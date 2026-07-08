@@ -1414,6 +1414,65 @@
     let seasonQueue = [];
     let seasonQueueIndex = 0;
     let evaluatorMode = 'season';
+    let firebaseOpenings = [];
+    let firebaseRatings = [];
+    let firebaseUnsubOpenings = null;
+    let firebaseUnsubRatings = null;
+
+    function waitForFirebaseDb() {
+      if (window.OPED_DB) return Promise.resolve(window.OPED_DB);
+
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error('Firebase не загрузился. Проверьте, что firebase-db.js лежит рядом с index.html и путь ./firebase-db.js правильный.'));
+        }, 10000);
+
+        window.addEventListener('oped-db-ready', () => {
+          clearTimeout(timer);
+          resolve(window.OPED_DB);
+        }, { once: true });
+      });
+    }
+
+    function normalizeEntryFromFirebase(row) {
+      return {
+        id: row.id,
+        title: row.title || '',
+        type: row.type === 'ED' ? 'ED' : 'OP',
+        year: row.year === null || row.year === undefined || row.year === '' ? null : Number(row.year),
+        season: row.season || '',
+        studios: row.studios || (row.studio ? [row.studio] : []),
+        directors: row.directors || [],
+        performers: row.performers || [],
+        image: row.image || '',
+        link: row.link || '',
+        notes: row.notes || '',
+        scores: {}
+      };
+    }
+
+    function rebuildEntriesFromFirebase() {
+      const next = firebaseOpenings.map(normalizeEntryFromFirebase);
+      const byId = new Map(next.map(e => [e.id, e]));
+
+      firebaseRatings.forEach(r => {
+        const openingId = String(r.openingId || '');
+        const entry = byId.get(openingId);
+        const nickname = String(r.nickname || '').trim();
+        const score = Number(r.score);
+
+        if (!entry || !nickname || !Number.isFinite(score)) return;
+        entry.scores = entry.scores || {};
+        entry.scores[nickname] = score;
+      });
+
+      entries = next;
+      populateFilterOptions();
+      render();
+      renderSeasonViews();
+      if (activeTab === 'profile') renderProfile();
+    }
+
 
     function setStatus(msg, isError) {
       statusEl.textContent = msg;
@@ -1587,36 +1646,46 @@
 
     async function loadEntries() {
       try {
-        const res = await window.storage.get(KEY, true);
-        entries = res && res.value ? JSON.parse(res.value) : [];
-        const demoLoaded = localStorage.getItem(DEMO_KEY);
-        if (!entries.length && !demoLoaded) {
-          entries = demoEntries();
-          localStorage.setItem(DEMO_KEY, '1');
-          await saveEntries();
-        }
-      } catch (e) { entries = demoEntries(); }
+        const db = await waitForFirebaseDb();
+        await db.init();
 
-      entries.forEach(e => {
-        e.studios = e.studios || (e.studio ? [e.studio] : []);
-        e.directors = e.directors || [];
-        e.performers = e.performers || [];
-        e.year = e.year || null;
-        e.season = e.season || '';
-        e.image = e.image || '';
-      });
-      populateFilterOptions();
-      render();
+        let gotOpenings = false;
+        let gotRatings = false;
+
+        await new Promise((resolve) => {
+          function maybeResolve() {
+            if (gotOpenings && gotRatings) resolve();
+          }
+
+          if (firebaseUnsubOpenings) firebaseUnsubOpenings();
+          if (firebaseUnsubRatings) firebaseUnsubRatings();
+
+          firebaseUnsubOpenings = db.watchOpenings((rows) => {
+            firebaseOpenings = rows || [];
+            gotOpenings = true;
+            rebuildEntriesFromFirebase();
+            maybeResolve();
+          });
+
+          firebaseUnsubRatings = db.watchRatings((rows) => {
+            firebaseRatings = rows || [];
+            gotRatings = true;
+            rebuildEntriesFromFirebase();
+            maybeResolve();
+          });
+        });
+      } catch (e) {
+        console.error(e);
+        setStatus('Firebase не подключился. Данные не будут общими для всех.', true);
+        entries = [];
+        populateFilterOptions();
+        render();
+      }
     }
 
     async function saveEntries() {
-      try {
-        const result = await window.storage.set(KEY, JSON.stringify(entries), true);
-        if (!result) setStatus('Не удалось сохранить. Попробуйте ещё раз.', true);
-      } catch (e) {
-        console.error(e);
-        setStatus('Ошибка сохранения.', true);
-      }
+      console.warn('saveEntries() больше не используется для треков. Треки и оценки сохраняются через Firebase.');
+      return true;
     }
 
     function uniqueSorted(values) {
@@ -1944,13 +2013,18 @@
       if (!entry) return;
       const score = clampScore($('#oc-eval-score').value);
       if (score === null) { setStatus('Введите оценку от 1 до 10.', true); return; }
-      entry.scores = entry.scores || {};
-      entry.scores[myName] = score;
-      await saveEntries();
-      render();
-      renderSeasonViews();
-      seasonQueueIndex += 1;
-      renderEvaluator();
+      try {
+        entry.scores = entry.scores || {};
+        entry.scores[myName] = score;
+        render();
+        renderSeasonViews();
+        await window.OPED_DB.saveRating(entry.id, myName, score);
+        seasonQueueIndex += 1;
+        renderEvaluator();
+      } catch (e) {
+        console.error(e);
+        setStatus('Не удалось сохранить оценку в Firebase.', true);
+      }
     }
 
     function renderEditCard(entry) {
@@ -2344,17 +2418,22 @@
 
       listContainer.querySelectorAll('[data-action="rate"]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-          if (!myName) { setStatus('Сначала введите имя вверху справа.', true); nameInput.focus(); return; }
+          if (!ensureNickname()) return;
           const id = e.target.getAttribute('data-id');
           const slider = listContainer.querySelector(`.oc-slider[data-id="${id}"]`);
           const val = parseFloat(slider.value);
           const entry = entries.find(x => x.id === id);
           if (!entry) return;
-          entry.scores = entry.scores || {};
-          entry.scores[myName] = val;
-          render();
-          await saveEntries();
-          setStatus('Оценка сохранена ✓');
+          try {
+            entry.scores = entry.scores || {};
+            entry.scores[myName] = val;
+            render();
+            await window.OPED_DB.saveRating(entry.id, myName, val);
+            setStatus('Оценка сохранена в Firebase ✓');
+          } catch (err) {
+            console.error(err);
+            setStatus('Не удалось сохранить оценку в Firebase.', true);
+          }
         });
       });
 
@@ -2380,22 +2459,34 @@
           if (!card || !entry) return;
           const title = card.querySelector('.oc-e-title').value.trim();
           if (!title) { setStatus('Название не может быть пустым.', true); return; }
-          entry.title = title;
-          entry.type = card.querySelector('.oc-e-type').value;
-          const yearRaw = card.querySelector('.oc-e-year').value.trim();
-          entry.year = yearRaw ? parseInt(yearRaw, 10) : null;
-          entry.season = card.querySelector('.oc-e-season').value;
-          entry.studios = parseList(card.querySelector('.oc-e-studio').value);
-          entry.directors = parseList(card.querySelector('.oc-e-director').value);
-          entry.performers = parseList(card.querySelector('.oc-e-performer').value);
-          entry.image = card.querySelector('.oc-e-image').value.trim();
-          entry.link = card.querySelector('.oc-e-link').value.trim();
-          entry.notes = card.querySelector('.oc-e-notes').value.trim();
-          editingId = null;
-          populateFilterOptions();
-          render();
-          await saveEntries();
-          setStatus('Изменения сохранены ✓');
+          const updatedEntry = {
+            ...entry,
+            title,
+            type: card.querySelector('.oc-e-type').value,
+            year: (() => {
+              const yearRaw = card.querySelector('.oc-e-year').value.trim();
+              return yearRaw ? parseInt(yearRaw, 10) : null;
+            })(),
+            season: card.querySelector('.oc-e-season').value,
+            studios: parseList(card.querySelector('.oc-e-studio').value),
+            directors: parseList(card.querySelector('.oc-e-director').value),
+            performers: parseList(card.querySelector('.oc-e-performer').value),
+            image: card.querySelector('.oc-e-image').value.trim(),
+            link: card.querySelector('.oc-e-link').value.trim(),
+            notes: card.querySelector('.oc-e-notes').value.trim()
+          };
+
+          try {
+            Object.assign(entry, updatedEntry);
+            editingId = null;
+            populateFilterOptions();
+            render();
+            await window.OPED_DB.updateOpening(id, updatedEntry);
+            setStatus('Изменения сохранены в Firebase ✓');
+          } catch (err) {
+            console.error(err);
+            setStatus('Не удалось сохранить изменения в Firebase.', true);
+          }
         });
       });
 
@@ -2415,11 +2506,16 @@
             }, 3000);
             return;
           }
-          entries = entries.filter(x => x.id !== id);
-          populateFilterOptions();
-          render();
-          await saveEntries();
-          setStatus('Удалено ✓');
+          try {
+            entries = entries.filter(x => x.id !== id);
+            populateFilterOptions();
+            render();
+            await window.OPED_DB.deleteOpening(id);
+            setStatus('Удалено из Firebase ✓');
+          } catch (err) {
+            console.error(err);
+            setStatus('Не удалось удалить из Firebase.', true);
+          }
         });
       });
       renderSeasonViews();
@@ -2539,6 +2635,8 @@
     });
 
     $('#oc-add-btn').addEventListener('click', async () => {
+      if (!ensureNickname()) return;
+
       const title = $('#oc-add-title').value.trim();
       const type = $('#oc-add-type').value;
       const yearRaw = $('#oc-add-year').value.trim();
@@ -2549,22 +2647,38 @@
       const performers = parseList($('#oc-add-performer').value);
       const image = $('#oc-add-image').value.trim();
       const link = $('#oc-add-link').value.trim();
+
       if (!title) { setStatus('Введите название.', true); return; }
-      const newEntry = { id: uid(), title, type, year, season, studios, directors, performers, image, link, notes: '', scores: {} };
-      entries.push(newEntry);
-      $('#oc-add-title').value = '';
-      $('#oc-add-year').value = '';
-      $('#oc-add-season').value = '';
-      $('#oc-add-studio').value = '';
-      $('#oc-add-director').value = '';
-      $('#oc-add-performer').value = '';
-      $('#oc-add-image').value = '';
-      $('#oc-add-link').value = '';
-      populateFilterOptions();
-      render();
-      if (activeTab === 'profile') renderProfile();
-      await saveEntries();
-      setStatus('Трек добавлен ✓');
+
+      try {
+        await window.OPED_DB.addOpening({
+          title,
+          type,
+          year,
+          season,
+          studios,
+          directors,
+          performers,
+          image,
+          link,
+          notes: '',
+          createdBy: myName
+        });
+
+        $('#oc-add-title').value = '';
+        $('#oc-add-year').value = '';
+        $('#oc-add-season').value = '';
+        $('#oc-add-studio').value = '';
+        $('#oc-add-director').value = '';
+        $('#oc-add-performer').value = '';
+        $('#oc-add-image').value = '';
+        $('#oc-add-link').value = '';
+
+        setStatus('Трек добавлен в Firebase ✓');
+      } catch (err) {
+        console.error(err);
+        setStatus('Не удалось добавить трек в Firebase.', true);
+      }
     });
 
     $('#oc-f-type').addEventListener('change', (e) => { filters.type = e.target.value; render(); if (activeTab === 'profile') renderProfile(); });
