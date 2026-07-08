@@ -571,10 +571,11 @@
     }
     .oc-season-select {
       min-width: 0;
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      overflow: hidden;
       background: transparent;
       border: 1px solid var(--border);
       color: var(--muted);
@@ -598,6 +599,13 @@
       align-items: center;
       gap: 7px;
       min-width: 0;
+      overflow: hidden;
+    }
+    .oc-season-label span:last-child {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .oc-season-check {
       display: inline-flex;
@@ -616,8 +624,14 @@
     .oc-season-right {
       display: inline-flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 6px;
-      white-space: nowrap;
+      max-width: 128px;
+      min-width: 0;
+      white-space: normal;
+      text-align: right;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
     }
     .oc-season-rate-mini {
       background: rgba(255,46,99,0.12);
@@ -938,6 +952,8 @@
       .oc-profile-thumb { width: 44px; height: 44px; }
       .oc-profile-score { grid-column: 3; justify-self: start; margin-top: 4px; }
       .oc-profile-item.manual .oc-move-btns { grid-column: 3; justify-self: start; }
+      .oc-allratings-item.editable { grid-template-columns: 1fr; }
+      .oc-ar-top-controls { justify-content: flex-start; }
     }
 
     /* ---------- profile tab (merged from base chart version) ---------- */
@@ -1136,6 +1152,53 @@
     }
     .oc-move-btn:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
     .oc-move-btn:disabled { opacity: 0.25; cursor: default; }
+    .oc-rank-jump-btn {
+      width: 100%;
+      min-width: 34px;
+      min-height: 28px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #0F0C16;
+      color: var(--cyan);
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 4px 6px;
+    }
+    .oc-rank-jump-btn:hover { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(8,217,214,0.14); }
+    .oc-profile-item.manual { grid-template-columns: 44px 46px minmax(0, 1fr) auto auto; }
+    .oc-allratings-item.editable { grid-template-columns: 56px 1fr auto; }
+    .oc-ar-top-controls {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .oc-ar-rank-btn,
+    .oc-ar-top-btn {
+      border-radius: 7px;
+      font-family: 'Space Mono', monospace;
+      font-size: 10.5px;
+      cursor: pointer;
+      white-space: nowrap;
+      padding: 6px 8px;
+    }
+    .oc-ar-rank-btn {
+      background: #0F0C16;
+      border: 1px solid var(--border);
+      color: var(--cyan);
+      font-weight: 700;
+    }
+    .oc-ar-rank-btn:hover { border-color: var(--cyan); }
+    .oc-ar-top-btn {
+      background: rgba(255,46,99,0.12);
+      border: 1px solid rgba(255,46,99,0.48);
+      color: var(--pink);
+      font-weight: 700;
+    }
+    .oc-ar-top-btn:hover { background: rgba(255,46,99,0.2); }
     .oc-profile-col-title.op { color: var(--cyan); }
     .oc-profile-col-title.ed { color: var(--pink); }
     .oc-profile-list {
@@ -1444,8 +1507,10 @@
     let evaluatorMode = 'season';
     let firebaseOpenings = [];
     let firebaseRatings = [];
+    let firebaseManualRanks = [];
     let firebaseUnsubOpenings = null;
     let firebaseUnsubRatings = null;
+    let firebaseUnsubManualRanks = null;
 
     function waitForFirebaseDb() {
       if (window.OPED_DB) return Promise.resolve(window.OPED_DB);
@@ -1498,6 +1563,20 @@
       populateFilterOptions();
       render();
       renderSeasonViews();
+      if (activeTab === 'profile') renderProfile();
+    }
+
+    function rebuildManualRanksFromFirebase() {
+      if (!Array.isArray(firebaseManualRanks)) return;
+      const next = { ...manualRanks };
+      firebaseManualRanks.forEach(row => {
+        const nickname = String(row.nickname || '').trim();
+        if (!nickname) return;
+        next[nickname] = next[nickname] || {};
+        next[nickname].OP = Array.isArray(row.OP) ? row.OP.map(String) : [];
+        next[nickname].ED = Array.isArray(row.ED) ? row.ED.map(String) : [];
+      });
+      manualRanks = next;
       if (activeTab === 'profile') renderProfile();
     }
 
@@ -1656,7 +1735,15 @@
 
     async function saveManualRanks() {
       try { await window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); }
-      catch (e) { console.error('Could not save manual ranks', e); }
+      catch (e) { console.error('Could not save manual ranks locally', e); }
+
+      try {
+        if (myName && window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
+          await window.OPED_DB.saveManualRanks(myName, manualRanks[myName] || {});
+        }
+      } catch (e) {
+        console.error('Could not save manual ranks to Firebase', e);
+      }
     }
 
     async function syncMyAvatarIntoMap() {
@@ -1679,14 +1766,16 @@
 
         let gotOpenings = false;
         let gotRatings = false;
+        let gotManualRanks = false;
 
         await new Promise((resolve) => {
           function maybeResolve() {
-            if (gotOpenings && gotRatings) resolve();
+            if (gotOpenings && gotRatings && gotManualRanks) resolve();
           }
 
           if (firebaseUnsubOpenings) firebaseUnsubOpenings();
           if (firebaseUnsubRatings) firebaseUnsubRatings();
+          if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
 
           firebaseUnsubOpenings = db.watchOpenings((rows) => {
             firebaseOpenings = rows || [];
@@ -1701,6 +1790,18 @@
             rebuildEntriesFromFirebase();
             maybeResolve();
           });
+
+          if (typeof db.watchManualRanks === 'function') {
+            firebaseUnsubManualRanks = db.watchManualRanks((rows) => {
+              firebaseManualRanks = rows || [];
+              gotManualRanks = true;
+              rebuildManualRanksFromFirebase();
+              maybeResolve();
+            });
+          } else {
+            gotManualRanks = true;
+            maybeResolve();
+          }
         });
       } catch (e) {
         console.error(e);
@@ -2109,7 +2210,9 @@
       newOnes.sort((a, b) => {
         const ea = entries.find(x => x.id === a);
         const eb = entries.find(x => x.id === b);
-        return eb.scores[user] - ea.scores[user];
+        const scoreDiff = (eb.scores[user] || 0) - (ea.scores[user] || 0);
+        if (scoreDiff !== 0) return scoreDiff;
+        return ea.title.localeCompare(eb.title, 'ru');
       });
       order = order.concat(newOnes);
       const changed = JSON.stringify(order) !== JSON.stringify(before);
@@ -2117,16 +2220,81 @@
       return { order, changed };
     }
 
+    function manualOrderFor(user, type) {
+      const result = reconcileManualOrder(user, type);
+      return result.order;
+    }
+
+    function manualPositionFor(user, type, id) {
+      const order = manualRanks[user] && manualRanks[user][type] ? manualRanks[user][type] : [];
+      const idx = order.indexOf(id);
+      return idx === -1 ? null : idx + 1;
+    }
+
     function swapManualRank(user, type, idA, idB) {
       manualRanks[user] = manualRanks[user] || {};
       const order = manualRanks[user][type] || [];
       const ia = order.indexOf(idA);
       const ib = order.indexOf(idB);
-      if (ia === -1 || ib === -1) return;
+      if (ia === -1 || ib === -1) return false;
       const tmp = order[ia];
       order[ia] = order[ib];
       order[ib] = tmp;
       manualRanks[user][type] = order;
+      return true;
+    }
+
+    function moveManualRankByOffset(user, type, id, offset) {
+      const order = manualOrderFor(user, type).slice();
+      const from = order.indexOf(id);
+      const to = from + offset;
+      if (from === -1 || to < 0 || to >= order.length) return false;
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      manualRanks[user][type] = order;
+      return true;
+    }
+
+    function moveManualRankTo(user, type, id, place) {
+      const order = manualOrderFor(user, type).slice();
+      const from = order.indexOf(id);
+      const targetNum = Number(place);
+      if (from === -1 || !Number.isFinite(targetNum)) return false;
+      const to = Math.max(0, Math.min(order.length - 1, Math.round(targetNum) - 1));
+      if (from === to) return false;
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      manualRanks[user][type] = order;
+      return true;
+    }
+
+    function promptManualRank(user, type, id) {
+      const order = manualOrderFor(user, type);
+      const current = order.indexOf(id) + 1;
+      if (!current) return false;
+      const raw = window.prompt(
+        `Введите место в ручном топе ${type} от 1 до ${order.length}.\n1–100 попадает в Топ-100, 101+ уйдёт ниже топа.`,
+        String(current)
+      );
+      if (raw === null) return false;
+      const place = Number(raw.replace(',', '.'));
+      if (!Number.isFinite(place)) {
+        setStatus('Нужно ввести число места.', true);
+        return false;
+      }
+      return moveManualRankTo(user, type, id, place);
+    }
+
+    function moveManualRankToTop100(user, type, id) {
+      const order = manualOrderFor(user, type).slice();
+      const from = order.indexOf(id);
+      if (from === -1) return false;
+      const to = Math.min(99, order.length - 1);
+      if (from === to) return false;
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      manualRanks[user][type] = order;
+      return true;
     }
 
     function ratedListFor(user, list) {
@@ -2212,7 +2380,11 @@
       let rated = ratedListFor(user, list);
       if (arTypeFilter) rated = rated.filter(r => r.entry.type === arTypeFilter);
       if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
-      rated.sort((a, b) => arSortDir === 'asc' ? a.score - b.score : b.score - a.score);
+      rated.sort((a, b) => {
+        const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
+        if (scoreDiff !== 0) return scoreDiff;
+        return a.entry.title.localeCompare(b.entry.title, 'ru');
+      });
 
       if (!user) {
         container.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
@@ -2222,19 +2394,62 @@
         container.innerHTML = '<div class="oc-empty">Нет оценок по выбранным условиям</div>';
         return;
       }
+
+      const editableManual = topMode === 'manual' && !!myName && user === myName;
+      if (editableManual) {
+        let changedAny = false;
+        ['OP', 'ED'].forEach(type => {
+          const result = reconcileManualOrder(user, type);
+          changedAny = changedAny || result.changed;
+        });
+        if (changedAny) saveManualRanks();
+      }
+
       container.innerHTML = rated.map(r => {
         const e = r.entry;
         const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
+        const pos = editableManual ? manualPositionFor(user, e.type, e.id) : null;
+        const controls = editableManual ? `
+          <div class="oc-ar-top-controls">
+            <button type="button" class="oc-ar-rank-btn" data-action="all-set-rank" data-type="${e.type}" data-id="${e.id}" title="Ввести точное место в ручном топе">№ ${pos || '—'}</button>
+            ${pos && pos > 100 ? `<button type="button" class="oc-ar-top-btn" data-action="all-to-top100" data-type="${e.type}" data-id="${e.id}" title="Поставить на 100-е место и вытолкнуть текущий 100-й ниже">В топ-100</button>` : ''}
+          </div>` : '';
         return `
-          <div class="oc-allratings-item">
+          <div class="oc-allratings-item${editableManual ? ' editable' : ''}">
             <div class="oc-profile-score">${formatScore(r.score)}</div>
             <div>
               <div class="oc-profile-name">${escapeHtml(e.title)} <span class="oc-type-tag ${e.type}">${e.type}</span></div>
               ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
             </div>
+            ${controls}
           </div>
         `;
       }).join('');
+
+      if (editableManual) {
+        container.querySelectorAll('[data-action="all-set-rank"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (promptManualRank(user, type, id)) {
+              saveManualRanks();
+              renderProfile();
+              setStatus('Место в ручном топе обновлено ✓');
+            }
+          });
+        });
+        container.querySelectorAll('[data-action="all-to-top100"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (moveManualRankToTop100(user, type, id)) {
+              saveManualRanks();
+              renderProfile();
+              setStatus('Трек добавлен в Топ-100 ✓');
+            }
+          });
+        });
+      }
     }
 
     function renderProfileList(containerId, list, user, opts) {
@@ -2250,20 +2465,26 @@
         return;
       }
       const editable = !!opts.editable;
+      const fullOrder = editable ? manualOrderFor(user, opts.type) : [];
       const html = list.map((item, idx) => {
         const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
-        const rankLabel = idx < 3 ? ['①','②','③'][idx] : (idx + 1);
         const e = item.entry;
+        const absolutePos = editable ? manualPositionFor(user, opts.type, e.id) : (idx + 1);
+        const rankLabel = editable ? absolutePos : (idx < 3 ? ['①','②','③'][idx] : (idx + 1));
         const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
         const scoreClass = item.score === null ? 'none' : '';
+        const orderIdx = editable ? fullOrder.indexOf(e.id) : -1;
         const moveButtons = editable ? `
             <div class="oc-move-btns">
-              <button class="oc-move-btn" data-action="move-up" data-type="${opts.type}" data-id="${e.id}" ${idx === 0 ? 'disabled' : ''} title="Выше">▲</button>
-              <button class="oc-move-btn" data-action="move-down" data-type="${opts.type}" data-id="${e.id}" ${idx === list.length - 1 ? 'disabled' : ''} title="Ниже">▼</button>
+              <button class="oc-move-btn" data-action="move-up" data-type="${opts.type}" data-id="${e.id}" ${orderIdx <= 0 ? 'disabled' : ''} title="Выше">▲</button>
+              <button class="oc-move-btn" data-action="move-down" data-type="${opts.type}" data-id="${e.id}" ${(orderIdx === -1 || orderIdx >= fullOrder.length - 1) ? 'disabled' : ''} title="Ниже">▼</button>
             </div>` : '';
+        const rankHtml = editable
+          ? `<button type="button" class="oc-rank-jump-btn" data-action="set-rank" data-type="${opts.type}" data-id="${e.id}" title="Кликните, чтобы ввести место вручную">${rankLabel}</button>`
+          : `<div class="oc-profile-rank ${rankClass}">${rankLabel}</div>`;
         return `
           <div class="oc-profile-item${editable ? ' manual' : ''}">
-            <div class="oc-profile-rank ${rankClass}">${rankLabel}</div>
+            ${rankHtml}
             ${imgHtml(e, 'oc-profile-thumb')}
             <div>
               <div class="oc-profile-name">${escapeHtml(e.title)}</div>
@@ -2277,26 +2498,35 @@
       container.innerHTML = html;
 
       if (editable) {
+        container.querySelectorAll('[data-action="set-rank"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (promptManualRank(user, type, id)) {
+              saveManualRanks();
+              renderProfile();
+              setStatus('Место в ручном топе обновлено ✓');
+            }
+          });
+        });
         container.querySelectorAll('[data-action="move-up"]').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-id');
             const type = btn.getAttribute('data-type');
-            const idx = list.findIndex(x => x.entry.id === id);
-            if (idx <= 0) return;
-            swapManualRank(user, type, id, list[idx - 1].entry.id);
-            saveManualRanks();
-            renderProfile();
+            if (moveManualRankByOffset(user, type, id, -1)) {
+              saveManualRanks();
+              renderProfile();
+            }
           });
         });
         container.querySelectorAll('[data-action="move-down"]').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-id');
             const type = btn.getAttribute('data-type');
-            const idx = list.findIndex(x => x.entry.id === id);
-            if (idx === -1 || idx >= list.length - 1) return;
-            swapManualRank(user, type, id, list[idx + 1].entry.id);
-            saveManualRanks();
-            renderProfile();
+            if (moveManualRankByOffset(user, type, id, 1)) {
+              saveManualRanks();
+              renderProfile();
+            }
           });
         });
       }
@@ -2312,14 +2542,18 @@
       renderProfileStats(computeProfileStats(profileUser, filtered));
 
       function topForScore(type) {
+        const manualOrder = manualOrderFor(profileUser, type);
+        const manualIndex = new Map(manualOrder.map((id, idx) => [id, idx]));
         const list = filtered
-          .filter(e => e.type === type)
-          .map(e => ({ entry: e, score: (e.scores && profileUser && e.scores[profileUser] !== undefined) ? e.scores[profileUser] : null }));
+          .filter(e => e.type === type && e.scores && profileUser && e.scores[profileUser] !== undefined)
+          .map(e => ({ entry: e, score: e.scores[profileUser] }));
         list.sort((a, b) => {
-          if (a.score === null && b.score === null) return a.entry.title.localeCompare(b.entry.title, 'ru');
-          if (a.score === null) return 1;
-          if (b.score === null) return -1;
-          return b.score - a.score;
+          const scoreDiff = b.score - a.score;
+          if (scoreDiff !== 0) return scoreDiff;
+          const ai = manualIndex.has(a.entry.id) ? manualIndex.get(a.entry.id) : Number.POSITIVE_INFINITY;
+          const bi = manualIndex.has(b.entry.id) ? manualIndex.get(b.entry.id) : Number.POSITIVE_INFINITY;
+          if (ai !== bi) return ai - bi;
+          return a.entry.title.localeCompare(b.entry.title, 'ru');
         });
         return list.slice(0, 100);
       }
@@ -2350,7 +2584,7 @@
       if (topMode === 'manual') {
         hintEl.style.display = 'block';
         hintEl.textContent = canEdit
-          ? 'Расставьте треки стрелками ▲/▼ — так удобно решить, какая из нескольких десяток лучше, а какая хуже.'
+          ? 'Кликните по номеру места, чтобы сразу ввести позицию, или используйте ▲/▼ для соседних перестановок. Внизу в «все оценки» можно вернуть трек в Топ-100.'
           : `Показан личный топ пользователя — порядок задан им вручную, не по оценке.`;
       } else {
         hintEl.style.display = 'none';
