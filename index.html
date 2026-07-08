@@ -658,7 +658,7 @@
     .oc-season-op-list { display: flex; flex-direction: column; gap: 8px; }
     .oc-season-op {
       display: grid;
-      grid-template-columns: 38px 54px 1fr 56px auto;
+      grid-template-columns: 38px 54px minmax(0, 1fr) max-content 64px;
       gap: 12px;
       align-items: center;
       background: #0F0C16;
@@ -667,6 +667,7 @@
       padding: 10px;
     }
     .oc-season-thumb,
+    .oc-profile-thumb,
     .oc-eval-image {
       background:
         radial-gradient(circle at 20% 15%, rgba(255,46,99,0.25), transparent 32%),
@@ -687,7 +688,27 @@
       border-radius: 8px;
       font-size: 18px;
     }
+    .oc-profile-thumb {
+      width: 46px;
+      height: 46px;
+      border-radius: 8px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .oc-image-link {
+      display: block;
+      color: inherit;
+      text-decoration: none;
+      border-radius: 8px;
+    }
+    .oc-image-link:hover .oc-season-thumb,
+    .oc-image-link:hover .oc-profile-thumb,
+    .oc-image-link:hover .oc-eval-image {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(8,217,214,0.18);
+    }
     .oc-season-thumb img,
+    .oc-profile-thumb img,
     .oc-eval-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .oc-season-score {
       font-family: 'Archivo Black', 'Arial Black', sans-serif;
@@ -708,11 +729,15 @@
       border: 1px solid var(--cyan);
       color: var(--cyan);
       border-radius: 7px;
-      padding: 7px 10px;
+      padding: 7px 12px;
       font-family: 'Space Mono', monospace;
       font-size: 10.5px;
+      line-height: 1.15;
       cursor: pointer;
       white-space: nowrap;
+      min-width: 96px;
+      width: max-content;
+      justify-self: end;
     }
     .oc-season-re-rate:hover { background: rgba(8,217,214,0.12); }
     .oc-name-modal {
@@ -900,7 +925,7 @@
       .oc-season-rate-mini { width: 100%; }
       .oc-season-op { grid-template-columns: 34px 48px 1fr; }
       .oc-season-score { text-align: left; grid-column: 3; }
-      .oc-season-re-rate { grid-column: 3; width: fit-content; }
+      .oc-season-re-rate { grid-column: 3; width: max-content; justify-self: start; }
       .oc-eval-grid { grid-template-columns: 1fr; }
     }
 
@@ -908,8 +933,11 @@
       .oc-card { grid-template-columns: 1fr; }
       .oc-rank, .oc-ring-wrap { justify-self: start; }
       .oc-rate { align-items: flex-start; }
-      .oc-profile-item { grid-template-columns: 24px 1fr; }
-      .oc-profile-score { grid-column: 1 / -1; justify-self: start; margin-top: 4px; }
+      .oc-profile-item,
+      .oc-profile-item.manual { grid-template-columns: 24px 44px 1fr; }
+      .oc-profile-thumb { width: 44px; height: 44px; }
+      .oc-profile-score { grid-column: 3; justify-self: start; margin-top: 4px; }
+      .oc-profile-item.manual .oc-move-btns { grid-column: 3; justify-self: start; }
     }
 
     /* ---------- profile tab (merged from base chart version) ---------- */
@@ -1089,7 +1117,7 @@
       margin-bottom: 14px;
       display: none;
     }
-    .oc-profile-item.manual { grid-template-columns: 28px 1fr auto auto; }
+    .oc-profile-item.manual { grid-template-columns: 28px 46px minmax(0, 1fr) auto auto; }
     .oc-move-btns { display: flex; flex-direction: column; gap: 2px; }
     .oc-move-btn {
       background: transparent;
@@ -1117,7 +1145,7 @@
     }
     .oc-profile-item {
       display: grid;
-      grid-template-columns: 28px 1fr auto;
+      grid-template-columns: 28px 46px minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
       background: var(--card);
@@ -1824,8 +1852,13 @@
     }
 
     function imgHtml(entry, className) {
-      if (!entry.image) return `<div class="${className}">OP</div>`;
-      return `<div class="${className}"><img src="${escapeHtml(normalizeUrl(entry.image))}" alt="${escapeHtml(entry.title)}" onerror="this.parentElement.textContent='нет изображения';"></div>`;
+      const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
+      const title = escapeHtml(entry && entry.title ? entry.title : 'видео');
+      const imageBlock = entry.image
+        ? `<div class="${className}"><img src="${escapeHtml(normalizeUrl(entry.image))}" alt="${title}" onerror="this.replaceWith(document.createTextNode('нет изображения'));"></div>`
+        : `<div class="${className}">${fallback}</div>`;
+      if (!entry.link) return imageBlock;
+      return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
     }
 
     function renderSeasonViews() {
@@ -2231,6 +2264,7 @@
         return `
           <div class="oc-profile-item${editable ? ' manual' : ''}">
             <div class="oc-profile-rank ${rankClass}">${rankLabel}</div>
+            ${imgHtml(e, 'oc-profile-thumb')}
             <div>
               <div class="oc-profile-name">${escapeHtml(e.title)}</div>
               ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
