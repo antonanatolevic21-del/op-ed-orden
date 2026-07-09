@@ -568,6 +568,7 @@
     let seasonDocs = new Map();
     let eventRatings = [];
     let eventBasket = {};
+    let eventBasketError = '';
     let renderTimer = null;
     let evaluatorQueue = [];
     let evaluatorIndex = 0;
@@ -1087,6 +1088,7 @@
         return;
       }
       const state = removeMissingBasketIds(getBasketState(activeSeason));
+      const basketErrorHtml = eventBasketError ? `<div class="ev-empty" style="border-color:rgba(255,46,99,.55); color:var(--pink); margin-bottom:12px;">${escapeHtml(eventBasketError)}</div>` : '';
       appEl.innerHTML = `
         <section class="ev-panel-head">
           <div>
@@ -1095,6 +1097,7 @@
             <div class="ev-hint">Сюда попадают OP, добавленные с основной страницы сезонов. Разложи их по корзинам, выбери лимит 10/15/20 и подтверди набор: гарантированные OP попадут в сезон для оценки.</div>
           </div>
         </section>
+        ${basketErrorHtml}
         <section class="ev-stage-layout">
           <aside class="ev-years">
             <div class="ev-year-title">${CURRENT_EVENT_YEAR}</div>
@@ -1982,10 +1985,15 @@
           scheduleRender();
         }, error => console.error('eventRatings snapshot error', error));
         onSnapshot(collection(db, 'eventBasket'), snapshot => {
+          eventBasketError = '';
           eventBasket = {};
           snapshot.docs.forEach(d => { eventBasket[d.id] = { id: d.id, ...d.data() }; });
           scheduleRender();
-        }, error => console.error('eventBasket snapshot error', error));
+        }, error => {
+          console.error('eventBasket snapshot error', error);
+          eventBasketError = 'Не удалось прочитать Firebase-корзину eventBasket. Проверь Rules для eventBasket.';
+          scheduleRender();
+        });
       }
       if (LOCAL_EVENTS_MODE) {
         window.addEventListener('storage', (e) => {

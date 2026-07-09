@@ -2302,6 +2302,9 @@
     let firebaseUnsubManualRanks = null;
     let firebaseUnsubUserProfiles = null;
     let firebaseUnsubTierOrders = null;
+    let firebaseUnsubEventBasket = null;
+    let firebaseEventBasket = {};
+    let firebaseEventBasketLoaded = false;
     let tierOrders = {};
     let tierLabels = {};
     let tierPlacements = {};
@@ -2346,6 +2349,7 @@
       if (extendedDbCache) return extendedDbCache;
       const appMod = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
       const fsMod = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
+      const authMod = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js');
       const firebaseConfig = {
         apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
         authDomain: "op-ed-orden-eed04.firebaseapp.com",
@@ -2355,6 +2359,12 @@
         appId: "1:821108008660:web:bab171d225e5c8cde2fd41"
       };
       const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(firebaseConfig);
+      try {
+        const auth = authMod.getAuth(app);
+        if (!auth.currentUser) await authMod.signInAnonymously(auth);
+      } catch (e) {
+        console.warn('anonymous auth for event basket failed', e);
+      }
       extendedDbCache = { db: fsMod.getFirestore(app), ...fsMod };
       return extendedDbCache;
     }
@@ -3390,11 +3400,34 @@
       return avatarsMap[name] || (name === 'Иван' ? '🐺' : '🙂');
     }
 
+
+    async function startEventBasketWatcher() {
+      try {
+        const ext = await getExtendedDb();
+        if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
+        firebaseUnsubEventBasket = ext.onSnapshot(ext.collection(ext.db, 'eventBasket'), snapshot => {
+          firebaseEventBasket = {};
+          snapshot.docs.forEach(d => { firebaseEventBasket[d.id] = { id: d.id, ...d.data() }; });
+          firebaseEventBasketLoaded = true;
+          if (activeTab === 'season') renderSeasonViews();
+        }, err => {
+          console.error('eventBasket watch error', err);
+          firebaseEventBasketLoaded = true;
+          setStatus('Не удалось прочитать Firebase-корзину eventBasket. Проверь Rules.', true);
+        });
+      } catch (e) {
+        console.error('eventBasket watcher setup failed', e);
+        firebaseEventBasketLoaded = true;
+        setStatus('Не удалось подключиться к Firebase-корзине eventBasket.', true);
+      }
+    }
+
     async function loadEntries() {
       try {
         const db = await waitForFirebaseDb();
         await db.init();
         await startTierOrderWatcher();
+        await startEventBasketWatcher();
 
         let gotOpenings = false;
         let gotRatings = false;
@@ -3946,31 +3979,29 @@
     }
 
     function loadEventBasket() {
-      try {
-        const raw = JSON.parse(localStorage.getItem(EVENT_BASKET_KEY) || '{}');
-        return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-      } catch (e) {
-        return {};
-      }
+      return firebaseEventBasket && typeof firebaseEventBasket === 'object' ? firebaseEventBasket : {};
     }
 
     function saveEventBasket(data) {
-      localStorage.setItem(EVENT_BASKET_KEY, JSON.stringify(data && typeof data === 'object' ? data : {}));
-      try { window.dispatchEvent(new StorageEvent('storage', { key: EVENT_BASKET_KEY, newValue: localStorage.getItem(EVENT_BASKET_KEY) })); } catch (e) {}
+      firebaseEventBasket = data && typeof data === 'object' ? data : {};
     }
 
     async function saveEventBasketSeasonToFirebase(key, seasonState) {
       try {
         const ext = await getExtendedDb();
-        await ext.setDoc(ext.doc(ext.db, 'eventBasket', String(key)), {
+        const payload = {
           ...seasonState,
           key: String(key),
           updatedAt: ext.serverTimestamp()
-        }, { merge: true });
+        };
+        await ext.setDoc(ext.doc(ext.db, 'eventBasket', String(key)), payload, { merge: true });
+        firebaseEventBasket[String(key)] = { ...payload, updatedAtLocal: seasonState.updatedAtLocal || new Date().toISOString() };
+        firebaseEventBasketLoaded = true;
         return true;
       } catch (e) {
         console.error('eventBasket save failed', e);
-        setStatus('Локально добавлено, но Firebase-корзина не сохранилась. Проверь правила Firebase для eventBasket.', true);
+        setStatus('Firebase НЕ сохранил корзину eventBasket. Скорее всего, не разрешены Rules для eventBasket. Локально больше не сохраняю, чтобы не было ложного “В корзине”.', true);
+        alert('Не удалось сохранить в Firebase eventBasket. Проверь Rules для коллекции eventBasket. Подробность в консоли браузера.');
         return false;
       }
     }
@@ -4012,9 +4043,11 @@
         buckets: nextBuckets,
         updatedAtLocal: new Date().toISOString()
       };
-      saveEventBasket(data);
       const savedToFirebase = await saveEventBasketSeasonToFirebase(key, data[key]);
-      if (savedToFirebase) setStatus(`Добавлено в корзину ивентов: ${entry.title}`);
+      if (savedToFirebase) {
+        saveEventBasket(data);
+        setStatus(`Добавлено в Firebase-корзину ивентов: ${entry.title}`);
+      }
       renderSeasonViews();
     }
 
