@@ -685,13 +685,48 @@
     .oc-season-op-list { display: flex; flex-direction: column; gap: 8px; }
     .oc-season-op {
       display: grid;
-      grid-template-columns: 38px 54px minmax(0, 1fr) max-content 64px;
+      grid-template-columns: 38px 54px minmax(0, 1fr) max-content max-content;
       gap: 12px;
       align-items: center;
       background: #0F0C16;
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 10px;
+    }
+    .oc-unified-card {
+      width: 100%;
+      min-width: 0;
+    }
+    .oc-unified-card.compact {
+      padding: 8px 10px;
+      gap: 10px;
+    }
+    .oc-card-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 6px;
+      justify-self: end;
+      min-width: 92px;
+    }
+    .oc-card-actions .oc-rate-row { justify-content: flex-end; }
+    .oc-card-actions .oc-rate-row input[type=range] { width: 108px; }
+    .oc-card-actions .oc-rate-btn,
+    .oc-card-actions .oc-open-btn,
+    .oc-card-actions .oc-secondary-btn,
+    .oc-card-actions .oc-edit-btn,
+    .oc-card-actions .oc-del,
+    .oc-card-actions .oc-ar-top-btn,
+    .oc-card-actions .oc-ar-rank-btn { width: 100%; text-align: center; }
+    .oc-season-score-sub {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 9.5px;
+      font-weight: 400;
+      line-height: 1.1;
     }
     .oc-season-thumb,
     .oc-profile-thumb,
@@ -971,6 +1006,15 @@
       .oc-season-rate-mini { width: 100%; }
       .oc-season-op { grid-template-columns: 34px 48px 1fr; }
       .oc-season-score { text-align: left; grid-column: 3; }
+      .oc-card-actions { grid-column: 3; align-items: flex-start; justify-self: start; min-width: 0; }
+      .oc-card-actions .oc-rate-row { justify-content: flex-start; }
+      .oc-card-actions .oc-rate-btn,
+      .oc-card-actions .oc-open-btn,
+      .oc-card-actions .oc-secondary-btn,
+      .oc-card-actions .oc-edit-btn,
+      .oc-card-actions .oc-del,
+      .oc-card-actions .oc-ar-top-btn,
+      .oc-card-actions .oc-ar-rank-btn { width: auto; }
       .oc-season-re-rate { grid-column: 3; width: max-content; justify-self: start; }
       .oc-eval-grid { grid-template-columns: 1fr; }
     }
@@ -1642,6 +1686,8 @@
       .oc-globaltop-item { grid-template-columns: 34px 44px minmax(0,1fr); }
       .oc-globaltop-metric { grid-column: 3; text-align:left; }
       .oc-season-op { grid-template-columns: 32px 46px minmax(0,1fr); }
+      .oc-card-actions { grid-column: 3; align-items:flex-start; justify-self:start; }
+      .oc-card-actions .oc-rate-row input[type=range] { width: min(190px, 58vw); }
       .oc-rate-row input[type=range] { width: min(190px, 58vw); }
       .oc-tabs { gap: 6px; overflow-x:auto; flex-wrap:nowrap; padding-bottom:4px; }
       .oc-tab-btn { flex: 0 0 auto; padding: 8px 12px; }
@@ -1902,6 +1948,11 @@
               <option value="OP">Только OP</option>
               <option value="ED">Только ED</option>
             </select>
+            <select id="oc-ar-metric" title="Какую оценку показывать и сортировать">
+              <option value="total">Показывать: общая</option>
+              <option value="song">Показывать: песня</option>
+              <option value="visual">Показывать: визуал</option>
+            </select>
             <select id="oc-ar-score"><option value="">Любая оценка</option></select>
             <button class="oc-sort-toggle-btn" id="oc-ar-sort">По убыванию ↓</button>
           </div>
@@ -2103,6 +2154,7 @@
     let topMode = 'manual'; // manual top is the main profile mode
     let arTypeFilter = '';
     let arScoreFilter = '';
+    let arScoreMetric = 'total';
     let arSortDir = 'desc';
     let profileUser = '';
     let globalTopType = 'OP';
@@ -3329,7 +3381,12 @@
 
     function allVoterNames() {
       const names = new Set();
-      entries.forEach(e => { Object.keys(e.scores || {}).forEach(n => names.add(n)); Object.keys(e.personalScores || {}).forEach(n => names.add(n)); });
+      entries.forEach(e => {
+        Object.keys(e.scores || {}).forEach(n => names.add(n));
+        Object.keys(e.songScores || {}).forEach(n => names.add(n));
+        Object.keys(e.visualScores || {}).forEach(n => names.add(n));
+        Object.keys(e.personalScores || {}).forEach(n => names.add(n));
+      });
       Object.keys(manualRanks || {}).forEach(n => {
         const row = manualRanks[n] || {};
         const display = String(row.nickname || row.displayName || row.name || '').trim();
@@ -3589,6 +3646,68 @@
       return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
     }
 
+
+    function entryYearSeasonTag(entry) {
+      return entry && entry.year ? `<span class="oc-yr-tag">${entry.year}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}</span>` : '';
+    }
+
+    function metricLabel(metric) {
+      if (metric === 'song') return 'песня';
+      if (metric === 'visual') return 'визуал';
+      return 'общая';
+    }
+
+    function metricScoreFor(entry, user, metric) {
+      if (metric === 'song') return songScoreFor(entry, user);
+      if (metric === 'visual') return visualScoreFor(entry, user);
+      return scoreFor(entry, user);
+    }
+
+    function ratedListForMetric(user, list, metric) {
+      return list
+        .map(e => ({ entry: e, score: metricScoreFor(e, user, metric || 'total') }))
+        .filter(r => r.score !== null);
+    }
+
+    function renderUnifiedEntryCard(entry, opts = {}) {
+      const rankLabel = opts.rankLabel !== undefined ? opts.rankLabel : '';
+      const rankClass = opts.rankClass || '';
+      const scoreText = opts.scoreText !== undefined ? opts.scoreText : formatScore(avg(entry.scores));
+      const scoreSub = opts.scoreSub ? `<span class="oc-season-score-sub">${escapeHtml(opts.scoreSub)}</span>` : '';
+      const controlsHtml = opts.controlsHtml ? `<div class="oc-card-actions">${opts.controlsHtml}</div>` : '';
+      const className = opts.className ? ` ${opts.className}` : '';
+      const metaLines = [];
+      const fields = opts.fields || ['studios', 'directors', 'performers', 'franchises'];
+      if (fields.includes('studios') && entry.studios && entry.studios.length) metaLines.push(`<span class="oc-meta-key">студия:</span> ${escapeHtml(entry.studios.join(', '))}`);
+      if (fields.includes('directors') && entry.directors && entry.directors.length) metaLines.push(`<span class="oc-meta-key">режиссёр:</span> ${escapeHtml(entry.directors.join(', '))}`);
+      if (fields.includes('performers') && entry.performers && entry.performers.length) metaLines.push(`<span class="oc-meta-key">исполнитель:</span> ${escapeHtml(entry.performers.join(', '))}`);
+      if (fields.includes('franchises') && entry.franchises && entry.franchises.length) metaLines.push(`<span class="oc-meta-key">франшиза:</span> ${escapeHtml(entry.franchises.join(', '))}`);
+      if (opts.showImageLink && entry.image) metaLines.push(`<span class="oc-meta-key">картинка:</span> <a href="${escapeHtml(normalizeUrl(entry.image))}" target="_blank" rel="noopener noreferrer">открыть ↗</a>`);
+      if (opts.showTrackLink && entry.link) metaLines.push(`<a href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer">ссылка ↗</a>`);
+      const extraHtml = opts.extraHtml || '';
+      const votesHtml = opts.votesHtml || '';
+      const notesHtml = opts.notes && entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : '';
+      const missing = opts.showMissingLink === false ? '' : (!entry.link ? '<span class="oc-missing-link" title="Ссылка не добавлена">😡</span>' : '');
+      return `<div class="oc-season-op oc-unified-card${className}" data-id="${escapeHtml(entry.id)}">
+        <div class="oc-rank ${rankClass}">${rankLabel}</div>
+        ${imgHtml(entry, 'oc-season-thumb')}
+        <div class="oc-info">
+          <div class="oc-name-row">
+            <span class="oc-name oc-clickable-title" data-action="open-card" data-id="${escapeHtml(entry.id)}">${escapeHtml(entry.title)}</span>
+            <span class="oc-type-tag ${entry.type}">${entry.type}</span>
+            ${entryYearSeasonTag(entry)}
+            ${missing}
+          </div>
+          ${metaLines.map(l => `<div class="oc-meta oc-meta-line">${l}</div>`).join('')}
+          ${notesHtml}
+          ${extraHtml}
+          ${votesHtml}
+        </div>
+        <div class="oc-season-score">${scoreText}${scoreSub}</div>
+        ${controlsHtml}
+      </div>`;
+    }
+
     function renderSeasonViews() {
       document.querySelectorAll('.oc-season-type-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.seasonType === seasonType));
       renderSeasonBrowser();
@@ -3678,21 +3797,16 @@
         const myScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
         const myScoreText = myScore !== null ? (isPersonalScale() ? formatFiveScore(myScore) : formatScore(myScore)) : '';
         const scoreText = score === null ? '—' : score.toFixed(1);
-        return `<div class="oc-season-op">
-          <div class="oc-rank">${idx + 1}</div>
-          ${imgHtml(entry, 'oc-season-thumb')}
-          <div class="oc-info">
-            <div class="oc-name-row">
-              <span class="oc-name oc-clickable-title" data-action="open-card" data-id="${entry.id}">${escapeHtml(entry.title)}</span>
-              <span class="oc-type-tag ${entry.type}">${entry.type}</span>
-              ${!entry.link ? '<span class="oc-missing-link" title="Ссылка не добавлена">😡</span>' : ''}
-            </div>
-            ${entry.performers && entry.performers.length ? `<div class="oc-meta oc-meta-line"><span class="oc-meta-key">исполнитель:</span> ${escapeHtml(entry.performers.join(', '))}</div>` : ''}
-            ${myScore !== null ? `<div class="oc-rated-mark">твоя оценка: ${escapeHtml(myScoreText)}</div>` : ''}
-          </div>
-          <button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>
-          <div class="oc-season-score">${scoreText}</div>
-        </div>`;
+        const extraHtml = myScore !== null ? `<div class="oc-rated-mark">твоя оценка: ${escapeHtml(myScoreText)}</div>` : '';
+        const controlsHtml = `<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
+        return renderUnifiedEntryCard(entry, {
+          rankLabel: idx + 1,
+          scoreText,
+          fields: ['performers'],
+          extraHtml,
+          controlsHtml,
+          className: 'season-card'
+        });
       }).join('')}</div>`;
     }
 
@@ -4218,10 +4332,10 @@
     function populateArScoreOptions(user, list) {
       const sel = $('#oc-ar-score');
       if (!sel) return;
-      const rated = ratedListFor(user, list);
+      const rated = ratedListForMetric(user, list, arScoreMetric);
       const values = Array.from(new Set(rated.map(r => r.score))).sort((a, b) => a - b);
       const prev = sel.value;
-      sel.innerHTML = '<option value="">Любая оценка</option>' + values.map(v => `<option value="${v}">${formatScore(v)}</option>`).join('');
+      sel.innerHTML = `<option value="">Любая ${metricLabel(arScoreMetric)}</option>` + values.map(v => `<option value="${v}">${formatScore(v)}</option>`).join('');
       sel.value = values.map(String).includes(prev) ? prev : '';
       arScoreFilter = sel.value;
     }
@@ -4240,7 +4354,7 @@
 
       function renderColumn(type, container) {
         if (!container) return;
-        let rated = ratedListFor(user, list).filter(r => r.entry.type === type);
+        let rated = ratedListForMetric(user, list, arScoreMetric).filter(r => r.entry.type === type);
         if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
         rated.sort((a, b) => {
           const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
@@ -4249,7 +4363,7 @@
         });
 
         if (!rated.length) {
-          container.innerHTML = `<div class="oc-empty">Нет оценённых ${type}</div>`;
+          container.innerHTML = `<div class="oc-empty">Нет оценённых ${type} для выбранной оценки: ${metricLabel(arScoreMetric)}</div>`;
           return;
         }
 
@@ -4258,37 +4372,32 @@
 
         allRatingsPage[type] = clampPage(allRatingsPage[type] || 1, rated.length);
         const page = pageSlice(rated, allRatingsPage[type]);
-        const rowsHtml = page.items.map(r => {
+        const rowsHtml = page.items.map((r, idx) => {
           const e = r.entry;
-          const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
           const pos = manualPositionFor(user, e.type, e.id, editableManual);
           const canDeleteRating = !!myName && manualSameUser(user, myName);
           const manualControls = editableManual ? `
               <button type="button" class="oc-ar-rank-btn" data-action="all-set-rank" data-type="${e.type}" data-id="${e.id}" title="Ввести точное место в ручном топе">№ ${pos || '—'}</button>
               ${(!pos || pos > 100) ? `<button type="button" class="oc-ar-top-btn" data-action="all-to-top100" data-type="${e.type}" data-id="${e.id}" title="Поставить на 100-е место и вытолкнуть текущий 100-й ниже">В топ-100</button>` : ''}` : '';
           const deleteControl = canDeleteRating ? `<button type="button" class="oc-ar-top-btn" data-action="all-delete-rating" data-id="${e.id}" title="Удалить твою оценку">Удалить оценку</button>` : '';
-          const controls = (manualControls || deleteControl) ? `
-            <div class="oc-ar-top-controls">
-              ${manualControls}
-              ${deleteControl}
-            </div>` : '';
+          const controls = manualControls + deleteControl;
           const detailBits = [];
+          const totalVal = scoreFor(e, user);
           const songVal = songScoreFor(e, user);
           const visualVal = visualScoreFor(e, user);
-          if (songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
-          if (visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
-          return `
-            <div class="oc-allratings-item${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}">
-              <div class="oc-profile-score">${formatScore(r.score)}</div>
-              ${imgHtml(e, 'oc-profile-thumb')}
-              <div>
-                <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span> <span class="oc-type-tag ${e.type}">${e.type}</span></div>
-                ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
-                ${detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : ''}
-              </div>
-              ${controls}
-            </div>
-          `;
+          if (arScoreMetric !== 'total' && totalVal !== null) detailBits.push('общая: ' + formatScore(totalVal));
+          if (arScoreMetric !== 'song' && songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
+          if (arScoreMetric !== 'visual' && visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
+          const extraHtml = detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : '';
+          return renderUnifiedEntryCard(e, {
+            rankLabel: page.start + idx + 1,
+            scoreText: formatScore(r.score),
+            scoreSub: metricLabel(arScoreMetric),
+            fields: ['performers'],
+            extraHtml,
+            controlsHtml: controls,
+            className: `compact allratings-card${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}`
+          });
         }).join('');
 
         const scope = 'allratings-' + type.toLowerCase();
@@ -4970,10 +5079,6 @@
         if (entry.id === editingId) return renderEditCard(entry);
         const score = avg(entry.scores);
         const scoreText = formatScore(score);
-        const pct = score === null ? 0 : normalizedPublicScoreRatio(score);
-        const circumference = 2 * Math.PI * 26;
-        const offset = circumference * (1 - pct);
-        const color = ringColor(score);
         const showRank = sortMode === 'score';
         const rankClass = showRank && absoluteIdx === 0 ? 'gold' : showRank && absoluteIdx === 1 ? 'silver' : showRank && absoluteIdx === 2 ? 'bronze' : '';
         const rankLabel = showRank ? (absoluteIdx < 3 ? ['①','②','③'][absoluteIdx] : (absoluteIdx + 1)) : (absoluteIdx + 1);
@@ -4984,50 +5089,33 @@
         const myPublicScore = scoreFor(entry, myName);
         const myPersonalScore = personalScoreFor(entry, myName);
         const myVal = isPersonalScale() ? (myPersonalScore || defaultScore()) : (myPublicScore || defaultScore());
-        const linkHtml = entry.link ? `<a href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer">ссылка ↗</a>` : '';
-        const metaLines = [];
-        if (entry.studios && entry.studios.length) metaLines.push(`<span class="oc-meta-key">студия:</span> ${escapeHtml(entry.studios.join(', '))}`);
-        if (entry.directors && entry.directors.length) metaLines.push(`<span class="oc-meta-key">режиссёр:</span> ${escapeHtml(entry.directors.join(', '))}`);
-        if (entry.performers && entry.performers.length) metaLines.push(`<span class="oc-meta-key">исполнитель:</span> ${escapeHtml(entry.performers.join(', '))}`);
-        if (entry.franchises && entry.franchises.length) metaLines.push(`<span class="oc-meta-key">франшиза:</span> ${escapeHtml(entry.franchises.join(', '))}`);
-        if (entry.image) metaLines.push(`<span class="oc-meta-key">картинка:</span> <a href="${escapeHtml(normalizeUrl(entry.image))}" target="_blank" rel="noopener noreferrer">открыть ↗</a>`);
-        if (linkHtml) metaLines.push(linkHtml);
-        const yearTag = entry.year ? `<span class="oc-yr-tag">${entry.year}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}</span>` : '';
-
-        return `
-          <div class="oc-card" data-id="${entry.id}">
-            <div class="oc-rank ${rankClass}">${rankLabel}</div>
-            <div class="oc-ring-wrap">
-              <svg viewBox="0 0 64 64">
-                <circle class="oc-ring-bg" cx="32" cy="32" r="26"></circle>
-                <circle class="oc-ring-fg" cx="32" cy="32" r="26" stroke="${color}" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"></circle>
-              </svg>
-              <div class="oc-ring-score">${scoreText}</div>
-            </div>
-            <div class="oc-info">
-              <div class="oc-name-row">
-                <span class="oc-name oc-clickable-title" data-action="open-card" data-id="${entry.id}">${escapeHtml(entry.title)}</span>
-                <span class="oc-type-tag ${entry.type}">${entry.type}</span>
-                ${yearTag}
-              </div>
-              ${metaLines.map(l => `<div class="oc-meta oc-meta-line">${l}</div>`).join('')}
-              ${entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : ''}
-              ${ratingCount(entry.scores) > 0 && ratingCount(entry.scores) < MIN_PUBLIC_VOTES ? `<div class="oc-song-small">средняя появится после ${MIN_PUBLIC_VOTES} оценок · сейчас ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}</div>` : ''}
-              ${myPersonalScore !== null ? `<div class="oc-song-small">твоя оценка: ${escapeHtml(formatFiveScore(myPersonalScore))}</div>` : ''}
-              <div class="oc-votes">${chips}</div>
-            </div>
-            <div class="oc-rate">
-              <div class="oc-rate-row">
-                <input type="range" min="${ratingMin()}" max="${ratingMax()}" step="${scaleStep()}" value="${myVal}" class="oc-slider" data-id="${entry.id}" />
-                <span class="oc-rate-val">${escapeHtml(formatInputScore(myVal))}</span>
-              </div>
-              <button class="oc-rate-btn" data-action="rate" data-id="${entry.id}">Оценить</button>
-              <button class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
-              ${(isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null) ? `<button class="oc-secondary-btn" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? 'удалить отметку' : 'удалить оценку'}</button>` : ''}
-              ${isAdmin() ? `<button class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
-              <button class="oc-del" data-action="delete" data-id="${entry.id}">удалить трек</button>` : ''}
-            </div>
-          </div>`;
+        const extraBits = [];
+        if (ratingCount(entry.scores) > 0 && ratingCount(entry.scores) < MIN_PUBLIC_VOTES) extraBits.push(`<div class="oc-song-small">средняя появится после ${MIN_PUBLIC_VOTES} оценок · сейчас ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}</div>`);
+        if (myPersonalScore !== null) extraBits.push(`<div class="oc-song-small">твоя оценка: ${escapeHtml(formatFiveScore(myPersonalScore))}</div>`);
+        const controlsHtml = `
+          <div class="oc-rate-row">
+            <input type="range" min="${ratingMin()}" max="${ratingMax()}" step="${scaleStep()}" value="${myVal}" class="oc-slider" data-id="${entry.id}" />
+            <span class="oc-rate-val">${escapeHtml(formatInputScore(myVal))}</span>
+          </div>
+          <button class="oc-rate-btn" data-action="rate" data-id="${entry.id}">Оценить</button>
+          <button class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
+          ${(isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null) ? `<button class="oc-secondary-btn" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? 'удалить отметку' : 'удалить оценку'}</button>` : ''}
+          ${isAdmin() ? `<button class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
+          <button class="oc-del" data-action="delete" data-id="${entry.id}">удалить трек</button>` : ''}`;
+        return renderUnifiedEntryCard(entry, {
+          rankLabel,
+          rankClass,
+          scoreText,
+          scoreSub: 'средняя',
+          fields: ['studios', 'directors', 'performers', 'franchises'],
+          showImageLink: true,
+          showTrackLink: true,
+          notes: true,
+          extraHtml: extraBits.join(''),
+          votesHtml: `<div class="oc-votes">${chips}</div>`,
+          controlsHtml,
+          className: 'main-card'
+        });
       }).join('');
 
       const pager = paginationHtml('chart', chartPage, sorted.length);
@@ -5431,7 +5519,7 @@
       filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = '';
       filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];
       sortMode = 'added_desc';
-      chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 };
+      chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 }; arScoreFilter = '';
       const sort = $('#oc-sort');
       if (sort) sort.value = 'added_desc';
       populateFilterOptions();
@@ -5492,6 +5580,14 @@
     $('#oc-ar-type').addEventListener('change', (e) => {
       arTypeFilter = e.target.value;
       allRatingsPage = { OP: 1, ED: 1 };
+      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
+    });
+    const arMetricEl = $('#oc-ar-metric');
+    if (arMetricEl) arMetricEl.addEventListener('change', (e) => {
+      arScoreMetric = e.target.value || 'total';
+      arScoreFilter = '';
+      allRatingsPage = { OP: 1, ED: 1 };
+      populateArScoreOptions(profileUser, applyFiltersIgnoringType(entries));
       renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
     });
     $('#oc-ar-score').addEventListener('change', (e) => {
