@@ -1768,6 +1768,10 @@
       .oc-auth-row, .oc-name-modal-row { grid-template-columns: 1fr; }
     }
 
+
+    .oc-basket-add-btn { border-color: rgba(255,200,87,.55); color: var(--gold); }
+    .oc-basket-add-btn:hover { background: rgba(255,200,87,.12); color: var(--gold); }
+
   </style>
 </head>
 <body>
@@ -1798,6 +1802,7 @@
       <button class="oc-tab-btn" data-tab="season">Сезоны OP/ED</button>
       <button class="oc-tab-btn" data-tab="tier">Тир-лист</button>
       <button class="oc-tab-btn" data-tab="stats">Средние</button>
+      <a class="oc-tab-btn" href="events.html" style="text-decoration:none;display:inline-flex;align-items:center;">Ивенты</a>
     </div>
 
     <div id="oc-main-panel" class="oc-tab-panel">
@@ -2211,6 +2216,8 @@
     const ACCESS_KEY = 'op-ed-access-level';
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
+    const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
+    const EVENT_BASKET_ALLOWED = new Set(['пескошачий', 'egortos']);
     const MIN_PUBLIC_VOTES = 3;
     const FIVE_SCORE_LABELS = { 1: 'залупа', 2: 'не очень', 3: '50/50', 4: 'норм', 5: 'заебись' };
     const AVATAR_OPTIONS = ['🙂','😎','🦊','🐱','🐧','🐉','👹','🌸','🎧','🎤','🎵','🔥','💿','📼','🌙','⭐','📺','🎬','🍥','⚔️','👾','🦄','🐺','🍜'];
@@ -2302,6 +2309,24 @@
     let tierSelection = { type: 'OP', year: new Date().getFullYear(), season: 'winter' };
     let extendedDbCache = null;
 
+    // ---------- performance layer for large catalogs ----------
+    // UI shows only paginated cards, but with thousands of tracks the expensive part is
+    // repeated filtering/statistics over the whole in-memory catalog. These counters and
+    // caches keep repeated renders cheap and coalesce several Firestore snapshots into one UI refresh.
+    let dataVersion = 0;
+    let catalogVersion = 0;
+    let manualRanksVersion = 0;
+    let avatarsVersion = 0;
+    let entriesById = new Map();
+    let filterOptionsVersion = -1;
+    let categoryCacheVersion = -1;
+    let categoryCache = { studios: [], directors: [], performers: [], franchises: [], years: [] };
+    let profileUsersCache = { key: '', names: [] };
+    let filteredCache = { key: '', value: null };
+    let sortedCache = { key: '', input: null, value: null };
+    let uiRefreshTimer = null;
+    let lastOpeningsSnapshotKey = '';
+
     function waitForFirebaseDb() {
       if (window.OPED_DB) return Promise.resolve(window.OPED_DB);
 
@@ -2334,6 +2359,93 @@
       return extendedDbCache;
     }
 
+
+    function makeDebounced(fn, delay = 250) {
+      let timer = null;
+      return function debounced(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+      };
+    }
+
+    function clearDerivedCaches() {
+      filteredCache = { key: '', value: null };
+      sortedCache = { key: '', input: null, value: null };
+    }
+
+    function touchEntryCache(entry) {
+      if (!entry) return entry;
+      ['scores', 'songScores', 'visualScores', 'personalScores'].forEach(key => {
+        if (entry[key] && typeof entry[key] === 'object') {
+          try { delete entry[key].__oc_stats; } catch (e) {}
+        }
+      });
+      delete entry.__ocSearchText;
+      return entry;
+    }
+
+    function rebuildFastIndexes({ catalogChanged = true } = {}) {
+      entriesById = new Map(entries.map(e => [String(e.id), e]));
+      dataVersion += 1;
+      if (catalogChanged) {
+        catalogVersion += 1;
+        filterOptionsVersion = -1;
+        categoryCacheVersion = -1;
+      }
+      profileUsersCache.key = '';
+      clearDerivedCaches();
+    }
+
+    function markRatingDataChanged() {
+      dataVersion += 1;
+      profileUsersCache.key = '';
+      clearDerivedCaches();
+    }
+
+    function markManualRanksChanged() {
+      manualRanksVersion += 1;
+      profileUsersCache.key = '';
+      clearDerivedCaches();
+    }
+
+    function markAvatarsChanged() {
+      avatarsVersion += 1;
+      profileUsersCache.key = '';
+    }
+
+    function refreshVisiblePanels({ forceFilters = false } = {}) {
+      if (forceFilters) populateFilterOptions(true);
+      else syncFilterControls();
+      populateProfileUsers();
+      if (activeTab === 'chart') render();
+      else if (activeTab === 'profile') renderProfile();
+      else if (activeTab === 'top100') renderGlobalTop100();
+      else if (activeTab === 'season') renderSeasonViews();
+      else if (activeTab === 'tier') renderTierList();
+      else if (activeTab === 'stats') renderStatsPage();
+    }
+
+    function scheduleVisibleRefresh(options = {}) {
+      clearTimeout(uiRefreshTimer);
+      uiRefreshTimer = setTimeout(() => {
+        uiRefreshTimer = null;
+        refreshVisiblePanels(options);
+      }, 50);
+    }
+
+
+    function firestoreTimeKey(value) {
+      if (!value) return '';
+      if (typeof value.toMillis === 'function') return String(value.toMillis());
+      if (typeof value.seconds === 'number') return `${value.seconds}:${value.nanoseconds || 0}`;
+      if (value instanceof Date) return String(value.getTime());
+      return String(value);
+    }
+
+    function openingsSnapshotKey(rows) {
+      return (rows || []).map(row => `${row.id || ''}:${firestoreTimeKey(row.updatedAt || row.createdAt || '')}`).join('|');
+    }
+
     async function saveOpeningExtras(openingId, extras) {
       if (!openingId || !extras) return;
       const ext = await getExtendedDb();
@@ -2364,7 +2476,7 @@
     }
 
     async function deleteCurrentRating(openingId, nickname, forceMode) {
-      const entry = entries.find(e => String(e.id) === String(openingId));
+      const entry = entriesById.get(String(openingId));
       const name = String(nickname || '').trim();
       if (!entry || !name) return;
       const mode = forceMode || (isPersonalScale() ? 'personal' : 'public');
@@ -2382,6 +2494,8 @@
             await saveRatingExtras(entry.id, name, { score: null, songScore: null, visualScore: null });
           }
         }
+        touchEntryCache(entry);
+        markRatingDataChanged();
         render();
         renderSeasonViews();
         if (activeTab === 'profile') renderProfile();
@@ -2587,7 +2701,8 @@
 
     function rebuildEntriesFromFirebase() {
       const next = firebaseOpenings.map(normalizeEntryFromFirebase);
-      const byId = new Map(next.map(e => [e.id, e]));
+      const byId = new Map(next.map(e => [String(e.id), e]));
+      let avatarChanged = false;
 
       firebaseRatings.forEach(r => {
         const openingId = String(r.openingId || '');
@@ -2599,32 +2714,44 @@
         const personalScore = normalizeOptionalNumber(r.personalScore);
 
         if (!entry || !nickname) return;
-        if (r.avatar) avatarsMap[nickname] = String(r.avatar).trim();
+        if (r.avatar) {
+          const av = String(r.avatar).trim();
+          if (av && avatarsMap[nickname] !== av) { avatarsMap[nickname] = av; avatarChanged = true; }
+        }
         if (Number.isFinite(personalScore)) {
           entry.personalScores = entry.personalScores || {};
           entry.personalScores[nickname] = personalScore;
         }
-        if (!Number.isFinite(score)) return;
-        entry.scores = entry.scores || {};
-        entry.scores[nickname] = score;
-        if (Number.isFinite(songScore)) {
-          entry.songScores = entry.songScores || {};
-          entry.songScores[nickname] = songScore;
-        }
-        if (Number.isFinite(visualScore)) {
-          entry.visualScores = entry.visualScores || {};
-          entry.visualScores[nickname] = visualScore;
+        if (Number.isFinite(score)) {
+          entry.scores = entry.scores || {};
+          entry.scores[nickname] = score;
+          if (Number.isFinite(songScore)) {
+            entry.songScores = entry.songScores || {};
+            entry.songScores[nickname] = songScore;
+          }
+          if (Number.isFinite(visualScore)) {
+            entry.visualScores = entry.visualScores || {};
+            entry.visualScores[nickname] = visualScore;
+          }
+        } else {
+          if (Number.isFinite(songScore)) {
+            entry.songScores = entry.songScores || {};
+            entry.songScores[nickname] = songScore;
+          }
+          if (Number.isFinite(visualScore)) {
+            entry.visualScores = entry.visualScores || {};
+            entry.visualScores[nickname] = visualScore;
+          }
         }
       });
 
+      const snapshotKey = openingsSnapshotKey(firebaseOpenings);
+      const catalogChanged = snapshotKey !== lastOpeningsSnapshotKey;
+      lastOpeningsSnapshotKey = snapshotKey;
       entries = next;
-      populateFilterOptions();
-      render();
-      renderSeasonViews();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'tier') renderTierList();
-      if (activeTab === 'stats') renderStatsPage();
-      if (activeTab === 'top100') renderGlobalTop100();
+      rebuildFastIndexes({ catalogChanged });
+      if (avatarChanged) markAvatarsChanged();
+      scheduleVisibleRefresh({ forceFilters: catalogChanged });
     }
 
     function rowHasManualTopData(row) {
@@ -2667,11 +2794,8 @@
     }
 
     function refreshAfterManualRankCacheChange() {
-      populateProfileUsers();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'tier') renderTierList();
-      if (activeTab === 'stats') renderStatsPage();
-      if (activeTab === 'top100') renderGlobalTop100();
+      markManualRanksChanged();
+      scheduleVisibleRefresh();
     }
 
     function rebuildManualRanksFromFirebase() {
@@ -2727,13 +2851,11 @@
       });
       avatarsMap = next;
       manualRanks = nextManualRanks;
+      markAvatarsChanged();
+      markManualRanksChanged();
       try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
       persistManualRanksCache();
-      populateProfileUsers();
-      render();
-      renderSeasonViews();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'top100') renderGlobalTop100();
+      scheduleVisibleRefresh();
     }
 
     function setStatus(msg, isError) {
@@ -2840,24 +2962,39 @@
       return Math.max(0.5, Math.min(10, Number(num.toFixed(1))));
     }
 
+    function scoreStats(scores) {
+      if (!scores || typeof scores !== 'object') return { keyCount: 0, count: 0, avgAny: null, sum: 0 };
+      const keys = Object.keys(scores);
+      const cached = scores.__oc_stats;
+      if (cached && cached.keyCount === keys.length) return cached;
+      let sum = 0;
+      let count = 0;
+      keys.forEach(key => {
+        const val = normalizePublicScore(scores[key]);
+        if (val !== null) { sum += val; count += 1; }
+      });
+      const stats = { keyCount: keys.length, count, avgAny: count ? sum / count : null, sum };
+      try { Object.defineProperty(scores, '__oc_stats', { value: stats, configurable: true, enumerable: false }); }
+      catch (e) { scores.__oc_stats = stats; }
+      return stats;
+    }
+
     function scoreValues(scores) {
-      return Object.values(scores || {}).map(normalizePublicScore).filter(v => v !== null);
+      return Object.keys(scores || {}).map(k => normalizePublicScore(scores[k])).filter(v => v !== null);
     }
 
     function ratingCount(scores) {
-      return scoreValues(scores).length;
+      return scoreStats(scores).count;
     }
 
     function avg(scores, minVotes = MIN_PUBLIC_VOTES) {
-      const vals = scoreValues(scores);
-      if (vals.length < minVotes) return null;
-      return vals.reduce((a, b) => a + b, 0) / vals.length;
+      const stats = scoreStats(scores);
+      if (stats.count < minVotes) return null;
+      return stats.avgAny;
     }
 
     function avgAny(scores) {
-      const vals = scoreValues(scores);
-      if (!vals.length) return null;
-      return vals.reduce((a, b) => a + b, 0) / vals.length;
+      return scoreStats(scores).avgAny;
     }
 
     function normalizedPublicScoreRatio(score) {
@@ -3274,17 +3411,21 @@
           if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
           if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
 
+          function rebuildCatalogWhenReady() {
+            if (gotOpenings && gotRatings) rebuildEntriesFromFirebase();
+          }
+
           firebaseUnsubOpenings = db.watchOpenings((rows) => {
             firebaseOpenings = rows || [];
             gotOpenings = true;
-            rebuildEntriesFromFirebase();
+            rebuildCatalogWhenReady();
             maybeResolve();
           });
 
           firebaseUnsubRatings = db.watchRatings((rows) => {
             firebaseRatings = rows || [];
             gotRatings = true;
-            rebuildEntriesFromFirebase();
+            rebuildCatalogWhenReady();
             rebuildManualRanksFromRatingDocs();
             maybeResolve();
           });
@@ -3359,25 +3500,40 @@
       return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ru'));
     }
 
-    function populateFilterOptions() {
+    function buildCategoryCache(force = false) {
+      if (!force && categoryCacheVersion === catalogVersion) return categoryCache;
       const years = uniqueSorted(entries.map(e => e.year ? String(e.year) : '')).sort((a, b) => b - a);
-      fillYearSelect('#oc-f-year', years);
-      fillYearSelect('#oc-p-year', years);
-      fillTierYearSelect(years);
+      categoryCache = {
+        years,
+        studios: uniqueSorted(entries.flatMap(e => e.studios || [])),
+        directors: uniqueSorted(entries.flatMap(e => e.directors || [])),
+        performers: uniqueSorted(entries.flatMap(e => e.performers || [])),
+        franchises: uniqueSorted(entries.flatMap(e => e.franchises || []))
+      };
+      categoryCacheVersion = catalogVersion;
+      return categoryCache;
+    }
 
-      const studios = uniqueSorted(entries.flatMap(e => e.studios || []));
-      const directors = uniqueSorted(entries.flatMap(e => e.directors || []));
-      const performers = uniqueSorted(entries.flatMap(e => e.performers || []));
-      const franchises = uniqueSorted(entries.flatMap(e => e.franchises || []));
-      fillMultiSelect('#oc-f-studio', studios, filters.studios);
-      fillMultiSelect('#oc-f-director', directors, filters.directors);
-      fillMultiSelect('#oc-f-performer', performers, filters.performers);
-      fillMultiSelect('#oc-f-franchise', franchises, filters.franchises);
-      fillMultiSelect('#oc-p-studio', studios, filters.studios);
-      fillMultiSelect('#oc-p-director', directors, filters.directors);
-      fillMultiSelect('#oc-p-performer', performers, filters.performers);
-      fillMultiSelect('#oc-p-franchise', franchises, filters.franchises);
-      refreshDatalists({ studios, directors, performers, franchises });
+    function populateFilterOptions(force = false) {
+      const groups = buildCategoryCache(force);
+      if (!force && filterOptionsVersion === catalogVersion) {
+        syncFilterControls();
+        return;
+      }
+      fillYearSelect('#oc-f-year', groups.years);
+      fillYearSelect('#oc-p-year', groups.years);
+      fillTierYearSelect(groups.years);
+
+      fillMultiSelect('#oc-f-studio', groups.studios, filters.studios);
+      fillMultiSelect('#oc-f-director', groups.directors, filters.directors);
+      fillMultiSelect('#oc-f-performer', groups.performers, filters.performers);
+      fillMultiSelect('#oc-f-franchise', groups.franchises, filters.franchises);
+      fillMultiSelect('#oc-p-studio', groups.studios, filters.studios);
+      fillMultiSelect('#oc-p-director', groups.directors, filters.directors);
+      fillMultiSelect('#oc-p-performer', groups.performers, filters.performers);
+      fillMultiSelect('#oc-p-franchise', groups.franchises, filters.franchises);
+      refreshDatalists(groups);
+      filterOptionsVersion = catalogVersion;
       syncFilterControls();
     }
 
@@ -3425,7 +3581,8 @@
     }
 
     function refreshDatalists(groups) {
-      fillDatalist('#oc-dl-titles', entries.map(e => e.title));
+      // Названия не кладём в datalist: для больших баз это очень тяжёлый список и визуально мешает.
+      fillDatalist('#oc-dl-titles', []);
       fillDatalist('#oc-dl-search', []);
       fillDatalist('#oc-dl-studios', groups.studios || []);
       fillDatalist('#oc-dl-directors', groups.directors || []);
@@ -3434,7 +3591,28 @@
     }
 
     function allCategoryValues(key) {
-      return uniqueSorted(entries.flatMap(e => e[key] || []));
+      const groups = buildCategoryCache(false);
+      return groups[key] || [];
+    }
+
+    function entrySearchText(entry) {
+      if (!entry) return '';
+      if (entry.__ocSearchText) return entry.__ocSearchText;
+      const text = [
+        entry.title, entry.type, entry.year, SEASON_LABEL[entry.season],
+        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
+      ].join(' ').toLowerCase();
+      try { Object.defineProperty(entry, '__ocSearchText', { value: text, configurable: true, enumerable: false }); }
+      catch (e) { entry.__ocSearchText = text; }
+      return text;
+    }
+
+    function filtersCacheKey() {
+      return [
+        dataVersion, filters.search, filters.type, filters.year, filters.season,
+        filters.scoreCmp, filters.scoreValue,
+        filters.studios.join('¦'), filters.directors.join('¦'), filters.performers.join('¦'), filters.franchises.join('¦')
+      ].join('|');
     }
 
     function addFilterValueFromInput(input) {
@@ -3472,16 +3650,28 @@
       return Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));
     }
 
-    function populateProfileUsers() {
+    function populateProfileUsers(force = false) {
       if (!profileUserSelect) return;
-      const names = allVoterNames();
+      const key = `${dataVersion}|${manualRanksVersion}|${avatarsVersion}|${myName}`;
       const prev = profileUserSelect.value;
+      let names;
+      if (!force && profileUsersCache.key === key && profileUsersCache.names.length) {
+        names = profileUsersCache.names;
+      } else {
+        names = allVoterNames();
+        profileUsersCache = { key, names };
+      }
       if (!names.length) {
         profileUserSelect.innerHTML = '<option value="">нет оценивших</option>';
         profileUser = '';
         return;
       }
-      profileUserSelect.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">${avatarFor(n)} ${escapeHtml(n)}</option>`).join('');
+      const currentOptionsKey = profileUserSelect.getAttribute('data-options-key') || '';
+      const nextOptionsKey = key + '|' + names.join('¦');
+      if (force || currentOptionsKey !== nextOptionsKey) {
+        profileUserSelect.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">${avatarFor(n)} ${escapeHtml(n)}</option>`).join('');
+        profileUserSelect.setAttribute('data-options-key', nextOptionsKey);
+      }
       let next = prev && names.includes(prev) ? prev : (myName && names.includes(myName) ? myName : names[0]);
       profileUserSelect.value = next;
       profileUser = next;
@@ -3489,13 +3679,11 @@
 
     function applyFilters(list) {
       const q = String(filters.search || '').trim().toLowerCase();
-      return list.filter(e => {
+      const cacheKey = list === entries ? filtersCacheKey() : '';
+      if (cacheKey && filteredCache.key === cacheKey && Array.isArray(filteredCache.value)) return filteredCache.value;
+      const result = list.filter(e => {
         if (q) {
-          const haystack = [
-            e.title, e.type, e.year, SEASON_LABEL[e.season],
-            ...(e.studios || []), ...(e.directors || []), ...(e.performers || []), ...(e.franchises || [])
-          ].join(' ').toLowerCase();
-          if (!haystack.includes(q) && !titleMatchesFuzzySearch(e.title, q)) return false;
+          if (!entrySearchText(e).includes(q) && !titleMatchesFuzzySearch(e.title, q)) return false;
         }
         if (filters.type && e.type !== filters.type) return false;
         if (filters.year && String(e.year) !== filters.year) return false;
@@ -3516,6 +3704,8 @@
         if (filters.franchises.length && !filters.franchises.some(s => (e.franchises || []).includes(s))) return false;
         return true;
       });
+      if (cacheKey) filteredCache = { key: cacheKey, value: result };
+      return result;
     }
 
     function applyFiltersIgnoringType(list) {
@@ -3537,6 +3727,8 @@
     }
 
     function applySort(list) {
+      const cacheKey = `${dataVersion}|${sortMode}|${list.length}|${list === filteredCache.value ? filteredCache.key : ''}`;
+      if (sortedCache.input === list && sortedCache.key === cacheKey && Array.isArray(sortedCache.value)) return sortedCache.value;
       const withScore = list.map((e, idx) => ({ e, score: avg(e.scores), ts: entryTimestamp(e, idx) }));
       withScore.sort((a, b) => {
         if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || b.e.title.localeCompare(a.e.title, 'ru');
@@ -3554,7 +3746,9 @@
         if (b.score === null) return -1;
         return b.score - a.score || (b.ts || 0) - (a.ts || 0);
       });
-      return withScore.map(x => x.e);
+      const result = withScore.map(x => x.e);
+      sortedCache = { key: cacheKey, input: list, value: result };
+      return result;
     }
 
     function clampPage(page, totalItems) {
@@ -3742,6 +3936,86 @@
         .filter(r => r.score !== null);
     }
 
+
+    function eventBasketAccessKey(name) {
+      return String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '');
+    }
+
+    function eventBasketCanAdd() {
+      return !!myName && EVENT_BASKET_ALLOWED.has(eventBasketAccessKey(myName));
+    }
+
+    function loadEventBasket() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(EVENT_BASKET_KEY) || '{}');
+        return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function saveEventBasket(data) {
+      localStorage.setItem(EVENT_BASKET_KEY, JSON.stringify(data && typeof data === 'object' ? data : {}));
+      try { window.dispatchEvent(new StorageEvent('storage', { key: EVENT_BASKET_KEY, newValue: localStorage.getItem(EVENT_BASKET_KEY) })); } catch (e) {}
+    }
+
+    async function saveEventBasketSeasonToFirebase(key, seasonState) {
+      try {
+        const ext = await getExtendedDb();
+        await ext.setDoc(ext.doc(ext.db, 'eventBasket', String(key)), {
+          ...seasonState,
+          key: String(key),
+          updatedAt: ext.serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.error('eventBasket save failed', e);
+        setStatus('Локально добавлено, но Firebase-корзина не сохранилась. Проверь правила Firebase.', true);
+      }
+    }
+
+    function basketSeasonKeyForEntry(entry) {
+      return `${Number(entry.year) || ''}_${String(entry.season || '')}`;
+    }
+
+    function eventBasketHas(entry) {
+      if (!entry || !entry.id) return false;
+      const state = loadEventBasket()[basketSeasonKeyForEntry(entry)];
+      if (!state) return false;
+      const id = String(entry.id);
+      const buckets = state.buckets || {};
+      return ['unassigned', 'guaranteed', 'variable'].some(name => Array.isArray(buckets[name]) && buckets[name].map(String).includes(id));
+    }
+
+    async function addEntryToEventBasket(entry) {
+      if (!entry || !entry.id) return;
+      if (entry.type !== 'OP') { setStatus('В корзину ивентов пока добавляются только OP.', true); return; }
+      if (!entry.year || !entry.season) { setStatus('У OP должен быть год и сезон.', true); return; }
+      const data = loadEventBasket();
+      const key = basketSeasonKeyForEntry(entry);
+      const current = data[key] || {};
+      const buckets = current.buckets || {};
+      const id = String(entry.id);
+      const nextBuckets = {
+        unassigned: Array.isArray(buckets.unassigned) ? buckets.unassigned.map(String).filter(Boolean) : [],
+        guaranteed: Array.isArray(buckets.guaranteed) ? buckets.guaranteed.map(String).filter(Boolean) : [],
+        variable: Array.isArray(buckets.variable) ? buckets.variable.map(String).filter(Boolean) : []
+      };
+      if (!['unassigned','guaranteed','variable'].some(name => nextBuckets[name].includes(id))) nextBuckets.unassigned.push(id);
+      data[key] = {
+        ...current,
+        key,
+        year: Number(entry.year),
+        season: String(entry.season),
+        target: Number(current.target) || 15,
+        buckets: nextBuckets,
+        updatedAtLocal: new Date().toISOString()
+      };
+      saveEventBasket(data);
+      await saveEventBasketSeasonToFirebase(key, data[key]);
+      setStatus(`Добавлено в корзину ивентов: ${entry.title}`);
+      renderSeasonViews();
+    }
+
     function renderUnifiedEntryCard(entry, opts = {}) {
       const rankLabel = opts.rankLabel !== undefined ? opts.rankLabel : '';
       const rankClass = opts.rankClass || '';
@@ -3871,7 +4145,10 @@
         const myScoreText = myScore !== null ? (isPersonalScale() ? formatFiveScore(myScore) : formatScore(myScore)) : '';
         const scoreText = score === null ? '—' : score.toFixed(1);
         const extraHtml = myScore !== null ? `<div class="oc-rated-mark">твоя оценка: ${escapeHtml(myScoreText)}</div>` : '';
-        const controlsHtml = `<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
+        const basketButton = eventBasketCanAdd() && entry.type === 'OP'
+          ? `<button type="button" class="oc-season-re-rate oc-basket-add-btn" data-basket-add="${entry.id}">${eventBasketHas(entry) ? 'В корзине ✓' : 'Добавить в корзину'}</button>`
+          : '';
+        const controlsHtml = `${basketButton}<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
         return renderUnifiedEntryCard(entry, {
           rankLabel: idx + 1,
           scoreText,
@@ -3929,7 +4206,7 @@
 
     function startOpeningRating(entryId) {
       if (!ensureNickname()) return;
-      const entry = entries.find(x => x.id === entryId);
+      const entry = entriesById.get(String(entryId));
       if (!entry) return;
       evaluatorMode = 'single';
       seasonQueue = [entry];
@@ -4044,6 +4321,8 @@
           await saveRatingExtras(entry.id, myName, { songScore, visualScore });
           appendManualOrderIfMissing(myName, entry.type, entry.id);
         }
+        touchEntryCache(entry);
+        markRatingDataChanged();
         setStatus('Оценка сохранена в Firebase ✓');
         render();
         renderSeasonViews();
@@ -4702,7 +4981,7 @@
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
         if (seenKeys.has(safe)) return;
         const arr = manualOrderFor(display, type);
-        const hasActualTop = Array.isArray(arr) && arr.slice(0, 100).some(id => entries.some(e => String(e.id) === String(id) && e.type === type));
+        const hasActualTop = Array.isArray(arr) && arr.slice(0, 100).some(id => (entriesById.get(String(id)) && entriesById.get(String(id)).type === type));
         if (!hasActualTop) return;
         seenKeys.add(safe);
         users.push(display);
@@ -4717,8 +4996,8 @@
         const seen = new Set();
         manualOrderFor(user, type).slice(0, 100).forEach((id, idx) => {
           if (seen.has(id)) return;
-          const entry = entries.find(e => String(e.id) === String(id) && e.type === type);
-          if (!entry) return;
+          const entry = entriesById.get(String(id));
+          if (!entry || entry.type !== type) return;
           seen.add(id);
           if (!rows.has(id)) rows.set(id, { entry, sumPlace: 0, count: 0, users: [] });
           const row = rows.get(id);
@@ -4914,13 +5193,13 @@
     }
 
     function canDropTierCardToScore(entryId, targetScore) {
-      const entry = entries.find(e => String(e.id) === String(entryId));
+      const entry = entriesById.get(String(entryId));
       if (!entry) return false;
       return allowedTierRowsForScore(tierScoreForEntry(entry, myName)).includes(Number(targetScore));
     }
 
     async function saveTierPlacement(user, type, year, season, entryId, targetScore) {
-      const entry = entries.find(e => String(e.id) === String(entryId));
+      const entry = entriesById.get(String(entryId));
       if (!entry) return;
       const allowed = allowedTierRowsForScore(tierScoreForEntry(entry, user));
       const target = Number(targetScore);
@@ -5103,7 +5382,7 @@
     }
 
     function openCardModal(id) {
-      const entry = entries.find(e => String(e.id) === String(id));
+      const entry = entriesById.get(String(id));
       if (!entry || !openingModal) return;
       const score = avg(entry.scores);
       const avgSong = avgAny(entry.songScores || {});
@@ -5209,7 +5488,7 @@
     }
 
     async function saveCardModalRating(id) {
-      const entry = entries.find(e => String(e.id) === String(id));
+      const entry = entriesById.get(String(id));
       if (!entry || !openingModal) return;
       if (!ensureNickname()) return;
       const scoreInput = $('#oc-card-score');
@@ -5238,6 +5517,8 @@
         }
         await saveRatingExtras(entry.id, myName, { score, songScore, visualScore });
         appendManualOrderIfMissing(myName, entry.type, entry.id);
+        touchEntryCache(entry);
+        markRatingDataChanged();
         render();
         renderSeasonViews();
         if (activeTab === 'profile') renderProfile();
@@ -5339,7 +5620,7 @@
           const id = e.target.getAttribute('data-id');
           const slider = listContainer.querySelector(`.oc-slider[data-id="${id}"]`);
           const val = clampScore(slider.value);
-          const entry = entries.find(x => x.id === id);
+          const entry = entriesById.get(String(id));
           if (!entry || val === null) return;
           try {
             if (isPersonalScale()) {
@@ -5353,6 +5634,8 @@
               await saveRatingExtras(entry.id, myName, { score: val });
               appendManualOrderIfMissing(myName, entry.type, entry.id);
             }
+            touchEntryCache(entry);
+            markRatingDataChanged();
             render();
             setStatus('Оценка сохранена в Firebase ✓');
           } catch (err) {
@@ -5398,7 +5681,7 @@
           if (!ensureAdmin()) return;
           const id = e.target.getAttribute('data-id');
           const card = listContainer.querySelector(`.oc-editcard[data-id="${id}"]`);
-          const entry = entries.find(x => x.id === id);
+          const entry = entriesById.get(String(id));
           if (!card || !entry) return;
           const title = card.querySelector('.oc-e-title').value.trim();
           if (!title) { setStatus('Название не может быть пустым.', true); return; }
@@ -5532,6 +5815,12 @@
     seasonListEl.addEventListener('click', (e) => {
       const open = e.target.closest('[data-action="open-card"]');
       if (open) { openCardModal(open.getAttribute('data-id')); return; }
+      const basketBtn = e.target.closest('[data-basket-add]');
+      if (basketBtn) {
+        const entry = entriesById.get(String(basketBtn.getAttribute('data-basket-add')));
+        addEntryToEventBasket(entry);
+        return;
+      }
       const btn = e.target.closest('[data-op-rate]');
       if (!btn) return;
       startOpeningRating(btn.getAttribute('data-op-rate'));
@@ -5677,10 +5966,16 @@
       if (activeTab === 'profile') renderProfile();
     }
 
+    const debouncedFilterChange = makeDebounced(applyFilterChange, 250);
+
     function bindSimpleFilter(selector, key, eventName = 'change') {
       const el = $(selector);
       if (!el) return;
-      el.addEventListener(eventName, (e) => { filters[key] = e.target.value; applyFilterChange(); });
+      el.addEventListener(eventName, (e) => {
+        filters[key] = e.target.value;
+        if (eventName === 'input') debouncedFilterChange();
+        else applyFilterChange();
+      });
     }
 
     bindSimpleFilter('#oc-f-search', 'search', 'input');
