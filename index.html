@@ -2483,28 +2483,74 @@
       if (activeTab === 'top100') renderGlobalTop100();
     }
 
-    function rebuildManualRanksFromFirebase() {
-      if (!Array.isArray(firebaseManualRanks)) return;
-      const next = { ...manualRanks };
-      firebaseManualRanks.forEach(row => {
-        const nickname = String(row.nickname || row.displayName || row.name || row.id || '').trim();
-        if (!nickname) return;
-        const nicknameKey = String(row.nicknameKey || row.id || manualUserSafeKey(nickname)).trim();
-        const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []));
-        const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []));
-        const profileRow = { ...(next[nickname] || next[nicknameKey] || {}), nickname, nicknameKey, OP: op.slice(0, 100), ED: ed.slice(0, 100) };
-        next[nickname] = profileRow;
-        if (nicknameKey && nicknameKey !== nickname) next[nicknameKey] = profileRow;
-      });
-      manualRanks = next;
-      populateProfileUsers();
+    function rowHasManualTopData(row) {
+      return !!(row && (
+        Array.isArray(row.OP) || Array.isArray(row.ED) ||
+        Array.isArray(row.op) || Array.isArray(row.ed) ||
+        Array.isArray(row.manualOP) || Array.isArray(row.manualED)
+      ));
+    }
+
+    function mergeManualRankRowInto(target, row) {
+      if (!row || !rowHasManualTopData(row)) return;
+      const nickname = String(row.nickname || row.displayName || row.name || '').trim();
+      const rawId = String(row.id || '').trim();
+      const nicknameKeyRaw = String(row.nicknameKey || '').trim();
+      const displayName = nickname || (rawId && rawId.indexOf('__') === -1 ? rawId : '');
+      const safeKey = nicknameKeyRaw || (displayName ? manualUserSafeKey(displayName) : rawId);
+      if (!displayName && !safeKey) return;
+      const display = displayName || safeKey;
+      const hasOP = Array.isArray(row.OP) || Array.isArray(row.manualOP) || Array.isArray(row.op);
+      const hasED = Array.isArray(row.ED) || Array.isArray(row.manualED) || Array.isArray(row.ed);
+      const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []));
+      const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []));
+      const prev = { ...(target[display] || {}), ...(safeKey ? (target[safeKey] || {}) : {}) };
+      const profileRow = {
+        ...prev,
+        nickname: display,
+        nicknameKey: safeKey || manualUserSafeKey(display)
+      };
+      if (hasOP) profileRow.OP = op.slice(0, 100);
+      else if (!Array.isArray(profileRow.OP)) profileRow.OP = [];
+      if (hasED) profileRow.ED = ed.slice(0, 100);
+      else if (!Array.isArray(profileRow.ED)) profileRow.ED = [];
+      target[display] = profileRow;
+      if (profileRow.nicknameKey && profileRow.nicknameKey !== display) target[profileRow.nicknameKey] = profileRow;
+    }
+
+    function persistManualRanksCache() {
       try { window.storage && window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); } catch (e) {}
+    }
+
+    function refreshAfterManualRankCacheChange() {
+      populateProfileUsers();
       if (activeTab === 'profile') renderProfile();
       if (activeTab === 'tier') renderTierList();
       if (activeTab === 'stats') renderStatsPage();
       if (activeTab === 'top100') renderGlobalTop100();
     }
 
+    function rebuildManualRanksFromFirebase() {
+      if (!Array.isArray(firebaseManualRanks)) return;
+      const next = { ...manualRanks };
+      firebaseManualRanks.forEach(row => mergeManualRankRowInto(next, row));
+      manualRanks = next;
+      persistManualRanksCache();
+      refreshAfterManualRankCacheChange();
+    }
+
+    function rebuildManualRanksFromRatingDocs() {
+      if (!Array.isArray(firebaseRatings)) return;
+      const next = { ...manualRanks };
+      firebaseRatings.forEach(row => {
+        const openingId = String(row.openingId || '').trim();
+        if (openingId !== '__manualRanks' && !rowHasManualTopData(row)) return;
+        mergeManualRankRowInto(next, row);
+      });
+      manualRanks = next;
+      persistManualRanksCache();
+      refreshAfterManualRankCacheChange();
+    }
 
     function rebuildUserProfilesFromFirebase() {
       const next = { ...avatarsMap };
@@ -2514,19 +2560,12 @@
         const nicknameKey = String(row.nicknameKey || row.id || '').trim();
         const avatar = String(row.avatar || '').trim();
         if (nickname && avatar) next[nickname] = avatar;
-        const op = Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.OP) ? row.OP.map(String) : []);
-        const ed = Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ED) ? row.ED.map(String) : []);
-        if (nickname && (op.length || ed.length)) {
-          const safeKey = nicknameKey || manualUserSafeKey(nickname);
-          const profileRow = { ...(nextManualRanks[nickname] || nextManualRanks[safeKey] || {}), nickname, nicknameKey: safeKey, OP: op.slice(0, 100), ED: ed.slice(0, 100) };
-          nextManualRanks[nickname] = profileRow;
-          if (safeKey && safeKey !== nickname) nextManualRanks[safeKey] = profileRow;
-        }
+        if (rowHasManualTopData(row)) mergeManualRankRowInto(nextManualRanks, row);
       });
       avatarsMap = next;
       manualRanks = nextManualRanks;
       try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
-      try { window.storage && window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); } catch (e) {}
+      persistManualRanksCache();
       populateProfileUsers();
       render();
       renderSeasonViews();
@@ -2998,7 +3037,8 @@
         };
         await Promise.allSettled([
           ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
-          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true })
+          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true }),
+          ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__manualRanks`), { ...payload, openingId: '__manualRanks', score: ext.deleteField(), songScore: ext.deleteField(), visualScore: ext.deleteField(), personalScore: ext.deleteField() }, { merge: true })
         ]).then(results => {
           if (results.some(r => r.status === 'fulfilled')) savedRemote = true;
           results.filter(r => r.status === 'rejected').forEach(r => { console.error('Manual rank mirror save failed', r.reason); errors.push(r.reason); });
@@ -3068,6 +3108,7 @@
             firebaseRatings = rows || [];
             gotRatings = true;
             rebuildEntriesFromFirebase();
+            rebuildManualRanksFromRatingDocs();
             maybeResolve();
           });
 
@@ -4170,7 +4211,8 @@
         return;
       }
       if (!list.length) {
-        container.innerHTML = '<div class="oc-empty">Нет треков по текущим фильтрам</div>';
+        const manualEmpty = opts && opts.manual;
+        container.innerHTML = `<div class="oc-empty">${manualEmpty ? 'Нет сохранённого ручного топа для этого типа' : 'Нет треков'}</div>`;
         return;
       }
       const editable = !!opts.editable;
@@ -4247,7 +4289,6 @@
       profileUser = profileUserSelect.value;
 
       const filtered = applyFilters(entries);
-      const filteredIds = new Set(filtered.map(e => e.id));
 
       renderProfileStats(computeProfileStats(profileUser, filtered));
 
@@ -4271,9 +4312,8 @@
       function topForManual(type) {
         const order = manualOrderFor(profileUser, type, manualEditMode && profileUser === myName);
         return order
-          .filter(id => filteredIds.has(id))
           .map(id => {
-            const e = entries.find(x => x.id === id);
+            const e = entries.find(x => x.id === id && x.type === type);
             return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
           })
           .filter(Boolean)
@@ -4284,8 +4324,8 @@
       const opList = topMode === 'manual' ? topForManual('OP') : topForScore('OP');
       const edList = topMode === 'manual' ? topForManual('ED') : topForScore('ED');
 
-      renderProfileList('#oc-profile-op', opList, profileUser, { editable: canEdit, type: 'OP' });
-      renderProfileList('#oc-profile-ed', edList, profileUser, { editable: canEdit, type: 'ED' });
+      renderProfileList('#oc-profile-op', opList, profileUser, { editable: canEdit, type: 'OP', manual: topMode === 'manual' });
+      renderProfileList('#oc-profile-ed', edList, profileUser, { editable: canEdit, type: 'ED', manual: topMode === 'manual' });
 
       const labelText = '(вручную)';
       $('#oc-topmode-label-op').textContent = labelText;
@@ -5568,7 +5608,8 @@
       };
       const results = await Promise.allSettled([
         setDoc(doc(db, "manualRanks", safeName), payload, { merge: true }),
-        setDoc(doc(db, "userProfiles", safeName), payload, { merge: true })
+        setDoc(doc(db, "userProfiles", safeName), payload, { merge: true }),
+        setDoc(doc(db, "ratings", `${safeName}__manualRanks`), { ...payload, openingId: "__manualRanks", score: deleteField(), songScore: deleteField(), visualScore: deleteField(), personalScore: deleteField() }, { merge: true })
       ]);
       const firstOk = results.find(r => r.status === 'fulfilled');
       if (!firstOk) throw results[0].reason;
