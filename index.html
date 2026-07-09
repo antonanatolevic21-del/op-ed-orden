@@ -2489,13 +2489,12 @@
       firebaseManualRanks.forEach(row => {
         const nickname = String(row.nickname || row.displayName || row.name || row.id || '').trim();
         if (!nickname) return;
-        const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []);
-        const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []);
-        next[nickname] = next[nickname] || {};
-        next[nickname].OP = op;
-        next[nickname].ED = ed;
-        const nicknameKey = String(row.nicknameKey || row.id || '').trim();
-        if (nicknameKey && nicknameKey !== nickname && !next[nicknameKey]) next[nicknameKey] = next[nickname];
+        const nicknameKey = String(row.nicknameKey || row.id || manualUserSafeKey(nickname)).trim();
+        const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []));
+        const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []));
+        const profileRow = { ...(next[nickname] || next[nicknameKey] || {}), nickname, nicknameKey, OP: op.slice(0, 100), ED: ed.slice(0, 100) };
+        next[nickname] = profileRow;
+        if (nicknameKey && nicknameKey !== nickname) next[nicknameKey] = profileRow;
       });
       manualRanks = next;
       populateProfileUsers();
@@ -2518,10 +2517,10 @@
         const op = Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.OP) ? row.OP.map(String) : []);
         const ed = Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ED) ? row.ED.map(String) : []);
         if (nickname && (op.length || ed.length)) {
-          nextManualRanks[nickname] = nextManualRanks[nickname] || {};
-          nextManualRanks[nickname].OP = op.slice(0, 100);
-          nextManualRanks[nickname].ED = ed.slice(0, 100);
-          if (nicknameKey && nicknameKey !== nickname && !nextManualRanks[nicknameKey]) nextManualRanks[nicknameKey] = nextManualRanks[nickname];
+          const safeKey = nicknameKey || manualUserSafeKey(nickname);
+          const profileRow = { ...(nextManualRanks[nickname] || nextManualRanks[safeKey] || {}), nickname, nicknameKey: safeKey, OP: op.slice(0, 100), ED: ed.slice(0, 100) };
+          nextManualRanks[nickname] = profileRow;
+          if (safeKey && safeKey !== nickname) nextManualRanks[safeKey] = profileRow;
         }
       });
       avatarsMap = next;
@@ -2965,12 +2964,12 @@
       catch (e) { console.error('Could not save manual ranks locally', e); }
 
       if (!myName) return;
-      const ranks = manualRanks[myName] || {};
+      const ranks = getManualRanksForUser(myName) || {};
       const cleanRanks = {
         OP: Array.isArray(ranks.OP) ? ranks.OP.map(String).slice(0, 100) : [],
         ED: Array.isArray(ranks.ED) ? ranks.ED.map(String).slice(0, 100) : []
       };
-      manualRanks[myName] = { ...(manualRanks[myName] || {}), ...cleanRanks };
+      rememberManualRanksForUser(myName, cleanRanks);
       const errors = [];
       let savedRemote = false;
 
@@ -2986,9 +2985,7 @@
 
       try {
         const ext = await getExtendedDb();
-        const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function'
-          ? window.OPED_DB.normalizeNickname(myName)
-          : safeDocPart(myName);
+        const safeName = manualUserSafeKey(myName);
         const payload = {
           nickname: myName,
           nicknameKey: safeName,
@@ -3240,7 +3237,13 @@
     function allVoterNames() {
       const names = new Set();
       entries.forEach(e => { Object.keys(e.scores || {}).forEach(n => names.add(n)); Object.keys(e.personalScores || {}).forEach(n => names.add(n)); });
-      Object.keys(manualRanks || {}).forEach(n => names.add(n));
+      Object.keys(manualRanks || {}).forEach(n => {
+        const row = manualRanks[n] || {};
+        const display = String(row.nickname || row.displayName || row.name || '').trim();
+        const key = String(row.nicknameKey || '').trim();
+        const looksLikeTechnicalAlias = key && key === n && display;
+        names.add(looksLikeTechnicalAlias ? display : (display || n));
+      });
       Object.keys(avatarsMap || {}).forEach(n => names.add(n));
       if (myName) names.add(myName);
       return Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));
@@ -3795,6 +3798,61 @@
     }
 
     // ---------- manual (user-curated) top-100 ----------
+    function manualUserSafeKey(user) {
+      const raw = String(user || '').trim();
+      if (!raw) return '';
+      if (window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function') return window.OPED_DB.normalizeNickname(raw);
+      return safeDocPart(raw);
+    }
+
+    function manualCandidateKeys(user) {
+      const raw = String(user || '').trim();
+      if (!raw) return [];
+      const safe = manualUserSafeKey(raw);
+      const lower = raw.toLowerCase();
+      const keys = [raw, safe, lower].filter(Boolean);
+      Object.keys(manualRanks || {}).forEach(k => {
+        const kk = String(k || '').trim();
+        if (!kk) return;
+        const row = manualRanks[kk] || {};
+        const rowNick = String(row.nickname || row.displayName || row.name || '').trim();
+        const rowSafe = String(row.nicknameKey || '').trim();
+        if (kk.toLowerCase() === lower || manualUserSafeKey(kk) === safe || rowNick.toLowerCase() === lower || rowSafe === safe) keys.push(kk);
+      });
+      return Array.from(new Set(keys));
+    }
+
+    function manualRankRowHasTop(row, type) {
+      return !!(row && Array.isArray(row[type]) && row[type].length);
+    }
+
+    function getManualRanksForUser(user) {
+      const keys = manualCandidateKeys(user);
+      for (const key of keys) {
+        const row = manualRanks && manualRanks[key];
+        if (manualRankRowHasTop(row, 'OP') || manualRankRowHasTop(row, 'ED')) return row;
+      }
+      for (const key of keys) {
+        const row = manualRanks && manualRanks[key];
+        if (row) return row;
+      }
+      return {};
+    }
+
+    function rememberManualRanksForUser(user, ranks) {
+      const raw = String(user || '').trim();
+      if (!raw || !ranks) return;
+      const safe = manualUserSafeKey(raw);
+      const profileRow = {
+        ...(manualRanks[raw] || {}),
+        ...ranks,
+        nickname: ranks.nickname || raw,
+        nicknameKey: ranks.nicknameKey || safe
+      };
+      manualRanks[raw] = profileRow;
+      if (safe && safe !== raw) manualRanks[safe] = profileRow;
+    }
+
     function ratedIdsForManual(user, type) {
       return entries
         .filter(e => e.type === type && e.scores && e.scores[user] !== undefined)
@@ -3808,7 +3866,8 @@
 
     function savedManualOrderFor(user, type) {
       if (!user) return [];
-      const saved = manualRanks[user] && Array.isArray(manualRanks[user][type]) ? manualRanks[user][type].map(String) : [];
+      const row = getManualRanksForUser(user);
+      const saved = row && Array.isArray(row[type]) ? row[type].map(String) : [];
       const valid = new Set(entries.filter(e => e.type === type).map(e => String(e.id)));
       const seen = new Set();
       return saved.filter(id => valid.has(String(id)) && !seen.has(String(id)) && (seen.add(String(id)) || true));
@@ -3816,12 +3875,13 @@
 
     function ensureManualOrderForEditing(user, type) {
       if (!user) return [];
-      manualRanks[user] = manualRanks[user] || {};
+      const current = getManualRanksForUser(user);
+      rememberManualRanksForUser(user, current);
       const saved = savedManualOrderFor(user, type);
       const seen = new Set(saved.map(String));
       const missing = ratedIdsForManual(user, type).filter(id => !seen.has(String(id)));
       const order = saved.concat(missing);
-      manualRanks[user][type] = order;
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
       return order;
     }
 
@@ -4270,10 +4330,21 @@
 
 
     function usersWithManualTop(type) {
-      return Object.keys(manualRanks || {}).filter(user => {
-        const arr = manualRanks[user] && manualRanks[user][type];
-        return Array.isArray(arr) && arr.slice(0, 100).some(id => entries.some(e => String(e.id) === String(id) && e.type === type));
+      const users = [];
+      const seenKeys = new Set();
+      Object.keys(manualRanks || {}).forEach(key => {
+        const row = manualRanks[key] || {};
+        const display = String(row.nickname || row.displayName || row.name || key || '').trim();
+        if (!display) return;
+        const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
+        if (seenKeys.has(safe)) return;
+        const arr = manualOrderFor(display, type);
+        const hasActualTop = Array.isArray(arr) && arr.slice(0, 100).some(id => entries.some(e => String(e.id) === String(id) && e.type === type));
+        if (!hasActualTop) return;
+        seenKeys.add(safe);
+        users.push(display);
       });
+      return users.sort((a, b) => a.localeCompare(b, 'ru'));
     }
 
     function computeGlobalManualTop(type) {
@@ -4281,7 +4352,7 @@
       const rows = new Map();
       users.forEach(user => {
         const seen = new Set();
-        (manualRanks[user][type] || []).slice(0, 100).forEach((id, idx) => {
+        manualOrderFor(user, type).slice(0, 100).forEach((id, idx) => {
           if (seen.has(id)) return;
           const entry = entries.find(e => String(e.id) === String(id) && e.type === type);
           if (!entry) return;
