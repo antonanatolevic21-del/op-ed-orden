@@ -1583,6 +1583,23 @@
       cursor: pointer;
     }
     .oc-soft-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .oc-tier-export-wrap {
+      width: max-content;
+      min-width: 1040px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 22px;
+      border-radius: 16px;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+    .oc-tier-export-title {
+      font-family: 'Archivo Black', 'Arial Black', sans-serif;
+      font-size: 30px;
+      color: var(--pink);
+      margin: 0 0 14px;
+    }
+    .oc-tier-export-wrap .oc-tier-board { width: max-content; min-width: 100%; }
+    .oc-tier-export-wrap .oc-tier-dropzone { align-content: flex-start; }
     .oc-soft-btn.active { border-color: var(--pink); color: var(--pink); background: rgba(255,46,99,0.08); }
     .oc-season-rate-all-btn { opacity: .58; padding: 7px 10px; font-size: 11px; }
     .oc-season-rate-all-btn:hover { opacity: 1; }
@@ -1647,7 +1664,7 @@
     <div class="oc-addbar oc-admin-only oc-locked">
       <div class="oc-section-label">+ добавить трек</div>
       <div class="oc-addgrid">
-        <input id="oc-add-title" type="text" list="oc-dl-titles" autocomplete="off" placeholder="Название (аниме — OP/ED N)" />
+        <input id="oc-add-title" type="text" autocomplete="off" placeholder="Название (аниме — OP/ED N)" />
         <select id="oc-add-type">
           <option value="OP">OP</option>
           <option value="ED">ED</option>
@@ -1662,10 +1679,10 @@
         </select>
       </div>
       <div class="oc-addgrid2">
-        <input id="oc-add-studio" type="text" list="oc-dl-studios" autocomplete="off" placeholder="Студии (через запятую)" />
-        <input id="oc-add-director" type="text" list="oc-dl-directors" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
-        <input id="oc-add-performer" type="text" list="oc-dl-performers" autocomplete="off" placeholder="Исполнители (через запятую)" />
-        <input id="oc-add-franchise" type="text" list="oc-dl-franchises" autocomplete="off" placeholder="Франшизы (через запятую)" />
+        <input id="oc-add-studio" type="text" autocomplete="off" placeholder="Студии (через запятую)" />
+        <input id="oc-add-director" type="text" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
+        <input id="oc-add-performer" type="text" autocomplete="off" placeholder="Исполнители (через запятую)" />
+        <input id="oc-add-franchise" type="text" autocomplete="off" placeholder="Франшизы (через запятую)" />
         <input id="oc-add-image" type="text" placeholder="Картинка / постер (URL)" />
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
         <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
@@ -1853,7 +1870,10 @@
 
       <div class="oc-allratings">
         <div class="oc-allratings-head">
-          <div class="oc-section-label" style="margin-bottom:0;">все оценки</div>
+          <div>
+            <div class="oc-section-label" style="margin-bottom:0;">все оценки</div>
+            <div class="oc-hint-inline">ниже работают те же фильтры, что и на главной/в профиле выше</div>
+          </div>
           <div class="oc-allratings-controls">
             <select id="oc-ar-type">
               <option value="">Все типы</option>
@@ -2455,13 +2475,19 @@
       if (!Array.isArray(firebaseManualRanks)) return;
       const next = { ...manualRanks };
       firebaseManualRanks.forEach(row => {
-        const nickname = String(row.nickname || '').trim();
+        const nickname = String(row.nickname || row.displayName || row.name || row.id || '').trim();
         if (!nickname) return;
+        const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []);
+        const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []);
         next[nickname] = next[nickname] || {};
-        next[nickname].OP = Array.isArray(row.OP) ? row.OP.map(String) : [];
-        next[nickname].ED = Array.isArray(row.ED) ? row.ED.map(String) : [];
+        next[nickname].OP = op;
+        next[nickname].ED = ed;
+        const nicknameKey = String(row.nicknameKey || row.id || '').trim();
+        if (nicknameKey && nicknameKey !== nickname && !next[nicknameKey]) next[nicknameKey] = next[nickname];
       });
       manualRanks = next;
+      populateProfileUsers();
+      try { window.storage && window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); } catch (e) {}
       if (activeTab === 'profile') renderProfile();
       if (activeTab === 'tier') renderTierList();
       if (activeTab === 'stats') renderStatsPage();
@@ -2738,6 +2764,41 @@
         }
       });
       return best;
+    }
+
+    function titleMatchesFuzzySearch(title, query) {
+      const raw = String(query || '').trim().toLowerCase();
+      if (!raw) return true;
+      const titleRaw = String(title || '').toLowerCase();
+      if (titleRaw.includes(raw)) return true;
+      const target = compactTitleForCompare(raw);
+      const other = compactTitleForCompare(title);
+      if (target.length < 4 || other.length < 4) return false;
+      if (other.includes(target) || target.includes(other)) return true;
+
+      const titleWords = normalizeTitleForDuplicate(title).split(/[^a-zа-яё0-9]+/gi).filter(Boolean);
+      const candidates = new Set([other]);
+      for (let i = 0; i < titleWords.length; i++) {
+        candidates.add(compactTitleForCompare(titleWords[i]));
+        if (i + 1 < titleWords.length) candidates.add(compactTitleForCompare(titleWords[i] + titleWords[i + 1]));
+        if (i + 2 < titleWords.length) candidates.add(compactTitleForCompare(titleWords[i] + titleWords[i + 1] + titleWords[i + 2]));
+      }
+      const minLen = Math.max(4, target.length - 2);
+      const maxLenWindow = Math.min(other.length, target.length + 3);
+      for (let len = minLen; len <= maxLenWindow; len++) {
+        for (let i = 0; i + len <= other.length; i++) candidates.add(other.slice(i, i + len));
+      }
+
+      for (const candidate of candidates) {
+        if (!candidate || candidate.length < 4) continue;
+        if (candidate.includes(target) || target.includes(candidate)) return true;
+        const dist = levenshteinDistance(target, candidate);
+        const maxLen = Math.max(target.length, candidate.length);
+        const ratio = 1 - dist / maxLen;
+        const allowedDistance = target.length <= 5 ? 2 : 3;
+        if (dist <= allowedDistance || ratio >= 0.84) return true;
+      }
+      return false;
     }
 
     function confirmModalChoice({ title, body, okText = 'Подтвердить', cancelText = 'Отмена' }) {
@@ -3151,7 +3212,7 @@
             e.title, e.type, e.year, SEASON_LABEL[e.season],
             ...(e.studios || []), ...(e.directors || []), ...(e.performers || []), ...(e.franchises || [])
           ].join(' ').toLowerCase();
-          if (!haystack.includes(q)) return false;
+          if (!haystack.includes(q) && !titleMatchesFuzzySearch(e.title, q)) return false;
         }
         if (filters.type && e.type !== filters.type) return false;
         if (filters.year && String(e.year) !== filters.year) return false;
@@ -3500,7 +3561,7 @@
       if (!ensureNickname()) return;
       evaluatorMode = includeAll ? 'season-all' : 'season';
       seasonQueue = includeAll
-        ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType)
+        ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType).slice().sort((a, b) => a.title.localeCompare(b.title, 'ru'))
         : (isPersonalScale()
           ? personalOpeningQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType)
           : openingQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType));
@@ -3942,7 +4003,8 @@
         `;
       }).join('');
 
-      container.innerHTML = rowsHtml + paginationHtml('allratings', allRatingsPage, rated.length);
+      const pager = paginationHtml('allratings', allRatingsPage, rated.length);
+      container.innerHTML = pager + rowsHtml + pager;
       bindPagination(container, 'allratings', () => allRatingsPage, v => { allRatingsPage = clampPage(v, rated.length); }, () => renderAllRatings(user, list));
       container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
 
@@ -4024,7 +4086,8 @@
           </div>
         `;
       }).join('');
-      container.innerHTML = html + paginationHtml(`profile-${type}`, profileTopPage[type], list.length);
+      const pager = paginationHtml(`profile-${type}`, profileTopPage[type], list.length);
+      container.innerHTML = pager + html + pager;
       bindPagination(container, `profile-${type}`, () => profileTopPage[type], v => { profileTopPage[type] = clampPage(v, list.length); }, renderProfile);
       container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
 
@@ -4092,7 +4155,7 @@
           .filter(id => filteredIds.has(id))
           .map(id => {
             const e = entries.find(x => x.id === id);
-            return e && e.scores && e.scores[profileUser] !== undefined ? { entry: e, score: e.scores[profileUser] } : null;
+            return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
           })
           .filter(Boolean)
           .slice(0, 100);
@@ -4337,7 +4400,7 @@
         const items = orderedTierItems(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
         const cards = items.map(e => {
           const title = escapeHtml(e.title);
-          const bg = e.image ? `<img src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" onerror="this.remove();">` : `<span>${escapeHtml(e.type)}</span>`;
+          const bg = e.image ? `<img src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" crossorigin="anonymous" referrerpolicy="no-referrer" onerror="this.remove();">` : `<span>${escapeHtml(e.type)}</span>`;
           return `<div class="oc-tier-card" draggable="true" data-tier-card="1" data-id="${e.id}" data-score="${score}" title="${title}">
             ${bg}<div class="oc-tier-card-title">${title}</div>
           </div>`;
@@ -4658,7 +4721,8 @@
           </div>`;
       }).join('');
 
-      listContainer.innerHTML = `<div class="oc-list">${html}</div>${paginationHtml('chart', chartPage, sorted.length)}`;
+      const pager = paginationHtml('chart', chartPage, sorted.length);
+      listContainer.innerHTML = `${pager}<div class="oc-list">${html}</div>${pager}`;
       bindPagination(listContainer, 'chart', () => chartPage, v => { chartPage = clampPage(v, sorted.length); }, render);
 
       listContainer.querySelectorAll('.oc-slider').forEach(slider => {
@@ -5157,66 +5221,92 @@
       renderAllRatings(profileUser, applyFilters(entries));
     });
 
-    function downloadCurrentTierList() {
+    function loadHtml2Canvas() {
+      if (window.html2canvas) return Promise.resolve(window.html2canvas);
+      if (window._opedHtml2CanvasPromise) return window._opedHtml2CanvasPromise;
+      window._opedHtml2CanvasPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+        script.async = true;
+        script.onload = () => window.html2canvas ? resolve(window.html2canvas) : reject(new Error('html2canvas не загрузился'));
+        script.onerror = () => reject(new Error('Не удалось загрузить html2canvas'));
+        document.head.appendChild(script);
+      });
+      return window._opedHtml2CanvasPromise;
+    }
+
+    function waitForImages(root) {
+      const imgs = Array.from(root.querySelectorAll('img'));
+      if (!imgs.length) return Promise.resolve();
+      return Promise.all(imgs.map(img => new Promise(resolve => {
+        if (img.complete) { resolve(); return; }
+        const done = () => resolve();
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+        setTimeout(done, 2500);
+      })));
+    }
+
+    async function downloadCurrentTierList() {
       if (!myName) { setStatus('Введите никнейм для скачивания тир-листа.', true); return; }
+      const board = $('#oc-tier-list .oc-tier-board');
+      if (!board || !board.querySelector('[data-tier-card]')) {
+        setStatus('В этом тир-листе пока нет карточек для скачивания.', true);
+        return;
+      }
+
       const type = tierSelection.type;
       const year = tierSelection.year;
       const season = tierSelection.season;
-      const rows = tierStepsDesc().map(score => ({
-        score,
-        label: tierLabelFor(myName, type, year, season, score),
-        items: orderedTierItems(myName, type, year, season, score)
-      })).filter(row => row.items.length);
-      if (!rows.length) { setStatus('В этом тир-листе пока нет карточек для скачивания.', true); return; }
-      const width = 1400;
-      const rowHeight = 132;
-      const height = 110 + rows.length * rowHeight;
-      const esc = (v) => String(v || '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-      let y = 76;
-      const body = rows.map(row => {
-        const label = `<rect x="24" y="${y}" width="150" height="96" rx="16" fill="#16121F" stroke="#2A2435"/><text x="99" y="${y+55}" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="24" fill="#08D9D6">${esc(row.label)}</text>`;
-        const cards = row.items.slice(0, 8).map((e, i) => {
-          const x = 194 + i * 146;
-          const title = esc(e.title.length > 38 ? e.title.slice(0, 35) + '…' : e.title);
-          return `<rect x="${x}" y="${y}" width="132" height="96" rx="14" fill="#0F0C16" stroke="#2A2435"/><text x="${x+66}" y="${y+44}" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#F5F3FA"><tspan x="${x+66}">${title.slice(0,18)}</tspan><tspan x="${x+66}" dy="18">${title.slice(18,36)}</tspan></text>`;
-        }).join('');
-        const more = row.items.length > 8 ? `<text x="1360" y="${y+55}" text-anchor="end" font-family="monospace" font-size="18" fill="#8B8698">+${row.items.length - 8}</text>` : '';
-        y += rowHeight;
-        return label + cards + more;
-      }).join('');
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#0B0A10"/><text x="24" y="42" font-family="Arial Black, sans-serif" font-size="32" fill="#FF2E63">АБОБА · тир-лист ${esc(type)} · ${esc(SEASON_LABEL[season])} ${esc(year)} · ${esc(myName)}</text>${body}</svg>`;
-      const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(svgBlob);
-      const img = new Image();
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob(blob => {
-            URL.revokeObjectURL(url);
-            if (!blob) { setStatus('Не удалось создать PNG.', true); return; }
-            const pngUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = pngUrl;
-            a.download = `aboba-tier-${type}-${year}-${season}.png`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            URL.revokeObjectURL(pngUrl);
-            setStatus('Тир-лист скачан как PNG ✓');
-          }, 'image/png');
-        } catch (err) {
-          console.error(err);
-          URL.revokeObjectURL(url);
-          setStatus('Не удалось скачать PNG.', true);
-        }
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); setStatus('Не удалось подготовить PNG.', true); };
-      img.src = url;
+      const exportWrap = document.createElement('div');
+      exportWrap.className = 'oc-tier-export-wrap';
+      exportWrap.style.position = 'fixed';
+      exportWrap.style.left = '-20000px';
+      exportWrap.style.top = '0';
+      exportWrap.style.zIndex = '-1';
+      exportWrap.innerHTML = `<div class="oc-tier-export-title">АБОБА · тир-лист ${escapeHtml(type)} · ${escapeHtml(SEASON_LABEL[season])} ${escapeHtml(year)} · ${escapeHtml(myName)}</div>`;
+      const clonedBoard = board.cloneNode(true);
+      clonedBoard.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
+      clonedBoard.querySelectorAll('img').forEach(img => {
+        img.setAttribute('crossorigin', 'anonymous');
+        img.setAttribute('referrerpolicy', 'no-referrer');
+      });
+      exportWrap.appendChild(clonedBoard);
+      document.body.appendChild(exportWrap);
+
+      try {
+        const html2canvas = await loadHtml2Canvas();
+        await waitForImages(exportWrap);
+        const canvas = await html2canvas(exportWrap, {
+          backgroundColor: '#0B0A10',
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          imageTimeout: 5000,
+          scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
+          windowWidth: Math.max(document.documentElement.scrollWidth, exportWrap.scrollWidth + 80),
+          windowHeight: Math.max(document.documentElement.scrollHeight, exportWrap.scrollHeight + 80)
+        });
+        canvas.toBlob(blob => {
+          exportWrap.remove();
+          if (!blob) { setStatus('Не удалось создать PNG.', true); return; }
+          const pngUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = pngUrl;
+          a.download = `aboba-tier-${type}-${year}-${season}.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(pngUrl);
+          setStatus('Тир-лист скачан как PNG-скриншот ✓');
+        }, 'image/png');
+      } catch (err) {
+        console.error(err);
+        exportWrap.remove();
+        setStatus('Не удалось сделать PNG-скриншот. Проверь, что браузер не блокирует внешние картинки.', true);
+      }
     }
+
 
     (async function init() {
       updateAccessUi();
