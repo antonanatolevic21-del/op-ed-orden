@@ -896,6 +896,8 @@
     }
     .oc-opening-detail-modal {
       border-color: var(--pink);
+      max-height: calc(100vh - 40px);
+      overflow: auto;
     }
     .oc-opening-title-block { min-width: 0; flex: 1; }
     .oc-opening-title-row {
@@ -935,6 +937,21 @@
     }
     .oc-opening-info-panel.hidden { display: none; }
     .oc-opening-score-strip { margin-top: 12px; }
+    .oc-opening-rate-panel {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #0F0C16;
+      padding: 12px;
+      margin-top: 14px;
+    }
+    .oc-opening-rate-panel .oc-section-label { margin-bottom: 10px; }
+    .oc-opening-rate-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
     .oc-opening-user-votes { margin-top: 14px; }
     .oc-opening-plain-image {
       width: 100%;
@@ -5058,6 +5075,23 @@
       renderStatsTable('#oc-stats-franchises', statsGroupRows(base, e => e.franchises || []));
     }
 
+    function openingModalInputBounds() {
+      return {
+        min: ratingScale === 'half' ? 0.5 : 1,
+        max: 10,
+        step: ratingScale === 'half' ? 0.5 : 1
+      };
+    }
+
+    function clampOpeningModalScore(value) {
+      const raw = String(value ?? '').trim();
+      if (!raw) return null;
+      const num = Number(raw);
+      if (!Number.isFinite(num)) return null;
+      const bounds = openingModalInputBounds();
+      return Math.max(bounds.min, Math.min(bounds.max, Number(num.toFixed(1))));
+    }
+
     function openCardModal(id) {
       const entry = entries.find(e => String(e.id) === String(id));
       if (!entry || !openingModal) return;
@@ -5085,6 +5119,12 @@
         ? `<div class="oc-eval-image oc-opening-plain-image"><img src="${escapeHtml(normalizeUrl(entry.image))}" alt="${escapeHtml(entry.title)}" onerror="this.replaceWith(document.createTextNode('нет изображения'));"></div>`
         : `<div class="oc-eval-image oc-opening-plain-image">${escapeHtml(entry.type || 'OP')}</div>`;
       const progressText = `карточка · ${entry.type || 'OP'}${entry.year ? ' · ' + entry.year : ''}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`;
+      const bounds = openingModalInputBounds();
+      const myPublicScore = scoreFor(entry, myName);
+      const mySongScore = songScoreFor(entry, myName);
+      const myVisualScore = visualScoreFor(entry, myName);
+      const savedScore = myPublicScore !== null ? clampOpeningModalScore(myPublicScore) : 5;
+      const hasAnyMyRating = myPublicScore !== null || mySongScore !== null || myVisualScore !== null;
       openingModal.classList.remove('hidden');
       openingModal.innerHTML = `<div class="oc-eval-modal oc-opening-detail-modal">
         <div class="oc-eval-top">
@@ -5103,14 +5143,101 @@
           ${entry.notes ? `<div class="oc-notes" style="margin-top:12px;">${escapeHtml(entry.notes)}</div>` : ''}
         </div>
         ${imageHtml}
+        <div class="oc-opening-rate-panel">
+          <div class="oc-section-label">твоя оценка</div>
+          <div class="oc-eval-grid">
+            <label>Общая оценка
+              <input id="oc-card-range" type="range" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${savedScore}" />
+              <div class="oc-score-word" id="oc-card-word">${escapeHtml(formatScore(savedScore))}</div>
+            </label>
+            <label>Итог
+              <input id="oc-card-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${savedScore}" />
+            </label>
+            <label>Песня <span class="oc-muted-inline">необяз.</span>
+              <input id="oc-card-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${mySongScore !== null ? formatScore(mySongScore) : ''}" placeholder="—" />
+            </label>
+            <label>Визуал <span class="oc-muted-inline">необяз.</span>
+              <input id="oc-card-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${myVisualScore !== null ? formatScore(myVisualScore) : ''}" placeholder="—" />
+            </label>
+          </div>
+          <div class="oc-opening-rate-actions">
+            ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
+            <button type="button" class="oc-addbtn" data-card-action="save-rating">Сохранить оценку</button>
+          </div>
+        </div>
         <div class="oc-opening-score-strip">
-          <div class="oc-detail-grid">${scoreRows}</div>
+          <div class="oc-detail-grid">${scoreRows || '<div class="oc-detail-box"><div class="oc-detail-label">средняя</div><div class="oc-detail-value">—</div></div>'}</div>
         </div>
         <div class="oc-opening-user-votes">
           <div class="oc-section-label" style="margin-bottom:8px;">оценки пользователей</div>
           <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${songScoreFor(entry, voter) !== null ? ' · песня ' + formatScore(songScoreFor(entry, voter)) : ''}${visualScoreFor(entry, voter) !== null ? ' · визуал ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
         </div>
       </div>`;
+
+      const range = $('#oc-card-range');
+      const scoreInput = $('#oc-card-score');
+      const word = $('#oc-card-word');
+      const updateWord = (val) => { if (word) word.textContent = formatScore(val); };
+      if (range && scoreInput) {
+        range.addEventListener('input', () => { scoreInput.value = range.value; updateWord(range.value); });
+        scoreInput.addEventListener('input', () => {
+          const val = clampOpeningModalScore(scoreInput.value);
+          if (val !== null) { range.value = String(val); updateWord(val); }
+        });
+      }
+      const saveBtn = openingModal.querySelector('[data-card-action="save-rating"]');
+      if (saveBtn) saveBtn.addEventListener('click', () => saveCardModalRating(entry.id));
+      const deleteBtn = openingModal.querySelector('[data-card-action="delete-rating"]');
+      if (deleteBtn) deleteBtn.addEventListener('click', async () => {
+        if (!ensureNickname()) return;
+        if (!window.confirm('Удалить твою общую оценку, песню и визуал?')) return;
+        await deleteCurrentRating(entry.id, myName, 'public');
+        openCardModal(entry.id);
+      });
+    }
+
+    async function saveCardModalRating(id) {
+      const entry = entries.find(e => String(e.id) === String(id));
+      if (!entry || !openingModal) return;
+      if (!ensureNickname()) return;
+      const scoreInput = $('#oc-card-score');
+      const songInput = $('#oc-card-song-score');
+      const visualInput = $('#oc-card-visual-score');
+      const score = clampOpeningModalScore(scoreInput ? scoreInput.value : '');
+      const rawSong = songInput ? String(songInput.value || '').trim() : '';
+      const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
+      const songScore = rawSong ? clampOpeningModalScore(rawSong) : null;
+      const visualScore = rawVisual ? clampOpeningModalScore(rawVisual) : null;
+      const bounds = openingModalInputBounds();
+      if (score === null) { setStatus(`Введите общую оценку от ${formatScore(bounds.min)} до ${formatScore(bounds.max)}.`, true); return; }
+      if (rawSong && songScore === null) { setStatus(`Введите оценку песни от ${formatScore(bounds.min)} до ${formatScore(bounds.max)} или оставьте поле пустым.`, true); return; }
+      if (rawVisual && visualScore === null) { setStatus(`Введите оценку визуала от ${formatScore(bounds.min)} до ${formatScore(bounds.max)} или оставьте поле пустым.`, true); return; }
+      try {
+        entry.scores = entry.scores || {};
+        entry.songScores = entry.songScores || {};
+        entry.visualScores = entry.visualScores || {};
+        entry.scores[myName] = score;
+        if (songScore === null) delete entry.songScores[myName];
+        else entry.songScores[myName] = songScore;
+        if (visualScore === null) delete entry.visualScores[myName];
+        else entry.visualScores[myName] = visualScore;
+        if (window.OPED_DB && typeof window.OPED_DB.saveRating === 'function') {
+          await window.OPED_DB.saveRating(entry.id, myName, score);
+        }
+        await saveRatingExtras(entry.id, myName, { score, songScore, visualScore });
+        appendManualOrderIfMissing(myName, entry.type, entry.id);
+        render();
+        renderSeasonViews();
+        if (activeTab === 'profile') renderProfile();
+        if (activeTab === 'tier') renderTierList();
+        if (activeTab === 'stats') renderStatsPage();
+        if (activeTab === 'top100') renderGlobalTop100();
+        openCardModal(entry.id);
+        setStatus('Оценка сохранена в Firebase ✓');
+      } catch (err) {
+        console.error(err);
+        setStatus('Не удалось сохранить оценку в Firebase.', true);
+      }
     }
 
     function closeCardModal() {
