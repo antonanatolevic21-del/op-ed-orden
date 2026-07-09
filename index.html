@@ -894,6 +894,54 @@
       font-size: 22px;
       line-height: 1.2;
     }
+    .oc-opening-detail-modal {
+      border-color: var(--pink);
+    }
+    .oc-opening-title-block { min-width: 0; flex: 1; }
+    .oc-opening-title-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      min-width: 0;
+    }
+    .oc-opening-title-row .oc-eval-title { min-width: 0; }
+    .oc-opening-info-toggle {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+      margin-top: -2px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0F0C16;
+      color: var(--cyan);
+      cursor: pointer;
+      font-family: 'Space Mono', monospace;
+      font-size: 17px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .16s ease, border-color .16s ease, background .16s ease;
+    }
+    .oc-opening-info-toggle:hover { border-color: var(--cyan); background: rgba(8,217,214,0.08); }
+    .oc-opening-info-toggle.open { transform: rotate(180deg); border-color: var(--pink); color: var(--pink); }
+    .oc-opening-info-panel {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #0F0C16;
+      padding: 12px;
+      margin: 0 0 14px;
+      animation: oc-pop .16s ease-out;
+    }
+    .oc-opening-info-panel.hidden { display: none; }
+    .oc-opening-score-strip { margin-top: 12px; }
+    .oc-opening-user-votes { margin-top: 14px; }
+    .oc-opening-plain-image {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 12px;
+      font-size: 13px;
+    }
     .oc-eval-close {
       background: transparent;
       border: 1px solid var(--border);
@@ -5017,34 +5065,51 @@
       const avgSong = avgAny(entry.songScores || {});
       const avgVisual = avgAny(entry.visualScores || {});
       const votes = Object.entries(entry.scores || {}).sort((a,b)=> Number(b[1]) - Number(a[1]));
+      const arrayValue = (arr) => escapeHtml((arr || []).filter(Boolean).join(', ') || '—');
+      const scoreRows = [
+        `<div class="oc-detail-box"><div class="oc-detail-label">средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
+        avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">песня</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
+        avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">визуал</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
+      ].filter(Boolean).join('');
+      const detailRows = `
+        <div class="oc-detail-box"><div class="oc-detail-label">тип</div><div class="oc-detail-value">${escapeHtml(entry.type || '—')}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">год</div><div class="oc-detail-value">${escapeHtml(entry.year || '—')}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">сезон</div><div class="oc-detail-value">${entry.season ? escapeHtml(SEASON_LABEL[entry.season]) : '—'}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">студии</div><div class="oc-detail-value">${arrayValue(entry.studios)}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">режиссёры</div><div class="oc-detail-value">${arrayValue(entry.directors)}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">исполнители</div><div class="oc-detail-value">${arrayValue(entry.performers)}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">франшизы</div><div class="oc-detail-value">${arrayValue(entry.franchises)}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">оценок</div><div class="oc-detail-value">${ratingCount(entry.scores)} общих${ratingCount(entry.songScores) ? ' · ' + ratingCount(entry.songScores) + ' песня' : ''}${ratingCount(entry.visualScores) ? ' · ' + ratingCount(entry.visualScores) + ' визуал' : ''}</div></div>
+      `;
+      const imageHtml = entry.image
+        ? `<div class="oc-eval-image oc-opening-plain-image"><img src="${escapeHtml(normalizeUrl(entry.image))}" alt="${escapeHtml(entry.title)}" onerror="this.replaceWith(document.createTextNode('нет изображения'));"></div>`
+        : `<div class="oc-eval-image oc-opening-plain-image">${escapeHtml(entry.type || 'OP')}</div>`;
+      const progressText = `карточка · ${entry.type || 'OP'}${entry.year ? ' · ' + entry.year : ''}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`;
       openingModal.classList.remove('hidden');
-      openingModal.innerHTML = `<div class="oc-modal-card">
-        <div class="oc-modal-head">
-          <div>
-            <div class="oc-section-label">карточка трека</div>
-            <div class="oc-modal-title">${escapeHtml(entry.title)} ${!entry.link ? '<span class="oc-missing-link" title="Ссылка не добавлена">😡</span>' : ''}</div>
-            <div class="oc-profile-meta">${entry.type}${entry.year ? ' · ' + entry.year : ''}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}</div>
-          </div>
-          <button type="button" class="oc-modal-close" data-modal-close="1">Закрыть</button>
-        </div>
-        <div class="oc-card-preview">
-          ${imgHtml(entry, 'oc-card-preview-img')}
-          <div>
-            <div class="oc-detail-grid">
-              <div class="oc-detail-box"><div class="oc-detail-label">средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>
-              ${avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">песня</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : ''}
-              ${avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">визуал</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''}
-              <div class="oc-detail-box"><div class="oc-detail-label">студии</div><div class="oc-detail-value">${escapeHtml((entry.studios || []).join(', ') || '—')}</div></div>
-              <div class="oc-detail-box"><div class="oc-detail-label">режиссёры</div><div class="oc-detail-value">${escapeHtml((entry.directors || []).join(', ') || '—')}</div></div>
-              <div class="oc-detail-box"><div class="oc-detail-label">исполнители</div><div class="oc-detail-value">${escapeHtml((entry.performers || []).join(', ') || '—')}</div></div>
-              <div class="oc-detail-box"><div class="oc-detail-label">франшизы</div><div class="oc-detail-value">${escapeHtml((entry.franchises || []).join(', ') || '—')}</div></div>
-              <div class="oc-detail-box"><div class="oc-detail-label">ссылка</div><div class="oc-detail-value">${entry.link ? `<a href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer">открыть ↗</a>` : '😡 ссылка не добавлена'}</div></div>
+      openingModal.innerHTML = `<div class="oc-eval-modal oc-opening-detail-modal">
+        <div class="oc-eval-top">
+          <div class="oc-opening-title-block">
+            <div class="oc-eval-progress">${escapeHtml(progressText)}</div>
+            <div class="oc-opening-title-row">
+              <div class="oc-eval-title">${escapeHtml(entry.title)} ${!entry.link ? '<span class="oc-missing-link" title="Ссылка не добавлена">😡</span>' : ''}</div>
+              <button type="button" class="oc-opening-info-toggle" data-opening-info-toggle="1" aria-expanded="false" title="Показать описание">⌄</button>
             </div>
-            ${entry.notes ? `<div class="oc-notes" style="margin-top:12px;">${escapeHtml(entry.notes)}</div>` : ''}
           </div>
+          <button type="button" class="oc-eval-close" data-modal-close="1">Закрыть</button>
         </div>
-        <div class="oc-section-label" style="margin-top:16px;">оценки пользователей</div>
-        <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${songScoreFor(entry, voter) !== null ? ' · песня ' + formatScore(songScoreFor(entry, voter)) : ''}${visualScoreFor(entry, voter) !== null ? ' · визуал ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
+        <div class="oc-opening-info-panel hidden" data-opening-info-panel="1">
+          <div class="oc-section-label">описание</div>
+          <div class="oc-detail-grid">${detailRows}</div>
+          ${entry.notes ? `<div class="oc-notes" style="margin-top:12px;">${escapeHtml(entry.notes)}</div>` : ''}
+        </div>
+        ${imageHtml}
+        <div class="oc-opening-score-strip">
+          <div class="oc-detail-grid">${scoreRows}</div>
+        </div>
+        <div class="oc-opening-user-votes">
+          <div class="oc-section-label" style="margin-bottom:8px;">оценки пользователей</div>
+          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${songScoreFor(entry, voter) !== null ? ' · песня ' + formatScore(songScoreFor(entry, voter)) : ''}${visualScoreFor(entry, voter) !== null ? ' · визуал ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
+        </div>
       </div>`;
     }
 
@@ -5597,6 +5662,16 @@
     });
     if (openingModal) {
       openingModal.addEventListener('click', (e) => {
+        const toggle = e.target.closest('[data-opening-info-toggle]');
+        if (toggle) {
+          const panel = openingModal.querySelector('[data-opening-info-panel]');
+          const willOpen = panel && panel.classList.contains('hidden');
+          if (panel) panel.classList.toggle('hidden', !willOpen);
+          toggle.classList.toggle('open', Boolean(willOpen));
+          toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+          toggle.title = willOpen ? 'Скрыть описание' : 'Показать описание';
+          return;
+        }
         if (e.target === openingModal || e.target.closest('[data-modal-close]')) closeCardModal();
       });
     }
