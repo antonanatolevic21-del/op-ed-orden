@@ -978,10 +978,17 @@
     }
     .oc-eval-grid {
       display: grid;
-      grid-template-columns: 1fr 110px;
+      grid-template-columns: minmax(0, 1fr) 110px;
       gap: 10px;
       align-items: end;
       margin-bottom: 12px;
+    }
+    .oc-eval-parts {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      align-items: end;
     }
     .oc-eval-grid label,
     .oc-details-grid label {
@@ -1082,6 +1089,7 @@
       .oc-card-actions .oc-ar-rank-btn { width: auto; }
       .oc-season-re-rate { grid-column: 3; width: max-content; justify-self: start; }
       .oc-eval-grid { grid-template-columns: 1fr; }
+      .oc-eval-parts { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 620px) {
@@ -3975,12 +3983,14 @@
           <label>${isPersonalScale() ? 'Значение' : 'Итог'}
             <input id="oc-eval-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
           </label>
-          ${optionalPublicParts ? `<label>Песня <span class="oc-muted-inline">необяз.</span>
-            <input id="oc-eval-song-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedSongScore !== null ? savedSongScore : ''}" placeholder="—" />
-          </label>
-          <label>Визуал <span class="oc-muted-inline">необяз.</span>
-            <input id="oc-eval-visual-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedVisualScore !== null ? savedVisualScore : ''}" placeholder="—" />
-          </label>` : ''}
+          ${optionalPublicParts ? `<div class="oc-eval-parts">
+            <label>Песня <span class="oc-muted-inline">необяз.</span>
+              <input id="oc-eval-song-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedSongScore !== null ? savedSongScore : ''}" placeholder="—" />
+            </label>
+            <label>Визуал <span class="oc-muted-inline">необяз.</span>
+              <input id="oc-eval-visual-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedVisualScore !== null ? savedVisualScore : ''}" placeholder="—" />
+            </label>
+          </div>` : ''}
         </div>
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? 'Отмена' : 'Пропустить'}</button>
@@ -5153,12 +5163,14 @@
             <label>Итог
               <input id="oc-card-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${savedScore}" />
             </label>
-            <label>Песня <span class="oc-muted-inline">необяз.</span>
-              <input id="oc-card-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${mySongScore !== null ? formatScore(mySongScore) : ''}" placeholder="—" />
-            </label>
-            <label>Визуал <span class="oc-muted-inline">необяз.</span>
-              <input id="oc-card-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${myVisualScore !== null ? formatScore(myVisualScore) : ''}" placeholder="—" />
-            </label>
+            <div class="oc-eval-parts">
+              <label>Песня <span class="oc-muted-inline">необяз.</span>
+                <input id="oc-card-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${mySongScore !== null ? formatScore(mySongScore) : ''}" placeholder="—" />
+              </label>
+              <label>Визуал <span class="oc-muted-inline">необяз.</span>
+                <input id="oc-card-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${myVisualScore !== null ? formatScore(myVisualScore) : ''}" placeholder="—" />
+              </label>
+            </div>
           </div>
           <div class="oc-opening-rate-actions">
             ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
