@@ -242,6 +242,9 @@
     @media (max-width: 900px) {
       .oc-filtergrid { grid-template-columns: 1fr 1fr; }
     }
+    @media (max-width: 980px) {
+      .oc-allratings-columns { grid-template-columns: 1fr; }
+    }
     .oc-field { display: flex; flex-direction: column; gap: 4px; }
     .oc-field label {
       font-family: 'Space Mono', monospace;
@@ -1104,11 +1107,18 @@
       cursor: pointer;
     }
     .oc-sort-toggle-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .oc-allratings-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .oc-allratings-col { min-width: 0; }
     .oc-allratings-list {
       display: flex;
       flex-direction: column;
       gap: 7px;
-      max-width: 920px;
+      max-width: none;
     }
     .oc-allratings-item {
       display: grid;
@@ -1691,10 +1701,10 @@
         </select>
       </div>
       <div class="oc-addgrid2">
-        <input id="oc-add-studio" type="text" autocomplete="off" placeholder="Студии (через запятую)" />
-        <input id="oc-add-director" type="text" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
-        <input id="oc-add-performer" type="text" autocomplete="off" placeholder="Исполнители (через запятую)" />
-        <input id="oc-add-franchise" type="text" autocomplete="off" placeholder="Франшизы (через запятую)" />
+        <input id="oc-add-studio" type="text" list="oc-dl-studios" autocomplete="off" placeholder="Студии (через запятую)" />
+        <input id="oc-add-director" type="text" list="oc-dl-directors" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
+        <input id="oc-add-performer" type="text" list="oc-dl-performers" autocomplete="off" placeholder="Исполнители (через запятую)" />
+        <input id="oc-add-franchise" type="text" list="oc-dl-franchises" autocomplete="off" placeholder="Франшизы (через запятую)" />
         <input id="oc-add-image" type="text" placeholder="Картинка / постер (URL)" />
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
         <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
@@ -1896,7 +1906,16 @@
             <button class="oc-sort-toggle-btn" id="oc-ar-sort">По убыванию ↓</button>
           </div>
         </div>
-        <div class="oc-allratings-list" id="oc-allratings-list"></div>
+        <div class="oc-allratings-columns" id="oc-allratings-columns">
+          <div class="oc-allratings-col" id="oc-allratings-col-op">
+            <div class="oc-profile-col-title op">Все оценки · OP</div>
+            <div class="oc-allratings-list" id="oc-allratings-op"></div>
+          </div>
+          <div class="oc-allratings-col" id="oc-allratings-col-ed">
+            <div class="oc-profile-col-title ed">Все оценки · ED</div>
+            <div class="oc-allratings-list" id="oc-allratings-ed"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2091,7 +2110,7 @@
     const PAGE_SIZE = 50;
     let chartPage = 1;
     let profileTopPage = { OP: 1, ED: 1 };
-    let allRatingsPage = 1;
+    let allRatingsPage = { OP: 1, ED: 1 };
     let manualEditMode = false;
     let manualDirty = false;
 
@@ -2823,7 +2842,7 @@
         const dist = levenshteinDistance(target, other);
         const maxLen = Math.max(target.length, other.length);
         const ratio = 1 - dist / maxLen;
-        const closeEnough = dist <= 2 || (dist === 3 && maxLen >= 10 && ratio >= 0.9) || ratio >= 0.93;
+        const closeEnough = dist <= 2 || (dist === 3 && maxLen >= 14 && ratio >= 0.92);
         if (closeEnough) {
           if (!best || dist < best.distance || (dist === best.distance && ratio > best.ratio)) best = { entry: e, distance: dist, ratio };
         }
@@ -3334,6 +3353,14 @@
         if (filters.franchises.length && !filters.franchises.some(s => (e.franchises || []).includes(s))) return false;
         return true;
       });
+    }
+
+    function applyFiltersIgnoringType(list) {
+      const oldType = filters.type;
+      filters.type = '';
+      const out = applyFilters(list);
+      filters.type = oldType;
+      return out;
     }
 
     function entryTimestamp(entry, fallbackIndex = 0) {
@@ -3869,15 +3896,26 @@
 
     function getManualRanksForUser(user) {
       const keys = manualCandidateKeys(user);
-      for (const key of keys) {
+      const merged = {};
+      let found = false;
+      keys.forEach(key => {
         const row = manualRanks && manualRanks[key];
-        if (manualRankRowHasTop(row, 'OP') || manualRankRowHasTop(row, 'ED')) return row;
-      }
-      for (const key of keys) {
-        const row = manualRanks && manualRanks[key];
-        if (row) return row;
-      }
-      return {};
+        if (!row) return;
+        found = true;
+        const op = Array.isArray(row.OP) ? row.OP.map(String)
+          : (Array.isArray(row.manualOP) ? row.manualOP.map(String)
+          : (Array.isArray(row.op) ? row.op.map(String) : null));
+        const ed = Array.isArray(row.ED) ? row.ED.map(String)
+          : (Array.isArray(row.manualED) ? row.manualED.map(String)
+          : (Array.isArray(row.ed) ? row.ed.map(String) : null));
+        Object.keys(row).forEach(k => {
+          if (['OP','ED','op','ed','manualOP','manualED'].includes(k)) return;
+          if (row[k] !== undefined && row[k] !== null && row[k] !== '') merged[k] = row[k];
+        });
+        if (op && (op.length || !Array.isArray(merged.OP))) merged.OP = op;
+        if (ed && (ed.length || !Array.isArray(merged.ED))) merged.ED = ed;
+      });
+      return found ? merged : {};
     }
 
     function rememberManualRanksForUser(user, ranks) {
@@ -3943,7 +3981,6 @@
     }
 
     function swapManualRank(user, type, idA, idB) {
-      manualRanks[user] = manualRanks[user] || {};
       const order = ensureManualOrderForEditing(user, type);
       const ia = order.indexOf(idA);
       const ib = order.indexOf(idB);
@@ -3951,7 +3988,7 @@
       const tmp = order[ia];
       order[ia] = order[ib];
       order[ib] = tmp;
-      manualRanks[user][type] = order;
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
       markManualDirty();
       return true;
     }
@@ -3963,7 +4000,7 @@
       if (from === -1 || to < 0 || to >= order.length) return false;
       const [moved] = order.splice(from, 1);
       order.splice(to, 0, moved);
-      manualRanks[user][type] = order;
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
       markManualDirty();
       return true;
     }
@@ -3977,7 +4014,7 @@
       if (from === to) return false;
       const [moved] = order.splice(from, 1);
       order.splice(to, 0, moved);
-      manualRanks[user][type] = order;
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
       markManualDirty();
       return true;
     }
@@ -4007,7 +4044,7 @@
       if (from === to) return false;
       const [moved] = order.splice(from, 1);
       order.splice(to, 0, moved);
-      manualRanks[user][type] = order;
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
       markManualDirty();
       return true;
     }
@@ -4108,71 +4145,87 @@
     }
 
     function renderAllRatings(user, list) {
-      const container = $('#oc-allratings-list');
-      if (!container) return;
-      let rated = ratedListFor(user, list);
-      if (arTypeFilter) rated = rated.filter(r => r.entry.type === arTypeFilter);
-      if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
-      rated.sort((a, b) => {
-        const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
-        if (scoreDiff !== 0) return scoreDiff;
-        return a.entry.title.localeCompare(b.entry.title, 'ru');
-      });
-
+      const opContainer = $('#oc-allratings-op') || $('#oc-allratings-list');
+      const edContainer = $('#oc-allratings-ed');
+      const opCol = $('#oc-allratings-col-op');
+      const edCol = $('#oc-allratings-col-ed');
+      if (!opContainer) return;
       if (!user) {
-        container.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
+        opContainer.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
+        if (edContainer) edContainer.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
         return;
       }
-      if (!rated.length) {
-        container.innerHTML = '<div class="oc-empty">Нет оценок по выбранным условиям</div>';
-        return;
+
+      function renderColumn(type, container) {
+        if (!container) return;
+        let rated = ratedListFor(user, list).filter(r => r.entry.type === type);
+        if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
+        rated.sort((a, b) => {
+          const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.entry.title.localeCompare(b.entry.title, 'ru');
+        });
+
+        if (!rated.length) {
+          container.innerHTML = `<div class="oc-empty">Нет оценённых ${type}</div>`;
+          return;
+        }
+
+        const editableManual = topMode === 'manual' && manualEditMode && !!myName && user === myName;
+        if (editableManual) ensureManualOrderForEditing(user, type);
+
+        allRatingsPage[type] = clampPage(allRatingsPage[type] || 1, rated.length);
+        const page = pageSlice(rated, allRatingsPage[type]);
+        const rowsHtml = page.items.map(r => {
+          const e = r.entry;
+          const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
+          const pos = manualPositionFor(user, e.type, e.id, editableManual);
+          const canDeleteRating = !!myName && user === myName;
+          const manualControls = editableManual ? `
+              <button type="button" class="oc-ar-rank-btn" data-action="all-set-rank" data-type="${e.type}" data-id="${e.id}" title="Ввести точное место в ручном топе">№ ${pos || '—'}</button>
+              ${(!pos || pos > 100) ? `<button type="button" class="oc-ar-top-btn" data-action="all-to-top100" data-type="${e.type}" data-id="${e.id}" title="Поставить на 100-е место и вытолкнуть текущий 100-й ниже">В топ-100</button>` : ''}` : '';
+          const deleteControl = canDeleteRating ? `<button type="button" class="oc-ar-top-btn" data-action="all-delete-rating" data-id="${e.id}" title="Удалить твою оценку">Удалить оценку</button>` : '';
+          const controls = (manualControls || deleteControl) ? `
+            <div class="oc-ar-top-controls">
+              ${manualControls}
+              ${deleteControl}
+            </div>` : '';
+          const detailBits = [];
+          const songVal = songScoreFor(e, user);
+          const visualVal = visualScoreFor(e, user);
+          if (songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
+          if (visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
+          return `
+            <div class="oc-allratings-item${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}">
+              <div class="oc-profile-score">${formatScore(r.score)}</div>
+              ${imgHtml(e, 'oc-profile-thumb')}
+              <div>
+                <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span> <span class="oc-type-tag ${e.type}">${e.type}</span></div>
+                ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
+                ${detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : ''}
+              </div>
+              ${controls}
+            </div>
+          `;
+        }).join('');
+
+        const scope = 'allratings-' + type.toLowerCase();
+        const pager = paginationHtml(scope, allRatingsPage[type], rated.length);
+        container.innerHTML = pager + rowsHtml + pager;
+        bindPagination(container, scope, () => allRatingsPage[type] || 1, v => { allRatingsPage[type] = clampPage(v, rated.length); }, () => renderAllRatings(user, list));
       }
+
+      if (opCol) opCol.style.display = (!arTypeFilter || arTypeFilter === 'OP') ? '' : 'none';
+      if (edCol) edCol.style.display = (!arTypeFilter || arTypeFilter === 'ED') ? '' : 'none';
+      renderColumn('OP', opContainer);
+      if (edContainer) renderColumn('ED', edContainer);
+
+      const root = $('#oc-allratings-columns') || opContainer;
+      root.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
 
       const editableManual = topMode === 'manual' && manualEditMode && !!myName && user === myName;
-      if (editableManual) ['OP', 'ED'].forEach(type => ensureManualOrderForEditing(user, type));
-
-      allRatingsPage = clampPage(allRatingsPage, rated.length);
-      const page = pageSlice(rated, allRatingsPage);
-      const rowsHtml = page.items.map(r => {
-        const e = r.entry;
-        const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
-        const pos = manualPositionFor(user, e.type, e.id, editableManual);
-        const canDeleteRating = !!myName && user === myName;
-        const manualControls = editableManual ? `
-            <button type="button" class="oc-ar-rank-btn" data-action="all-set-rank" data-type="${e.type}" data-id="${e.id}" title="Ввести точное место в ручном топе">№ ${pos || '—'}</button>
-            ${(!pos || pos > 100) ? `<button type="button" class="oc-ar-top-btn" data-action="all-to-top100" data-type="${e.type}" data-id="${e.id}" title="Поставить на 100-е место и вытолкнуть текущий 100-й ниже">В топ-100</button>` : ''}` : '';
-        const deleteControl = canDeleteRating ? `<button type="button" class="oc-ar-top-btn" data-action="all-delete-rating" data-id="${e.id}" title="Удалить твою оценку">Удалить оценку</button>` : '';
-        const controls = (manualControls || deleteControl) ? `
-          <div class="oc-ar-top-controls">
-            ${manualControls}
-            ${deleteControl}
-          </div>` : '';
-        const detailBits = [];
-        const songVal = songScoreFor(e, user);
-        const visualVal = visualScoreFor(e, user);
-        if (songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
-        if (visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
-        return `
-          <div class="oc-allratings-item${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}">
-            <div class="oc-profile-score">${formatScore(r.score)}</div>
-            ${imgHtml(e, 'oc-profile-thumb')}
-            <div>
-              <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span> <span class="oc-type-tag ${e.type}">${e.type}</span></div>
-              ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
-              ${detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : ''}
-            </div>
-            ${controls}
-          </div>
-        `;
-      }).join('');
-
-      const pager = paginationHtml('allratings', allRatingsPage, rated.length);
-      container.innerHTML = pager + rowsHtml + pager;
-      bindPagination(container, 'allratings', () => allRatingsPage, v => { allRatingsPage = clampPage(v, rated.length); }, () => renderAllRatings(user, list));
-      container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
-
       if (editableManual) {
-        container.querySelectorAll('[data-action="all-set-rank"]').forEach(btn => {
+        root.querySelectorAll('[data-action="all-set-rank"]').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-id');
             const type = btn.getAttribute('data-type');
@@ -4182,7 +4235,7 @@
             }
           });
         });
-        container.querySelectorAll('[data-action="all-to-top100"]').forEach(btn => {
+        root.querySelectorAll('[data-action="all-to-top100"]').forEach(btn => {
           btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-id');
             const type = btn.getAttribute('data-type');
@@ -4193,7 +4246,7 @@
           });
         });
       }
-      container.querySelectorAll('[data-action="all-delete-rating"]').forEach(btn => {
+      root.querySelectorAll('[data-action="all-delete-rating"]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.getAttribute('data-id');
           if (!window.confirm('Удалить твою оценку?')) return;
@@ -4289,13 +4342,15 @@
       profileUser = profileUserSelect.value;
 
       const filtered = applyFilters(entries);
+      const topFiltered = applyFiltersIgnoringType(entries);
+      const allRatingsFiltered = applyFiltersIgnoringType(entries);
 
       renderProfileStats(computeProfileStats(profileUser, filtered));
 
       function topForScore(type) {
         const manualOrder = manualOrderFor(profileUser, type);
         const manualIndex = new Map(manualOrder.map((id, idx) => [id, idx]));
-        const list = filtered
+        const list = topFiltered
           .filter(e => e.type === type && e.scores && profileUser && e.scores[profileUser] !== undefined)
           .map(e => ({ entry: e, score: e.scores[profileUser] }));
         list.sort((a, b) => {
@@ -4313,7 +4368,7 @@
         const order = manualOrderFor(profileUser, type, manualEditMode && profileUser === myName);
         return order
           .map(id => {
-            const e = entries.find(x => x.id === id && x.type === type);
+            const e = topFiltered.find(x => x.id === id && x.type === type);
             return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
           })
           .filter(Boolean)
@@ -4354,15 +4409,15 @@
         manualSaveBtn.classList.toggle('active', manualDirty);
       }
 
-      populateArScoreOptions(profileUser, filtered);
-      renderAllRatings(profileUser, filtered);
+      populateArScoreOptions(profileUser, allRatingsFiltered);
+      renderAllRatings(profileUser, allRatingsFiltered);
     }
 
     function setTopMode(mode) {
       topMode = mode;
       manualEditMode = false;
       profileTopPage = { OP: 1, ED: 1 };
-      allRatingsPage = 1;
+      allRatingsPage = { OP: 1, ED: 1 };
       $('#oc-topmode-score').classList.toggle('active', mode === 'score');
       $('#oc-topmode-manual').classList.toggle('active', mode === 'manual');
       renderProfile();
@@ -5239,7 +5294,7 @@
     function applyFilterChange() {
       chartPage = 1;
       profileTopPage = { OP: 1, ED: 1 };
-      allRatingsPage = 1;
+      allRatingsPage = { OP: 1, ED: 1 };
       syncFilterControls();
       render();
       if (activeTab === 'profile') renderProfile();
@@ -5291,7 +5346,7 @@
       filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = '';
       filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];
       sortMode = 'added_desc';
-      chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = 1;
+      chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 };
       const sort = $('#oc-sort');
       if (sort) sort.value = 'added_desc';
       populateFilterOptions();
@@ -5337,7 +5392,7 @@
         setStatus('Не удалось сохранить ручной топ-100.', true);
       }
     });
-    profileUserSelect.addEventListener('change', () => { manualEditMode = false; allRatingsPage = 1; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
+    profileUserSelect.addEventListener('change', () => { manualEditMode = false; allRatingsPage = { OP: 1, ED: 1 }; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
 
     const tierTypeEl = $('#oc-tier-type');
     const tierYearEl = $('#oc-tier-year');
@@ -5351,13 +5406,13 @@
 
     $('#oc-ar-type').addEventListener('change', (e) => {
       arTypeFilter = e.target.value;
-      allRatingsPage = 1;
-      renderAllRatings(profileUser, applyFilters(entries));
+      allRatingsPage = { OP: 1, ED: 1 };
+      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
     });
     $('#oc-ar-score').addEventListener('change', (e) => {
       arScoreFilter = e.target.value;
-      allRatingsPage = 1;
-      renderAllRatings(profileUser, applyFilters(entries));
+      allRatingsPage = { OP: 1, ED: 1 };
+      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
     });
     if (openingModal) {
       openingModal.addEventListener('click', (e) => {
@@ -5386,9 +5441,9 @@
 
     $('#oc-ar-sort').addEventListener('click', () => {
       arSortDir = arSortDir === 'desc' ? 'asc' : 'desc';
-      allRatingsPage = 1;
+      allRatingsPage = { OP: 1, ED: 1 };
       $('#oc-ar-sort').textContent = arSortDir === 'desc' ? 'По убыванию ↓' : 'По возрастанию ↑';
-      renderAllRatings(profileUser, applyFilters(entries));
+      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
     });
 
     function loadHtml2Canvas() {
