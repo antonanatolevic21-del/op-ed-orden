@@ -731,6 +731,11 @@
     }
 
     function removeMissingBasketIds(state) {
+      // Важно: корзина может прийти из Firebase раньше, чем успеет загрузиться
+      // коллекция openings. Раньше в этот момент все id считались «пропавшими»
+      // и страница ивентов сразу затирала корзину пустым списком.
+      // Поэтому чистим несуществующие id только после фактической загрузки OP/ED.
+      if (!openingsById || openingsById.size === 0) return state;
       const buckets = normalizeBasketBuckets(state.buckets);
       let changed = false;
       ['unassigned', 'guaranteed', 'variable'].forEach(bucket => {

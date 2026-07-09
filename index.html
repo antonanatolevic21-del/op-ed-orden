@@ -3967,9 +3967,11 @@
           key: String(key),
           updatedAt: ext.serverTimestamp()
         }, { merge: true });
+        return true;
       } catch (e) {
         console.error('eventBasket save failed', e);
-        setStatus('Локально добавлено, но Firebase-корзина не сохранилась. Проверь правила Firebase.', true);
+        setStatus('Локально добавлено, но Firebase-корзина не сохранилась. Проверь правила Firebase для eventBasket.', true);
+        return false;
       }
     }
 
@@ -4011,8 +4013,8 @@
         updatedAtLocal: new Date().toISOString()
       };
       saveEventBasket(data);
-      await saveEventBasketSeasonToFirebase(key, data[key]);
-      setStatus(`Добавлено в корзину ивентов: ${entry.title}`);
+      const savedToFirebase = await saveEventBasketSeasonToFirebase(key, data[key]);
+      if (savedToFirebase) setStatus(`Добавлено в корзину ивентов: ${entry.title}`);
       renderSeasonViews();
     }
 
