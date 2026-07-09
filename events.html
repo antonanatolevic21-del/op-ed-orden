@@ -338,7 +338,7 @@
     .ev-image-link .ev-image { margin-bottom: 14px; }
     .ev-eval-grid { display: grid; grid-template-columns: 1fr 110px; gap: 10px; align-items: end; margin-bottom: 12px; }
     .ev-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
-    .ev-field input, .ev-field textarea {
+    .ev-field input, .ev-field textarea, .ev-field select {
       width: 100%;
       background: var(--panel);
       border: 1px solid var(--border);
@@ -350,6 +350,7 @@
       text-transform: none;
       letter-spacing: 0;
     }
+    .ev-field select { cursor: pointer; }
     .ev-field input[type=range] { accent-color: var(--pink); }
     .ev-field textarea { min-height: 96px; resize: vertical; line-height: 1.45; }
     .ev-post-textarea {
@@ -426,6 +427,7 @@
     .ev-winner-row.auto { border-color: rgba(74,222,128,.42); }
     .ev-winner-row.tie { border-color: rgba(255,200,87,.42); }
     .ev-winner-row.chosen { border-color: rgba(8,217,214,.52); background: rgba(8,217,214,.06); }
+    .ev-winner-row.bad { border-color: rgba(255,46,99,.52); opacity: .72; }
     .ev-winner-rank { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; }
     .ev-winner-name { min-width: 0; font-weight: 800; font-size: 12.8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ev-winner-meta { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
@@ -439,7 +441,39 @@
     .ev-semi-item { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
     .ev-semi-item:last-child { border-bottom: none; }
     .ev-semi-score { font-family: 'Space Mono', monospace; color: var(--cyan); font-weight: 800; }
-    @media (max-width: 920px) { .ev-basket-grid, .ev-semi-grid { grid-template-columns: 1fr; } .ev-winner-row { grid-template-columns: 28px minmax(0, 1fr); } .ev-winner-score, .ev-winner-btn { grid-column: 2; justify-self: start; } }
+    .ev-egortos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 12px; }
+    .ev-egortos-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      min-height: 86px;
+      text-align: left;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .ev-egortos-card:hover:not(:disabled) { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(8,217,214,.1); }
+    .ev-egortos-card.active { border-color: var(--pink); background: rgba(255,46,99,.08); box-shadow: 0 0 0 2px rgba(255,46,99,.12); }
+    .ev-egortos-card:disabled { opacity: .48; cursor: default; }
+    .ev-egortos-card .ev-egortos-thumb { width: 74px; height: 52px; border-radius: 9px; overflow: hidden; border: 1px solid var(--border); background: var(--panel); display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: 'Archivo Black', sans-serif; font-size: 13px; }
+    .ev-egortos-card .ev-egortos-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ev-egortos-title { font-weight: 800; font-size: 12.8px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .ev-egortos-meta { margin-top: 4px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.25; }
+    .ev-egortos-score { margin-top: 4px; color: var(--cyan); font-family: 'Space Mono', monospace; font-weight: 800; font-size: 11px; }
+    .ev-egortos-badge { position: absolute; top: 6px; right: 6px; min-width: 22px; height: 22px; border-radius: 999px; background: rgba(255,46,99,.9); color: #0B0A10; font-family: 'Archivo Black', sans-serif; font-size: 12px; display: none; align-items: center; justify-content: center; padding: 0 7px; }
+    .ev-egortos-card.active .ev-egortos-badge { display: flex; }
+    .ev-egortos-selected { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 10px; }
+    @media (max-width: 920px) { .ev-basket-grid, .ev-semi-grid, .ev-egortos-selected { grid-template-columns: 1fr; } .ev-winner-row { grid-template-columns: 28px minmax(0, 1fr); } .ev-winner-score, .ev-winner-btn { grid-column: 2; justify-self: start; } }
+
+    .ev-guest-season-stack { display: flex; flex-direction: column; gap: 16px; }
+    .ev-participant-input.fixed { border-color: rgba(8,217,214,.45); color: var(--cyan); opacity: .92; }
 
   </style>
 </head>
@@ -522,6 +556,7 @@
     const auth = getAuth(app);
 
     const CURRENT_EVENT_YEAR = 2026;
+    const SEMIFINAL_META_KEY = `${CURRENT_EVENT_YEAR}_semifinal_meta`;
     const EVENT_YEAR_KEY = 'event-current-year';
     const NAME_KEY = 'my-display-name';
     const ACCESS_KEY = 'event-access-level';
@@ -532,6 +567,7 @@
     const LOCAL_EVENT_RATINGS_KEY = 'aboba-events-local-ratings-v1';
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const WINNER_COUNT_BY_TARGET = { 10: 2, 15: 3, 20: 4 };
+    const WILDCARD_SLOT_COUNT_BY_TARGET = { 10: 2, 15: 1, 20: 0 };
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
@@ -556,6 +592,7 @@
     const evaluatorEl = $('#ev-evaluator');
     const postModalEl = $('#ev-post-modal');
     const POST_PRIORITY_NICKS = ['Egortos', 'Кофа', 'Toxexex'];
+    const FIXED_PARTICIPANTS = ['Egortos', 'Кофа', 'Toxexex'];
 
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
     let guestSlot = Math.max(0, Math.min(15, Number(sessionStorage.getItem(GUEST_SLOT_KEY) || 0) || 0));
@@ -773,22 +810,24 @@
       return String(state.allowedNicknames[guestSlot - 1] || '').trim();
     }
 
-    function findGuestSeasonState() {
-      if (!isGuest() || !guestSlot) return null;
+    function findGuestSeasonStates() {
+      if (!isGuest() || !guestSlot) return [];
       const myKey = normalizeNickname(myName);
-      if (!myKey) return null;
-      const preferred = getCalendarSeason();
-      const ordered = [preferred, ...SEASONS.filter(s => s !== preferred)];
-      for (const season of ordered) {
-        const state = getSeasonState(season);
-        if (state.closed) continue;
-        const nickname = getGuestNicknameForSeason(state);
-        const guestKey = normalizeNickname(nickname);
-        if (!guestKey) continue;
-        if (guestKey !== myKey) continue;
-        return state;
-      }
-      return null;
+      if (!myKey) return [];
+      // Гостю показываем все доступные открытые сезоны в стабильном календарном порядке,
+      // а не начиная с текущего сезона: Зима → Весна → Лето → Осень.
+      return SEASONS
+        .map(season => getSeasonState(season))
+        .filter(state => {
+          if (state.closed) return false;
+          const nickname = getGuestNicknameForSeason(state);
+          const guestKey = normalizeNickname(nickname);
+          return !!guestKey && guestKey === myKey;
+        });
+    }
+
+    function findGuestSeasonState() {
+      return findGuestSeasonStates()[0] || null;
     }
 
     function cleanNickList(values) {
@@ -802,6 +841,46 @@
         out.push(name);
       });
       return out.slice(0, 15);
+    }
+
+    function cleanParticipantSlots(values) {
+      const raw = Array.isArray(values) ? values : [];
+      const out = Array.from({ length: 15 }, () => '');
+      const used = new Set();
+      FIXED_PARTICIPANTS.forEach((name, idx) => {
+        out[idx] = name;
+        used.add(normalizeNickname(name));
+      });
+
+      const fixedAlreadyInSlots = FIXED_PARTICIPANTS.every((name, idx) => normalizeNickname(raw[idx]) === normalizeNickname(name));
+      const looksSlotBased = raw.length >= 15 || fixedAlreadyInSlots;
+
+      const fillNextFree = (name) => {
+        const clean = String(name || '').trim();
+        const key = normalizeNickname(clean);
+        if (!clean || !key || used.has(key)) return;
+        const pos = out.findIndex((value, idx) => idx >= 3 && !value);
+        if (pos < 0) return;
+        out[pos] = clean;
+        used.add(key);
+      };
+
+      if (looksSlotBased) {
+        for (let idx = 3; idx < 15; idx += 1) {
+          const name = String(raw[idx] || '').trim();
+          const key = normalizeNickname(name);
+          if (!name || !key || used.has(key)) continue;
+          out[idx] = name;
+          used.add(key);
+        }
+        for (let idx = 0; idx < 3; idx += 1) {
+          fillNextFree(raw[idx]);
+        }
+      } else {
+        raw.forEach(value => fillNextFree(value));
+      }
+
+      return out;
     }
 
     function isAdmin() { return adminUnlocked && accessLevel === 'admin'; }
@@ -898,7 +977,7 @@
         season,
         stage: 'first',
         closed: !!docData.closed,
-        allowedNicknames: cleanNickList(docData.allowedNicknames || []),
+        allowedNicknames: cleanParticipantSlots(docData.allowedNicknames || []),
         selectedOpeningIds,
         basketTarget: [10, 15, 20].includes(Number(docData.basketTarget)) ? Number(docData.basketTarget) : getBasketState(season).target,
         semifinalOpeningIds: Array.isArray(docData.semifinalOpeningIds) ? docData.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [],
@@ -945,8 +1024,52 @@
       return WINNER_COUNT_BY_TARGET[rawTarget] || 3;
     }
 
+    function getWildcardSlotCountForSeason(state) {
+      const rawTarget = Number(state?.basketTarget || getBasketState(state?.season || activeSeason).target || 15);
+      return WILDCARD_SLOT_COUNT_BY_TARGET[rawTarget] || 0;
+    }
+
+    function getSemifinalMeta() {
+      return seasonDocs.get(SEMIFINAL_META_KEY) || {};
+    }
+
+    function saveSemifinalMeta(patch) {
+      return saveLocalSeasonDoc(SEMIFINAL_META_KEY, {
+        stage: 'semi',
+        year: CURRENT_EVENT_YEAR,
+        metaKey: SEMIFINAL_META_KEY,
+        ...patch,
+        updatedAtLocal: new Date().toISOString()
+      });
+    }
+
+    function fullRatingProgress(state) {
+      const slots = cleanParticipantSlots(state.allowedNicknames || []);
+      const users = slots.map(normalizeNickname).filter(Boolean);
+      const requiredUserCount = 15;
+      const selectedIds = (state.selectedOpeningIds || []).map(String).filter(id => openingsById.has(id));
+      const total = selectedIds.length * requiredUserCount;
+      const allowedSet = new Set(users);
+      const selectedSet = new Set(selectedIds);
+      const doneSet = new Set(getSeasonRatings(state.key)
+        .filter(r => allowedSet.has(String(r.nicknameKey || '')) && selectedSet.has(String(r.openingId || '')) && Number.isFinite(Number(r.score)))
+        .map(r => `${r.nicknameKey}__${r.openingId}`));
+      return {
+        done: doneSet.size,
+        total,
+        userCount: users.length,
+        openingCount: selectedIds.length,
+        complete: selectedIds.length > 0 && users.length === requiredUserCount && doneSet.size >= total
+      };
+    }
+
+    function isSeasonFullyRated(state) {
+      return fullRatingProgress(state).complete;
+    }
+
     function getSeasonWinnerPlan(state) {
       const winnerCount = getWinnerCountForSeason(state);
+      const progress = fullRatingProgress(state);
       const ranked = (state.selectedOpeningIds || [])
         .map(id => {
           const opening = openingsById.get(String(id));
@@ -959,7 +1082,11 @@
           };
         })
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
-      if (!ranked.length) return { winnerCount, ranked: [], auto: [], candidates: [], chosen: [], finalIds: [], needManual: 0, ready: false };
+      if (!ranked.length) return { winnerCount, ranked: [], auto: [], candidates: [], chosen: [], finalIds: [], needManual: 0, ready: false, complete: false, progress };
+      if (!progress.complete) {
+        const saved = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
+        return { winnerCount, ranked, auto: [], candidates: [], chosen: [], finalIds: saved, needManual: 0, ready: false, complete: false, progress };
+      }
       const cutoff = ranked[Math.min(winnerCount, ranked.length) - 1]?.total ?? 0;
       const auto = ranked.filter(row => row.total > cutoff);
       const tiedAtCutoff = ranked.filter(row => row.total === cutoff);
@@ -983,18 +1110,196 @@
         chosen,
         finalIds: finalRows.map(row => row.id),
         needManual: candidates.length ? slotsForTie : 0,
-        ready: finalRows.length === Math.min(winnerCount, ranked.length)
+        ready: finalRows.length === Math.min(winnerCount, ranked.length),
+        complete: true,
+        progress
       };
     }
 
+    function getDirectSemifinalIdsForState(state) {
+      const saved = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
+      if (saved.length) return saved;
+      const plan = getSeasonWinnerPlan(state);
+      return plan.ready ? plan.finalIds : [];
+    }
+
     function getAllSemifinalRows() {
-      return SEASONS.flatMap(season => {
+      const direct = SEASONS.flatMap(season => {
         const state = getSeasonState(season);
-        const ids = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String) : [];
+        const ids = getDirectSemifinalIdsForState(state);
         return ids.map((id, idx) => {
           const sum = sumForOpeningInSeason(state.key, id);
-          return { season, seasonKey: state.key, id, idx, total: sum.total, count: sum.count };
+          return { source: 'direct', season, seasonKey: state.key, id, idx, total: sum.total, count: sum.count };
         });
+      });
+      const meta = getSemifinalMeta();
+      const wildcards = Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
+      const wildcardRows = wildcards.map((id, idx) => {
+        const origin = findOpeningSeasonState(id);
+        const sum = origin ? sumForOpeningInSeason(origin.key, id) : { total: 0, count: 0 };
+        return { source: 'wildcard', season: origin?.season || '', seasonKey: origin?.key || '', id, idx, total: sum.total, count: sum.count };
+      });
+      const lockedForEgortos = getSemifinalLockedIds();
+      const egortos = Array.isArray(meta.egortosSelectedIds) ? meta.egortosSelectedIds.map(String).filter(id => openingsById.has(id) && !lockedForEgortos.has(String(id))) : [];
+      const egortosRows = egortos.map((id, idx) => {
+        const origin = findOpeningSeasonState(id);
+        const sum = origin ? sumForOpeningInSeason(origin.key, id) : { total: 0, count: 0 };
+        return { source: 'egortos', season: origin?.season || '', seasonKey: origin?.key || '', id, idx, total: sum.total, count: sum.count };
+      });
+      return [...direct, ...wildcardRows, ...egortosRows];
+    }
+
+    function findOpeningSeasonState(openingId) {
+      const id = String(openingId);
+      return SEASONS.map(season => getSeasonState(season)).find(state => (state.selectedOpeningIds || []).map(String).includes(id)) || null;
+    }
+
+    function getSemifinalWildcardPlan() {
+      const meta = getSemifinalMeta();
+      const completedStates = SEASONS.map(season => getSeasonState(season)).filter(state => isSeasonFullyRated(state));
+      const slots = completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      const directSet = new Set();
+      completedStates.forEach(state => getDirectSemifinalIdsForState(state).forEach(id => directSet.add(String(id))));
+      const pool = completedStates.flatMap(state => (state.selectedOpeningIds || [])
+        .map(String)
+        .filter(id => openingsById.has(id) && !directSet.has(id))
+        .map(id => {
+          const opening = openingsById.get(id);
+          const score = sumForOpeningInSeason(state.key, id);
+          return {
+            id,
+            season: state.season,
+            seasonKey: state.key,
+            title: opening?.title || id,
+            total: score.total,
+            count: score.count
+          };
+        }))
+        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+
+      if (!slots || !pool.length) {
+        return { slots, completedStates, directSet, ranked: pool, above: [], tie: [], included: [], excluded: [], finalIds: [], overflow: 0, ready: slots === 0, savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String) : [] };
+      }
+      const cutoff = pool[Math.min(slots, pool.length) - 1]?.total ?? 0;
+      const above = pool.filter(row => row.total > cutoff);
+      const tie = pool.filter(row => row.total === cutoff);
+      const below = pool.filter(row => row.total < cutoff);
+      const tieIds = new Set(tie.map(row => row.id));
+      const overflow = Math.max(0, above.length + tie.length - slots);
+      let excluded = Array.isArray(meta.wildcardExcludedIds) ? meta.wildcardExcludedIds.map(String).filter(id => tieIds.has(id)).slice(0, overflow) : [];
+      const excludedSet = new Set(excluded);
+      const included = [...above, ...tie.filter(row => !excludedSet.has(row.id))];
+      const finalIds = included.slice(0, Math.min(slots, included.length)).map(row => row.id);
+      const ready = overflow === 0 || excluded.length === overflow;
+      return {
+        slots,
+        completedStates,
+        directSet,
+        ranked: pool,
+        above,
+        tie,
+        below,
+        included,
+        excluded,
+        finalIds: ready ? finalIds : [],
+        overflow,
+        ready,
+        savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String).filter(id => openingsById.has(id)) : []
+      };
+    }
+
+    function toggleWildcardExclusion(openingId) {
+      if (!isAdmin()) return;
+      const plan = getSemifinalWildcardPlan();
+      if (!plan.overflow) return;
+      const id = String(openingId);
+      const tieIds = new Set(plan.tie.map(row => row.id));
+      if (!tieIds.has(id)) return;
+      let excluded = plan.excluded.slice();
+      if (excluded.includes(id)) excluded = excluded.filter(x => x !== id);
+      else if (excluded.length < plan.overflow) excluded.push(id);
+      saveSemifinalMeta({ wildcardExcludedIds: excluded });
+    }
+
+    function saveWildcardSemifinalBasket() {
+      if (!isAdmin()) return;
+      const plan = getSemifinalWildcardPlan();
+      if (!plan.ready || plan.finalIds.length !== Math.min(plan.slots, plan.ranked.length)) {
+        alert('Сначала нужно исключить лишние OP на границе прохода, чтобы занятых слотов было ровно столько, сколько нужно.');
+        return;
+      }
+      saveSemifinalMeta({
+        wildcardOpeningIds: plan.finalIds,
+        wildcardExcludedIds: plan.excluded,
+        wildcardSavedAtLocal: new Date().toISOString()
+      });
+    }
+
+
+    function getSemifinalLockedIds() {
+      const locked = new Set();
+      SEASONS.forEach(season => {
+        getDirectSemifinalIdsForState(getSeasonState(season)).forEach(id => locked.add(String(id)));
+      });
+      const meta = getSemifinalMeta();
+      (Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds : []).forEach(id => {
+        if (openingsById.has(String(id))) locked.add(String(id));
+      });
+      return locked;
+    }
+
+    function getEgortosPickPlan() {
+      const meta = getSemifinalMeta();
+      const locked = getSemifinalLockedIds();
+      const seen = new Set();
+      const candidates = [];
+      SEASONS.forEach(season => {
+        const state = getSeasonState(season);
+        (state.selectedOpeningIds || []).map(String).filter(id => openingsById.has(id)).forEach(id => {
+          if (locked.has(id) || seen.has(id)) return;
+          seen.add(id);
+          const opening = openingsById.get(id);
+          const score = sumForOpeningInSeason(state.key, id);
+          candidates.push({
+            id,
+            season,
+            seasonKey: state.key,
+            title: opening?.title || id,
+            total: score.total,
+            count: score.count
+          });
+        });
+      });
+      candidates.sort((a, b) =>
+        (Number(b.total) || 0) - (Number(a.total) || 0) ||
+        a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }) ||
+        String(a.id).localeCompare(String(b.id))
+      );
+      const candidateIds = new Set(candidates.map(row => row.id));
+      const selectedIds = (Array.isArray(meta.egortosSelectedIds) ? meta.egortosSelectedIds : [])
+        .map(String)
+        .filter(id => candidateIds.has(id))
+        .filter((id, idx, arr) => arr.indexOf(id) === idx)
+        .slice(0, 2);
+      return { candidates, selectedIds, locked, ready: selectedIds.length === 2 };
+    }
+
+    function saveEgortosPicks(ids) {
+      if (!isAdmin()) return;
+      const plan = getEgortosPickPlan();
+      const candidateIds = new Set(plan.candidates.map(row => row.id));
+      const cleanIds = (ids || [])
+        .map(String)
+        .filter(id => candidateIds.has(id))
+        .filter((id, idx, arr) => arr.indexOf(id) === idx)
+        .slice(0, 2);
+      if (cleanIds.length !== 2) {
+        alert('Нужно выбрать ровно 2 разных OP для слотов Egortos.');
+        return;
+      }
+      saveSemifinalMeta({
+        egortosSelectedIds: cleanIds,
+        egortosSelectedAtLocal: new Date().toISOString()
       });
     }
 
@@ -1017,6 +1322,7 @@
     function toggleTieWinner(state, openingId) {
       if (!isAdmin()) return;
       const plan = getSeasonWinnerPlan(state);
+      if (!plan.complete) { alert('Сначала должны быть проставлены все 15 оценок по сезону.'); return; }
       if (!plan.candidates.length || !plan.needManual) return;
       const id = String(openingId);
       const candidateIds = new Set(plan.candidates.map(row => row.id));
@@ -1035,6 +1341,7 @@
     function recalcSemifinalWinners(state) {
       if (!isAdmin()) return;
       const plan = getSeasonWinnerPlan(state);
+      if (!plan.complete) { alert('Сначала должны быть проставлены все 15 оценок по сезону.'); return; }
       if (!plan.candidates.length) {
         saveSemifinalWinners(state, plan.finalIds, {
           semifinalTieWinnerIds: [],
@@ -1245,24 +1552,28 @@
         return;
       }
       const rows = getAllSemifinalRows();
+      const wildcardPlan = getSemifinalWildcardPlan();
       appEl.innerHTML = `
         <section class="ev-panel-head">
           <div>
             <div class="ev-section-label">Полуфинал</div>
             <h2>Корзина полуфинала</h2>
-            <div class="ev-hint">Сюда попадают победители сезонов по сумме баллов: 10 OP → 2 победителя, 15 OP → 3, 20 OP → 4. Оценки ивентов считаются только внутри этой страницы и не влияют на основной рейтинг сайта.</div>
+            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты считаются по всем полностью оценённым сезонам: 10 OP → +2 слота, 15 OP → +1 слот, 20 OP → +0 слотов.</div>
           </div>
         </section>
         <div class="ev-semi-grid">
           ${SEASONS.map(season => renderSemiSeason(season)).join('')}
         </div>
+        ${renderWildcardSemifinalPanel(wildcardPlan)}
+        ${renderEgortosPickPanel(getEgortosPickPlan())}
         <div class="ev-status-line ${rows.length ? 'ok' : 'warn'}" style="margin-top:12px;">Всего в корзине полуфинала: ${rows.length} OP.</div>
       `;
+      bindSemiEvents();
     }
 
     function renderSemiSeason(season) {
       const state = getSeasonState(season);
-      const ids = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String) : [];
+      const ids = getDirectSemifinalIdsForState(state);
       const items = ids.length
         ? ids.map((id, idx) => {
             const opening = openingsById.get(String(id));
@@ -1280,15 +1591,154 @@
       `;
     }
 
+    function renderWildcardSemifinalPanel(plan = getSemifinalWildcardPlan()) {
+      const completedText = plan.completedStates.length
+        ? plan.completedStates.map(state => `${SEASON_LABEL[state.season]} (+${getWildcardSlotCountForSeason(state)})`).join(', ')
+        : 'нет полностью оценённых сезонов';
+      const status = !plan.slots
+        ? 'Дополнительных слотов пока нет.'
+        : plan.ready
+          ? `Можно сохранить дополнительные слоты: ${plan.finalIds.length}/${Math.min(plan.slots, plan.ranked.length)}.`
+          : `На границе прохода ничья. Нужно исключить ${plan.overflow - plan.excluded.length} OP, чтобы осталось ровно ${plan.slots} слотов.`;
+      const rows = plan.ranked.map((row, idx) => {
+        const opening = openingsById.get(String(row.id));
+        const isAbove = plan.above.some(x => x.id === row.id);
+        const isTie = plan.tie.some(x => x.id === row.id) && plan.overflow > 0;
+        const isExcluded = plan.excluded.includes(row.id);
+        const isSelected = plan.ready && plan.finalIds.includes(row.id);
+        const cls = ['ev-winner-row'];
+        if (isSelected || isAbove) cls.push('chosen');
+        if (isTie) cls.push('tie');
+        if (isExcluded) cls.push('bad');
+        const action = isTie
+          ? `<button class="ev-winner-btn ${isExcluded ? 'active' : ''}" data-wildcard-minus="${escapeHtml(row.id)}">${isExcluded ? 'исключён −' : '− исключить'}</button>`
+          : isSelected || isAbove
+            ? '<span class="ev-status-line ok" style="margin:0;">в слот</span>'
+            : '';
+        return `
+          <div class="${cls.join(' ')}">
+            <div class="ev-winner-rank">${idx + 1}</div>
+            <div>
+              <div class="ev-winner-name">${escapeHtml(opening?.title || row.title)}</div>
+              <div class="ev-winner-meta">${escapeHtml(SEASON_LABEL[row.season] || row.season)} · ${escapeHtml(row.count)} оценок</div>
+            </div>
+            <div class="ev-winner-score">${escapeHtml(row.total)} б.</div>
+            <div>${action}</div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <section class="ev-winner-panel" style="margin-top:16px;">
+          <div class="ev-winner-head">
+            <div>
+              <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
+              <div class="ev-winner-hint">Полностью оценённые сезоны: ${escapeHtml(completedText)}. Всего дополнительных слотов: ${plan.slots}.</div>
+              <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
+            </div>
+            <div class="ev-actions">
+              <button class="ev-btn-main" id="ev-save-wildcards" ${plan.ready && plan.slots ? '' : 'disabled'}>Сохранить доп. слоты</button>
+            </div>
+          </div>
+          <div class="ev-winner-list">${rows || '<div class="ev-empty">Пока нет кандидатов для дополнительных слотов.</div>'}</div>
+        </section>
+      `;
+    }
+
+    function renderEgortosPickPanel(plan = getEgortosPickPlan()) {
+      const selected = plan.selectedIds.slice(0, 2);
+      const selectedSet = new Set(selected.map(String));
+      const selectedList = selected.length
+        ? selected.map((id, idx) => {
+            const opening = openingsById.get(String(id));
+            const origin = findOpeningSeasonState(id);
+            const sum = origin ? sumForOpeningInSeason(origin.key, id) : { total: 0, count: 0 };
+            return `
+              <div class="ev-semi-item">
+                <span class="oc-profile-rank">${idx + 1}</span>
+                <span class="ev-winner-name">${escapeHtml(opening?.title || id)}</span>
+                <span class="ev-semi-score">${sum.total} б.</span>
+              </div>
+            `;
+          }).join('')
+        : '<div class="ev-empty" style="padding:18px 8px;">Пока ничего не выбрано</div>';
+
+      const cards = plan.candidates.map(row => {
+        const opening = openingsById.get(String(row.id));
+        const active = selectedSet.has(String(row.id));
+        const selectedIndex = selected.indexOf(String(row.id));
+        const img = opening?.image ? `<img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : 'OP';
+        const countText = Number(row.count) ? `${row.count} оценок` : 'оценок нет';
+        return `
+          <button type="button" class="ev-egortos-card ${active ? 'active' : ''}" data-egortos-card="${escapeHtml(row.id)}" title="Выбрать ${escapeHtml(row.title)}">
+            <div class="ev-egortos-thumb">${img}</div>
+            <div>
+              <div class="ev-egortos-title">${escapeHtml(row.title)}</div>
+              <div class="ev-egortos-meta">${escapeHtml(SEASON_LABEL[row.season] || row.season)} · ${escapeHtml(countText)}</div>
+              <div class="ev-egortos-score">${escapeHtml(row.total)} б.</div>
+            </div>
+            <span class="ev-egortos-badge">${active ? selectedIndex + 1 : '✓'}</span>
+          </button>
+        `;
+      }).join('');
+
+      return `
+        <section class="ev-winner-panel" style="margin-top:16px;">
+          <div class="ev-winner-head">
+            <div>
+              <div class="ev-winner-title">Выбрано Egortos'ом</div>
+              <div class="ev-winner-hint">Всегда 2 слота. Можно выбрать только OP, которых нет выше: в гарантированных проходах сезонов и в дополнительных слотах. Кандидаты отсортированы по сумме баллов сверху вниз.</div>
+              <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">Выбрано ${plan.selectedIds.length}/2. Доступно кандидатов: ${plan.candidates.length}.</div>
+            </div>
+            <div class="ev-actions">
+              <button class="ev-btn-main" id="ev-save-egortos-picks" ${plan.candidates.length >= 2 ? '' : 'disabled'}>Сохранить выбор</button>
+            </div>
+          </div>
+          <div class="ev-egortos-selected">${selectedList}</div>
+          <div class="ev-egortos-grid">${cards || '<div class="ev-empty">Нет доступных кандидатов для выбора.</div>'}</div>
+        </section>
+      `;
+    }
+
+    function bindSemiEvents() {
+      document.querySelectorAll('[data-wildcard-minus]').forEach(btn => {
+        btn.addEventListener('click', () => toggleWildcardExclusion(btn.dataset.wildcardMinus));
+      });
+      $('#ev-save-wildcards')?.addEventListener('click', () => saveWildcardSemifinalBasket());
+      $('#ev-save-egortos-picks')?.addEventListener('click', () => {
+        const picks = Array.from(document.querySelectorAll('[data-egortos-card].active')).map(card => card.dataset.egortosCard).filter(Boolean);
+        saveEgortosPicks(picks);
+      });
+      document.querySelectorAll('[data-egortos-card]').forEach(card => {
+        card.addEventListener('click', () => {
+          const activeCards = Array.from(document.querySelectorAll('[data-egortos-card].active'));
+          if (card.classList.contains('active')) {
+            card.classList.remove('active');
+          } else {
+            if (activeCards.length >= 2) {
+              activeCards[0].classList.remove('active');
+            }
+            card.classList.add('active');
+          }
+          const selectedCards = Array.from(document.querySelectorAll('[data-egortos-card].active'));
+          document.querySelectorAll('[data-egortos-card]').forEach(c => {
+            const badge = c.querySelector('.ev-egortos-badge');
+            if (!badge) return;
+            const idx = selectedCards.indexOf(c);
+            badge.textContent = idx >= 0 ? String(idx + 1) : '✓';
+          });
+        });
+      });
+    }
+
     function renderGuestStage() {
-      const state = findGuestSeasonState();
+      const states = findGuestSeasonStates();
       updateAccessUi();
-      if (!state) {
+      if (!states.length) {
         appEl.innerHTML = `
           <section class="ev-panel-head">
             <div>
               <div class="ev-section-label">Гостевой вход #${escapeHtml(String(guestSlot).padStart(2, '0'))}</div>
-              <h2>Нет доступного сезона для оценки</h2>
+              <h2>Нет доступных сезонов для оценки</h2>
               <div class="ev-hint">Проверь никнейм сверху: он должен совпадать с ником, который указан в строке участника #${escapeHtml(String(guestSlot).padStart(2, '0'))}. Закрытые сезоны в гостевом режиме не показываются.</div>
             </div>
           </section>
@@ -1298,16 +1748,16 @@
       appEl.innerHTML = `
         <section class="ev-panel-head">
           <div>
-            <div class="ev-section-label">Сезон для оценки</div>
-            <h2>${escapeHtml(SEASON_LABEL[state.season])} ${state.year}</h2>
-            <div class="ev-hint">Ты вошёл как участник #${escapeHtml(String(guestSlot).padStart(2, '0'))}: <strong style="color:var(--cyan);">${escapeHtml(myName)}</strong>. Здесь показан только сезон, который можно оценить.</div>
+            <div class="ev-section-label">Сезоны для оценки</div>
+            <h2>${CURRENT_EVENT_YEAR} · доступные открытые сезоны</h2>
+            <div class="ev-hint">Ты вошёл как участник #${escapeHtml(String(guestSlot).padStart(2, '0'))}: <strong style="color:var(--cyan);">${escapeHtml(myName)}</strong>. Показаны все открытые сезоны, где этот ник стоит в указанной строке участника.</div>
           </div>
         </section>
-        <section class="ev-content">
-          ${renderGuestSeasonContent(state)}
-        </section>
+        <div class="ev-guest-season-stack">
+          ${states.map(state => `<section class="ev-content ev-guest-season" data-guest-season="${escapeHtml(state.season)}">${renderGuestSeasonContent(state)}</section>`).join('')}
+        </div>
       `;
-      bindGuestEvents(state);
+      bindGuestEvents(states);
     }
 
     function renderGuestSeasonContent(state) {
@@ -1320,7 +1770,7 @@
             <div class="ev-status-line ${allowed ? 'ok' : 'warn'}">${allowed ? 'Можно оценивать OP сезона.' : 'Оценка недоступна для этого гостевого входа.'}</div>
           </div>
           <div class="ev-actions">
-            <button class="ev-btn-secondary" id="ev-rate-all" ${!allowed || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>
+            <button class="ev-btn-secondary" data-guest-rate-all="${escapeHtml(state.season)}" ${!allowed || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>
           </div>
         </div>
         <div class="ev-list">
@@ -1329,10 +1779,21 @@
       `;
     }
 
-    function bindGuestEvents(state) {
-      $('#ev-rate-all')?.addEventListener('click', () => openEvaluator(state, state.selectedOpeningIds, 0));
+    function bindGuestEvents(states) {
+      const bySeason = new Map((states || []).map(state => [state.season, state]));
+      document.querySelectorAll('[data-guest-rate-all]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const state = bySeason.get(btn.dataset.guestRateAll);
+          if (state) openEvaluator(state, state.selectedOpeningIds, 0);
+        });
+      });
       document.querySelectorAll('[data-rate-id]').forEach(btn => {
-        btn.addEventListener('click', () => openEvaluator(state, state.selectedOpeningIds, state.selectedOpeningIds.indexOf(String(btn.dataset.rateId))));
+        btn.addEventListener('click', () => {
+          const season = btn.closest('[data-guest-season]')?.dataset.guestSeason;
+          const state = bySeason.get(season);
+          if (!state) return;
+          openEvaluator(state, state.selectedOpeningIds, state.selectedOpeningIds.indexOf(String(btn.dataset.rateId)));
+        });
       });
     }
 
@@ -1343,7 +1804,7 @@
           <div>
             <div class="ev-section-label">Первый этап</div>
             <h2>${CURRENT_EVENT_YEAR} · сезонный отбор</h2>
-            <div class="ev-hint">Сезоны наполняются через корзину. Для сезона можно задать до 15 участников. Оценка не сохраняется без комментария. Сейчас ивенты сохраняются локально в этом браузере и не влияют на основной рейтинг сайта.</div>
+            <div class="ev-hint">Сезоны наполняются через корзину. Первые три участника закреплены: Egortos, Кофа, Toxexex. Оценка не сохраняется без комментария и не влияет на основной рейтинг сайта.</div>
           </div>
         </section>
         <section class="ev-stage-layout">
@@ -1409,9 +1870,11 @@
       const plan = getSeasonWinnerPlan(state);
       if (!state.selectedOpeningIds.length) return '';
       const target = Number(state.basketTarget || getBasketState(state.season).target || 15);
-      const status = plan.candidates.length
-        ? `Автоматически проходят ${plan.auto.length}. Нужно выбрать ещё ${plan.needManual}: нажми «это победитель» у кандидатов с одинаковой суммой.`
-        : `Победители определяются автоматически: ${plan.finalIds.length}/${plan.winnerCount}.`;
+      const status = !plan.complete
+        ? `Сначала нужны все 15 оценок по сезону: ${plan.progress.done}/${plan.progress.total || '—'}. До этого проходы и дополнительные слоты не считаются.`
+        : plan.candidates.length
+          ? `Автоматически проходят ${plan.auto.length}. Нужно выбрать ещё ${plan.needManual}: нажми «это победитель» у кандидатов с одинаковой суммой.`
+          : `Победители определяются автоматически: ${plan.finalIds.length}/${plan.winnerCount}.`;
       const chosenSet = new Set((state.semifinalTieWinnerIds || []).map(String));
       const finalSet = new Set((state.semifinalOpeningIds || []).map(String));
       const rows = plan.ranked.map((row, idx) => {
@@ -1423,11 +1886,13 @@
         if (isAuto) cls.push('auto');
         if (isCandidate) cls.push('tie');
         if (chosenSet.has(row.id) || (isAuto && finalSet.has(row.id))) cls.push('chosen');
-        const action = isCandidate
-          ? `<button class="ev-winner-btn ${chosenSet.has(row.id) ? 'active' : ''}" data-tie-winner="${escapeHtml(row.id)}">${chosenSet.has(row.id) ? 'выбран ✓' : 'это победитель'}</button>`
-          : isAuto
-            ? '<span class="ev-status-line ok" style="margin:0;">авто</span>'
-            : '';
+        const action = !plan.complete
+          ? ''
+          : isCandidate
+            ? `<button class="ev-winner-btn ${chosenSet.has(row.id) ? 'active' : ''}" data-tie-winner="${escapeHtml(row.id)}">${chosenSet.has(row.id) ? 'выбран ✓' : 'это победитель'}</button>`
+            : isAuto
+              ? '<span class="ev-status-line ok" style="margin:0;">авто</span>'
+              : '';
         return `
           <div class="${cls.join(' ')}">
             <div class="ev-winner-rank">${idx + 1}</div>
@@ -1445,11 +1910,11 @@
           <div class="ev-winner-head">
             <div>
               <div class="ev-winner-title">Победители сезона → корзина полуфинала</div>
-              <div class="ev-winner-hint">Выбрано в корзине: ${target} OP. В полуфинал проходит ${plan.winnerCount}. Считаем по сумме баллов, не по последней оценке.</div>
-              <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)} Сейчас в полуфинальной корзине: ${(state.semifinalOpeningIds || []).length}/${plan.winnerCount}.</div>
+              <div class="ev-winner-hint">Выбрано в корзине: ${target} OP. Прямо проходит ${plan.winnerCount}. Дополнительные слоты для общего добора: ${getWildcardSlotCountForSeason(state)}. Считаем по сумме баллов.</div>
+              <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)} Сейчас сохранено прямых проходов: ${(state.semifinalOpeningIds || []).length}/${plan.winnerCount}.</div>
             </div>
             <div class="ev-actions">
-              <button class="ev-btn-secondary" id="ev-recalc-semi" ${!plan.ranked.length ? 'disabled' : ''}>Пересчитать</button>
+              <button class="ev-btn-secondary" id="ev-recalc-semi" ${!plan.complete || !plan.ranked.length ? 'disabled' : ''}>Пересчитать</button>
             </div>
           </div>
           <div class="ev-winner-list">${rows || '<div class="ev-empty">Пока нет оценок.</div>'}</div>
@@ -1458,18 +1923,23 @@
     }
 
     function renderParticipants(state) {
-      const names = Array.from({ length: 15 }, (_, idx) => state.allowedNicknames[idx] || '');
+      const names = cleanParticipantSlots(state.allowedNicknames || []);
       return `
         <section class="ev-participants">
           <div class="ev-participants-head">
             <div>
               <div class="ev-mini-title">Участники сезона</div>
-              <div class="ev-hint">До 15 никнеймов. Оценивать смогут только эти ники; сравнение идёт по нормализованному нику.</div>
+              <div class="ev-hint">Первые три строки закреплены всегда: Egortos, Кофа, Toxexex. Остальные слоты можно заполнить вручную.</div>
             </div>
             <button class="ev-btn-ghost" id="ev-save-participants" ${!isAdmin() || state.closed ? 'disabled' : ''}>Сохранить участников</button>
           </div>
           <div class="ev-participant-grid">
-            ${names.map((name, idx) => `<input class="ev-participant-input" data-idx="${idx}" value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" ${!isAdmin() || state.closed ? 'disabled' : ''} />`).join('')}
+            ${names.map((name, idx) => {
+              const fixed = idx < FIXED_PARTICIPANTS.length;
+              const disabled = !isAdmin() || state.closed || fixed;
+              const title = fixed ? 'Фиксированный участник' : '';
+              return `<input class="ev-participant-input ${fixed ? 'fixed' : ''}" data-idx="${idx}" value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''} />`;
+            }).join('')}
           </div>
         </section>
       `;
@@ -1685,7 +2155,7 @@
     async function saveParticipants(state) {
       if (!isAdmin() || state.closed) return;
       const values = Array.from(document.querySelectorAll('.ev-participant-input')).map(input => input.value);
-      const allowedNicknames = cleanNickList(values);
+      const allowedNicknames = cleanParticipantSlots(values);
       if (LOCAL_EVENTS_MODE) {
         saveLocalSeasonDoc(state.key, {
           stage: 'first',
@@ -1713,7 +2183,7 @@
       const ok = confirm(`Закрыть сезон «${SEASON_LABEL[state.season]} ${state.year}»? После этого участники больше не смогут его оценивать.`);
       if (!ok) return;
       const values = Array.from(document.querySelectorAll('.ev-participant-input')).map(input => input.value);
-      const allowedNicknames = cleanNickList(values.length ? values : state.allowedNicknames);
+      const allowedNicknames = cleanParticipantSlots(values.length ? values : state.allowedNicknames);
       const patch = {
         stage: 'first',
         year: state.year,
