@@ -1107,17 +1107,18 @@
     .oc-allratings-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 7px;
+      max-width: 920px;
     }
     .oc-allratings-item {
       display: grid;
-      grid-template-columns: 56px 46px 1fr;
-      gap: 12px;
+      grid-template-columns: 50px 42px minmax(0, 1fr) max-content;
+      gap: 10px;
       align-items: center;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 9px;
-      padding: 10px 12px;
+      padding: 8px 10px;
     }
     .oc-allratings-item .oc-profile-score { justify-self: start; }
     .oc-profile-col-title {
@@ -1197,7 +1198,8 @@
     }
     .oc-rank-jump-btn:hover { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(8,217,214,0.14); }
     .oc-profile-item.manual { grid-template-columns: 44px 46px minmax(0, 1fr) auto auto; }
-    .oc-allratings-item.editable { grid-template-columns: 56px 46px 1fr auto; }
+    .oc-allratings-item.editable { grid-template-columns: 50px 42px minmax(0, 1fr) max-content; }
+    .oc-allratings-item .oc-profile-thumb { width: 42px; height: 42px; }
     .oc-ar-top-controls {
       display: flex;
       align-items: center;
@@ -1591,7 +1593,9 @@
       padding: 22px;
       border-radius: 16px;
       font-family: 'Inter', system-ui, sans-serif;
+      box-sizing: border-box;
     }
+    .oc-tier-export-wrap * { box-sizing: border-box; }
     .oc-tier-export-title {
       font-family: 'Archivo Black', 'Arial Black', sans-serif;
       font-size: 30px;
@@ -1599,7 +1603,15 @@
       margin: 0 0 14px;
     }
     .oc-tier-export-wrap .oc-tier-board { width: max-content; min-width: 100%; }
-    .oc-tier-export-wrap .oc-tier-dropzone { align-content: flex-start; }
+    .oc-tier-export-wrap .oc-tier-row { grid-template-columns: 86px 1496px; width: max-content; }
+    .oc-tier-export-wrap .oc-tier-dropzone {
+      display: grid !important;
+      grid-template-columns: repeat(10, 138px);
+      gap: 10px;
+      align-content: flex-start;
+      align-items: start;
+      width: 1496px;
+    }
     .oc-soft-btn.active { border-color: var(--pink); color: var(--pink); background: rgba(255,46,99,0.08); }
     .oc-season-rate-all-btn { opacity: .58; padding: 7px 10px; font-size: 11px; }
     .oc-season-rate-all-btn:hover { opacity: 1; }
@@ -2497,19 +2509,31 @@
 
     function rebuildUserProfilesFromFirebase() {
       const next = { ...avatarsMap };
+      const nextManualRanks = { ...manualRanks };
       (firebaseUserProfiles || []).forEach(row => {
-        const nickname = String(row.nickname || '').trim();
+        const nickname = String(row.nickname || row.displayName || row.name || row.id || '').trim();
+        const nicknameKey = String(row.nicknameKey || row.id || '').trim();
         const avatar = String(row.avatar || '').trim();
         if (nickname && avatar) next[nickname] = avatar;
+        const op = Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.OP) ? row.OP.map(String) : []);
+        const ed = Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ED) ? row.ED.map(String) : []);
+        if (nickname && (op.length || ed.length)) {
+          nextManualRanks[nickname] = nextManualRanks[nickname] || {};
+          nextManualRanks[nickname].OP = op.slice(0, 100);
+          nextManualRanks[nickname].ED = ed.slice(0, 100);
+          if (nicknameKey && nicknameKey !== nickname && !nextManualRanks[nicknameKey]) nextManualRanks[nicknameKey] = nextManualRanks[nickname];
+        }
       });
       avatarsMap = next;
+      manualRanks = nextManualRanks;
+      try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
+      try { window.storage && window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); } catch (e) {}
       populateProfileUsers();
       render();
       renderSeasonViews();
       if (activeTab === 'profile') renderProfile();
       if (activeTab === 'top100') renderGlobalTop100();
     }
-
 
     function setStatus(msg, isError) {
       statusEl.textContent = msg;
@@ -2750,16 +2774,19 @@
 
     function findSimilarTitle(title, type, exceptId) {
       const target = compactTitleForCompare(title);
-      if (target.length < 5) return null;
+      if (target.length < 6) return null;
       let best = null;
       entries.forEach(e => {
         if (String(e.id) === String(exceptId || '') || e.type !== type) return;
         const other = compactTitleForCompare(e.title);
         if (!other || other === target) return;
+        const lengthDiff = Math.abs(target.length - other.length);
+        if (lengthDiff > 3) return;
         const dist = levenshteinDistance(target, other);
         const maxLen = Math.max(target.length, other.length);
         const ratio = 1 - dist / maxLen;
-        if (dist <= 3 || ratio >= 0.86) {
+        const closeEnough = dist <= 2 || (dist === 3 && maxLen >= 10 && ratio >= 0.9) || ratio >= 0.93;
+        if (closeEnough) {
           if (!best || dist < best.distance || (dist === best.distance && ratio > best.ratio)) best = { entry: e, distance: dist, ratio };
         }
       });
@@ -2792,11 +2819,13 @@
       for (const candidate of candidates) {
         if (!candidate || candidate.length < 4) continue;
         if (candidate.includes(target) || target.includes(candidate)) return true;
+        const lengthDiff = Math.abs(target.length - candidate.length);
+        if (lengthDiff > 3) continue;
         const dist = levenshteinDistance(target, candidate);
         const maxLen = Math.max(target.length, candidate.length);
         const ratio = 1 - dist / maxLen;
-        const allowedDistance = target.length <= 5 ? 2 : 3;
-        if (dist <= allowedDistance || ratio >= 0.84) return true;
+        const allowedDistance = target.length <= 5 ? 1 : (target.length <= 8 ? 2 : 3);
+        if (dist <= allowedDistance || (dist <= 3 && ratio >= 0.88)) return true;
       }
       return false;
     }
@@ -2935,29 +2964,57 @@
       try { await window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); }
       catch (e) { console.error('Could not save manual ranks locally', e); }
 
-      try {
-        if (!myName) return;
-        const ranks = manualRanks[myName] || {};
-        if (window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
-          await window.OPED_DB.saveManualRanks(myName, ranks);
-        } else {
-          const ext = await getExtendedDb();
-          const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function'
-            ? window.OPED_DB.normalizeNickname(myName)
-            : safeDocPart(myName);
-          await ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), {
-            nickname: myName,
-            nicknameKey: safeName,
-            OP: Array.isArray(ranks.OP) ? ranks.OP.map(String) : [],
-            ED: Array.isArray(ranks.ED) ? ranks.ED.map(String) : [],
-            updatedAt: ext.serverTimestamp()
-          }, { merge: true });
+      if (!myName) return;
+      const ranks = manualRanks[myName] || {};
+      const cleanRanks = {
+        OP: Array.isArray(ranks.OP) ? ranks.OP.map(String).slice(0, 100) : [],
+        ED: Array.isArray(ranks.ED) ? ranks.ED.map(String).slice(0, 100) : []
+      };
+      manualRanks[myName] = { ...(manualRanks[myName] || {}), ...cleanRanks };
+      const errors = [];
+      let savedRemote = false;
+
+      if (window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
+        try {
+          await window.OPED_DB.saveManualRanks(myName, cleanRanks);
+          savedRemote = true;
+        } catch (e) {
+          console.error('Could not save manual ranks through OPED_DB', e);
+          errors.push(e);
         }
-      } catch (e) {
-        console.error('Could not save manual ranks to Firebase', e);
-        setStatus('Не удалось сохранить ручной топ в Firebase.', true);
       }
 
+      try {
+        const ext = await getExtendedDb();
+        const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function'
+          ? window.OPED_DB.normalizeNickname(myName)
+          : safeDocPart(myName);
+        const payload = {
+          nickname: myName,
+          nicknameKey: safeName,
+          OP: cleanRanks.OP,
+          ED: cleanRanks.ED,
+          manualOP: cleanRanks.OP,
+          manualED: cleanRanks.ED,
+          avatar: myAvatar,
+          updatedAt: ext.serverTimestamp()
+        };
+        await Promise.allSettled([
+          ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
+          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true })
+        ]).then(results => {
+          if (results.some(r => r.status === 'fulfilled')) savedRemote = true;
+          results.filter(r => r.status === 'rejected').forEach(r => { console.error('Manual rank mirror save failed', r.reason); errors.push(r.reason); });
+        });
+      } catch (e) {
+        console.error('Could not mirror manual ranks to Firebase', e);
+        errors.push(e);
+      }
+
+      if (!savedRemote) {
+        setStatus('Не удалось сохранить ручной топ в Firebase.', true);
+        if (errors.length) throw errors[0];
+      }
     }
 
     async function syncMyAvatarIntoMap() {
@@ -3711,7 +3768,7 @@
         <div class="oc-editcard" data-id="${entry.id}">
           <div class="oc-section-label">редактирование трека</div>
           <div class="oc-editgrid">
-            <input class="oc-e-title" type="text" list="oc-dl-titles" autocomplete="off" value="${escapeHtml(entry.title)}" placeholder="Название" />
+            <input class="oc-e-title" type="text" autocomplete="off" value="${escapeHtml(entry.title)}" placeholder="Название" />
             <select class="oc-e-type">
               <option value="OP" ${entry.type === 'OP' ? 'selected' : ''}>OP</option>
               <option value="ED" ${entry.type === 'ED' ? 'selected' : ''}>ED</option>
@@ -3989,14 +4046,19 @@
             ${manualControls}
             ${deleteControl}
           </div>` : '';
+        const detailBits = [];
+        const songVal = songScoreFor(e, user);
+        const visualVal = visualScoreFor(e, user);
+        if (songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
+        if (visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
         return `
-          <div class="oc-allratings-item${editableManual ? ' editable' : ''}">
+          <div class="oc-allratings-item${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}">
             <div class="oc-profile-score">${formatScore(r.score)}</div>
             ${imgHtml(e, 'oc-profile-thumb')}
             <div>
               <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span> <span class="oc-type-tag ${e.type}">${e.type}</span></div>
               ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
-              ${(songScoreFor(e, user) !== null || visualScoreFor(e, user) !== null) ? `<div class="oc-profile-meta">${songScoreFor(e, user) !== null ? 'песня: ' + formatScore(songScoreFor(e, user)) : ''}${songScoreFor(e, user) !== null && visualScoreFor(e, user) !== null ? ' · ' : ''}${visualScoreFor(e, user) !== null ? 'визуал: ' + formatScore(visualScoreFor(e, user)) : ''}</div>` : ''}
+              ${detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : ''}
             </div>
             ${controls}
           </div>
@@ -4053,11 +4115,10 @@
       }
       const editable = !!opts.editable;
       const type = opts.type || 'OP';
-      profileTopPage[type] = clampPage(profileTopPage[type], list.length);
-      const page = pageSlice(list, profileTopPage[type]);
       const fullOrder = editable ? manualOrderFor(user, type, true) : [];
-      const html = page.items.map((item, idx) => {
-        const absoluteIdx = page.start + idx;
+      const visibleList = list.slice(0, 100);
+      const html = visibleList.map((item, idx) => {
+        const absoluteIdx = idx;
         const rankClass = absoluteIdx === 0 ? 'gold' : absoluteIdx === 1 ? 'silver' : absoluteIdx === 2 ? 'bronze' : '';
         const e = item.entry;
         const absolutePos = editable ? manualPositionFor(user, type, e.id, true) : (absoluteIdx + 1);
@@ -4086,9 +4147,7 @@
           </div>
         `;
       }).join('');
-      const pager = paginationHtml(`profile-${type}`, profileTopPage[type], list.length);
-      container.innerHTML = pager + html + pager;
-      bindPagination(container, `profile-${type}`, () => profileTopPage[type], v => { profileTopPage[type] = clampPage(v, list.length); }, renderProfile);
+      container.innerHTML = html;
       container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
 
       if (editable) {
@@ -5264,6 +5323,16 @@
       exportWrap.style.left = '-20000px';
       exportWrap.style.top = '0';
       exportWrap.style.zIndex = '-1';
+      exportWrap.style.setProperty('--bg', '#0B0A10');
+      exportWrap.style.setProperty('--card', '#16121F');
+      exportWrap.style.setProperty('--card-hover', '#1D1829');
+      exportWrap.style.setProperty('--border', '#2A2435');
+      exportWrap.style.setProperty('--pink', '#FF2E63');
+      exportWrap.style.setProperty('--cyan', '#08D9D6');
+      exportWrap.style.setProperty('--text', '#F5F3FA');
+      exportWrap.style.setProperty('--muted', '#8B8698');
+      exportWrap.style.setProperty('--gold', '#FFC857');
+      exportWrap.style.setProperty('--green', '#4ADE80');
       exportWrap.innerHTML = `<div class="oc-tier-export-title">АБОБА · тир-лист ${escapeHtml(type)} · ${escapeHtml(SEASON_LABEL[season])} ${escapeHtml(year)} · ${escapeHtml(myName)}</div>`;
       const clonedBoard = board.cloneNode(true);
       clonedBoard.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
@@ -5413,13 +5482,26 @@
       const displayName = String(nickname || "").trim();
       const safeName = normalizeNickname(displayName);
       if (!safeName) throw new Error("Никнейм обязателен");
-      return setDoc(doc(db, "manualRanks", safeName), {
+      const cleanRanks = {
+        OP: Array.isArray(ranks && ranks.OP) ? ranks.OP.map(String).slice(0, 100) : [],
+        ED: Array.isArray(ranks && ranks.ED) ? ranks.ED.map(String).slice(0, 100) : []
+      };
+      const payload = {
         nickname: displayName,
         nicknameKey: safeName,
-        OP: Array.isArray(ranks && ranks.OP) ? ranks.OP.map(String) : [],
-        ED: Array.isArray(ranks && ranks.ED) ? ranks.ED.map(String) : [],
+        OP: cleanRanks.OP,
+        ED: cleanRanks.ED,
+        manualOP: cleanRanks.OP,
+        manualED: cleanRanks.ED,
         updatedAt: serverTimestamp()
-      }, { merge: true });
+      };
+      const results = await Promise.allSettled([
+        setDoc(doc(db, "manualRanks", safeName), payload, { merge: true }),
+        setDoc(doc(db, "userProfiles", safeName), payload, { merge: true })
+      ]);
+      const firstOk = results.find(r => r.status === 'fulfilled');
+      if (!firstOk) throw results[0].reason;
+      return true;
     }
 
     function watchUserProfiles(callback) {
