@@ -3199,22 +3199,29 @@
       return `<button type="button" class="oc-video-cover" data-video-url="${escapeHtml(href)}" data-video-type="${escapeHtml(directType)}" data-embed-url="${escapeHtml(embedUrl)}" title="Запустить видео">${imageBlock}</button>`;
     }
 
+    function bindVideoEmbeds(root) {
+      const scope = root || document;
+      scope.querySelectorAll('.oc-video-cover').forEach(videoCover => {
+        if (videoCover.dataset.videoBound === '1') return;
+        videoCover.dataset.videoBound = '1';
+        videoCover.addEventListener('click', () => {
+          const videoUrl = videoCover.dataset.videoUrl || '';
+          const videoType = videoCover.dataset.videoType || '';
+          const embedUrl = videoCover.dataset.embedUrl || '';
+          if (videoType && videoUrl) {
+            videoCover.outerHTML = `<div class="oc-video-frame"><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(videoUrl)}" type="${escapeHtml(videoType)}">Видео не удалось встроить. Откройте ссылку отдельно.</video></div>`;
+          } else if (embedUrl) {
+            videoCover.outerHTML = `<div class="oc-video-frame"><iframe src="${escapeHtml(embedUrl)}" title="Видео" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+          } else if (videoUrl) {
+            window.open(videoUrl, '_blank', 'noopener,noreferrer');
+          }
+        });
+      });
+    }
+
     function bindOpeningVideoEmbed() {
       if (!openingModal) return;
-      const videoCover = openingModal.querySelector('.oc-video-cover');
-      if (!videoCover) return;
-      videoCover.addEventListener('click', () => {
-        const videoUrl = videoCover.dataset.videoUrl || '';
-        const videoType = videoCover.dataset.videoType || '';
-        const embedUrl = videoCover.dataset.embedUrl || '';
-        if (videoType && videoUrl) {
-          videoCover.outerHTML = `<div class="oc-video-frame"><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(videoUrl)}" type="${escapeHtml(videoType)}">Видео не удалось встроить. Откройте ссылку отдельно.</video></div>`;
-        } else if (embedUrl) {
-          videoCover.outerHTML = `<div class="oc-video-frame"><iframe src="${escapeHtml(embedUrl)}" title="Видео" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
-        } else if (videoUrl) {
-          window.open(videoUrl, '_blank', 'noopener,noreferrer');
-        }
-      });
+      bindVideoEmbeds(openingModal);
     }
 
     function parseList(str) {
@@ -4438,7 +4445,7 @@
           </div>
           <button class="oc-eval-close" data-eval-action="close">Закрыть</button>
         </div>
-        ${imgHtml(entry, 'oc-eval-image')}
+        ${renderOpeningVideoBlock(entry)}
         <div class="oc-eval-grid">
           <label>Оценка
             <input id="oc-eval-range" type="range" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
@@ -4471,6 +4478,7 @@
         const val = clampScore(score.value);
         if (val !== null) { range.value = String(val); updateWord(val); }
       });
+      bindVideoEmbeds(evaluatorEl);
     }
 
     async function saveEvaluatorScore() {
