@@ -3598,6 +3598,18 @@
         ['#oc-f-score-value', filters.scoreValue], ['#oc-p-score-value', filters.scoreValue]
       ];
       pairs.forEach(([selector, value]) => { const el = $(selector); if (el) el.value = value; });
+      const multiPairs = [
+        ['#oc-f-studio', filters.studios], ['#oc-p-studio', filters.studios],
+        ['#oc-f-director', filters.directors], ['#oc-p-director', filters.directors],
+        ['#oc-f-performer', filters.performers], ['#oc-p-performer', filters.performers],
+        ['#oc-f-franchise', filters.franchises], ['#oc-p-franchise', filters.franchises]
+      ];
+      multiPairs.forEach(([selector, selected]) => {
+        const el = $(selector);
+        if (!el) return;
+        const selectedSet = new Set(selected || []);
+        Array.from(el.options).forEach(opt => { opt.selected = selectedSet.has(opt.value); });
+      });
     }
 
     function fillMultiSelect(selector, values, currentSelection) {
@@ -3657,7 +3669,11 @@
       const partial = values.find(v => v.toLowerCase().includes(raw.toLowerCase()));
       const chosen = exact || partial || raw;
       filters[key] = filters[key] || [];
-      if (!filters[key].includes(chosen)) filters[key].push(chosen);
+      if (filters[key].includes(chosen)) {
+        filters[key] = filters[key].filter(v => v !== chosen);
+      } else {
+        filters[key].push(chosen);
+      }
       input.value = '';
       populateFilterOptions();
       applyFilterChange();
@@ -5560,7 +5576,7 @@
         if (activeTab === 'tier') renderTierList();
         if (activeTab === 'stats') renderStatsPage();
         if (activeTab === 'top100') renderGlobalTop100();
-        openCardModal(entry.id);
+        closeCardModal();
         setStatus('Оценка сохранена в Firebase ✓');
       } catch (err) {
         console.error(err);
@@ -6030,6 +6046,15 @@
     function bindMultiFilter(selector, filterKey) {
       const el = $(selector);
       if (!el) return;
+      el.addEventListener('mousedown', (e) => {
+        const option = e.target && e.target.closest ? e.target.closest('option') : null;
+        if (!option || !el.contains(option)) return;
+        e.preventDefault();
+        option.selected = !option.selected;
+        filters[filterKey] = Array.from(el.selectedOptions).map(o => o.value);
+        applyFilterChange();
+        el.focus();
+      });
       el.addEventListener('change', (e) => {
         filters[filterKey] = Array.from(e.target.selectedOptions).map(o => o.value);
         applyFilterChange();
