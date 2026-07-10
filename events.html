@@ -336,6 +336,86 @@
     }
     .ev-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .ev-image-link .ev-image { margin-bottom: 14px; }
+    .ev-video-cover {
+      display: block;
+      width: 100%;
+      padding: 0;
+      margin: 0 0 14px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      position: relative;
+      border-radius: 12px;
+      text-align: inherit;
+    }
+    .ev-video-cover:hover .ev-image {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 1px rgba(8,217,214,.2);
+    }
+    .ev-video-cover::after {
+      content: '▶';
+      position: absolute;
+      right: 14px;
+      bottom: 16px;
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(11,10,16,.82);
+      border: 1px solid rgba(8,217,214,.65);
+      color: var(--cyan);
+      font-size: 15px;
+      transition: transform .15s ease, background .15s ease;
+      pointer-events: none;
+    }
+    .ev-video-cover:hover::after { transform: scale(1.06); background: rgba(8,217,214,.14); }
+    .ev-video-frame {
+      width: 100%;
+      aspect-ratio: 16/9;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      background: #000;
+    }
+    .ev-video-frame iframe, .ev-video-frame video { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+    .ev-alt-links {
+      background: #0F0C16;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 0 0 12px;
+    }
+    .ev-alt-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: 8px;
+    }
+    .ev-alt-list { display: flex; flex-wrap: wrap; gap: 7px; }
+    .ev-alt-list a {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--text);
+      text-decoration: none;
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      background: var(--card);
+      max-width: 100%;
+    }
+    .ev-alt-list a:hover { border-color: var(--cyan); color: var(--cyan); }
+    .ev-alt-edit { display: none; margin-top: 10px; }
+    .ev-alt-edit.open { display: block; }
+    .ev-alt-edit textarea { min-height: 84px; }
     .ev-eval-grid { display: grid; grid-template-columns: 1fr 110px; gap: 10px; align-items: end; margin-bottom: 12px; }
     .ev-field { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
     .ev-field input, .ev-field textarea, .ev-field select {
@@ -509,7 +589,7 @@
   <div class="ev-modal hidden" id="ev-auth-modal">
     <div class="ev-dialog ev-auth-dialog">
       <h2>Вход</h2>
-      <p>Админ-пароль открывает полную страницу ивентов. Гостевой пароль формата 235-6401…235-6415 открывает только назначенный сезон для конкретного участника.</p>
+      <p>Введите пароль, чтобы открыть страницу.</p>
       <div class="ev-auth-row">
         <input id="ev-auth-pass" type="password" placeholder="Пароль" />
         <button class="ev-btn-main" id="ev-auth-save">Войти</button>
@@ -568,6 +648,7 @@
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const WINNER_COUNT_BY_TARGET = { 10: 2, 15: 3, 20: 4 };
     const WILDCARD_SLOT_COUNT_BY_TARGET = { 10: 2, 15: 1, 20: 0 };
+    const BASE_WILDCARD_SLOT_COUNT = 2;
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
@@ -606,6 +687,7 @@
     let eventRatings = [];
     let eventBasket = {};
     let eventBasketError = '';
+    let eventAltLinks = new Map();
     let renderTimer = null;
     let evaluatorQueue = [];
     let evaluatorIndex = 0;
@@ -957,6 +1039,163 @@
       };
     }
 
+    function safeUrl(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      try {
+        const url = new URL(raw, window.location.href);
+        if (!['http:', 'https:'].includes(url.protocol)) return '';
+        return url.href;
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function getDirectVideoType(value) {
+      const href = safeUrl(value);
+      if (!href) return '';
+      try {
+        const url = new URL(href);
+        const text = `${url.pathname} ${url.search}`.toLowerCase();
+        if (/\.webm(?:$|[?#&\s])/.test(text) || text.includes('.webm')) return 'video/webm';
+        if (/\.mp4(?:$|[?#&\s])/.test(text) || text.includes('.mp4')) return 'video/mp4';
+        if (/\.ogg(?:$|[?#&\s])/.test(text) || text.includes('.ogv')) return 'video/ogg';
+      } catch (e) {}
+      return '';
+    }
+
+    function getVideoEmbedUrl(value) {
+      const href = safeUrl(value);
+      if (!href || getDirectVideoType(href)) return '';
+      try {
+        const url = new URL(href);
+        const host = url.hostname.replace(/^www\./, '').toLowerCase();
+        if (host === 'youtu.be') {
+          const id = url.pathname.split('/').filter(Boolean)[0];
+          return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
+        }
+        if (host.endsWith('youtube.com')) {
+          if (url.pathname.startsWith('/embed/')) return `${url.origin}${url.pathname}?autoplay=1&rel=0`;
+          if (url.pathname.startsWith('/shorts/')) {
+            const id = url.pathname.split('/').filter(Boolean)[1];
+            return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
+          }
+          const id = url.searchParams.get('v');
+          return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
+        }
+        if (host.endsWith('vimeo.com')) {
+          const id = url.pathname.split('/').filter(Boolean).find(part => /^\d+$/.test(part));
+          return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}?autoplay=1` : '';
+        }
+        if (host.endsWith('rutube.ru')) {
+          const parts = url.pathname.split('/').filter(Boolean);
+          const idx = parts.findIndex(part => part === 'video');
+          const id = idx >= 0 ? parts[idx + 1] : '';
+          return id ? `https://rutube.ru/play/embed/${encodeURIComponent(id)}` : '';
+        }
+      } catch (e) {
+        return '';
+      }
+      return '';
+    }
+
+    function parseAltLinksText(value) {
+      return String(value || '')
+        .split(/\n+/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map((line, idx) => {
+          const match = line.match(/^(.*?)(?:\s+[—-]\s+|\s*\|\s*)(https?:\/\/\S+)$/i);
+          const rawUrl = match ? match[2] : line;
+          const url = safeUrl(rawUrl);
+          if (!url) return null;
+          const label = match && match[1].trim() ? match[1].trim() : `Ссылка ${idx + 1}`;
+          return { label, url };
+        })
+        .filter(Boolean)
+        .slice(0, 12);
+    }
+
+    function formatAltLinksText(links) {
+      return (Array.isArray(links) ? links : [])
+        .map((link, idx) => {
+          const url = safeUrl(link?.url || link);
+          if (!url) return '';
+          const label = String(link?.label || `Ссылка ${idx + 1}`).trim();
+          return `${label} — ${url}`;
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    function getAltLinks(openingId) {
+      const row = eventAltLinks.get(String(openingId)) || {};
+      return Array.isArray(row.links) ? row.links.filter(link => safeUrl(link?.url || link)).slice(0, 12) : [];
+    }
+
+    async function saveAltLinks(openingId, links) {
+      const id = String(openingId || '');
+      if (!id) return;
+      const payload = {
+        openingId: id,
+        links: Array.isArray(links) ? links : [],
+        updatedBy: myName || '',
+        updatedAtLocal: new Date().toISOString()
+      };
+      eventAltLinks.set(id, { id, ...payload });
+      scheduleRender();
+      if (!LOCAL_EVENTS_MODE) {
+        await setDoc(doc(db, 'eventAltLinks', id), {
+          ...payload,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+    }
+
+    function renderVideoBlock(opening) {
+      const img = opening.image ? `<img src="${escapeHtml(opening.image)}" alt="" referrerpolicy="no-referrer" />` : 'Нет картинки';
+      const href = safeUrl(opening.link);
+      const directType = getDirectVideoType(href);
+      const embed = directType ? '' : getVideoEmbedUrl(href);
+      if (!href) return `<div class="ev-image">${img}</div>`;
+      return `
+        <button type="button" class="ev-video-cover" data-video-url="${escapeHtml(href)}" data-video-type="${escapeHtml(directType)}" data-embed-url="${escapeHtml(embed)}" title="Запустить видео">
+          <div class="ev-image">${img}</div>
+        </button>
+      `;
+    }
+
+    function renderAltLinksBlock(openingId) {
+      const links = getAltLinks(openingId);
+      const linksHtml = links.length
+        ? `<div class="ev-alt-list">${links.map((link, idx) => `<a href="${escapeHtml(safeUrl(link.url))}" target="_blank" rel="noopener noreferrer">↗ ${escapeHtml(link.label || `Ссылка ${idx + 1}`)}</a>`).join('')}</div>`
+        : '<div class="ev-hint">Альтернативные ссылки пока не добавлены.</div>';
+      const adminEdit = isAdmin()
+        ? `
+          <div class="ev-actions" style="margin-top:10px;justify-content:flex-start;">
+            <button type="button" class="ev-btn-ghost" id="ev-alt-toggle">Добавить альтернативные ссылки</button>
+          </div>
+          <div class="ev-alt-edit" id="ev-alt-edit">
+            <label class="ev-field">Альтернативные ссылки
+              <textarea id="ev-alt-text" placeholder="Одна ссылка на строку. Можно так: YouTube — https://...">${escapeHtml(formatAltLinksText(links))}</textarea>
+            </label>
+            <div class="ev-modal-actions" style="justify-content:flex-start;">
+              <button type="button" class="ev-btn-secondary" id="ev-alt-save">Сохранить ссылки</button>
+            </div>
+            <div class="ev-error" id="ev-alt-error"></div>
+          </div>
+        `
+        : '';
+      if (!links.length && !isAdmin()) return '';
+      return `
+        <section class="ev-alt-links">
+          <div class="ev-alt-title">Альтернативные ссылки</div>
+          ${linksHtml}
+          ${adminEdit}
+        </section>
+      `;
+    }
+
     function seasonDefaultOpeningIds(season) {
       return openings
         .filter(o => o.type === 'OP' && Number(o.year) === CURRENT_EVENT_YEAR && o.season === season)
@@ -1036,13 +1275,14 @@
 
     function getPotentialWildcardDisplayLimit(completedStates = []) {
       const completedSeasonSet = new Set((completedStates || []).map(state => state.season));
-      return SEASONS.reduce((sum, season) => {
+      const seasonalPotential = SEASONS.reduce((sum, season) => {
         const state = getSeasonState(season);
         if (completedSeasonSet.has(season) || isSeasonConfirmedForWildcard(state)) {
           return sum + getWildcardSlotCountForSeason(state);
         }
         return sum + 2;
       }, 0);
+      return BASE_WILDCARD_SLOT_COUNT + seasonalPotential;
     }
 
     function getSemifinalMeta() {
@@ -1173,7 +1413,8 @@
     function getSemifinalWildcardPlan() {
       const meta = getSemifinalMeta();
       const completedStates = SEASONS.map(season => getSeasonState(season)).filter(state => isSeasonFullyRated(state));
-      const slots = completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      const seasonalSlots = completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      const slots = BASE_WILDCARD_SLOT_COUNT + seasonalSlots;
       const potentialDisplayLimit = getPotentialWildcardDisplayLimit(completedStates);
       const directSet = new Set();
       completedStates.forEach(state => getDirectSemifinalIdsForState(state).forEach(id => directSet.add(String(id))));
@@ -1583,7 +1824,7 @@
           <div>
             <div class="ev-section-label">Полуфинал</div>
             <h2>Корзина полуфинала</h2>
-            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты считаются по всем полностью оценённым сезонам: 10 OP → +2 слота, 15 OP → +1 слот, 20 OP → +0 слотов.</div>
+            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты считаются по всем полностью оценённым сезонам: всегда есть базовые +2 слота, дальше 10 OP → +2, 15 OP → +1, 20 OP → +0. Итого минимум 2, максимум 10.</div>
           </div>
         </section>
         <div class="ev-semi-grid">
@@ -1879,7 +2120,9 @@
           <div class="ev-actions">
             <button class="ev-btn-secondary" id="ev-rate-all" ${state.closed || !allowed || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>
             <button class="ev-btn-ghost" id="ev-post-season" ${!isAdmin() || !state.selectedOpeningIds.length ? 'disabled' : ''}>Пост</button>
-            <button class="ev-btn-danger" id="ev-close-season" ${!isAdmin() || state.closed ? 'disabled' : ''}>Закрыть сезон</button>
+            ${state.closed
+              ? `<button class="ev-btn-secondary" id="ev-reopen-season" ${!isAdmin() ? 'disabled' : ''}>Открыть сезон</button>`
+              : `<button class="ev-btn-danger" id="ev-close-season" ${!isAdmin() ? 'disabled' : ''}>Закрыть сезон</button>`}
           </div>
         </div>
         ${renderParticipants(state)}
@@ -1921,12 +2164,19 @@
               : isAuto
                 ? '<span class="ev-status-line ok" style="margin:0;">авто</span>'
                 : '';
+        const progressLabel = isFinal
+          ? 'проходит'
+          : isAuto
+            ? 'проходит гарантированно'
+            : isCandidate
+              ? 'спорное место'
+              : 'ниже прохода';
         return `
           <div class="${cls.join(' ')}">
             <div class="ev-winner-rank">${idx + 1}</div>
             <div>
               <div class="ev-winner-name">${escapeHtml(opening?.title || row.title)}</div>
-              <div class="ev-winner-meta">${escapeHtml(row.count)} оценок · ${isAuto ? 'проходит гарантированно' : isCandidate ? 'спорное место' : 'ниже прохода'}</div>
+              <div class="ev-winner-meta">${escapeHtml(row.count)} оценок · ${progressLabel}</div>
             </div>
             <div class="ev-winner-score">${escapeHtml(row.total)} б.</div>
             <div>${action}</div>
@@ -2014,6 +2264,14 @@
       return String(value || '').replace(/\s+/g, ' ').trim();
     }
 
+    function buildPostCommentLine(r) {
+      const text = normalizeCommentText(r?.comment);
+      if (!text) return '';
+      const score = formatPostScore(r?.score);
+      const separator = /[.!?…]$/.test(text) ? ' ' : '. ';
+      return `${text}${separator}${score}/10`;
+    }
+
     function orderPostNicknames(state, ratings) {
       const byKey = new Map();
       const add = (name) => {
@@ -2092,13 +2350,7 @@
               return aTitle.localeCompare(bTitle, 'ru', { sensitivity: 'base' });
             });
           const comments = userRows
-            .map(r => {
-              const text = normalizeCommentText(r.comment);
-              if (!text) return '';
-              if (items.length <= 1) return text;
-              const title = openingsById.get(String(r.openingId || ''))?.title || String(r.openingTitle || 'OP');
-              return `${title} — ${text}`;
-            })
+            .map(r => buildPostCommentLine(r))
             .filter(Boolean);
           comments.forEach(comment => lines.push(`${user.name}: ${comment}`));
         });
@@ -2169,6 +2421,7 @@
       const state = getSeasonState(activeSeason);
       $('#ev-save-participants')?.addEventListener('click', () => saveParticipants(state));
       $('#ev-close-season')?.addEventListener('click', () => closeSeason(state));
+      $('#ev-reopen-season')?.addEventListener('click', () => reopenSeason(state));
       $('#ev-post-season')?.addEventListener('click', () => openSeasonPostModal(state));
       $('#ev-recalc-semi')?.addEventListener('click', () => recalcSemifinalWinners(state));
       document.querySelectorAll('[data-tie-winner]').forEach(btn => {
@@ -2234,6 +2487,32 @@
       }, { merge: true });
     }
 
+    async function reopenSeason(state) {
+      if (!isAdmin() || !state.closed) return;
+      const ok = confirm(`Заново открыть сезон «${SEASON_LABEL[state.season]} ${state.year}»? Участники снова смогут менять оценки.`);
+      if (!ok) return;
+      const patch = {
+        stage: 'first',
+        year: state.year,
+        season: state.season,
+        seasonKey: state.key,
+        allowedNicknames: state.allowedNicknames,
+        selectedOpeningIds: state.selectedOpeningIds,
+        closed: false,
+        reopenedBy: myName || '',
+        reopenedAtLocal: new Date().toISOString()
+      };
+      if (LOCAL_EVENTS_MODE) {
+        saveLocalSeasonDoc(state.key, patch);
+        return;
+      }
+      await setDoc(doc(db, 'eventSeasons', state.key), {
+        ...patch,
+        reopenedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+
     function openEvaluator(state, ids, startIndex) {
       if (state.closed || !isAllowedForSeason(state)) return;
       evaluatorQueue = (ids || []).filter(id => openingsById.has(String(id))).map(String);
@@ -2251,10 +2530,8 @@
       const existing = getMyEventRating(state.key, openingId);
       const score = existing ? Number(existing.score) || 5 : 5;
       const comment = existing ? String(existing.comment || '') : '';
-      const img = opening.image ? `<img src="${escapeHtml(opening.image)}" alt="" referrerpolicy="no-referrer" />` : 'Нет картинки';
-      const imageBlock = opening.link
-        ? `<a class="ev-image-link" href="${escapeHtml(opening.link)}" target="_blank" rel="noopener noreferrer" title="Открыть видео"><div class="ev-image">${img}</div></a>`
-        : `<div class="ev-image">${img}</div>`;
+      const imageBlock = renderVideoBlock(opening);
+      const altLinksBlock = renderAltLinksBlock(opening.id);
       evaluatorEl.innerHTML = `
         <div class="ev-dialog">
           <div class="ev-dialog-top">
@@ -2266,6 +2543,7 @@
             <button class="ev-close" id="ev-eval-close">Закрыть</button>
           </div>
           ${imageBlock}
+          ${altLinksBlock}
           <div class="ev-eval-grid">
             <label class="ev-field">Оценка
               <input id="ev-eval-score" type="range" min="1" max="10" step="1" value="${score}" />
@@ -2299,6 +2577,40 @@
       scoreRange.addEventListener('input', () => sync(scoreRange.value));
       scoreNum.addEventListener('input', () => sync(scoreNum.value));
       $('#ev-eval-close').addEventListener('click', () => evaluatorEl.classList.add('hidden'));
+      const videoCover = evaluatorEl.querySelector('.ev-video-cover');
+      if (videoCover) {
+        videoCover.addEventListener('click', () => {
+          const embedUrl = videoCover.dataset.embedUrl || '';
+          const videoUrl = videoCover.dataset.videoUrl || '';
+          const videoType = videoCover.dataset.videoType || '';
+          if (videoType && videoUrl) {
+            videoCover.outerHTML = `<div class="ev-video-frame"><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(videoUrl)}" type="${escapeHtml(videoType)}">Видео не удалось встроить. Откройте ссылку отдельно.</video></div>`;
+          } else if (embedUrl) {
+            videoCover.outerHTML = `<div class="ev-video-frame"><iframe src="${escapeHtml(embedUrl)}" title="Видео" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+          } else if (videoUrl) {
+            window.open(videoUrl, '_blank', 'noopener,noreferrer');
+          }
+        });
+      }
+      const altToggle = $('#ev-alt-toggle');
+      if (altToggle) {
+        altToggle.addEventListener('click', () => $('#ev-alt-edit')?.classList.toggle('open'));
+      }
+      const altSave = $('#ev-alt-save');
+      if (altSave) {
+        altSave.addEventListener('click', async () => {
+          const err = $('#ev-alt-error');
+          const links = parseAltLinksText($('#ev-alt-text')?.value || '');
+          try {
+            await saveAltLinks(opening.id, links);
+            if (err) { err.textContent = 'Ссылки сохранены ✓'; err.style.color = 'var(--green)'; }
+            renderEvaluator(state);
+          } catch (e) {
+            console.error('eventAltLinks save failed', e);
+            if (err) { err.textContent = 'Не удалось сохранить ссылки. Проверь Rules для eventAltLinks.'; err.style.color = 'var(--red)'; }
+          }
+        });
+      }
       $('#ev-eval-prev').addEventListener('click', () => {
         if (evaluatorIndex > 0) { evaluatorIndex -= 1; renderEvaluator(state); }
       });
@@ -2418,7 +2730,7 @@
         adminUnlocked = false;
         myName = getSavedAdminNickname() || myName || '';
       } else {
-        authError.textContent = 'Неверный пароль. Для гостя: 235-6401…235-6415.';
+        authError.textContent = 'Неверный пароль.';
         return;
       }
       sessionStorage.setItem(ACCESS_KEY, accessLevel);
@@ -2492,6 +2804,10 @@
           eventBasketError = 'Не удалось прочитать Firebase-корзину eventBasket. Проверь Rules для eventBasket.';
           scheduleRender();
         });
+        onSnapshot(collection(db, 'eventAltLinks'), snapshot => {
+          eventAltLinks = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+          scheduleRender();
+        }, error => console.error('eventAltLinks snapshot error', error));
       }
       if (LOCAL_EVENTS_MODE) {
         window.addEventListener('storage', (e) => {
