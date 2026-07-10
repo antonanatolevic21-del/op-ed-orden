@@ -172,7 +172,7 @@
     .ev-list { display: flex; flex-direction: column; gap: 8px; }
     .oc-season-op {
       display: grid;
-      grid-template-columns: 38px 54px minmax(0, 1fr) max-content 74px;
+      grid-template-columns: 38px 54px minmax(0, 1fr) max-content minmax(92px, max-content);
       gap: 12px;
       align-items: center;
       background: var(--panel);
@@ -276,7 +276,10 @@
       font-weight: 800;
       cursor: pointer;
       white-space: nowrap;
+      min-width: 74px;
+      text-align: center;
     }
+    .ev-rate-btn.admin-edit { min-width: 112px; }
     .ev-rate-btn:hover:not(:disabled) { background: rgba(8,217,214,.12); }
     .ev-empty {
       text-align: center;
@@ -1638,20 +1641,18 @@
       if (!isAdmin()) return;
       const plan = getSeasonWinnerPlan(state);
       if (!plan.complete) { alert('Сначала должны быть проставлены все 15 оценок по сезону.'); return; }
-      if (!plan.candidates.length) {
-        saveSemifinalWinners(state, plan.finalIds, {
-          semifinalTieWinnerIds: [],
-          semifinalUpdatedAtLocal: new Date().toISOString()
-        });
-      } else {
-        const candidateSet = new Set(plan.candidates.map(row => row.id));
-        const chosenIds = (state.semifinalTieWinnerIds || []).map(String).filter(id => candidateSet.has(id)).slice(0, plan.needManual);
-        const nextPlan = getSeasonWinnerPlan({ ...state, semifinalTieWinnerIds: chosenIds });
-        saveSemifinalWinners(state, nextPlan.finalIds, {
-          semifinalTieWinnerIds: chosenIds,
-          semifinalUpdatedAtLocal: new Date().toISOString()
-        });
+      if (plan.candidates.length && !plan.ready) {
+        alert(`На границе прохода ничья. Сначала выбери ${plan.needManual} OP через «это победитель». Кнопка не добавляет всю спорную группу целиком.`);
+        return;
       }
+      const candidateSet = new Set(plan.candidates.map(row => row.id));
+      const chosenIds = plan.candidates.length
+        ? (state.semifinalTieWinnerIds || []).map(String).filter(id => candidateSet.has(id)).slice(0, plan.needManual)
+        : [];
+      saveSemifinalWinners(state, plan.finalIds, {
+        semifinalTieWinnerIds: chosenIds,
+        semifinalUpdatedAtLocal: new Date().toISOString()
+      });
     }
 
     function ratingProgress(state) {
@@ -2225,7 +2226,7 @@
               <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)} Сейчас сохранено прямых проходов: ${(state.semifinalOpeningIds || []).length}/${plan.winnerCount}.</div>
             </div>
             <div class="ev-actions">
-              <button class="ev-btn-secondary" id="ev-recalc-semi" ${!plan.complete || !plan.ranked.length ? 'disabled' : ''}>Пересчитать</button>
+              <button class="ev-btn-secondary" id="ev-recalc-semi" ${!plan.complete || !plan.ranked.length ? 'disabled' : ''} title="Пересчитать и сохранить прямые проходы сезона по текущим оценкам">Обновить проходящих</button>
             </div>
           </div>
           <div class="ev-winner-list">${rows || '<div class="ev-empty">Пока нет оценок.</div>'}</div>
@@ -2284,7 +2285,7 @@
             ${personalLine}
           </div>
           ${statusCell}
-          <button class="ev-rate-btn" data-rate-id="${escapeHtml(opening.id)}" ${isAdmin() ? '' : (state.closed || !canRate ? 'disabled' : '')}>${isAdmin() ? 'Редактировать' : (myRating ? 'Изменить' : 'Оценить')}</button>
+          <button class="ev-rate-btn ${isAdmin() ? 'admin-edit' : ''}" data-rate-id="${escapeHtml(opening.id)}" ${isAdmin() ? '' : (state.closed || !canRate ? 'disabled' : '')}>${isAdmin() ? 'Редактировать' : (myRating ? 'Изменить' : 'Оценить')}</button>
         </article>
       `;
     }
