@@ -2820,15 +2820,38 @@
       ));
     }
 
-    function mergeManualRankRowInto(target, row) {
-      if (!row || !rowHasManualTopData(row)) return;
+    function manualRankRowIdentity(row) {
+      if (!row) return { display: '', safeKey: '' };
       const nickname = String(row.nickname || row.displayName || row.name || '').trim();
       const rawId = String(row.id || '').trim();
       const nicknameKeyRaw = String(row.nicknameKey || '').trim();
       const displayName = nickname || (rawId && rawId.indexOf('__') === -1 ? rawId : '');
       const safeKey = nicknameKeyRaw || (displayName ? manualUserSafeKey(displayName) : rawId);
-      if (!displayName && !safeKey) return;
-      const display = displayName || safeKey;
+      return { display: displayName || safeKey, safeKey };
+    }
+
+    function isCurrentManualRankRow(row) {
+      if (!myName || !row) return false;
+      const identity = manualRankRowIdentity(row);
+      const raw = String(myName || '').trim();
+      const safe = manualUserSafeKey(raw);
+      const candidates = [identity.display, identity.safeKey, row.nickname, row.displayName, row.name, row.id]
+        .map(v => String(v || '').trim())
+        .filter(Boolean);
+      return candidates.some(v => v.toLowerCase() === raw.toLowerCase() || manualUserSafeKey(v) === safe);
+    }
+
+    function shouldKeepLocalManualDraft(row) {
+      return !!(manualDirty && manualEditMode && isCurrentManualRankRow(row));
+    }
+
+    function mergeManualRankRowInto(target, row) {
+      if (!row || !rowHasManualTopData(row)) return;
+      if (shouldKeepLocalManualDraft(row)) return;
+      const identity = manualRankRowIdentity(row);
+      const display = identity.display;
+      const safeKey = identity.safeKey;
+      if (!display && !safeKey) return;
       const hasOP = Array.isArray(row.OP) || Array.isArray(row.manualOP) || Array.isArray(row.op);
       const hasED = Array.isArray(row.ED) || Array.isArray(row.manualED) || Array.isArray(row.ed);
       const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []));
@@ -2868,29 +2891,11 @@
     function rebuildManualRanksFromRatingDocs() {
       if (!Array.isArray(firebaseRatings)) return;
       const next = { ...manualRanks };
-      const groupedRanks = {};
       firebaseRatings.forEach(row => {
         const openingId = String(row.openingId || '').trim();
         if (openingId === '__manualRanks' || rowHasManualTopData(row)) {
           mergeManualRankRowInto(next, row);
         }
-        if (!openingId || openingId === '__manualRanks') return;
-        const nickname = String(row.nickname || row.displayName || row.name || '').trim();
-        const nicknameKey = String(row.nicknameKey || '').trim() || (nickname ? manualUserSafeKey(nickname) : '');
-        const display = nickname || nicknameKey;
-        if (!display && !nicknameKey) return;
-        const groupKey = nicknameKey || display;
-        if (!groupedRanks[groupKey]) groupedRanks[groupKey] = { nickname: display, nicknameKey, OP: [], ED: [] };
-        const opRank = Number(row.manualRankOP);
-        const edRank = Number(row.manualRankED);
-        if (Number.isFinite(opRank) && opRank > 0) groupedRanks[groupKey].OP.push({ id: openingId, rank: opRank });
-        if (Number.isFinite(edRank) && edRank > 0) groupedRanks[groupKey].ED.push({ id: openingId, rank: edRank });
-      });
-      Object.values(groupedRanks).forEach(group => {
-        const row = { nickname: group.nickname, nicknameKey: group.nicknameKey };
-        if (group.OP.length) row.OP = group.OP.sort((a, b) => a.rank - b.rank).map(x => x.id).slice(0, 100);
-        if (group.ED.length) row.ED = group.ED.sort((a, b) => a.rank - b.rank).map(x => x.id).slice(0, 100);
-        if (row.OP || row.ED) mergeManualRankRowInto(next, row);
       });
       manualRanks = next;
       persistManualRanksCache();
@@ -3489,17 +3494,44 @@
           updatedAt: ext.serverTimestamp()
         };
         const rankDocWrites = [];
+        const currentOP = new Set(cleanRanks.OP.map(String));
+        const currentED = new Set(cleanRanks.ED.map(String));
+        const touchedRankDocs = new Set();
         cleanRanks.OP.forEach((openingId, idx) => {
-          rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${openingId}`), {
-            openingId: String(openingId), nickname: myName, nicknameKey: safeName, avatar: myAvatar,
+          const id = String(openingId);
+          touchedRankDocs.add(id);
+          rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${id}`), {
+            openingId: id, nickname: myName, nicknameKey: safeName, avatar: myAvatar,
             manualRankOP: idx + 1, updatedAt: ext.serverTimestamp()
           }, { merge: true }));
         });
         cleanRanks.ED.forEach((openingId, idx) => {
-          rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${openingId}`), {
-            openingId: String(openingId), nickname: myName, nicknameKey: safeName, avatar: myAvatar,
+          const id = String(openingId);
+          touchedRankDocs.add(id);
+          rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${id}`), {
+            openingId: id, nickname: myName, nicknameKey: safeName, avatar: myAvatar,
             manualRankED: idx + 1, updatedAt: ext.serverTimestamp()
           }, { merge: true }));
+        });
+        (firebaseRatings || []).forEach(row => {
+          const openingId = String(row.openingId || '').trim();
+          if (!openingId || openingId === '__manualRanks') return;
+          const rowSafe = String(row.nicknameKey || '').trim() || manualUserSafeKey(row.nickname || row.displayName || row.name || '');
+          if (rowSafe !== safeName) return;
+          const cleanup = { updatedAt: ext.serverTimestamp() };
+          let needsCleanup = false;
+          if (Number.isFinite(Number(row.manualRankOP)) && !currentOP.has(openingId)) {
+            cleanup.manualRankOP = ext.deleteField();
+            needsCleanup = true;
+          }
+          if (Number.isFinite(Number(row.manualRankED)) && !currentED.has(openingId)) {
+            cleanup.manualRankED = ext.deleteField();
+            needsCleanup = true;
+          }
+          if (needsCleanup) {
+            touchedRankDocs.add(openingId);
+            rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${openingId}`), cleanup, { merge: true }));
+          }
         });
         await Promise.allSettled([
           ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
@@ -5106,7 +5138,7 @@
 
       function topForManual(type) {
         const ownProfile = !!myName && manualSameUser(profileUser, myName);
-        const order = manualOrderFor(profileUser, type, ownProfile || (manualEditMode && ownProfile));
+        const order = manualOrderFor(profileUser, type, manualEditMode && ownProfile);
         return order
           .map(id => {
             const e = topFiltered.find(x => x.id === id && x.type === type);
