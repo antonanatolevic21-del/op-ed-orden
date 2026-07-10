@@ -1029,6 +1029,22 @@
       return WILDCARD_SLOT_COUNT_BY_TARGET[rawTarget] || 0;
     }
 
+
+    function isSeasonConfirmedForWildcard(state) {
+      return Array.isArray(state?.selectedOpeningIds) && state.selectedOpeningIds.length > 0;
+    }
+
+    function getPotentialWildcardDisplayLimit(completedStates = []) {
+      const completedSeasonSet = new Set((completedStates || []).map(state => state.season));
+      return SEASONS.reduce((sum, season) => {
+        const state = getSeasonState(season);
+        if (completedSeasonSet.has(season) || isSeasonConfirmedForWildcard(state)) {
+          return sum + getWildcardSlotCountForSeason(state);
+        }
+        return sum + 2;
+      }, 0);
+    }
+
     function getSemifinalMeta() {
       return seasonDocs.get(SEMIFINAL_META_KEY) || {};
     }
@@ -1158,6 +1174,7 @@
       const meta = getSemifinalMeta();
       const completedStates = SEASONS.map(season => getSeasonState(season)).filter(state => isSeasonFullyRated(state));
       const slots = completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      const potentialDisplayLimit = getPotentialWildcardDisplayLimit(completedStates);
       const directSet = new Set();
       completedStates.forEach(state => getDirectSemifinalIdsForState(state).forEach(id => directSet.add(String(id))));
       const pool = completedStates.flatMap(state => (state.selectedOpeningIds || [])
@@ -1178,24 +1195,32 @@
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
 
       if (!slots || !pool.length) {
-        return { slots, completedStates, directSet, ranked: pool, above: [], tie: [], included: [], excluded: [], finalIds: [], overflow: 0, ready: slots === 0, savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String) : [] };
+        const visibleRows = pool.slice(0, Math.min(pool.length, potentialDisplayLimit));
+        return { slots, potentialDisplayLimit, completedStates, directSet, ranked: pool, visibleRows, above: [], tie: [], included: [], excluded: [], finalIds: [], overflow: 0, ready: slots === 0, savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String) : [] };
       }
-      const cutoff = pool[Math.min(slots, pool.length) - 1]?.total ?? 0;
+      const effectiveSlots = Math.min(slots, pool.length);
+      const cutoff = pool[effectiveSlots - 1]?.total ?? 0;
       const above = pool.filter(row => row.total > cutoff);
       const tie = pool.filter(row => row.total === cutoff);
       const below = pool.filter(row => row.total < cutoff);
       const tieIds = new Set(tie.map(row => row.id));
-      const overflow = Math.max(0, above.length + tie.length - slots);
+      const overflow = Math.max(0, above.length + tie.length - effectiveSlots);
       let excluded = Array.isArray(meta.wildcardExcludedIds) ? meta.wildcardExcludedIds.map(String).filter(id => tieIds.has(id)).slice(0, overflow) : [];
       const excludedSet = new Set(excluded);
       const included = [...above, ...tie.filter(row => !excludedSet.has(row.id))];
-      const finalIds = included.slice(0, Math.min(slots, included.length)).map(row => row.id);
+      const finalIds = included.slice(0, Math.min(effectiveSlots, included.length)).map(row => row.id);
       const ready = overflow === 0 || excluded.length === overflow;
+      const displayLimit = Math.max(effectiveSlots, Math.min(pool.length, potentialDisplayLimit));
+      const visibleRows = overflow > 0
+        ? [...above, ...tie]
+        : pool.slice(0, displayLimit);
       return {
         slots,
+        potentialDisplayLimit,
         completedStates,
         directSet,
         ranked: pool,
+        visibleRows,
         above,
         tie,
         below,
@@ -1600,7 +1625,8 @@
         : plan.ready
           ? `Можно сохранить дополнительные слоты: ${plan.finalIds.length}/${Math.min(plan.slots, plan.ranked.length)}.`
           : `На границе прохода ничья. Нужно исключить ${plan.overflow - plan.excluded.length} OP, чтобы осталось ровно ${plan.slots} слотов.`;
-      const rows = plan.ranked.map((row, idx) => {
+      const visibleRows = Array.isArray(plan.visibleRows) ? plan.visibleRows : plan.ranked;
+      const rows = visibleRows.map((row, idx) => {
         const opening = openingsById.get(String(row.id));
         const isAbove = plan.above.some(x => x.id === row.id);
         const isTie = plan.tie.some(x => x.id === row.id) && plan.overflow > 0;
@@ -1632,7 +1658,7 @@
           <div class="ev-winner-head">
             <div>
               <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
-              <div class="ev-winner-hint">Полностью оценённые сезоны: ${escapeHtml(completedText)}. Всего дополнительных слотов: ${plan.slots}.</div>
+              <div class="ev-winner-hint">Полностью оценённые сезоны: ${escapeHtml(completedText)}. Сейчас дополнительных слотов: ${plan.slots}. Потенциально до конца этапа: ${plan.potentialDisplayLimit ?? plan.slots}.</div>
               <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
             </div>
             <div class="ev-actions">
@@ -1881,18 +1907,20 @@
         const opening = openingsById.get(String(row.id));
         const isAuto = plan.auto.some(x => x.id === row.id);
         const isCandidate = plan.candidates.some(x => x.id === row.id);
-        const isChosen = chosenSet.has(row.id) || (isAuto && finalSet.has(row.id));
+        const isFinal = plan.finalIds.includes(row.id) || finalSet.has(row.id);
         const cls = ['ev-winner-row'];
         if (isAuto) cls.push('auto');
         if (isCandidate) cls.push('tie');
-        if (chosenSet.has(row.id) || (isAuto && finalSet.has(row.id))) cls.push('chosen');
+        if (isFinal) cls.push('chosen');
         const action = !plan.complete
           ? ''
           : isCandidate
             ? `<button class="ev-winner-btn ${chosenSet.has(row.id) ? 'active' : ''}" data-tie-winner="${escapeHtml(row.id)}">${chosenSet.has(row.id) ? 'выбран ✓' : 'это победитель'}</button>`
-            : isAuto
-              ? '<span class="ev-status-line ok" style="margin:0;">авто</span>'
-              : '';
+            : isFinal
+              ? '<span class="ev-status-line ok" style="margin:0;">проходит</span>'
+              : isAuto
+                ? '<span class="ev-status-line ok" style="margin:0;">авто</span>'
+                : '';
         return `
           <div class="${cls.join(' ')}">
             <div class="ev-winner-rank">${idx + 1}</div>
