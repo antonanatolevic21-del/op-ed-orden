@@ -5226,19 +5226,25 @@
           const entry = entriesById.get(String(id));
           if (!entry || entry.type !== type) return;
           seen.add(id);
-          if (!rows.has(id)) rows.set(id, { entry, sumPlace: 0, count: 0, users: [] });
+          if (!rows.has(id)) rows.set(id, { entry, sumPlace: 0, count: 0, bestPlace: Number.POSITIVE_INFINITY, users: [] });
           const row = rows.get(id);
-          row.sumPlace += idx + 1;
+          const place = idx + 1;
+          row.sumPlace += place;
           row.count += 1;
+          row.bestPlace = Math.min(row.bestPlace, place);
           row.users.push(user);
         });
       });
       return Array.from(rows.values()).map(row => {
         const avgPlace = row.sumPlace / row.count;
         const coverage = users.length ? row.count / users.length : 0;
-        const weighted = coverage ? avgPlace / coverage : Number.POSITIVE_INFINITY;
-        return { ...row, avgPlace, coverage, weighted, totalUsers: users.length, mode: 'manual' };
-      }).sort((a, b) => a.weighted - b.weighted || a.avgPlace - b.avgPlace || b.count - a.count || a.entry.title.localeCompare(b.entry.title, 'ru')).slice(0, 100);
+        return { ...row, avgPlace, coverage, totalUsers: users.length, mode: 'manual' };
+      }).sort((a, b) =>
+        b.count - a.count ||
+        a.avgPlace - b.avgPlace ||
+        a.bestPlace - b.bestPlace ||
+        a.entry.title.localeCompare(b.entry.title, 'ru')
+      ).slice(0, 100);
     }
 
     function computeGlobalScoreTop(type) {
@@ -5262,7 +5268,7 @@
       const users = usersWithManualTop(globalTopType);
       if (summaryEl) summaryEl.textContent = globalTopMode === 'score'
         ? `Тип: ${globalTopType}. Режим: средний балл. Минимум ${MIN_PUBLIC_VOTES} оценки. Показано: ${rows.length}.`
-        : `Тип: ${globalTopType}. Режим: ручные топ-100. Пользователей с ручным топом: ${users.length}. Показано: ${rows.length}.`;
+        : `Тип: ${globalTopType}. Режим: ручные топ-100. Сначала учитывается количество попаданий в топ, потом среднее место. Пользователей с ручным топом: ${users.length}. Показано: ${rows.length}.`;
       if (globalTopMode === 'manual' && !users.length) {
         listEl.innerHTML = '<div class="oc-empty">Пока нет сохранённых ручных топ-100 для этого типа.</div>';
         return;
@@ -5279,7 +5285,7 @@
         const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
         const metric = globalTopMode === 'score'
           ? `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">ср. ${formatScore(row.avgScore)}</span></div><div class="oc-globaltop-metric">оценок ${row.count}</div><div class="oc-globaltop-metric">мин. ${MIN_PUBLIC_VOTES}</div>`
-          : `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">индекс ${formatScore(row.weighted)}</span></div><div class="oc-globaltop-metric">ср. место ${formatScore(row.avgPlace)}</div><div class="oc-globaltop-metric">в топе ${row.count}/${row.totalUsers}</div>`;
+          : `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">в топе ${row.count}/${row.totalUsers}</span></div><div class="oc-globaltop-metric">ср. место ${formatScore(row.avgPlace)}</div><div class="oc-globaltop-metric">лучшее место ${row.bestPlace}</div>`;
         return `<div class="oc-globaltop-item">
           <div class="oc-profile-rank ${rankClass}">${idx < 3 ? ['①','②','③'][idx] : idx + 1}</div>
           ${imgHtml(e, 'oc-profile-thumb')}
