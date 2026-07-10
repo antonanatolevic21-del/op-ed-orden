@@ -2375,18 +2375,15 @@
         const score = items[0]?.total || 0;
         lines.push(`${group.rank} место: ${titles} [${formatPostScore(score)} / ${formatPostScore(maxScore)}]`);
 
-        orderedUsers.forEach(user => {
-          const userRows = ratings
-            .filter(r => ids.has(String(r.openingId || '')) && String(r.nicknameKey || '') === user.key)
-            .sort((a, b) => {
-              const aTitle = openingsById.get(String(a.openingId || ''))?.title || String(a.openingTitle || '');
-              const bTitle = openingsById.get(String(b.openingId || ''))?.title || String(b.openingTitle || '');
-              return aTitle.localeCompare(bTitle, 'ru', { sensitivity: 'base' });
-            });
-          const comments = userRows
-            .map(r => buildPostCommentLine(r))
-            .filter(Boolean);
-          comments.forEach(comment => lines.push(`${user.name}: ${comment}`));
+        items.forEach(item => {
+          orderedUsers.forEach(user => {
+            const userRow = ratings.find(r =>
+              String(r.openingId || '') === String(item.id) &&
+              String(r.nicknameKey || '') === user.key
+            );
+            const comment = buildPostCommentLine(userRow);
+            if (comment) lines.push(`${user.name}: ${comment}`);
+          });
         });
         lines.push('');
       });
