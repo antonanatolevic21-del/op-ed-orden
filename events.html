@@ -1704,20 +1704,25 @@
       })
         .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx);
 
-      // Уже завершившие сезон, но пока не попавшие в гарантированную часть, тоже задают
-      // минимальный порог для будущих свободных слотов. Потенциально показываем
-      // только те места, которые ещё не заняты гарантированными проходящими.
-      const guaranteedSet = new Set((ready ? finalIds : above.map(row => row.id)).map(String));
-      const completedRemainder = completedPool.filter(row => !guaranteedSet.has(String(row.id)));
+      // Уже завершившие сезон, но пока не попавшие в гарантированную часть,
+      // тоже должны отображаться как потенциальные: если по настройкам всех четырёх
+      // сезонов сейчас может быть 7 слотов, нельзя показывать только 3–4 гарантированных.
+      // Полупрозрачная часть показывает максимум OP, которые ещё математически могут
+      // удержаться в итоговом доборе, в том числе за счёт будущих +2 от неизвестных сезонов.
+      const displayedGuaranteedSet = new Set(guaranteedRows.map(row => String(row.id)));
+      const completedRemainder = completedPool
+        .filter(row => !displayedGuaranteedSet.has(String(row.id)))
+        .map(row => ({ ...row, potential: true, potentialSource: 'completed' }));
       const occupiedGuaranteedSlots = Math.min(earnedSlots, completedPool.length);
       const remainingSlots = Math.max(0, slots - occupiedGuaranteedSlots);
+      const displayPotentialSlots = Math.max(0, slots - guaranteedRows.length);
       const chancePool = [...completedRemainder, ...partialPool]
         .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
 
       const allPotentialRows = remainingSlots > 0
-        ? partialPool
-            .map(row => ({ ...row, chance: getChanceRequirement(chancePool, row.id, remainingSlots) }))
+        ? chancePool
+            .map(row => ({ ...row, potential: true, chance: getChanceRequirement(chancePool, row.id, remainingSlots) }))
             .filter(row => row.chance)
             .sort((a, b) => {
               const aMax = Number(a.total || 0) + Number(a.chance?.maximum || 0);
@@ -1726,9 +1731,10 @@
             })
         : [];
 
-      // Показываем максимум возможных свободных мест: если всего доступно 10 слотов
-      // и 3 уже заняты гарантированно, полупрозрачно показываем до 7 потенциальных.
-      const potentialRows = allPotentialRows.slice(0, remainingSlots);
+      // Визуально держим список на уровне общего числа слотов. Если на границе
+      // гарантированного прохода ничья, спорные строки занимают место в списке,
+      // а после исключения лишнего OP список всё равно остаётся понятным по размеру.
+      const potentialRows = allPotentialRows.slice(0, displayPotentialSlots);
       const visibleRows = [...guaranteedRows, ...potentialRows];
 
       return {
