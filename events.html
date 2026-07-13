@@ -1350,6 +1350,9 @@
       const candidate = (rows || []).find(row => String(row.id) === String(candidateId));
       if (!candidate || slotCount <= 0) return null;
       const remaining = Math.max(0, totalVoters - Number(candidate.count || 0));
+      // Для предварительного списка считаем лучший сценарий для кандидата:
+      // он добирает нужные баллы, а конкуренты теоретически могут получить минимум
+      // за оставшиеся оценки. Если даже так не догнать границу, шанс потерян.
       const otherMinimums = (rows || [])
         .filter(row => String(row.id) !== String(candidateId))
         .map(row => Number(row.total || 0) + Math.max(0, totalVoters - Number(row.count || 0)))
@@ -1402,13 +1405,18 @@
       return Array.isArray(state?.selectedOpeningIds) && state.selectedOpeningIds.length > 0;
     }
 
-    function getConfirmedWildcardStates() {
-      return SEASONS.map(season => getSeasonState(season)).filter(state => isSeasonConfirmedForWildcard(state));
+    function getAllWildcardStates() {
+      return SEASONS.map(season => getSeasonState(season));
     }
 
-    function getPotentialWildcardDisplayLimit() {
-      const confirmedStates = getConfirmedWildcardStates();
-      return BASE_WILDCARD_SLOT_COUNT + confirmedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+    function getConfirmedWildcardStates() {
+      return getAllWildcardStates().filter(state => isSeasonConfirmedForWildcard(state));
+    }
+
+    function getPotentialWildcardDisplayLimit(states = null) {
+      const baseStates = Array.isArray(states) ? states : getConfirmedWildcardStates();
+      const total = BASE_WILDCARD_SLOT_COUNT + baseStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      return Math.max(BASE_WILDCARD_SLOT_COUNT, Math.min(10, total));
     }
 
     function getSemifinalMeta() {
@@ -1515,7 +1523,11 @@
         });
       });
       const meta = getSemifinalMeta();
-      const wildcards = Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
+      const wildcardPlan = getSemifinalWildcardPlan();
+      const computedWildcards = wildcardPlan.ready ? wildcardPlan.finalIds : [];
+      const savedWildcards = Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
+      const wildcards = (computedWildcards.length ? computedWildcards : savedWildcards)
+        .filter((id, idx, arr) => arr.indexOf(String(id)) === idx);
       const wildcardRows = wildcards.map((id, idx) => {
         const origin = findOpeningSeasonState(id);
         const sum = origin ? sumForOpeningInSeason(origin.key, id) : { total: 0, count: 0 };
@@ -1538,17 +1550,26 @@
 
     function getSemifinalWildcardPlan() {
       const meta = getSemifinalMeta();
-      const confirmedStates = getConfirmedWildcardStates();
+      const allStates = getAllWildcardStates();
+      const confirmedStates = allStates.filter(state => isSeasonConfirmedForWildcard(state));
       const completedStates = confirmedStates.filter(state => isSeasonFullyRated(state));
-      const partialStates = confirmedStates.filter(state => !isSeasonFullyRated(state) && getCompletedParticipantCount(state) >= 10);
-      const slots = BASE_WILDCARD_SLOT_COUNT + confirmedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
-      const potentialDisplayLimit = getPotentialWildcardDisplayLimit();
-      const allConfirmedComplete = confirmedStates.length > 0 && completedStates.length === confirmedStates.length;
+      const partialStates = confirmedStates.filter(state => {
+        const completed = getCompletedParticipantCount(state);
+        return !isSeasonFullyRated(state) && completed >= 10 && completed < 15;
+      });
+
+      // Итоговое число дополнительных слотов считаем по уже подтверждённым сезонам.
+      // Базовые +2 всегда входят в общий лимит, но гарантированно занять их можно
+      // только после появления хотя бы одного полностью оценённого сезона.
+      const slots = getPotentialWildcardDisplayLimit(confirmedStates);
+      const earnedSlots = completedStates.length
+        ? Math.min(slots, BASE_WILDCARD_SLOT_COUNT + completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0))
+        : 0;
 
       const directSet = new Set();
       completedStates.forEach(state => getDirectSemifinalIdsForState(state).forEach(id => directSet.add(String(id))));
 
-      const pool = completedStates.flatMap(state => (state.selectedOpeningIds || [])
+      const completedPool = completedStates.flatMap(state => (state.selectedOpeningIds || [])
         .map(String)
         .filter(id => openingsById.has(id) && !directSet.has(id))
         .map(id => {
@@ -1561,11 +1582,41 @@
             title: opening?.title || id,
             total: score.total,
             count: score.count,
-            potential: !allConfirmedComplete
+            potential: false
           };
         }))
+        .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
 
+      const effectiveEarnedSlots = Math.min(earnedSlots, completedPool.length);
+      let above = [];
+      let tie = [];
+      let below = completedPool.slice();
+      let overflow = 0;
+      let excluded = [];
+      let guaranteedRows = [];
+      let finalIds = [];
+      let ready = effectiveEarnedSlots === 0;
+
+      if (effectiveEarnedSlots > 0) {
+        const cutoff = completedPool[effectiveEarnedSlots - 1]?.total ?? 0;
+        above = completedPool.filter(row => row.total > cutoff);
+        tie = completedPool.filter(row => row.total === cutoff);
+        below = completedPool.filter(row => row.total < cutoff);
+        const tieIds = new Set(tie.map(row => row.id));
+        overflow = Math.max(0, above.length + tie.length - effectiveEarnedSlots);
+        excluded = Array.isArray(meta.wildcardExcludedIds)
+          ? meta.wildcardExcludedIds.map(String).filter(id => tieIds.has(id)).slice(0, overflow)
+          : [];
+        const excludedSet = new Set(excluded);
+        const included = [...above, ...tie.filter(row => !excludedSet.has(row.id))];
+        finalIds = included.slice(0, effectiveEarnedSlots).map(row => row.id);
+        ready = overflow === 0 || excluded.length === overflow;
+        guaranteedRows = overflow > 0 ? [...above, ...tie] : completedPool.slice(0, effectiveEarnedSlots);
+      }
+
+      // Кандидаты из незавершённых сезонов показываются только при 10–14 полностью
+      // проголосовавших участниках. Временные прямые проходы сюда не дублируем.
       const partialPool = partialStates.flatMap(state => {
         const winnerCount = getWinnerCountForSeason(state);
         const currentRows = (state.selectedOpeningIds || [])
@@ -1580,105 +1631,59 @@
               seasonKey: state.key,
               title: opening?.title || id,
               total: score.total,
-              count: score.count
+              count: score.count,
+              potential: true
             };
           })
           .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
         const provisionalDirect = new Set(currentRows.slice(0, winnerCount).map(row => row.id));
         return currentRows.filter(row => !provisionalDirect.has(row.id));
-      });
+      })
+        .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx);
 
-      const chancePool = [...pool, ...partialPool]
+      // Уже завершившие сезон, но пока не попавшие в гарантированную часть, тоже задают
+      // минимальный порог для будущих свободных слотов. Потенциально показываем
+      // только те места, которые ещё не заняты гарантированными проходящими.
+      const guaranteedSet = new Set((ready ? finalIds : above.map(row => row.id)).map(String));
+      const completedRemainder = completedPool.filter(row => !guaranteedSet.has(String(row.id)));
+      const occupiedGuaranteedSlots = Math.min(earnedSlots, completedPool.length);
+      const remainingSlots = Math.max(0, slots - occupiedGuaranteedSlots);
+      const chancePool = [...completedRemainder, ...partialPool]
         .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
 
-      const potentialRows = partialPool
-        .map(row => ({ ...row, potential: true, chance: getChanceRequirement(chancePool, row.id, slots) }))
-        .filter(row => row.chance)
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+      const allPotentialRows = remainingSlots > 0
+        ? partialPool
+            .map(row => ({ ...row, chance: getChanceRequirement(chancePool, row.id, remainingSlots) }))
+            .filter(row => row.chance)
+            .sort((a, b) => {
+              const aMax = Number(a.total || 0) + Number(a.chance?.maximum || 0);
+              const bMax = Number(b.total || 0) + Number(b.chance?.maximum || 0);
+              return (bMax - aMax) || (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' });
+            })
+        : [];
 
-      if (!slots || (!pool.length && !potentialRows.length)) {
-        return {
-          slots,
-          potentialDisplayLimit,
-          confirmedStates,
-          completedStates,
-          partialStates,
-          allConfirmedComplete,
-          directSet,
-          ranked: pool,
-          visibleRows: potentialRows,
-          potentialRows,
-          above: [],
-          tie: [],
-          included: [],
-          excluded: [],
-          finalIds: [],
-          overflow: 0,
-          ready: false,
-          savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String) : []
-        };
-      }
+      // Показываем максимум возможных свободных мест: если всего доступно 10 слотов
+      // и 3 уже заняты гарантированно, полупрозрачно показываем до 7 потенциальных.
+      const potentialRows = allPotentialRows.slice(0, remainingSlots);
+      const visibleRows = [...guaranteedRows, ...potentialRows];
 
-      if (!allConfirmedComplete) {
-        const merged = [...pool.map(row => ({ ...row, potential: true, chance: getChanceRequirement(chancePool, row.id, slots) })), ...potentialRows]
-          .filter(row => row.chance)
-          .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
-          .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
-        return {
-          slots,
-          potentialDisplayLimit,
-          confirmedStates,
-          completedStates,
-          partialStates,
-          allConfirmedComplete,
-          directSet,
-          ranked: pool,
-          visibleRows: merged,
-          potentialRows: merged,
-          above: [],
-          tie: [],
-          below: [],
-          included: [],
-          excluded: [],
-          finalIds: [],
-          overflow: 0,
-          ready: false,
-          savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String).filter(id => openingsById.has(id)) : []
-        };
-      }
-
-      const effectiveSlots = Math.min(slots, pool.length);
-      const cutoff = pool[effectiveSlots - 1]?.total ?? 0;
-      const above = pool.filter(row => row.total > cutoff);
-      const tie = pool.filter(row => row.total === cutoff);
-      const below = pool.filter(row => row.total < cutoff);
-      const tieIds = new Set(tie.map(row => row.id));
-      const overflow = Math.max(0, above.length + tie.length - effectiveSlots);
-      let excluded = Array.isArray(meta.wildcardExcludedIds) ? meta.wildcardExcludedIds.map(String).filter(id => tieIds.has(id)).slice(0, overflow) : [];
-      const excludedSet = new Set(excluded);
-      const included = [...above, ...tie.filter(row => !excludedSet.has(row.id))];
-      const finalIds = included.slice(0, Math.min(effectiveSlots, included.length)).map(row => row.id);
-      const ready = (overflow === 0 || excluded.length === overflow) && allConfirmedComplete;
-      const displayLimit = Math.max(effectiveSlots, Math.min(pool.length, potentialDisplayLimit));
-      const visibleRows = overflow > 0
-        ? [...above, ...tie]
-        : pool.slice(0, displayLimit);
       return {
         slots,
-        potentialDisplayLimit,
+        earnedSlots,
+        potentialDisplayLimit: remainingSlots,
         confirmedStates,
         completedStates,
         partialStates,
-        allConfirmedComplete,
+        allConfirmedComplete: confirmedStates.length > 0 && completedStates.length === confirmedStates.length,
         directSet,
-        ranked: pool,
+        ranked: completedPool,
         visibleRows,
-        potentialRows: [],
+        potentialRows,
         above,
         tie,
         below,
-        included,
+        included: ready ? completedPool.filter(row => finalIds.includes(row.id)) : above,
         excluded,
         finalIds: ready ? finalIds : [],
         overflow,
@@ -1703,8 +1708,13 @@
     function saveWildcardSemifinalBasket() {
       if (!isAdmin()) return;
       const plan = getSemifinalWildcardPlan();
-      if (!plan.ready || plan.finalIds.length !== Math.min(plan.slots, plan.ranked.length)) {
-        alert('Сначала нужно исключить лишние OP на границе прохода, чтобы занятых слотов было ровно столько, сколько нужно.');
+      const expected = Math.min(plan.earnedSlots || 0, plan.ranked.length);
+      if (!expected) {
+        alert('Пока нет полностью оценённого сезона, из которого можно сохранить гарантированные дополнительные проходы.');
+        return;
+      }
+      if (!plan.ready || plan.finalIds.length !== expected) {
+        alert('Сначала нужно исключить лишние OP на границе прохода, чтобы гарантированных проходящих осталось ровно столько, сколько уже доступно слотов.');
         return;
       }
       saveSemifinalMeta({
@@ -1721,7 +1731,11 @@
         getDirectSemifinalIdsForState(getSeasonState(season)).forEach(id => locked.add(String(id)));
       });
       const meta = getSemifinalMeta();
-      (Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds : []).forEach(id => {
+      const wildcardPlan = getSemifinalWildcardPlan();
+      const wildcardIds = wildcardPlan.ready && wildcardPlan.finalIds.length
+        ? wildcardPlan.finalIds
+        : (Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds : []);
+      wildcardIds.forEach(id => {
         if (openingsById.has(String(id))) locked.add(String(id));
       });
       return locked;
@@ -2035,7 +2049,7 @@
           <div>
             <div class="ev-section-label">Полуфинал</div>
             <h2>Корзина полуфинала</h2>
-            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты резервируются сразу по всем подтверждённым сезонам: всегда есть базовые +2 слота, дальше 10 OP → +2, 15 OP → +1, 20 OP → +0. После завершения оценок хотя бы 10 участниками появляются полупрозрачные предварительные кандидаты.</div>
+            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты считаются по подтверждённым сезонам: всегда есть базовые +2 слота, дальше 10 OP → +2, 15 OP → +1, 20 OP → +0. После 15 оценок проходящие показываются обычными строками, а при 10–14 участниках полупрозрачно показываются OP, которые ещё математически могут добрать баллы.</div>
           </div>
         </section>
         <div class="ev-semi-grid">
@@ -2098,43 +2112,49 @@
         ? plan.partialStates.map(state => `${SEASON_LABEL[state.season]} (${getCompletedParticipantCount(state)}/15)`).join(', ')
         : 'нет';
 
+      const expectedGuaranteed = Math.min(plan.earnedSlots || 0, plan.ranked.length);
       let status = '';
-      if (!plan.slots) {
-        status = 'Дополнительных слотов пока нет.';
-      } else if (!plan.allConfirmedComplete) {
-        status = `Зарезервировано ${plan.slots} слотов. Пока показаны предварительные кандидаты; сохранить итог можно после завершения всех подтверждённых сезонов.`;
-      } else if (plan.ready) {
-        status = `Можно сохранить дополнительные слоты: ${plan.finalIds.length}/${Math.min(plan.slots, plan.ranked.length)}.`;
+      if (!plan.completedStates.length && !plan.partialStates.length) {
+        status = `Предусмотрено ${plan.slots} дополнительных слотов. Кандидаты появятся после того, как сезон полностью оценят хотя бы 10 участников.`;
+      } else if (!plan.ready && plan.overflow > 0) {
+        status = `На границе гарантированного прохода ничья. Нужно исключить ещё ${Math.max(0, plan.overflow - plan.excluded.length)} OP.`;
+      } else if (expectedGuaranteed > 0 && plan.partialStates.length) {
+        status = `Гарантированно определено ${plan.finalIds.length}/${expectedGuaranteed}. Ниже полупрозрачно показаны все кандидаты, которые ещё могут попасть в оставшиеся слоты в лучшем сценарии.`;
+      } else if (expectedGuaranteed > 0) {
+        status = `Гарантированно определено ${plan.finalIds.length} OP. Всего по настройкам четырёх сезонов предусмотрено ${plan.slots} дополнительных слотов.`;
       } else {
-        status = `На границе прохода ничья. Нужно исключить ${plan.overflow - plan.excluded.length} OP, чтобы осталось ровно ${plan.slots} слотов.`;
+        status = `Показаны потенциальные кандидаты из сезонов с 10–14 завершившими участниками.`;
       }
 
       const visibleRows = Array.isArray(plan.visibleRows) ? plan.visibleRows : plan.ranked;
       const rows = visibleRows.map((row, idx) => {
         const opening = openingsById.get(String(row.id));
-        const isPotential = !!row.potential || !plan.allConfirmedComplete;
+        const isPotential = !!row.potential;
         const isAbove = plan.above.some(x => x.id === row.id);
-        const isTie = plan.tie.some(x => x.id === row.id) && plan.overflow > 0;
-        const isExcluded = plan.excluded.includes(row.id);
-        const isSelected = plan.ready && plan.finalIds.includes(row.id);
+        const isTie = !isPotential && plan.tie.some(x => x.id === row.id) && plan.overflow > 0;
+        const isExcluded = !isPotential && plan.excluded.includes(row.id);
+        const isSelected = !isPotential && plan.ready && plan.finalIds.includes(row.id);
         const cls = ['ev-winner-row'];
         if (isPotential) cls.push('potential');
         if (isSelected || isAbove) cls.push('chosen');
         if (isTie) cls.push('tie');
         if (isExcluded) cls.push('bad');
+
         const action = isPotential
-          ? '<span class="ev-status-line warn" style="margin:0;">предварительно</span>'
+          ? '<span class="ev-status-line warn" style="margin:0;">есть шанс</span>'
           : isTie
             ? `<button class="ev-winner-btn ${isExcluded ? 'active' : ''}" data-wildcard-minus="${escapeHtml(row.id)}">${isExcluded ? 'исключён −' : '− исключить'}</button>`
             : isSelected || isAbove
-              ? '<span class="ev-status-line ok" style="margin:0;">в слот</span>'
+              ? '<span class="ev-status-line ok" style="margin:0;">прошёл ✓</span>'
               : '';
+
         const chance = row.chance;
         const chanceText = isPotential && chance
           ? (chance.remaining > 0
-              ? `Нужно минимум ${chance.needed} б. за оставшиеся ${chance.remaining} оценок${chance.average > 0 ? ` · ср. ${chance.average.toFixed(1)}` : ''}, чтобы сохранить шанс.`
-              : 'По текущей сумме сохраняет шанс попасть в дополнительный слот.')
+              ? `Нужно набрать минимум ${chance.needed} б. за оставшиеся ${chance.remaining} оценок${chance.average > 0 ? ` · средняя не ниже ${chance.average.toFixed(1)}` : ''}, чтобы в лучшем сценарии сохранить шанс.`
+              : 'По текущей сумме ещё сохраняет шанс попасть в дополнительный слот.')
           : '';
+
         return `
           <div class="${cls.join(' ')}">
             <div class="ev-winner-rank">${idx + 1}</div>
@@ -2148,17 +2168,19 @@
           </div>
         `;
       }).join('');
+
+      const canSave = expectedGuaranteed > 0 && plan.ready && plan.finalIds.length === expectedGuaranteed;
       return `
         <section class="ev-winner-panel" style="margin-top:16px;">
           <div class="ev-winner-head">
             <div>
               <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
-              <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}. От 10 завершивших участников: ${escapeHtml(partialText)}.</div>
-              <div class="ev-winner-hint">Всего дополнительных слотов по подтверждённым сезонам: ${plan.slots}. Базовые 2 уже входят в это число.</div>
-              <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
+              <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}. Сейчас на этапе 10–14 участников: ${escapeHtml(partialText)}.</div>
+              <div class="ev-winner-hint">Всего предусмотрено ${plan.slots} слотов по настройкам всех четырёх сезонов. Из них сейчас гарантированно доступно ${plan.earnedSlots || 0}. Базовые 2 уже входят в расчёт.</div>
+              <div class="ev-status-line ${canSave || plan.finalIds.length ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
             </div>
             <div class="ev-actions">
-              <button class="ev-btn-main" id="ev-save-wildcards" ${plan.ready && plan.slots ? '' : 'disabled'}>Сохранить доп. слоты</button>
+              <button class="ev-btn-main" id="ev-save-wildcards" ${canSave ? '' : 'disabled'}>Сохранить гарантированные</button>
             </div>
           </div>
           <div class="ev-winner-list">${rows || '<div class="ev-empty">Потенциальные кандидаты появятся после завершения оценок хотя бы 10 участниками в одном из сезонов.</div>'}</div>
