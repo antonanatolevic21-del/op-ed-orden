@@ -153,9 +153,11 @@
     .ev-participants { margin-bottom: 14px; }
     .ev-participants-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
     .ev-mini-title { font-family: 'Archivo Black', sans-serif; font-size: 16px; }
-    .ev-participant-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .ev-participant-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+    .ev-participant-slot { display: grid; grid-template-columns: minmax(0, 1fr) 34px; gap: 7px; align-items: center; }
     .ev-participant-grid input {
       width: 100%;
+      min-width: 0;
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--text);
@@ -164,6 +166,24 @@
       font-size: 13px;
     }
     .ev-participant-grid input:disabled { opacity: .62; }
+    .ev-participant-progress {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      min-height: 34px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      font-weight: 800;
+      color: var(--muted);
+      background: var(--panel);
+      white-space: nowrap;
+    }
+    .ev-participant-progress.done { color: var(--green); border-color: rgba(74,222,128,.5); background: rgba(74,222,128,.08); font-size: 15px; }
+    .ev-participant-progress.partial { color: var(--gold); border-color: rgba(255,200,87,.45); }
     .ev-status-line { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 9px; }
     .ev-status-line.ok { color: var(--green); }
     .ev-status-line.warn { color: var(--gold); }
@@ -511,6 +531,10 @@
     .ev-winner-row.tie { border-color: rgba(255,200,87,.42); }
     .ev-winner-row.chosen { border-color: rgba(8,217,214,.52); background: rgba(8,217,214,.06); }
     .ev-winner-row.bad { border-color: rgba(255,46,99,.52); opacity: .72; }
+    .ev-winner-row.potential { opacity: .52; border-style: dashed; }
+    .ev-winner-row.potential .ev-winner-score { color: var(--gold); }
+    .ev-semi-item.potential { opacity: .55; border-bottom-style: dashed; }
+    .ev-potential-note { display: block; margin-top: 2px; font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.35; color: var(--gold); }
     .ev-winner-rank { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; }
     .ev-winner-name { min-width: 0; font-weight: 800; font-size: 12.8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ev-winner-meta { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
@@ -1291,6 +1315,78 @@
       return { total, count: rows.length };
     }
 
+    function getParticipantRatingProgress(state) {
+      const selectedIds = (state?.selectedOpeningIds || []).map(String).filter(id => openingsById.has(id));
+      const selectedSet = new Set(selectedIds);
+      const ratings = getSeasonRatings(state?.key);
+      const byUser = new Map();
+      ratings.forEach(row => {
+        const nicknameKey = String(row?.nicknameKey || normalizeNickname(row?.nickname || ''));
+        const openingId = String(row?.openingId || '');
+        if (!nicknameKey || !selectedSet.has(openingId) || !Number.isFinite(Number(row?.score))) return;
+        if (!byUser.has(nicknameKey)) byUser.set(nicknameKey, new Set());
+        byUser.get(nicknameKey).add(openingId);
+      });
+      return cleanParticipantSlots(state?.allowedNicknames || []).map((nickname, idx) => {
+        const nicknameKey = normalizeNickname(nickname);
+        const done = nicknameKey && byUser.has(nicknameKey) ? byUser.get(nicknameKey).size : 0;
+        const total = selectedIds.length;
+        return {
+          idx,
+          nickname,
+          nicknameKey,
+          done,
+          total,
+          complete: !!nicknameKey && total > 0 && done >= total
+        };
+      });
+    }
+
+    function getCompletedParticipantCount(state) {
+      return getParticipantRatingProgress(state).filter(row => row.complete).length;
+    }
+
+    function getChanceRequirement(rows, candidateId, slotCount, totalVoters = 15) {
+      const candidate = (rows || []).find(row => String(row.id) === String(candidateId));
+      if (!candidate || slotCount <= 0) return null;
+      const remaining = Math.max(0, totalVoters - Number(candidate.count || 0));
+      const otherMinimums = (rows || [])
+        .filter(row => String(row.id) !== String(candidateId))
+        .map(row => Number(row.total || 0) + Math.max(0, totalVoters - Number(row.count || 0)))
+        .sort((a, b) => b - a);
+      const thresholdIndex = Math.max(0, Math.min(slotCount, otherMinimums.length) - 1);
+      const threshold = otherMinimums.length >= slotCount ? otherMinimums[thresholdIndex] : 0;
+      const unavoidableMinimum = remaining;
+      const needed = Math.max(unavoidableMinimum, threshold - Number(candidate.total || 0));
+      const maximum = remaining * 10;
+      if (needed > maximum) return null;
+      return {
+        remaining,
+        needed: Math.max(0, Math.ceil(needed)),
+        maximum,
+        threshold,
+        average: remaining > 0 ? Math.max(0, needed) / remaining : 0
+      };
+    }
+
+    function getSeasonPotentialWinnerRows(state) {
+      const completedParticipants = getCompletedParticipantCount(state);
+      if (completedParticipants < 10 || isSeasonFullyRated(state)) return { completedParticipants, rows: [] };
+      const winnerCount = getWinnerCountForSeason(state);
+      const ranked = (state.selectedOpeningIds || [])
+        .map(id => {
+          const opening = openingsById.get(String(id));
+          const score = sumForOpeningInSeason(state.key, id);
+          return { id: String(id), title: opening?.title || String(id), total: score.total, count: score.count };
+        })
+        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+      const rows = ranked
+        .map(row => ({ ...row, chance: getChanceRequirement(ranked, row.id, winnerCount) }))
+        .filter(row => row.chance)
+        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+      return { completedParticipants, winnerCount, rows };
+    }
+
     function getWinnerCountForSeason(state) {
       const rawTarget = Number(state?.basketTarget || getBasketState(state?.season || activeSeason).target || 15);
       return WINNER_COUNT_BY_TARGET[rawTarget] || 3;
@@ -1306,16 +1402,13 @@
       return Array.isArray(state?.selectedOpeningIds) && state.selectedOpeningIds.length > 0;
     }
 
-    function getPotentialWildcardDisplayLimit(completedStates = []) {
-      const completedSeasonSet = new Set((completedStates || []).map(state => state.season));
-      const seasonalPotential = SEASONS.reduce((sum, season) => {
-        const state = getSeasonState(season);
-        if (completedSeasonSet.has(season) || isSeasonConfirmedForWildcard(state)) {
-          return sum + getWildcardSlotCountForSeason(state);
-        }
-        return sum + 2;
-      }, 0);
-      return BASE_WILDCARD_SLOT_COUNT + seasonalPotential;
+    function getConfirmedWildcardStates() {
+      return SEASONS.map(season => getSeasonState(season)).filter(state => isSeasonConfirmedForWildcard(state));
+    }
+
+    function getPotentialWildcardDisplayLimit() {
+      const confirmedStates = getConfirmedWildcardStates();
+      return BASE_WILDCARD_SLOT_COUNT + confirmedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
     }
 
     function getSemifinalMeta() {
@@ -1445,12 +1538,16 @@
 
     function getSemifinalWildcardPlan() {
       const meta = getSemifinalMeta();
-      const completedStates = SEASONS.map(season => getSeasonState(season)).filter(state => isSeasonFullyRated(state));
-      const seasonalSlots = completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
-      const slots = BASE_WILDCARD_SLOT_COUNT + seasonalSlots;
-      const potentialDisplayLimit = getPotentialWildcardDisplayLimit(completedStates);
+      const confirmedStates = getConfirmedWildcardStates();
+      const completedStates = confirmedStates.filter(state => isSeasonFullyRated(state));
+      const partialStates = confirmedStates.filter(state => !isSeasonFullyRated(state) && getCompletedParticipantCount(state) >= 10);
+      const slots = BASE_WILDCARD_SLOT_COUNT + confirmedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      const potentialDisplayLimit = getPotentialWildcardDisplayLimit();
+      const allConfirmedComplete = confirmedStates.length > 0 && completedStates.length === confirmedStates.length;
+
       const directSet = new Set();
       completedStates.forEach(state => getDirectSemifinalIdsForState(state).forEach(id => directSet.add(String(id))));
+
       const pool = completedStates.flatMap(state => (state.selectedOpeningIds || [])
         .map(String)
         .filter(id => openingsById.has(id) && !directSet.has(id))
@@ -1463,15 +1560,94 @@
             seasonKey: state.key,
             title: opening?.title || id,
             total: score.total,
-            count: score.count
+            count: score.count,
+            potential: !allConfirmedComplete
           };
         }))
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
 
-      if (!slots || !pool.length) {
-        const visibleRows = pool.slice(0, Math.min(pool.length, potentialDisplayLimit));
-        return { slots, potentialDisplayLimit, completedStates, directSet, ranked: pool, visibleRows, above: [], tie: [], included: [], excluded: [], finalIds: [], overflow: 0, ready: slots === 0, savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String) : [] };
+      const partialPool = partialStates.flatMap(state => {
+        const winnerCount = getWinnerCountForSeason(state);
+        const currentRows = (state.selectedOpeningIds || [])
+          .map(String)
+          .filter(id => openingsById.has(id))
+          .map(id => {
+            const opening = openingsById.get(id);
+            const score = sumForOpeningInSeason(state.key, id);
+            return {
+              id,
+              season: state.season,
+              seasonKey: state.key,
+              title: opening?.title || id,
+              total: score.total,
+              count: score.count
+            };
+          })
+          .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+        const provisionalDirect = new Set(currentRows.slice(0, winnerCount).map(row => row.id));
+        return currentRows.filter(row => !provisionalDirect.has(row.id));
+      });
+
+      const chancePool = [...pool, ...partialPool]
+        .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
+        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+
+      const potentialRows = partialPool
+        .map(row => ({ ...row, potential: true, chance: getChanceRequirement(chancePool, row.id, slots) }))
+        .filter(row => row.chance)
+        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+
+      if (!slots || (!pool.length && !potentialRows.length)) {
+        return {
+          slots,
+          potentialDisplayLimit,
+          confirmedStates,
+          completedStates,
+          partialStates,
+          allConfirmedComplete,
+          directSet,
+          ranked: pool,
+          visibleRows: potentialRows,
+          potentialRows,
+          above: [],
+          tie: [],
+          included: [],
+          excluded: [],
+          finalIds: [],
+          overflow: 0,
+          ready: false,
+          savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String) : []
+        };
       }
+
+      if (!allConfirmedComplete) {
+        const merged = [...pool.map(row => ({ ...row, potential: true, chance: getChanceRequirement(chancePool, row.id, slots) })), ...potentialRows]
+          .filter(row => row.chance)
+          .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
+          .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+        return {
+          slots,
+          potentialDisplayLimit,
+          confirmedStates,
+          completedStates,
+          partialStates,
+          allConfirmedComplete,
+          directSet,
+          ranked: pool,
+          visibleRows: merged,
+          potentialRows: merged,
+          above: [],
+          tie: [],
+          below: [],
+          included: [],
+          excluded: [],
+          finalIds: [],
+          overflow: 0,
+          ready: false,
+          savedIds: Array.isArray(meta.wildcardOpeningIds) ? meta.wildcardOpeningIds.map(String).filter(id => openingsById.has(id)) : []
+        };
+      }
+
       const effectiveSlots = Math.min(slots, pool.length);
       const cutoff = pool[effectiveSlots - 1]?.total ?? 0;
       const above = pool.filter(row => row.total > cutoff);
@@ -1483,7 +1659,7 @@
       const excludedSet = new Set(excluded);
       const included = [...above, ...tie.filter(row => !excludedSet.has(row.id))];
       const finalIds = included.slice(0, Math.min(effectiveSlots, included.length)).map(row => row.id);
-      const ready = overflow === 0 || excluded.length === overflow;
+      const ready = (overflow === 0 || excluded.length === overflow) && allConfirmedComplete;
       const displayLimit = Math.max(effectiveSlots, Math.min(pool.length, potentialDisplayLimit));
       const visibleRows = overflow > 0
         ? [...above, ...tie]
@@ -1491,10 +1667,14 @@
       return {
         slots,
         potentialDisplayLimit,
+        confirmedStates,
         completedStates,
+        partialStates,
+        allConfirmedComplete,
         directSet,
         ranked: pool,
         visibleRows,
+        potentialRows: [],
         above,
         tie,
         below,
@@ -1855,7 +2035,7 @@
           <div>
             <div class="ev-section-label">Полуфинал</div>
             <h2>Корзина полуфинала</h2>
-            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты считаются по всем полностью оценённым сезонам: всегда есть базовые +2 слота, дальше 10 OP → +2, 15 OP → +1, 20 OP → +0. Итого минимум 2, максимум 10.</div>
+            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты резервируются сразу по всем подтверждённым сезонам: всегда есть базовые +2 слота, дальше 10 OP → +2, 15 OP → +1, 20 OP → +0. После завершения оценок хотя бы 10 участниками появляются полупрозрачные предварительные кандидаты.</div>
           </div>
         </section>
         <div class="ev-semi-grid">
@@ -1871,54 +2051,97 @@
     function renderSemiSeason(season) {
       const state = getSeasonState(season);
       const ids = getDirectSemifinalIdsForState(state);
-      const items = ids.length
-        ? ids.map((id, idx) => {
-            const opening = openingsById.get(String(id));
-            if (!opening) return '';
-            const sum = sumForOpeningInSeason(state.key, id);
-            return `<div class="ev-semi-item"><span class="oc-profile-rank">${idx + 1}</span><span class="ev-winner-name">${escapeHtml(opening.title)}</span><span class="ev-semi-score">${sum.total} б.</span></div>`;
-          }).join('')
-        : '<div class="ev-empty" style="padding:18px 8px;">Пока нет победителей</div>';
+      const potentialPlan = getSeasonPotentialWinnerRows(state);
+      let items = '';
+      let hint = `${ids.length} OP в корзине полуфинала`;
+
+      if (ids.length) {
+        items = ids.map((id, idx) => {
+          const opening = openingsById.get(String(id));
+          if (!opening) return '';
+          const sum = sumForOpeningInSeason(state.key, id);
+          return `<div class="ev-semi-item"><span class="oc-profile-rank">${idx + 1}</span><span class="ev-winner-name">${escapeHtml(opening.title)}</span><span class="ev-semi-score">${sum.total} б.</span></div>`;
+        }).join('');
+      } else if (potentialPlan.rows.length) {
+        hint = `Предварительно: ${potentialPlan.completedParticipants}/15 участников завершили оценивание`;
+        items = potentialPlan.rows.map((row, idx) => {
+          const opening = openingsById.get(String(row.id));
+          const chance = row.chance;
+          const needText = chance.remaining > 0
+            ? `минимум ${chance.needed} б. за оставшиеся ${chance.remaining} оценок${chance.average > 0 ? ` · ср. ${chance.average.toFixed(1)}` : ''}`
+            : 'сохраняет шанс на проход';
+          return `<div class="ev-semi-item potential"><span class="oc-profile-rank">${idx + 1}</span><span class="ev-winner-name">${escapeHtml(opening?.title || row.title)}<span class="ev-potential-note">${escapeHtml(needText)}</span></span><span class="ev-semi-score">${row.total} б.</span></div>`;
+        }).join('');
+      } else {
+        const completed = getCompletedParticipantCount(state);
+        hint = completed > 0 ? `${completed}/15 участников завершили оценивание` : 'Оценивание ещё не началось';
+        items = '<div class="ev-empty" style="padding:18px 8px;">Потенциальные проходящие появятся после завершения оценок хотя бы 10 участниками.</div>';
+      }
+
       return `
         <section class="ev-semi-season">
           <h3>${escapeHtml(SEASON_LABEL[season])} ${CURRENT_EVENT_YEAR}</h3>
-          <div class="ev-winner-hint">${ids.length} OP в корзине полуфинала</div>
+          <div class="ev-winner-hint">${escapeHtml(hint)}</div>
           <div style="margin-top:8px;">${items}</div>
         </section>
       `;
     }
 
     function renderWildcardSemifinalPanel(plan = getSemifinalWildcardPlan()) {
+      const confirmedText = plan.confirmedStates?.length
+        ? plan.confirmedStates.map(state => `${SEASON_LABEL[state.season]} (+${getWildcardSlotCountForSeason(state)})`).join(', ')
+        : 'нет подтверждённых сезонов';
       const completedText = plan.completedStates.length
-        ? plan.completedStates.map(state => `${SEASON_LABEL[state.season]} (+${getWildcardSlotCountForSeason(state)})`).join(', ')
-        : 'нет полностью оценённых сезонов';
-      const status = !plan.slots
-        ? 'Дополнительных слотов пока нет.'
-        : plan.ready
-          ? `Можно сохранить дополнительные слоты: ${plan.finalIds.length}/${Math.min(plan.slots, plan.ranked.length)}.`
-          : `На границе прохода ничья. Нужно исключить ${plan.overflow - plan.excluded.length} OP, чтобы осталось ровно ${plan.slots} слотов.`;
+        ? plan.completedStates.map(state => SEASON_LABEL[state.season]).join(', ')
+        : 'нет';
+      const partialText = plan.partialStates?.length
+        ? plan.partialStates.map(state => `${SEASON_LABEL[state.season]} (${getCompletedParticipantCount(state)}/15)`).join(', ')
+        : 'нет';
+
+      let status = '';
+      if (!plan.slots) {
+        status = 'Дополнительных слотов пока нет.';
+      } else if (!plan.allConfirmedComplete) {
+        status = `Зарезервировано ${plan.slots} слотов. Пока показаны предварительные кандидаты; сохранить итог можно после завершения всех подтверждённых сезонов.`;
+      } else if (plan.ready) {
+        status = `Можно сохранить дополнительные слоты: ${plan.finalIds.length}/${Math.min(plan.slots, plan.ranked.length)}.`;
+      } else {
+        status = `На границе прохода ничья. Нужно исключить ${plan.overflow - plan.excluded.length} OP, чтобы осталось ровно ${plan.slots} слотов.`;
+      }
+
       const visibleRows = Array.isArray(plan.visibleRows) ? plan.visibleRows : plan.ranked;
       const rows = visibleRows.map((row, idx) => {
         const opening = openingsById.get(String(row.id));
+        const isPotential = !!row.potential || !plan.allConfirmedComplete;
         const isAbove = plan.above.some(x => x.id === row.id);
         const isTie = plan.tie.some(x => x.id === row.id) && plan.overflow > 0;
         const isExcluded = plan.excluded.includes(row.id);
         const isSelected = plan.ready && plan.finalIds.includes(row.id);
         const cls = ['ev-winner-row'];
+        if (isPotential) cls.push('potential');
         if (isSelected || isAbove) cls.push('chosen');
         if (isTie) cls.push('tie');
         if (isExcluded) cls.push('bad');
-        const action = isTie
-          ? `<button class="ev-winner-btn ${isExcluded ? 'active' : ''}" data-wildcard-minus="${escapeHtml(row.id)}">${isExcluded ? 'исключён −' : '− исключить'}</button>`
-          : isSelected || isAbove
-            ? '<span class="ev-status-line ok" style="margin:0;">в слот</span>'
-            : '';
+        const action = isPotential
+          ? '<span class="ev-status-line warn" style="margin:0;">предварительно</span>'
+          : isTie
+            ? `<button class="ev-winner-btn ${isExcluded ? 'active' : ''}" data-wildcard-minus="${escapeHtml(row.id)}">${isExcluded ? 'исключён −' : '− исключить'}</button>`
+            : isSelected || isAbove
+              ? '<span class="ev-status-line ok" style="margin:0;">в слот</span>'
+              : '';
+        const chance = row.chance;
+        const chanceText = isPotential && chance
+          ? (chance.remaining > 0
+              ? `Нужно минимум ${chance.needed} б. за оставшиеся ${chance.remaining} оценок${chance.average > 0 ? ` · ср. ${chance.average.toFixed(1)}` : ''}, чтобы сохранить шанс.`
+              : 'По текущей сумме сохраняет шанс попасть в дополнительный слот.')
+          : '';
         return `
           <div class="${cls.join(' ')}">
             <div class="ev-winner-rank">${idx + 1}</div>
             <div>
               <div class="ev-winner-name">${escapeHtml(opening?.title || row.title)}</div>
               <div class="ev-winner-meta">${escapeHtml(SEASON_LABEL[row.season] || row.season)} · ${escapeHtml(row.count)} оценок</div>
+              ${chanceText ? `<span class="ev-potential-note">${escapeHtml(chanceText)}</span>` : ''}
             </div>
             <div class="ev-winner-score">${escapeHtml(row.total)} б.</div>
             <div>${action}</div>
@@ -1930,14 +2153,15 @@
           <div class="ev-winner-head">
             <div>
               <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
-              <div class="ev-winner-hint">Полностью оценённые сезоны: ${escapeHtml(completedText)}. Сейчас дополнительных слотов: ${plan.slots}. Потенциально до конца этапа: ${plan.potentialDisplayLimit ?? plan.slots}.</div>
+              <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}. От 10 завершивших участников: ${escapeHtml(partialText)}.</div>
+              <div class="ev-winner-hint">Всего дополнительных слотов по подтверждённым сезонам: ${plan.slots}. Базовые 2 уже входят в это число.</div>
               <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
             </div>
             <div class="ev-actions">
               <button class="ev-btn-main" id="ev-save-wildcards" ${plan.ready && plan.slots ? '' : 'disabled'}>Сохранить доп. слоты</button>
             </div>
           </div>
-          <div class="ev-winner-list">${rows || '<div class="ev-empty">Пока нет кандидатов для дополнительных слотов.</div>'}</div>
+          <div class="ev-winner-list">${rows || '<div class="ev-empty">Потенциальные кандидаты появятся после завершения оценок хотя бы 10 участниками в одном из сезонов.</div>'}</div>
         </section>
       `;
     }
@@ -2236,12 +2460,14 @@
 
     function renderParticipants(state) {
       const names = cleanParticipantSlots(state.allowedNicknames || []);
+      const progressRows = getParticipantRatingProgress(state);
+      const completeCount = progressRows.filter(row => row.complete).length;
       return `
         <section class="ev-participants">
           <div class="ev-participants-head">
             <div>
               <div class="ev-mini-title">Участники сезона</div>
-              <div class="ev-hint">Первые три строки закреплены всегда: Egortos, Кофа, Toxexex. Остальные слоты можно заполнить вручную.</div>
+              <div class="ev-hint">Первые три строки закреплены всегда: Egortos, Кофа, Toxexex. Галочка означает, что пользователь оценил все OP сезона. Завершили: ${completeCount}/15.</div>
             </div>
             <button class="ev-btn-ghost" id="ev-save-participants" ${!isAdmin() || state.closed ? 'disabled' : ''}>Сохранить участников</button>
           </div>
@@ -2250,7 +2476,22 @@
               const fixed = idx < FIXED_PARTICIPANTS.length;
               const disabled = !isAdmin() || state.closed || fixed;
               const title = fixed ? 'Фиксированный участник' : '';
-              return `<input class="ev-participant-input ${fixed ? 'fixed' : ''}" data-idx="${idx}" value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''} />`;
+              const progress = progressRows[idx] || { done: 0, total: state.selectedOpeningIds.length, complete: false };
+              const progressClass = progress.complete ? 'done' : progress.done > 0 ? 'partial' : '';
+              const progressText = progress.complete ? '✓' : progress.done > 0 ? `${progress.done}/${progress.total}` : '—';
+              const progressTitle = !name
+                ? 'Участник не указан'
+                : progress.complete
+                  ? 'Все оценки отправлены'
+                  : progress.done > 0
+                    ? `Оценено ${progress.done} из ${progress.total}`
+                    : 'Оценки ещё не отправлены';
+              return `
+                <div class="ev-participant-slot">
+                  <input class="ev-participant-input ${fixed ? 'fixed' : ''}" data-idx="${idx}" value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''} />
+                  <span class="ev-participant-progress ${progressClass}" title="${escapeHtml(progressTitle)}">${escapeHtml(progressText)}</span>
+                </div>
+              `;
             }).join('')}
           </div>
         </section>
