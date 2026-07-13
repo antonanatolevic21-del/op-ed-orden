@@ -1647,9 +1647,10 @@
       const confirmedStates = allStates.filter(state => isSeasonConfirmedForWildcard(state));
       const completedStates = confirmedStates.filter(state => isSeasonFullyRated(state));
 
-      // Общий максимум по настройкам четырёх сезонов оставляем для понимания лимита,
-      // но в самом списке дополнительных слотов показываем только уже гарантированную
-      // часть из полностью оценённых сезонов. Предварительные доборы/расчёты шансов убраны.
+      // plan.slots — это максимально возможное число дополнительных слотов по сетке:
+      // базовые 2 + уже известные бонусы подтверждённых сезонов + максимум (+2) за ещё неизвестные сезоны.
+      // Даже если гарантированно сейчас доступно меньше, показываем список до этого максимума,
+      // чтобы не казалось, что потенциальные слоты пропали.
       const slots = getPotentialWildcardDisplayLimit(allStates);
       const earnedSlots = completedStates.length
         ? Math.min(slots, BASE_WILDCARD_SLOT_COUNT + completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0))
@@ -1678,6 +1679,7 @@
         .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
 
       const effectiveEarnedSlots = Math.min(earnedSlots, completedPool.length);
+      const displayLimit = Math.min(slots, completedPool.length);
       let above = [];
       let tie = [];
       let below = completedPool.slice();
@@ -1704,17 +1706,33 @@
         guaranteedRows = overflow > 0 ? [...above, ...tie] : completedPool.slice(0, effectiveEarnedSlots);
       }
 
+      const guaranteedDisplayIds = new Set(guaranteedRows.map(row => row.id));
+      const visibleRows = completedPool.slice(0, displayLimit).map((row, idx) => ({
+        ...row,
+        potential: idx >= effectiveEarnedSlots && !guaranteedDisplayIds.has(row.id)
+      }));
+      // Если на границе гарантированного прохода ничья, гарантированные строки могут быть шире,
+      // чем обычный срез. Сохраняем всю спорную группу в отображении, а затем добиваем список
+      // до максимального числа потенциальных слотов.
+      if (guaranteedRows.length > visibleRows.length) {
+        const visibleIds = new Set(visibleRows.map(row => row.id));
+        guaranteedRows.forEach(row => {
+          if (!visibleIds.has(row.id)) visibleRows.push({ ...row, potential: false });
+        });
+      }
+
       return {
         slots,
         earnedSlots,
+        displayLimit,
         confirmedStates,
         completedStates,
         partialStates: [],
         allConfirmedComplete: confirmedStates.length > 0 && completedStates.length === confirmedStates.length,
         directSet,
         ranked: completedPool,
-        visibleRows: guaranteedRows,
-        potentialRows: [],
+        visibleRows,
+        potentialRows: visibleRows.filter(row => row.potential),
         above,
         tie,
         below,
@@ -2084,7 +2102,7 @@
           <div>
             <div class="ev-section-label">Полуфинал</div>
             <h2>Корзина полуфинала</h2>
-            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Если сезон ещё не закончен, но его полностью оценили хотя бы 10 участников, в топе сезона предварительно показываются текущие проходящие по сумме баллов. Дополнительные слоты показывают только уже гарантированную часть по полностью оценённым сезонам.</div>
+            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Если сезон ещё не закончен, но его полностью оценили хотя бы 10 участников, в топе сезона предварительно показываются текущие проходящие по сумме баллов. Дополнительные слоты показывают гарантированную часть и потенциальные строки до текущего максимума сетки, без расчёта будущих баллов.</div>
           </div>
         </section>
         <div class="ev-semi-grid">
@@ -2166,19 +2184,13 @@
         if (isExcluded) cls.push('bad');
 
         const action = isPotential
-          ? '<span class="ev-status-line warn" style="margin:0;">есть шанс</span>'
+          ? '<span class="ev-status-line warn" style="margin:0;">потенциально</span>'
           : isTie
             ? `<button class="ev-winner-btn ${isExcluded ? 'active' : ''}" data-wildcard-minus="${escapeHtml(row.id)}">${isExcluded ? 'исключён −' : '− исключить'}</button>`
             : isSelected || isAbove
               ? '<span class="ev-status-line ok" style="margin:0;">прошёл ✓</span>'
               : '';
 
-        const chance = row.chance;
-        const chanceText = isPotential && chance
-          ? (chance.remaining > 0
-              ? `Нужно набрать минимум ${chance.needed} б. за оставшиеся ${chance.remaining} оценок${chance.average > 0 ? ` · средняя не ниже ${chance.average.toFixed(1)}` : ''}, чтобы в лучшем сценарии сохранить шанс.`
-              : 'По текущей сумме ещё сохраняет шанс попасть в дополнительный слот.')
-          : '';
 
         return `
           <div class="${cls.join(' ')}">
@@ -2186,7 +2198,6 @@
             <div>
               <div class="ev-winner-name">${escapeHtml(opening?.title || row.title)}</div>
               <div class="ev-winner-meta">${escapeHtml(SEASON_LABEL[row.season] || row.season)} · ${escapeHtml(row.count)} оценок</div>
-              ${chanceText ? `<span class="ev-potential-note">${escapeHtml(chanceText)}</span>` : ''}
             </div>
             <div class="ev-winner-score">${escapeHtml(row.total)} б.</div>
             <div>${action}</div>
@@ -2201,7 +2212,7 @@
             <div>
               <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
               <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}.</div>
-              <div class="ev-winner-hint">Потенциальный максимум по настройкам четырёх сезонов: ${plan.slots}. Сейчас гарантированно доступно ${plan.earnedSlots || 0}. Базовые 2 уже входят в расчёт.</div>
+              <div class="ev-winner-hint">Потенциальный максимум по настройкам четырёх сезонов: ${plan.slots}. Сейчас гарантированно доступно ${plan.earnedSlots || 0}. Показано ${visibleRows.length}/${plan.slots} возможных строк. Базовые 2 уже входят в расчёт.</div>
               <div class="ev-status-line ${canSave || plan.finalIds.length ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
             </div>
             <div class="ev-actions">
