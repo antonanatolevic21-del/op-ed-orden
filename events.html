@@ -678,7 +678,6 @@
     const WILDCARD_SLOT_COUNT_BY_TARGET = { 10: 2, 15: 1, 20: 0 };
     const BASE_WILDCARD_SLOT_COUNT = 2;
     const MAX_WILDCARD_SLOT_COUNT_PER_UNKNOWN_SEASON = 2;
-    const COMPLETION_NOTIFY_EMAIL = 'egortos.maomao@gmail.com';
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
@@ -718,6 +717,9 @@
     let eventBasket = {};
     let eventBasketError = '';
     let eventAltLinks = new Map();
+    let eventNotifications = new Map();
+    let noticePopupOpen = false;
+    const locallyHandledNoticeIds = new Set();
     let renderTimer = null;
     let evaluatorQueue = [];
     let evaluatorIndex = 0;
@@ -1364,7 +1366,12 @@
       return getUserSeasonCompletion(state, nicknameKey).complete;
     }
 
-    async function maybeSendSeasonCompletionEmail(state, nicknameKey, ratingRow, wasComplete) {
+    function isEgortosNoticeReceiver() {
+      const key = normalizeNickname(myName);
+      return key === 'egortos' || key === 'gortos';
+    }
+
+    async function maybeCreateSeasonCompletionNotice(state, nicknameKey, ratingRow, wasComplete) {
       if (LOCAL_EVENTS_MODE || isAdmin() || wasComplete) return;
       const progress = getUserSeasonCompletion(state, nicknameKey, [ratingRow]);
       if (!progress.complete) return;
@@ -1372,33 +1379,59 @@
       const year = state.year || CURRENT_EVENT_YEAR;
       const nickname = String(ratingRow?.nickname || myName || nicknameKey || '').trim() || nicknameKey;
       const siteUrl = `${window.location.origin}${window.location.pathname}`;
-      const subject = `Ивент: ${nickname} оценил ${seasonLabel} ${year}`;
-      const text = `${nickname} полностью оценил сезон ${seasonLabel} ${year}: ${progress.done}/${progress.total} оценок.\n\nПроверить на сайте: ${siteUrl}`;
-      const html = `
-        <p><b>${escapeHtml(nickname)}</b> полностью оценил сезон <b>${escapeHtml(seasonLabel)} ${escapeHtml(year)}</b>.</p>
-        <p>Оценок: <b>${escapeHtml(progress.done)}/${escapeHtml(progress.total)}</b>.</p>
-        <p><a href="${escapeHtml(siteUrl)}">Открыть страницу ивентов</a></p>
-      `;
-      const mailId = `eventComplete__${state.key}__${nicknameKey}`.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const noticeId = `seasonComplete__${state.key}__${nicknameKey}`.replace(/[^a-zA-Z0-9_\-]/g, '_');
       try {
-        await setDoc(doc(db, 'mail', mailId), {
-          to: COMPLETION_NOTIFY_EMAIL,
-          message: { subject, text, html },
+        await setDoc(doc(db, 'eventNotifications', noticeId), {
           eventType: 'season-complete',
           seasonKey: state.key,
           season: state.season,
+          seasonLabel,
           year,
           nickname,
           nicknameKey,
           ratingCount: progress.done,
           totalRatings: progress.total,
           siteUrl,
+          acknowledged: false,
           createdAtLocal: new Date().toISOString(),
           createdAt: serverTimestamp()
         }, { merge: false });
       } catch (e) {
-        console.error('season completion email request failed', e);
+        console.error('season completion notice failed', e);
       }
+    }
+
+    function maybeShowCompletionNotice() {
+      if (LOCAL_EVENTS_MODE || noticePopupOpen || !isEgortosNoticeReceiver()) return;
+      const notices = Array.from(eventNotifications.values())
+        .filter(row => row?.eventType === 'season-complete' && !row?.acknowledged && !locallyHandledNoticeIds.has(String(row.id)))
+        .sort((a, b) => String(a.createdAtLocal || '').localeCompare(String(b.createdAtLocal || '')));
+      const notice = notices[0];
+      if (!notice) return;
+      noticePopupOpen = true;
+      locallyHandledNoticeIds.add(String(notice.id));
+      setTimeout(async () => {
+        const seasonLabel = notice.seasonLabel || SEASON_LABEL[notice.season] || notice.season || 'сезон';
+        const year = notice.year || CURRENT_EVENT_YEAR;
+        const ratingCount = notice.ratingCount || notice.totalRatings || 0;
+        const title = `${notice.nickname || 'Пользователь'} добавил оценки: ${ratingCount} OP · ${seasonLabel} ${year}`;
+        const text = `${title}\n\nОткрой страницу ивентов, чтобы проверить оценки.`;
+        alert(text);
+        try {
+          await setDoc(doc(db, 'eventNotifications', String(notice.id)), {
+            acknowledged: true,
+            acknowledgedBy: myName || 'Egortos',
+            acknowledgedByKey: normalizeNickname(myName || 'Egortos'),
+            acknowledgedAtLocal: new Date().toISOString(),
+            acknowledgedAt: serverTimestamp()
+          }, { merge: true });
+        } catch (e) {
+          console.error('notice acknowledge failed', e);
+        } finally {
+          noticePopupOpen = false;
+          setTimeout(maybeShowCompletionNotice, 100);
+        }
+      }, 50);
     }
 
     function getCompletedParticipantCount(state) {
@@ -1435,17 +1468,14 @@
       const completedParticipants = getCompletedParticipantCount(state);
       if (completedParticipants < 10 || isSeasonFullyRated(state)) return { completedParticipants, rows: [] };
       const winnerCount = getWinnerCountForSeason(state);
-      const ranked = (state.selectedOpeningIds || [])
+      const rows = (state.selectedOpeningIds || [])
         .map(id => {
           const opening = openingsById.get(String(id));
           const score = sumForOpeningInSeason(state.key, id);
           return { id: String(id), title: opening?.title || String(id), total: score.total, count: score.count };
         })
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
-      const rows = ranked
-        .map(row => ({ ...row, chance: getChanceRequirement(ranked, row.id, winnerCount) }))
-        .filter(row => row.chance)
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }))
+        .slice(0, winnerCount);
       return { completedParticipants, winnerCount, rows };
     }
 
@@ -1616,14 +1646,10 @@
       const allStates = getAllWildcardStates();
       const confirmedStates = allStates.filter(state => isSeasonConfirmedForWildcard(state));
       const completedStates = confirmedStates.filter(state => isSeasonFullyRated(state));
-      const partialStates = confirmedStates.filter(state => {
-        const completed = getCompletedParticipantCount(state);
-        return !isSeasonFullyRated(state) && completed >= 10 && completed < 15;
-      });
 
-      // Потенциальное число дополнительных слотов считаем по максимуму: неизвестные
-      // сезоны временно дают +2, а подтверждённые сезоны — свой фактический вклад.
-      // Гарантированно сохранить можно только слоты от полностью оценённых сезонов.
+      // Общий максимум по настройкам четырёх сезонов оставляем для понимания лимита,
+      // но в самом списке дополнительных слотов показываем только уже гарантированную
+      // часть из полностью оценённых сезонов. Предварительные доборы/расчёты шансов убраны.
       const slots = getPotentialWildcardDisplayLimit(allStates);
       const earnedSlots = completedStates.length
         ? Math.min(slots, BASE_WILDCARD_SLOT_COUNT + completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0))
@@ -1678,77 +1704,17 @@
         guaranteedRows = overflow > 0 ? [...above, ...tie] : completedPool.slice(0, effectiveEarnedSlots);
       }
 
-      // Кандидаты из незавершённых сезонов показываются только при 10–14 полностью
-      // проголосовавших участниках. Временные прямые проходы сюда не дублируем.
-      const partialPool = partialStates.flatMap(state => {
-        const winnerCount = getWinnerCountForSeason(state);
-        const currentRows = (state.selectedOpeningIds || [])
-          .map(String)
-          .filter(id => openingsById.has(id))
-          .map(id => {
-            const opening = openingsById.get(id);
-            const score = sumForOpeningInSeason(state.key, id);
-            return {
-              id,
-              season: state.season,
-              seasonKey: state.key,
-              title: opening?.title || id,
-              total: score.total,
-              count: score.count,
-              potential: true
-            };
-          })
-          .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
-        const provisionalDirect = new Set(currentRows.slice(0, winnerCount).map(row => row.id));
-        return currentRows.filter(row => !provisionalDirect.has(row.id));
-      })
-        .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx);
-
-      // Уже завершившие сезон, но пока не попавшие в гарантированную часть,
-      // тоже должны отображаться как потенциальные: если по настройкам всех четырёх
-      // сезонов сейчас может быть 7 слотов, нельзя показывать только 3–4 гарантированных.
-      // Полупрозрачная часть показывает максимум OP, которые ещё математически могут
-      // удержаться в итоговом доборе, в том числе за счёт будущих +2 от неизвестных сезонов.
-      const displayedGuaranteedSet = new Set(guaranteedRows.map(row => String(row.id)));
-      const completedRemainder = completedPool
-        .filter(row => !displayedGuaranteedSet.has(String(row.id)))
-        .map(row => ({ ...row, potential: true, potentialSource: 'completed' }));
-      const occupiedGuaranteedSlots = Math.min(earnedSlots, completedPool.length);
-      const remainingSlots = Math.max(0, slots - occupiedGuaranteedSlots);
-      const displayPotentialSlots = Math.max(0, slots - guaranteedRows.length);
-      const chancePool = [...completedRemainder, ...partialPool]
-        .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
-
-      const allPotentialRows = remainingSlots > 0
-        ? chancePool
-            .map(row => ({ ...row, potential: true, chance: getChanceRequirement(chancePool, row.id, remainingSlots) }))
-            .filter(row => row.chance)
-            .sort((a, b) => {
-              const aMax = Number(a.total || 0) + Number(a.chance?.maximum || 0);
-              const bMax = Number(b.total || 0) + Number(b.chance?.maximum || 0);
-              return (bMax - aMax) || (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' });
-            })
-        : [];
-
-      // Визуально держим список на уровне общего числа слотов. Если на границе
-      // гарантированного прохода ничья, спорные строки занимают место в списке,
-      // а после исключения лишнего OP список всё равно остаётся понятным по размеру.
-      const potentialRows = allPotentialRows.slice(0, displayPotentialSlots);
-      const visibleRows = [...guaranteedRows, ...potentialRows];
-
       return {
         slots,
         earnedSlots,
-        potentialDisplayLimit: remainingSlots,
         confirmedStates,
         completedStates,
-        partialStates,
+        partialStates: [],
         allConfirmedComplete: confirmedStates.length > 0 && completedStates.length === confirmedStates.length,
         directSet,
         ranked: completedPool,
-        visibleRows,
-        potentialRows,
+        visibleRows: guaranteedRows,
+        potentialRows: [],
         above,
         tie,
         below,
@@ -2118,7 +2084,7 @@
           <div>
             <div class="ev-section-label">Полуфинал</div>
             <h2>Корзина полуфинала</h2>
-            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Дополнительные слоты считаются по подтверждённым сезонам: всегда есть базовые +2 слота, дальше 10 OP → +2, 15 OP → +1, 20 OP → +0. После 15 оценок проходящие показываются обычными строками, а при 10–14 участниках полупрозрачно показываются OP, которые ещё математически могут добрать баллы.</div>
+            <div class="ev-hint">Сезонные гарантированные проходы сохраняются отдельно. Если сезон ещё не закончен, но его полностью оценили хотя бы 10 участников, в топе сезона предварительно показываются текущие проходящие по сумме баллов. Дополнительные слоты показывают только уже гарантированную часть по полностью оценённым сезонам.</div>
           </div>
         </section>
         <div class="ev-semi-grid">
@@ -2146,14 +2112,10 @@
           return `<div class="ev-semi-item"><span class="oc-profile-rank">${idx + 1}</span><span class="ev-winner-name">${escapeHtml(opening.title)}</span><span class="ev-semi-score">${sum.total} б.</span></div>`;
         }).join('');
       } else if (potentialPlan.rows.length) {
-        hint = `Предварительно: ${potentialPlan.completedParticipants}/15 участников завершили оценивание`;
+        hint = `Предварительно: ${potentialPlan.completedParticipants}/15 участников завершили оценивание · сейчас проходят ${potentialPlan.rows.length}/${potentialPlan.winnerCount}`;
         items = potentialPlan.rows.map((row, idx) => {
           const opening = openingsById.get(String(row.id));
-          const chance = row.chance;
-          const needText = chance.remaining > 0
-            ? `минимум ${chance.needed} б. за оставшиеся ${chance.remaining} оценок${chance.average > 0 ? ` · ср. ${chance.average.toFixed(1)}` : ''}`
-            : 'сохраняет шанс на проход';
-          return `<div class="ev-semi-item potential"><span class="oc-profile-rank">${idx + 1}</span><span class="ev-winner-name">${escapeHtml(opening?.title || row.title)}<span class="ev-potential-note">${escapeHtml(needText)}</span></span><span class="ev-semi-score">${row.total} б.</span></div>`;
+          return `<div class="ev-semi-item potential"><span class="oc-profile-rank">${idx + 1}</span><span class="ev-winner-name">${escapeHtml(opening?.title || row.title)}</span><span class="ev-semi-score">${row.total} б.</span></div>`;
         }).join('');
       } else {
         const completed = getCompletedParticipantCount(state);
@@ -2177,22 +2139,16 @@
       const completedText = plan.completedStates.length
         ? plan.completedStates.map(state => SEASON_LABEL[state.season]).join(', ')
         : 'нет';
-      const partialText = plan.partialStates?.length
-        ? plan.partialStates.map(state => `${SEASON_LABEL[state.season]} (${getCompletedParticipantCount(state)}/15)`).join(', ')
-        : 'нет';
-
       const expectedGuaranteed = Math.min(plan.earnedSlots || 0, plan.ranked.length);
       let status = '';
-      if (!plan.completedStates.length && !plan.partialStates.length) {
-        status = `Предусмотрено ${plan.slots} дополнительных слотов. Кандидаты появятся после того, как сезон полностью оценят хотя бы 10 участников.`;
+      if (!plan.completedStates.length) {
+        status = `Пока нет полностью оценённых сезонов для гарантированного добора. Потенциальный максимум по сетке: ${plan.slots} слотов.`;
       } else if (!plan.ready && plan.overflow > 0) {
         status = `На границе гарантированного прохода ничья. Нужно исключить ещё ${Math.max(0, plan.overflow - plan.excluded.length)} OP.`;
-      } else if (expectedGuaranteed > 0 && plan.partialStates.length) {
-        status = `Гарантированно определено ${plan.finalIds.length}/${expectedGuaranteed}. Ниже полупрозрачно показаны все кандидаты, которые ещё могут попасть в оставшиеся слоты в лучшем сценарии.`;
       } else if (expectedGuaranteed > 0) {
-        status = `Гарантированно определено ${plan.finalIds.length} OP. Всего по настройкам четырёх сезонов предусмотрено ${plan.slots} дополнительных слотов.`;
+        status = `Гарантированно определено ${plan.finalIds.length}/${expectedGuaranteed}. Потенциальный максимум по сетке: ${plan.slots} слотов.`;
       } else {
-        status = `Показаны потенциальные кандидаты из сезонов с 10–14 завершившими участниками.`;
+        status = `Полностью оценённые сезоны есть, но пока нет доступных кандидатов для добора.`;
       }
 
       const visibleRows = Array.isArray(plan.visibleRows) ? plan.visibleRows : plan.ranked;
@@ -2244,15 +2200,15 @@
           <div class="ev-winner-head">
             <div>
               <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
-              <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}. Сейчас на этапе 10–14 участников: ${escapeHtml(partialText)}.</div>
-              <div class="ev-winner-hint">Всего предусмотрено ${plan.slots} слотов по настройкам всех четырёх сезонов. Из них сейчас гарантированно доступно ${plan.earnedSlots || 0}. Базовые 2 уже входят в расчёт.</div>
+              <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}.</div>
+              <div class="ev-winner-hint">Потенциальный максимум по настройкам четырёх сезонов: ${plan.slots}. Сейчас гарантированно доступно ${plan.earnedSlots || 0}. Базовые 2 уже входят в расчёт.</div>
               <div class="ev-status-line ${canSave || plan.finalIds.length ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
             </div>
             <div class="ev-actions">
               <button class="ev-btn-main" id="ev-save-wildcards" ${canSave ? '' : 'disabled'}>Сохранить гарантированные</button>
             </div>
           </div>
-          <div class="ev-winner-list">${rows || '<div class="ev-empty">Потенциальные кандидаты появятся после завершения оценок хотя бы 10 участниками в одном из сезонов.</div>'}</div>
+          <div class="ev-winner-list">${rows || '<div class="ev-empty">Гарантированные кандидаты появятся после полной оценки сезона.</div>'}</div>
         </section>
       `;
     }
@@ -3092,7 +3048,7 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
       }
-      await maybeSendSeasonCompletionEmail(state, myKey, ratingRow, wasComplete);
+      await maybeCreateSeasonCompletionNotice(state, myKey, ratingRow, wasComplete);
       if (goNext && evaluatorIndex < evaluatorQueue.length - 1) {
         evaluatorIndex += 1;
         renderEvaluator(state);
@@ -3116,12 +3072,14 @@
         if (myName) localStorage.setItem(NAME_KEY, myName);
         else localStorage.removeItem(NAME_KEY);
         if (isGuest()) scheduleRender();
+        maybeShowCompletionNotice();
       });
       nameInput.addEventListener('change', () => {
         myName = nameInput.value.trim();
         if (myName) localStorage.setItem(NAME_KEY, myName);
         else localStorage.removeItem(NAME_KEY);
         render();
+        maybeShowCompletionNotice();
       });
       if (roleSwitch) {
         fillRoleSwitch();
@@ -3145,6 +3103,7 @@
           sessionStorage.setItem(ADMIN_UNLOCKED_KEY, '1');
           updateAccessUi();
           render();
+          maybeShowCompletionNotice();
         });
       }
       authSave.addEventListener('click', handleAuth);
@@ -3184,6 +3143,7 @@
       updateAccessUi();
       if ((isAdmin() || isGuest()) && !myName) showNameModal();
       render();
+      maybeShowCompletionNotice();
     }
 
     function showNameModal() {
@@ -3204,6 +3164,7 @@
       nameModal.classList.add('hidden');
       updateAccessUi();
       render();
+      maybeShowCompletionNotice();
     }
 
     async function init() {
@@ -3251,6 +3212,10 @@
           eventAltLinks = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
           scheduleRender();
         }, error => console.error('eventAltLinks snapshot error', error));
+        onSnapshot(collection(db, 'eventNotifications'), snapshot => {
+          eventNotifications = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+          maybeShowCompletionNotice();
+        }, error => console.error('eventNotifications snapshot error', error));
       }
       if (LOCAL_EVENTS_MODE) {
         window.addEventListener('storage', (e) => {
