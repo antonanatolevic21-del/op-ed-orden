@@ -677,6 +677,8 @@
     const WINNER_COUNT_BY_TARGET = { 10: 2, 15: 3, 20: 4 };
     const WILDCARD_SLOT_COUNT_BY_TARGET = { 10: 2, 15: 1, 20: 0 };
     const BASE_WILDCARD_SLOT_COUNT = 2;
+    const MAX_WILDCARD_SLOT_COUNT_PER_UNKNOWN_SEASON = 2;
+    const COMPLETION_NOTIFY_EMAIL = 'egortos.maomao@gmail.com';
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
@@ -1342,6 +1344,63 @@
       });
     }
 
+    function getUserSeasonCompletion(state, nicknameKey, extraRows = []) {
+      const selectedIds = (state?.selectedOpeningIds || []).map(String).filter(id => openingsById.has(id));
+      const selectedSet = new Set(selectedIds);
+      const key = String(nicknameKey || '');
+      if (!key || !selectedIds.length) return { done: 0, total: selectedIds.length, complete: false };
+      const done = new Set();
+      [...getSeasonRatings(state?.key), ...extraRows].forEach(row => {
+        const rowKey = String(row?.nicknameKey || normalizeNickname(row?.nickname || ''));
+        const openingId = String(row?.openingId || '');
+        if (rowKey === key && selectedSet.has(openingId) && Number.isFinite(Number(row?.score))) {
+          done.add(openingId);
+        }
+      });
+      return { done: done.size, total: selectedIds.length, complete: done.size >= selectedIds.length };
+    }
+
+    function isUserSeasonComplete(state, nicknameKey) {
+      return getUserSeasonCompletion(state, nicknameKey).complete;
+    }
+
+    async function maybeSendSeasonCompletionEmail(state, nicknameKey, ratingRow, wasComplete) {
+      if (LOCAL_EVENTS_MODE || isAdmin() || wasComplete) return;
+      const progress = getUserSeasonCompletion(state, nicknameKey, [ratingRow]);
+      if (!progress.complete) return;
+      const seasonLabel = SEASON_LABEL[state.season] || state.season;
+      const year = state.year || CURRENT_EVENT_YEAR;
+      const nickname = String(ratingRow?.nickname || myName || nicknameKey || '').trim() || nicknameKey;
+      const siteUrl = `${window.location.origin}${window.location.pathname}`;
+      const subject = `Ивент: ${nickname} оценил ${seasonLabel} ${year}`;
+      const text = `${nickname} полностью оценил сезон ${seasonLabel} ${year}: ${progress.done}/${progress.total} оценок.\n\nПроверить на сайте: ${siteUrl}`;
+      const html = `
+        <p><b>${escapeHtml(nickname)}</b> полностью оценил сезон <b>${escapeHtml(seasonLabel)} ${escapeHtml(year)}</b>.</p>
+        <p>Оценок: <b>${escapeHtml(progress.done)}/${escapeHtml(progress.total)}</b>.</p>
+        <p><a href="${escapeHtml(siteUrl)}">Открыть страницу ивентов</a></p>
+      `;
+      const mailId = `eventComplete__${state.key}__${nicknameKey}`.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      try {
+        await setDoc(doc(db, 'mail', mailId), {
+          to: COMPLETION_NOTIFY_EMAIL,
+          message: { subject, text, html },
+          eventType: 'season-complete',
+          seasonKey: state.key,
+          season: state.season,
+          year,
+          nickname,
+          nicknameKey,
+          ratingCount: progress.done,
+          totalRatings: progress.total,
+          siteUrl,
+          createdAtLocal: new Date().toISOString(),
+          createdAt: serverTimestamp()
+        }, { merge: false });
+      } catch (e) {
+        console.error('season completion email request failed', e);
+      }
+    }
+
     function getCompletedParticipantCount(state) {
       return getParticipantRatingProgress(state).filter(row => row.complete).length;
     }
@@ -1414,8 +1473,12 @@
     }
 
     function getPotentialWildcardDisplayLimit(states = null) {
-      const baseStates = Array.isArray(states) ? states : getConfirmedWildcardStates();
-      const total = BASE_WILDCARD_SLOT_COUNT + baseStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0);
+      const baseStates = Array.isArray(states) ? states : getAllWildcardStates();
+      const total = BASE_WILDCARD_SLOT_COUNT + baseStates.reduce((sum, state) => {
+        return sum + (isSeasonConfirmedForWildcard(state)
+          ? getWildcardSlotCountForSeason(state)
+          : MAX_WILDCARD_SLOT_COUNT_PER_UNKNOWN_SEASON);
+      }, 0);
       return Math.max(BASE_WILDCARD_SLOT_COUNT, Math.min(10, total));
     }
 
@@ -1558,10 +1621,10 @@
         return !isSeasonFullyRated(state) && completed >= 10 && completed < 15;
       });
 
-      // Итоговое число дополнительных слотов считаем по уже подтверждённым сезонам.
-      // Базовые +2 всегда входят в общий лимит, но гарантированно занять их можно
-      // только после появления хотя бы одного полностью оценённого сезона.
-      const slots = getPotentialWildcardDisplayLimit(confirmedStates);
+      // Потенциальное число дополнительных слотов считаем по максимуму: неизвестные
+      // сезоны временно дают +2, а подтверждённые сезоны — свой фактический вклад.
+      // Гарантированно сохранить можно только слоты от полностью оценённых сезонов.
+      const slots = getPotentialWildcardDisplayLimit(allStates);
       const earnedSlots = completedStates.length
         ? Math.min(slots, BASE_WILDCARD_SLOT_COUNT + completedStates.reduce((sum, state) => sum + getWildcardSlotCountForSeason(state), 0))
         : 0;
@@ -3000,6 +3063,7 @@
         if (errEl) errEl.textContent = 'Комментарий обязателен. Хотя бы пару слов.';
         return;
       }
+      const wasComplete = isUserSeasonComplete(state, myKey);
       const ratingRow = {
         stage: 'first',
         seasonKey: state.key,
@@ -3022,6 +3086,7 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
       }
+      await maybeSendSeasonCompletionEmail(state, myKey, ratingRow, wasComplete);
       if (goNext && evaluatorIndex < evaluatorQueue.length - 1) {
         evaluatorIndex += 1;
         renderEvaluator(state);
