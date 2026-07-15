@@ -72,8 +72,8 @@
 
     .ev-mode-switch {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      width: min(680px, 100%);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: min(980px, 100%);
       gap: 5px;
       padding: 5px;
       margin-bottom: 18px;
@@ -939,6 +939,74 @@
     .ev-guest-season-stack { display: flex; flex-direction: column; gap: 16px; }
     .ev-participant-input.fixed { border-color: rgba(8,217,214,.45); color: var(--cyan); opacity: .92; }
 
+
+    /* Multiplayer: guess each participant's best / worst opening */
+    .ev-bw-shell { display: flex; flex-direction: column; gap: 16px; }
+    .ev-bw-lobby-grid { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(0, 1.2fr); gap: 14px; align-items: start; }
+    .ev-bw-player-list { display: flex; flex-direction: column; gap: 8px; }
+    .ev-bw-player {
+      display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center;
+      min-height: 48px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+    }
+    .ev-bw-player-name { min-width: 0; font-weight: 800; overflow-wrap: anywhere; }
+    .ev-bw-player-state { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); white-space: nowrap; }
+    .ev-bw-player.ready { border-color: rgba(74,222,128,.52); background: rgba(74,222,128,.06); }
+    .ev-bw-player.ready .ev-bw-player-state { color: var(--green); }
+    .ev-bw-summary-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .ev-bw-pill { border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; background: var(--panel); color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
+    .ev-bw-pill strong { color: var(--cyan); }
+    .ev-bw-round-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .ev-bw-opening-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; margin-top: 14px; }
+    .ev-bw-opening { min-width: 0; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); overflow: hidden; }
+    .ev-bw-opening.active-best { border-color: rgba(74,222,128,.72); box-shadow: 0 0 0 2px rgba(74,222,128,.1); }
+    .ev-bw-opening.active-worst { border-color: rgba(251,113,133,.72); box-shadow: 0 0 0 2px rgba(251,113,133,.1); }
+    .ev-bw-media { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 1px solid var(--border); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+    .ev-bw-media iframe, .ev-bw-media video, .ev-bw-media img { width: 100%; height: 100%; display: block; border: 0; object-fit: cover; background: #000; }
+    .ev-bw-opening-body { padding: 11px; }
+    .ev-bw-opening-title { min-height: 38px; font-weight: 900; line-height: 1.25; overflow-wrap: anywhere; }
+    .ev-bw-opening-meta { margin-top: 5px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.4; }
+    .ev-bw-flags { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
+    .ev-bw-flag { border: 1px solid var(--border); border-radius: 8px; padding: 8px 9px; background: var(--card); color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 800; cursor: pointer; }
+    .ev-bw-flag.best.active { border-color: var(--green); color: var(--green); background: rgba(74,222,128,.09); }
+    .ev-bw-flag.worst.active { border-color: var(--red); color: var(--red); background: rgba(251,113,133,.09); }
+    .ev-bw-answer-card { margin-top: 14px; border: 1px solid var(--border); border-radius: 13px; background: var(--card); padding: 13px; }
+    .ev-bw-active-target { display: grid; grid-template-columns: minmax(0, 1fr) minmax(190px, .7fr); gap: 10px; align-items: end; margin-bottom: 12px; }
+    .ev-bw-answer-list { display: flex; flex-direction: column; gap: 8px; }
+    .ev-bw-answer-row { display: grid; grid-template-columns: minmax(140px, .8fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: center; padding: 9px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+    .ev-bw-answer-name { font-weight: 900; overflow-wrap: anywhere; }
+    .ev-bw-answer-row select { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); padding: 9px 10px; }
+    .ev-bw-progress-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+    .ev-bw-progress-user { border: 1px solid var(--border); border-radius: 999px; padding: 6px 9px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9.5px; }
+    .ev-bw-progress-user.done { border-color: rgba(74,222,128,.5); color: var(--green); background: rgba(74,222,128,.06); }
+    .ev-bw-truth-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
+    .ev-bw-truth { border: 1px solid var(--border); border-radius: 11px; background: var(--panel); padding: 11px; }
+    .ev-bw-truth h4 { margin: 0 0 8px; font-family: 'Archivo Black', sans-serif; font-size: 15px; }
+    .ev-bw-truth-line { margin-top: 5px; font-size: 12px; line-height: 1.35; }
+    .ev-bw-truth-line.best strong { color: var(--green); }
+    .ev-bw-truth-line.worst strong { color: var(--red); }
+    .ev-bw-score-table { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .ev-bw-score-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+    .ev-bw-score-rank { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; }
+    .ev-bw-score-name { font-weight: 900; overflow-wrap: anywhere; }
+    .ev-bw-score-value { color: var(--cyan); font-family: 'Archivo Black', sans-serif; font-size: 18px; white-space: nowrap; }
+    .ev-bw-podium { display: flex; align-items: flex-end; justify-content: center; gap: 10px; min-height: 270px; padding: 24px 8px 6px; overflow-x: auto; }
+    .ev-bw-podium-place { width: min(180px, 30%); min-width: 110px; text-align: center; }
+    .ev-bw-podium-name { min-height: 42px; display: flex; align-items: flex-end; justify-content: center; padding: 0 5px 8px; font-weight: 900; overflow-wrap: anywhere; }
+    .ev-bw-podium-block { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 12px 12px 5px 5px; background: linear-gradient(180deg, rgba(8,217,214,.18), var(--panel)); }
+    .ev-bw-podium-place.first .ev-bw-podium-block { height: 170px; border-color: var(--gold); }
+    .ev-bw-podium-place.second .ev-bw-podium-block { height: 125px; }
+    .ev-bw-podium-place.third .ev-bw-podium-block { height: 95px; border-color: #D8935A; }
+    .ev-bw-podium-rank { font-family: 'Archivo Black', sans-serif; font-size: 34px; }
+    .ev-bw-podium-score { margin-top: 5px; color: var(--cyan); font-family: 'Space Mono', monospace; font-weight: 800; }
+    .ev-bw-last { margin-top: 14px; border: 1px solid rgba(251,113,133,.48); border-radius: 11px; padding: 12px; background: rgba(251,113,133,.06); text-align: center; }
+    @media (max-width: 850px) { .ev-bw-lobby-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 650px) {
+      .ev-mode-switch { grid-template-columns: 1fr; }
+      .ev-bw-active-target, .ev-bw-answer-row { grid-template-columns: 1fr; }
+      .ev-bw-opening-grid { grid-template-columns: 1fr; }
+      .ev-bw-podium { justify-content: flex-start; }
+    }
+
   </style>
 </head>
 <body>
@@ -959,6 +1027,7 @@
     <nav class="ev-mode-switch" aria-label="Раздел ивентов">
       <button class="ev-mode-tab active" type="button" data-mode="rating">Оценка опенингов года</button>
       <button class="ev-mode-tab" type="button" data-mode="guess">Угадай опенинг</button>
+      <button class="ev-mode-tab" type="button" data-mode="bestworst">Угадай лучшее / худшее</button>
     </nav>
 
     <nav class="ev-tabs" id="ev-stage-tabs">
@@ -1119,6 +1188,36 @@
       manualIds: [],
       search: ''
     };
+    const BW_ROOM_COLLECTION = 'bestWorstRooms';
+    const BW_ROOM_ID = 'current';
+    const BW_SUBMISSION_COLLECTION = 'bestWorstSubmissions';
+    const bestWorstFilters = {
+      mode: 'both',
+      perRound: 6,
+      rounds: 5,
+      grouping: 'none',
+      year: '',
+      season: '',
+      studio: '',
+      director: '',
+      performer: '',
+      content: 'all',
+      source: 'ratings',
+      users: [],
+      scoreLogic: 'and',
+      scoreOverallCmp: 'gte',
+      scoreOverallValue: '',
+      scoreSongCmp: 'gte',
+      scoreSongValue: '',
+      scoreVisualCmp: 'gte',
+      scoreVisualValue: ''
+    };
+    let bestWorstRoom = null;
+    let bestWorstSubmissions = [];
+    let bestWorstStatus = '';
+    let bestWorstDraft = {};
+    let bestWorstDraftKey = '';
+    let bestWorstActiveTargetKey = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -2330,6 +2429,679 @@
       renderTimer = setTimeout(() => { renderTimer = null; render(); }, 60);
     }
 
+
+    function bwClamp(value, min, max, fallback) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return fallback;
+      return Math.max(min, Math.min(max, Math.round(number)));
+    }
+
+    function normalizeBestWorstSettings(raw = {}) {
+      const mode = ['best', 'worst', 'both'].includes(raw.mode) ? raw.mode : 'both';
+      const grouping = ['none', 'year', 'yearSeason', 'performer', 'director', 'studio'].includes(raw.grouping) ? raw.grouping : 'none';
+      const content = ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(raw.content) ? raw.content : 'all';
+      return {
+        mode,
+        perRound: bwClamp(raw.perRound, 2, 20, 6),
+        rounds: bwClamp(raw.rounds, 1, 20, 5),
+        grouping,
+        year: String(raw.year || ''),
+        season: SEASONS.includes(raw.season) ? raw.season : '',
+        studio: String(raw.studio || ''),
+        director: String(raw.director || ''),
+        performer: String(raw.performer || ''),
+        content,
+        source: raw.source === 'all' ? 'all' : 'ratings',
+        users: Array.isArray(raw.users) ? [...new Set(raw.users.map(normalizeNickname).filter(Boolean))] : [],
+        scoreLogic: raw.scoreLogic === 'or' ? 'or' : 'and',
+        scoreOverallCmp: ['gte','gt','eq','lte','lt'].includes(raw.scoreOverallCmp) ? raw.scoreOverallCmp : 'gte',
+        scoreOverallValue: raw.scoreOverallValue === '' || raw.scoreOverallValue == null ? '' : Number(raw.scoreOverallValue),
+        scoreSongCmp: ['gte','gt','eq','lte','lt'].includes(raw.scoreSongCmp) ? raw.scoreSongCmp : 'gte',
+        scoreSongValue: raw.scoreSongValue === '' || raw.scoreSongValue == null ? '' : Number(raw.scoreSongValue),
+        scoreVisualCmp: ['gte','gt','eq','lte','lt'].includes(raw.scoreVisualCmp) ? raw.scoreVisualCmp : 'gte',
+        scoreVisualValue: raw.scoreVisualValue === '' || raw.scoreVisualValue == null ? '' : Number(raw.scoreVisualValue)
+      };
+    }
+
+    function bwCurrentSettings() {
+      const source = isAdmin() && (!bestWorstRoom || bestWorstRoom.status === 'lobby') ? bestWorstFilters : (bestWorstRoom?.settings || bestWorstFilters);
+      return normalizeBestWorstSettings(source);
+    }
+
+    function bwCurrentUserKey() {
+      return normalizeNickname(myName);
+    }
+
+    function bwPlayers(room = bestWorstRoom) {
+      return Array.isArray(room?.players)
+        ? room.players.map(player => ({ key: normalizeNickname(player?.key || player?.name), name: String(player?.name || player?.key || '').trim(), ready: Boolean(player?.ready) })).filter(player => player.key && player.name)
+        : [];
+    }
+
+    function bwReadyPlayers(room = bestWorstRoom) {
+      return bwPlayers(room).filter(player => player.ready);
+    }
+
+    function bwModeUses(settings, kind) {
+      return settings.mode === 'both' || settings.mode === kind;
+    }
+
+    function bwModeLabel(mode) {
+      if (mode === 'best') return 'Только лучшее';
+      if (mode === 'worst') return 'Только худшее';
+      return 'Лучшее и худшее';
+    }
+
+    function bwGroupingLabel(grouping) {
+      return ({ none: 'Без группировки', year: 'По году', yearSeason: 'По году и сезону', performer: 'По исполнителю', director: 'По режиссёру', studio: 'По студии' })[grouping] || 'Без группировки';
+    }
+
+    function bwScoreConditions(settings) {
+      return [
+        { metric: 'score', cmp: settings.scoreOverallCmp, raw: settings.scoreOverallValue },
+        { metric: 'songScore', cmp: settings.scoreSongCmp, raw: settings.scoreSongValue },
+        { metric: 'visualScore', cmp: settings.scoreVisualCmp, raw: settings.scoreVisualValue }
+      ].map(row => {
+        if (row.raw === '' || row.raw == null) return null;
+        const target = Number(row.raw);
+        return Number.isFinite(target) ? { metric: row.metric, cmp: row.cmp, target } : null;
+      }).filter(Boolean);
+    }
+
+    function bwRatingContext(settings) {
+      const selectedUsers = new Set((settings.users || []).map(normalizeNickname).filter(Boolean));
+      const allRatingUsers = new Set();
+      const valuesByOpening = new Map();
+      mainRatings.forEach(rating => {
+        const openingId = String(rating.openingId || '');
+        const userKey = normalizeNickname(rating.nicknameKey || rating.nickname || '');
+        if (!openingId || !userKey) return;
+        allRatingUsers.add(userKey);
+        if (selectedUsers.size && !selectedUsers.has(userKey)) return;
+        if (!valuesByOpening.has(openingId)) valuesByOpening.set(openingId, { score: [], songScore: [], visualScore: [], rows: [], ratingCount: 0 });
+        const bucket = valuesByOpening.get(openingId);
+        const row = {};
+        bucket.ratingCount += 1;
+        ['score', 'songScore', 'visualScore'].forEach(metric => {
+          const value = Number(rating[metric]);
+          if (!Number.isFinite(value)) return;
+          bucket[metric].push(value);
+          row[metric] = value;
+        });
+        bucket.rows.push(row);
+      });
+      const allUsersSelected = !selectedUsers.size || (allRatingUsers.size > 0 && [...allRatingUsers].every(key => selectedUsers.has(key)));
+      return { selectedUsers, allUsersSelected, valuesByOpening };
+    }
+
+    function bwRatingFilterMatches(openingId, settings, context) {
+      const bucket = context.valuesByOpening.get(String(openingId));
+      if (!bucket || !bucket.ratingCount) return false;
+      const conditions = bwScoreConditions(settings);
+      if (!conditions.length) return true;
+      if (context.allUsersSelected) {
+        const checks = conditions.map(condition => {
+          const values = bucket[condition.metric] || [];
+          if (!values.length) return false;
+          const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+          return guessCompare(average, condition.cmp, condition.target);
+        });
+        return settings.scoreLogic === 'or' ? checks.some(Boolean) : checks.every(Boolean);
+      }
+      return bucket.rows.some(row => {
+        const checks = conditions.map(condition => guessCompare(Number(row[condition.metric]), condition.cmp, condition.target));
+        return settings.scoreLogic === 'or' ? checks.some(Boolean) : checks.every(Boolean);
+      });
+    }
+
+    function bwParticipantScoreMap(players) {
+      const playerKeys = new Set((players || []).map(player => normalizeNickname(player.key || player.name)).filter(Boolean));
+      const map = new Map();
+      mainRatings.forEach(rating => {
+        const userKey = normalizeNickname(rating.nicknameKey || rating.nickname || '');
+        const openingId = String(rating.openingId || '');
+        const score = Number(rating.score);
+        if (!playerKeys.has(userKey) || !openingId || !Number.isFinite(score)) return;
+        if (!map.has(userKey)) map.set(userKey, new Map());
+        map.get(userKey).set(openingId, score);
+      });
+      return map;
+    }
+
+    function bwOpeningMatches(opening, settings, ratingContext) {
+      if (opening.type !== 'OP') return false;
+      if (!getGuessPlaybackSource(opening)) return false;
+      if (settings.year && String(opening.year ?? '') !== settings.year) return false;
+      if (settings.season && opening.season !== settings.season) return false;
+      if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
+      if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
+      if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
+      const content = guessContentFlags(settings.content);
+      if (!content.showChinese && opening.isChinese) return false;
+      if (!content.showMovie && opening.isMovie) return false;
+      if (!content.showShortened && opening.isShortened) return false;
+      if (settings.source === 'ratings' && !bwRatingFilterMatches(opening.id, settings, ratingContext)) return false;
+      return true;
+    }
+
+    function getBestWorstCandidates(settings, players = [], requireParticipantRatings = false) {
+      const normalized = normalizeBestWorstSettings(settings);
+      const ratingContext = bwRatingContext(normalized);
+      const scoreMap = requireParticipantRatings ? bwParticipantScoreMap(players) : null;
+      return openings.filter(opening => {
+        if (!bwOpeningMatches(opening, normalized, ratingContext)) return false;
+        if (!requireParticipantRatings) return true;
+        return players.every(player => scoreMap.get(player.key)?.has(String(opening.id)));
+      });
+    }
+
+    function bwGroupBuckets(candidates, grouping) {
+      const buckets = new Map();
+      const add = (key, label, opening) => {
+        const cleanKey = String(key || '').trim();
+        if (!cleanKey) return;
+        if (!buckets.has(cleanKey)) buckets.set(cleanKey, { key: cleanKey, label: String(label || cleanKey), rows: [] });
+        const bucket = buckets.get(cleanKey);
+        if (!bucket.rows.some(row => String(row.id) === String(opening.id))) bucket.rows.push(opening);
+      };
+      candidates.forEach(opening => {
+        if (grouping === 'year') add(`year:${opening.year ?? 'none'}`, String(opening.year ?? 'Год не указан'), opening);
+        else if (grouping === 'yearSeason') add(`ys:${opening.year ?? 'none'}:${opening.season || 'none'}`, `${opening.year ?? 'Год не указан'} · ${SEASON_LABEL[opening.season] || opening.season || 'Сезон не указан'}`, opening);
+        else if (grouping === 'performer') (opening.performers || []).forEach(value => add(`performer:${normalizeGuessAnswer(value)}`, value, opening));
+        else if (grouping === 'director') (opening.directors || []).forEach(value => add(`director:${normalizeGuessAnswer(value)}`, value, opening));
+        else if (grouping === 'studio') (opening.studios || []).forEach(value => add(`studio:${normalizeGuessAnswer(value)}`, value, opening));
+        else add('all', 'Без группировки', opening);
+      });
+      return [...buckets.values()];
+    }
+
+    function bwBuildTruth(openingIds, players, scoreMap) {
+      const truth = {};
+      for (const player of players) {
+        const rows = openingIds.map(id => ({ id: String(id), score: Number(scoreMap.get(player.key)?.get(String(id))) }));
+        if (rows.some(row => !Number.isFinite(row.score))) return null;
+        const max = Math.max(...rows.map(row => row.score));
+        const min = Math.min(...rows.map(row => row.score));
+        if (!(max > min)) return null;
+        truth[player.key] = {
+          name: player.name,
+          bestIds: rows.filter(row => Math.abs(row.score - max) < .0001).map(row => row.id),
+          worstIds: rows.filter(row => Math.abs(row.score - min) < .0001).map(row => row.id),
+          bestScore: max,
+          worstScore: min
+        };
+      }
+      return truth;
+    }
+
+    function bwBuildRounds(settings, players) {
+      const candidates = getBestWorstCandidates(settings, players, true);
+      if (candidates.length < settings.perRound) throw new Error(`После фильтров и проверки оценок всех готовых участников осталось ${candidates.length} OP. Нужно хотя бы ${settings.perRound}.`);
+      const scoreMap = bwParticipantScoreMap(players);
+      const buckets = bwGroupBuckets(candidates, settings.grouping).filter(bucket => bucket.rows.length >= settings.perRound);
+      if (!buckets.length) throw new Error(`Нет ни одной группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} подходящими OP.`);
+      const rounds = [];
+      let unused = new Set(candidates.map(opening => String(opening.id)));
+      for (let roundIndex = 0; roundIndex < settings.rounds; roundIndex += 1) {
+        let selected = null;
+        let selectedBucket = null;
+        let truth = null;
+        for (let cycle = 0; cycle < 2 && !selected; cycle += 1) {
+          const bucketOrder = guessShuffle(buckets);
+          for (const bucket of bucketOrder) {
+            const rows = bucket.rows.filter(opening => cycle === 1 || unused.has(String(opening.id)));
+            if (rows.length < settings.perRound) continue;
+            for (let attempt = 0; attempt < 90; attempt += 1) {
+              const sample = guessShuffle(rows).slice(0, settings.perRound);
+              const ids = sample.map(opening => String(opening.id));
+              const candidateTruth = bwBuildTruth(ids, players, scoreMap);
+              if (!candidateTruth) continue;
+              selected = ids;
+              selectedBucket = bucket;
+              truth = candidateTruth;
+              break;
+            }
+            if (selected) break;
+          }
+        }
+        if (!selected) throw new Error(`Не удалось собрать раунд ${roundIndex + 1}: у одного из участников все выбранные OP имеют одинаковую общую оценку. Попробуй увеличить выборку или изменить группировку.`);
+        selected.forEach(id => unused.delete(id));
+        if (unused.size < settings.perRound) unused = new Set(candidates.map(opening => String(opening.id)));
+        rounds.push({ index: roundIndex, groupKey: selectedBucket.key, groupLabel: selectedBucket.label, openingIds: selected, truth });
+      }
+      return { rounds, candidateCount: candidates.length };
+    }
+
+    function bwSubmissionId(gameId, roundIndex, userKey) {
+      return `${String(gameId)}__${Number(roundIndex)}__${normalizeNickname(userKey)}`;
+    }
+
+    function bwRoundSubmissions(room = bestWorstRoom, roundIndex = Number(room?.currentRound || 0)) {
+      if (!room?.gameId) return [];
+      return bestWorstSubmissions.filter(row => String(row.gameId) === String(room.gameId) && Number(row.roundIndex) === Number(roundIndex));
+    }
+
+    function bwOwnSubmission(room = bestWorstRoom) {
+      const key = bwCurrentUserKey();
+      return bwRoundSubmissions(room).find(row => normalizeNickname(row.guesserKey || row.guesserName) === key) || null;
+    }
+
+    function bwEnsureDraft(room, round, players) {
+      const key = `${room?.gameId || ''}:${round?.index ?? ''}:${bwCurrentUserKey()}`;
+      if (bestWorstDraftKey === key) return;
+      bestWorstDraftKey = key;
+      const saved = bwOwnSubmission(room);
+      bestWorstDraft = {};
+      players.forEach(player => {
+        const row = saved?.answers?.[player.key] || {};
+        bestWorstDraft[player.key] = { best: String(row.best || ''), worst: String(row.worst || '') };
+      });
+      if (!players.some(player => player.key === bestWorstActiveTargetKey)) bestWorstActiveTargetKey = players[0]?.key || '';
+    }
+
+    function bwOpeningName(id) {
+      return getOpeningTitle(openingsById.get(String(id)) || { title: 'Неизвестный OP' });
+    }
+
+    function bwRenderMedia(opening) {
+      const source = getGuessPlaybackSource(opening);
+      if (source?.kind === 'direct') return `<div class="ev-bw-media"><video controls preload="metadata" playsinline src="${escapeHtml(source.url)}"></video></div>`;
+      if (source?.kind === 'youtube') return `<div class="ev-bw-media"><iframe loading="lazy" src="https://www.youtube.com/embed/${escapeHtml(source.videoId)}?rel=0" title="${escapeHtml(getOpeningTitle(opening))}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+      if (opening.image) return `<div class="ev-bw-media"><img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></div>`;
+      return '<div class="ev-bw-media">Видео недоступно</div>';
+    }
+
+    function bwAnswerOptions(round, selected, blocked = '') {
+      return `<option value="">— не выбрано —</option>${(round.openingIds || []).map(id => `<option value="${escapeHtml(id)}" ${String(selected) === String(id) ? 'selected' : ''} ${String(blocked) === String(id) && String(selected) !== String(id) ? 'disabled' : ''}>${escapeHtml(bwOpeningName(id))}</option>`).join('')}`;
+    }
+
+    async function bwSaveLobby() {
+      if (!isAdmin()) return;
+      const name = String(myName || '').trim();
+      const key = normalizeNickname(name);
+      if (!key) { bestWorstStatus = 'Сначала введи никнейм.'; render(); return; }
+      const settings = normalizeBestWorstSettings(bestWorstFilters);
+      const existingPlayers = bestWorstRoom?.status === 'lobby' ? bwPlayers(bestWorstRoom).map(player => ({ ...player, ready: false })) : [];
+      if (!existingPlayers.some(player => player.key === key)) existingPlayers.unshift({ key, name, ready: false });
+      const gameId = bestWorstRoom?.status === 'lobby' ? bestWorstRoom.gameId : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      bestWorstStatus = 'Сохраняю лобби…';
+      try {
+        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+          gameId,
+          status: 'lobby',
+          phase: 'lobby',
+          hostKey: key,
+          hostName: name,
+          settings,
+          players: existingPlayers,
+          rounds: [],
+          currentRound: 0,
+          candidateCount: 0,
+          updatedAtLocal: new Date().toISOString(),
+          updatedAt: serverTimestamp()
+        });
+        bestWorstStatus = 'Лобби сохранено. После изменения настроек готовность участников сброшена.';
+      } catch (error) {
+        console.error('best/worst lobby save failed', error);
+        bestWorstStatus = 'Не удалось сохранить лобби. Проверь Firebase Rules для bestWorstRooms.';
+        render();
+      }
+    }
+
+    async function bwJoinLobby() {
+      if (!bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
+      const name = String(myName || '').trim();
+      const key = normalizeNickname(name);
+      if (!key) { bestWorstStatus = 'Сначала введи никнейм.'; render(); return; }
+      const players = bwPlayers(bestWorstRoom);
+      if (!players.some(player => player.key === key)) players.push({ key, name, ready: false });
+      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+    }
+
+    async function bwToggleReady() {
+      if (!bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
+      const name = String(myName || '').trim();
+      const key = normalizeNickname(name);
+      if (!key) { bestWorstStatus = 'Сначала введи никнейм.'; render(); return; }
+      const players = bwPlayers(bestWorstRoom);
+      const index = players.findIndex(player => player.key === key);
+      if (index < 0) players.push({ key, name, ready: true });
+      else players[index] = { ...players[index], name, ready: !players[index].ready };
+      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+    }
+
+    async function bwStartGame() {
+      if (!isAdmin() || !bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
+      const players = bwReadyPlayers(bestWorstRoom);
+      if (players.length < 2) { bestWorstStatus = 'Для запуска должны нажать «Готов» хотя бы два человека.'; render(); return; }
+      const settings = normalizeBestWorstSettings(bestWorstRoom.settings);
+      try {
+        const built = bwBuildRounds(settings, players);
+        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+          status: 'playing',
+          phase: 'answering',
+          players,
+          rounds: built.rounds,
+          currentRound: 0,
+          candidateCount: built.candidateCount,
+          startedAtLocal: new Date().toISOString(),
+          updatedAtLocal: new Date().toISOString(),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        bestWorstDraftKey = '';
+        bestWorstStatus = '';
+      } catch (error) {
+        console.error('best/worst start failed', error);
+        bestWorstStatus = error?.message || 'Не удалось собрать раунды.';
+        render();
+      }
+    }
+
+    async function bwSubmitRound() {
+      const room = bestWorstRoom;
+      if (!room || room.status !== 'playing' || room.phase !== 'answering') return;
+      const userKey = bwCurrentUserKey();
+      const players = bwReadyPlayers(room);
+      if (!players.some(player => player.key === userKey)) { bestWorstStatus = 'Ты не входишь в список готовых участников этой игры.'; render(); return; }
+      const settings = normalizeBestWorstSettings(room.settings);
+      for (const player of players) {
+        const answer = bestWorstDraft[player.key] || {};
+        if (bwModeUses(settings, 'best') && !answer.best) { bestWorstStatus = `Не выбрано лучшее для пользователя ${player.name}.`; render(); return; }
+        if (bwModeUses(settings, 'worst') && !answer.worst) { bestWorstStatus = `Не выбрано худшее для пользователя ${player.name}.`; render(); return; }
+        if (settings.mode === 'both' && answer.best === answer.worst) { bestWorstStatus = `У пользователя ${player.name} один OP не может быть одновременно лучшим и худшим.`; render(); return; }
+      }
+      try {
+        const alreadySubmitted = new Set(bwRoundSubmissions(room).map(row => normalizeNickname(row.guesserKey || row.guesserName)));
+        await setDoc(doc(db, BW_SUBMISSION_COLLECTION, bwSubmissionId(room.gameId, room.currentRound, userKey)), {
+          gameId: room.gameId,
+          roundIndex: Number(room.currentRound || 0),
+          guesserKey: userKey,
+          guesserName: String(myName || userKey),
+          answers: bestWorstDraft,
+          submittedAtLocal: new Date().toISOString(),
+          submittedAt: serverTimestamp()
+        });
+        alreadySubmitted.add(userKey);
+        if (players.every(player => alreadySubmitted.has(player.key))) {
+          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { phase: 'results', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+          bestWorstStatus = '';
+        } else {
+          bestWorstStatus = 'Ответ сохранён. Его можно изменить, пока не ответили остальные участники.';
+        }
+      } catch (error) {
+        console.error('best/worst submission failed', error);
+        bestWorstStatus = 'Не удалось сохранить ответ. Проверь Firebase Rules для bestWorstSubmissions.';
+        render();
+      }
+    }
+
+    async function bwRevealRound(force = false) {
+      if (!bestWorstRoom || bestWorstRoom.status !== 'playing' || bestWorstRoom.phase !== 'answering') return;
+      const players = bwReadyPlayers(bestWorstRoom);
+      const submissions = bwRoundSubmissions(bestWorstRoom);
+      const submittedKeys = new Set(submissions.map(row => normalizeNickname(row.guesserKey || row.guesserName)));
+      const allDone = players.every(player => submittedKeys.has(player.key));
+      if (!allDone && !force) { bestWorstStatus = 'Сначала должны отправить ответы все участники.'; render(); return; }
+      if (!isAdmin() && !allDone) return;
+      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { phase: 'results', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+    }
+
+    async function bwNextRound() {
+      if (!isAdmin() || !bestWorstRoom || bestWorstRoom.phase !== 'results') return;
+      const next = Number(bestWorstRoom.currentRound || 0) + 1;
+      const total = Array.isArray(bestWorstRoom.rounds) ? bestWorstRoom.rounds.length : 0;
+      if (next >= total) {
+        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { status: 'finished', phase: 'finished', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+      } else {
+        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { currentRound: next, phase: 'answering', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+      }
+      bestWorstDraftKey = '';
+      bestWorstStatus = '';
+    }
+
+    async function bwResetGame() {
+      if (!isAdmin()) return;
+      if (!confirm('Удалить текущее лобби/игру? Старые ответы останутся в архивной коллекции, но больше не будут отображаться.')) return;
+      await deleteDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID));
+      bestWorstRoom = null;
+      bestWorstDraftKey = '';
+      bestWorstStatus = 'Текущая игра удалена.';
+      render();
+    }
+
+    function bwSubmissionScore(round, submission, settings) {
+      let score = 0;
+      let max = 0;
+      const details = {};
+      Object.entries(round?.truth || {}).forEach(([targetKey, truth]) => {
+        const answer = submission?.answers?.[targetKey] || {};
+        let targetScore = 0;
+        let targetMax = 0;
+        if (bwModeUses(settings, 'best')) { targetMax += 1; if ((truth.bestIds || []).includes(String(answer.best || ''))) targetScore += 1; }
+        if (bwModeUses(settings, 'worst')) { targetMax += 1; if ((truth.worstIds || []).includes(String(answer.worst || ''))) targetScore += 1; }
+        score += targetScore;
+        max += targetMax;
+        details[targetKey] = { score: targetScore, max: targetMax };
+      });
+      return { score, max, details };
+    }
+
+    function bwScoreboard(room, upToRound = null) {
+      const players = bwReadyPlayers(room);
+      const settings = normalizeBestWorstSettings(room.settings);
+      const lastRound = upToRound == null ? (room.rounds?.length || 0) - 1 : Number(upToRound);
+      const rows = players.map(player => ({ ...player, score: 0, max: 0 }));
+      const byKey = new Map(rows.map(row => [row.key, row]));
+      for (let index = 0; index <= lastRound; index += 1) {
+        const round = room.rounds?.[index];
+        if (!round) continue;
+        const possible = Object.keys(round.truth || {}).length * (settings.mode === 'both' ? 2 : 1);
+        rows.forEach(row => { row.max += possible; });
+        bwRoundSubmissions(room, index).forEach(submission => {
+          const key = normalizeNickname(submission.guesserKey || submission.guesserName);
+          const row = byKey.get(key);
+          if (!row) return;
+          const result = bwSubmissionScore(round, submission, settings);
+          row.score += result.score;
+        });
+      }
+      return rows.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }));
+    }
+
+    function bwRenderScoreboard(room, currentOnly = false) {
+      const settings = normalizeBestWorstSettings(room.settings);
+      const round = room.rounds?.[Number(room.currentRound || 0)];
+      let rows;
+      if (currentOnly) {
+        rows = bwReadyPlayers(room).map(player => {
+          const submission = bwRoundSubmissions(room).find(row => normalizeNickname(row.guesserKey || row.guesserName) === player.key);
+          const result = submission ? bwSubmissionScore(round, submission, settings) : { score: 0, max: Object.keys(round?.truth || {}).length * (settings.mode === 'both' ? 2 : 1) };
+          return { ...player, ...result };
+        }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }));
+      } else rows = bwScoreboard(room, Number(room.currentRound || 0));
+      return `<div class="ev-bw-score-table">${rows.map((row, index) => `<div class="ev-bw-score-row"><div class="ev-bw-score-rank">${index + 1}</div><div class="ev-bw-score-name">${escapeHtml(row.name)}</div><div class="ev-bw-score-value">${row.score}/${row.max}</div></div>`).join('')}</div>`;
+    }
+
+    function bwRenderLobby() {
+      const room = bestWorstRoom;
+      const settings = bwCurrentSettings();
+      const players = bwPlayers(room);
+      const ready = bwReadyPlayers(room);
+      const meKey = bwCurrentUserKey();
+      const me = players.find(player => player.key === meKey);
+      const years = [...new Set(openings.filter(row => row.type === 'OP').map(row => Number(row.year)).filter(Number.isFinite))].sort((a, b) => b - a);
+      const studios = guessUniqueValues('studios');
+      const directors = guessUniqueValues('directors');
+      const performers = guessUniqueValues('performers');
+      const users = guessUserOptions();
+      const selectedUsers = new Set((settings.users || []).map(normalizeNickname).filter(Boolean));
+      const candidates = getBestWorstCandidates(settings);
+      const hostDisabled = isAdmin() ? '' : 'disabled';
+      const sourceDisabled = settings.source !== 'ratings';
+      const canStart = isAdmin() && ready.length >= 2;
+      appEl.innerHTML = `
+        <div class="ev-bw-shell">
+          <section class="ev-panel-head">
+            <div><div class="ev-section-label">Сетевой ивент</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">Все готовые участники угадывают, какой OP каждый из них оценил выше и ниже остальных в текущем раунде. Запуск доступен минимум с двух готовых игроков.</div></div>
+            ${isAdmin() && room ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить текущую игру</button>' : ''}
+          </section>
+          <div class="ev-bw-lobby-grid">
+            <section class="ev-guess-filter-card">
+              <div class="ev-guess-card-head"><div><h3>Лобби</h3><div class="ev-hint">${room ? `Создатель: ${escapeHtml(room.hostName || 'админ')}` : 'Лобби ещё не создано.'}</div></div></div>
+              <div class="ev-bw-player-list">
+                ${players.length ? players.map(player => `<div class="ev-bw-player ${player.ready ? 'ready' : ''}"><div class="ev-bw-player-name">${escapeHtml(player.name)}${player.key === meKey ? ' · вы' : ''}</div><div class="ev-bw-player-state">${player.ready ? '✓ ГОТОВ' : 'НЕ ГОТОВ'}</div></div>`).join('') : '<div class="ev-guess-empty">Участников пока нет.</div>'}
+              </div>
+              <div class="ev-bw-summary-strip"><span class="ev-bw-pill">Участников: <strong>${players.length}</strong></span><span class="ev-bw-pill">Готовы: <strong>${ready.length}</strong></span><span class="ev-bw-pill">Минимум: <strong>2</strong></span></div>
+              <div class="ev-actions" style="margin-top:12px;justify-content:flex-start;">
+                ${room && !me ? '<button type="button" class="ev-btn-secondary" id="ev-bw-join">Присоединиться</button>' : ''}
+                ${room && me ? `<button type="button" class="${me.ready ? 'ev-btn-ghost' : 'ev-btn-secondary'}" id="ev-bw-ready">${me.ready ? 'Отменить готовность' : 'Готов'}</button>` : ''}
+                ${room ? `<button type="button" class="ev-btn-main" id="ev-bw-start" ${canStart ? '' : 'disabled'}>Запустить игру</button>` : ''}
+              </div>
+              <div class="ev-status-line ${ready.length >= 2 ? 'ok' : 'warn'}">${ready.length >= 2 ? 'Минимум готовых набран.' : 'Ждём хотя бы двух готовых участников.'}</div>
+            </section>
+
+            <section class="ev-guess-filter-card">
+              <div class="ev-guess-card-head"><div><h3>Параметры и фильтры</h3><div class="ev-hint">Тип зафиксирован: только OP. Поля названия, четырёх вариантов, франшизы, длины фрагмента и прослушиваний здесь отсутствуют.</div></div><button type="button" class="ev-btn-ghost" id="ev-bw-defaults" ${hostDisabled}>Сбросить</button></div>
+              <div class="ev-guess-grid">
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Что угадывать</span><select id="ev-bw-mode" ${hostDisabled}><option value="best" ${settings.mode === 'best' ? 'selected' : ''}>Только лучшее</option><option value="worst" ${settings.mode === 'worst' ? 'selected' : ''}>Только худшее</option><option value="both" ${settings.mode === 'both' ? 'selected' : ''}>Лучшее и худшее</option></select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">OP за раунд</span><input id="ev-bw-per-round" type="number" min="2" max="20" step="1" value="${settings.perRound}" ${hostDisabled} /></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Количество раундов</span><input id="ev-bw-rounds" type="number" min="1" max="20" step="1" value="${settings.rounds}" ${hostDisabled} /></label>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option></select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Год</span><select id="ev-bw-year" ${hostDisabled}>${guessSelectOptions(years, settings.year)}</select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Сезон</span><select id="ev-bw-season" ${hostDisabled}><option value="" ${!settings.season ? 'selected' : ''}>Все</option>${SEASONS.map(season => `<option value="${season}" ${settings.season === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('')}</select></label>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
+                <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это фильтр выборки. При запуске дополнительно останутся только OP, оценённые каждым готовым участником.</span></div>
+                <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
+              </div>
+              <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> OP с рабочим источником. При запуске выборка дополнительно проверяется по оценкам всех готовых игроков.</div>${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
+            </section>
+          </div>
+          ${bestWorstStatus ? `<div class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может/i.test(bestWorstStatus) ? 'bad' : 'ok'}">${escapeHtml(bestWorstStatus)}</div>` : ''}
+        </div>`;
+      bindBestWorstLobbyControls();
+    }
+
+    function bindBestWorstLobbyControls() {
+      const bind = (selector, key, parser = value => value) => {
+        const el = $(selector);
+        el?.addEventListener('change', () => { bestWorstFilters[key] = parser(el.value); render(); });
+      };
+      bind('#ev-bw-mode', 'mode');
+      bind('#ev-bw-per-round', 'perRound', value => bwClamp(value, 2, 20, 6));
+      bind('#ev-bw-rounds', 'rounds', value => bwClamp(value, 1, 20, 5));
+      bind('#ev-bw-grouping', 'grouping');
+      bind('#ev-bw-year', 'year');
+      bind('#ev-bw-season', 'season');
+      bind('#ev-bw-content', 'content');
+      bind('#ev-bw-studio', 'studio');
+      bind('#ev-bw-director', 'director');
+      bind('#ev-bw-performer', 'performer');
+      bind('#ev-bw-source', 'source');
+      bind('#ev-bw-score-overall-cmp', 'scoreOverallCmp');
+      bind('#ev-bw-score-song-cmp', 'scoreSongCmp');
+      bind('#ev-bw-score-visual-cmp', 'scoreVisualCmp');
+      const parseScore = value => { const raw = String(value || '').trim(); const number = Number(raw); return raw && Number.isFinite(number) ? Math.max(.5, Math.min(10, number)) : ''; };
+      bind('#ev-bw-score-overall-value', 'scoreOverallValue', parseScore);
+      bind('#ev-bw-score-song-value', 'scoreSongValue', parseScore);
+      bind('#ev-bw-score-visual-value', 'scoreVisualValue', parseScore);
+      document.querySelectorAll('[data-bw-score-logic]').forEach(button => button.addEventListener('click', () => { bestWorstFilters.scoreLogic = button.dataset.bwScoreLogic === 'or' ? 'or' : 'and'; render(); }));
+      document.querySelectorAll('#ev-bw-users input[type="checkbox"]').forEach(input => input.addEventListener('change', () => { const users = new Set((bestWorstFilters.users || []).map(normalizeNickname)); const key = normalizeNickname(input.value); input.checked ? users.add(key) : users.delete(key); bestWorstFilters.users = [...users]; render(); }));
+      $('#ev-bw-defaults')?.addEventListener('click', () => { Object.assign(bestWorstFilters, normalizeBestWorstSettings({ mode:'both', perRound:6, rounds:5, grouping:'none', source:'ratings', content:'all' })); render(); });
+      $('#ev-bw-save-lobby')?.addEventListener('click', bwSaveLobby);
+      $('#ev-bw-join')?.addEventListener('click', bwJoinLobby);
+      $('#ev-bw-ready')?.addEventListener('click', bwToggleReady);
+      $('#ev-bw-start')?.addEventListener('click', bwStartGame);
+      $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
+    }
+
+    function bwRenderRound() {
+      const room = bestWorstRoom;
+      const players = bwReadyPlayers(room);
+      const settings = normalizeBestWorstSettings(room.settings);
+      const roundIndex = Number(room.currentRound || 0);
+      const round = room.rounds?.[roundIndex];
+      if (!round) { appEl.innerHTML = '<div class="ev-empty">Раунд не найден.</div>'; return; }
+      bwEnsureDraft(room, round, players);
+      const submissions = bwRoundSubmissions(room);
+      const submittedKeys = new Set(submissions.map(row => normalizeNickname(row.guesserKey || row.guesserName)));
+      const ownSubmitted = submittedKeys.has(bwCurrentUserKey());
+      const allDone = players.every(player => submittedKeys.has(player.key));
+      const canAnswer = players.some(player => player.key === bwCurrentUserKey()) && room.phase === 'answering';
+      const activeTarget = players.find(player => player.key === bestWorstActiveTargetKey) || players[0];
+      const activeAnswer = bestWorstDraft[activeTarget?.key] || {};
+      const phaseResults = room.phase === 'results';
+      appEl.innerHTML = `
+        <div class="ev-bw-shell">
+          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">Группа: <strong>${escapeHtml(round.groupLabel || 'Без группировки')}</strong> · ${escapeHtml(bwModeLabel(settings.mode))} · ${settings.perRound} OP</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</section>
+          <section class="ev-guess-filter-card">
+            <div class="ev-bw-round-head"><div><h3 style="margin:0 0 5px;font-family:'Archivo Black',sans-serif;">${phaseResults ? 'Результаты раунда' : 'Смотри OP и расставляй флажки'}</h3><div class="ev-hint">Флажки на карточках относятся к выбранному ниже участнику. Те же ответы можно выбрать в выпадающих списках.</div></div><div class="ev-bw-pill">Ответили: <strong>${submittedKeys.size}/${players.length}</strong></div></div>
+            ${!phaseResults ? `<div class="ev-bw-active-target"><label class="ev-guess-field"><span class="ev-guess-label">Флажки сейчас ставятся для</span><select id="ev-bw-active-target">${players.map(player => `<option value="${escapeHtml(player.key)}" ${player.key === activeTarget?.key ? 'selected' : ''}>${escapeHtml(player.name)}</option>`).join('')}</select></label><div class="ev-hint">Один OP не может одновременно быть лучшим и худшим у одного пользователя.</div></div>` : ''}
+            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(activeAnswer.best || '') === String(id); const isWorst = String(activeAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
+            ${phaseResults ? bwRenderRoundResults(room, round, players, settings) : `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Ответы по участникам</h3><div class="ev-hint">Нужно точно выбрать OP для каждого пользователя.</div></div></div><div class="ev-bw-answer-list">${players.map(player => { const answer = bestWorstDraft[player.key] || {}; return `<div class="ev-bw-answer-row"><div class="ev-bw-answer-name">${escapeHtml(player.name)}</div>${bwModeUses(settings,'best') ? `<label><span class="ev-guess-label">Лучшее</span><select data-bw-answer="best" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.best, settings.mode === 'both' ? answer.worst : '')}</select></label>` : ''}${bwModeUses(settings,'worst') ? `<label><span class="ev-guess-label">Худшее</span><select data-bw-answer="worst" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.worst, settings.mode === 'both' ? answer.best : '')}</select></label>` : ''}</div>`; }).join('')}</div><div class="ev-actions" style="margin-top:12px;justify-content:flex-start;"><button type="button" class="ev-btn-main" id="ev-bw-submit" ${canAnswer ? '' : 'disabled'}>${ownSubmitted ? 'Обновить ответ' : 'Готово'}</button>${allDone ? '<button type="button" class="ev-btn-secondary" id="ev-bw-reveal">Показать результаты</button>' : ''}${isAdmin() && !allDone ? '<button type="button" class="ev-btn-ghost" id="ev-bw-force-reveal">Показать досрочно</button>' : ''}</div><div class="ev-bw-progress-list">${players.map(player => `<span class="ev-bw-progress-user ${submittedKeys.has(player.key) ? 'done' : ''}">${submittedKeys.has(player.key) ? '✓' : '…'} ${escapeHtml(player.name)}</span>`).join('')}</div></div>`}
+          </section>
+          ${bestWorstStatus ? `<div class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может/i.test(bestWorstStatus) ? 'bad' : 'ok'}">${escapeHtml(bestWorstStatus)}</div>` : ''}
+        </div>`;
+      bindBestWorstRoundControls();
+    }
+
+    function bwRenderRoundResults(room, round, players, settings) {
+      const truthHtml = players.map(player => { const truth = round.truth?.[player.key] || {}; const best = (truth.bestIds || []).map(bwOpeningName).join(' / '); const worst = (truth.worstIds || []).map(bwOpeningName).join(' / '); return `<article class="ev-bw-truth"><h4>${escapeHtml(player.name)}</h4>${bwModeUses(settings,'best') ? `<div class="ev-bw-truth-line best"><strong>Лучшее:</strong> ${escapeHtml(best || '—')}</div>` : ''}${bwModeUses(settings,'worst') ? `<div class="ev-bw-truth-line worst"><strong>Худшее:</strong> ${escapeHtml(worst || '—')}</div>` : ''}</article>`; }).join('');
+      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Правильные ответы</h3><div class="ev-hint">При одинаковой максимальной или минимальной оценке засчитывается любой OP из ничьей.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
+    }
+
+    function bindBestWorstRoundControls() {
+      $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
+      $('#ev-bw-active-target')?.addEventListener('change', event => { bestWorstActiveTargetKey = normalizeNickname(event.target.value); render(); });
+      document.querySelectorAll('[data-bw-flag]').forEach(button => button.addEventListener('click', () => {
+        const targetKey = bestWorstActiveTargetKey;
+        if (!targetKey) return;
+        const kind = button.dataset.bwFlag;
+        const id = String(button.dataset.openingId || '');
+        const row = bestWorstDraft[targetKey] || { best:'', worst:'' };
+        row[kind] = row[kind] === id ? '' : id;
+        if (kind === 'best' && row.best && row.best === row.worst) row.worst = '';
+        if (kind === 'worst' && row.worst && row.worst === row.best) row.best = '';
+        bestWorstDraft[targetKey] = row;
+        render();
+      }));
+      document.querySelectorAll('[data-bw-answer]').forEach(select => select.addEventListener('change', () => {
+        const targetKey = normalizeNickname(select.dataset.targetKey);
+        const kind = select.dataset.bwAnswer;
+        const row = bestWorstDraft[targetKey] || { best:'', worst:'' };
+        row[kind] = String(select.value || '');
+        if (kind === 'best' && row.best && row.best === row.worst) row.worst = '';
+        if (kind === 'worst' && row.worst && row.worst === row.best) row.best = '';
+        bestWorstDraft[targetKey] = row;
+        bestWorstActiveTargetKey = targetKey;
+        render();
+      }));
+      $('#ev-bw-submit')?.addEventListener('click', bwSubmitRound);
+      $('#ev-bw-reveal')?.addEventListener('click', () => bwRevealRound(false));
+      $('#ev-bw-force-reveal')?.addEventListener('click', () => bwRevealRound(true));
+      $('#ev-bw-next')?.addEventListener('click', bwNextRound);
+    }
+
+    function bwRenderFinished() {
+      const room = bestWorstRoom;
+      const rows = bwScoreboard(room);
+      const top = rows.slice(0, 3);
+      const order = [top[1], top[0], top[2]].filter(Boolean);
+      const classes = top.length >= 3 ? ['second','first','third'] : top.length === 2 ? ['second','first'] : ['first'];
+      const last = rows[rows.length - 1];
+      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · общий результат по точным совпадениям.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${order.map((row,index) => { const cls = classes[index]; const rank = cls === 'first' ? 1 : cls === 'second' ? 2 : 3; return `<div class="ev-bw-podium-place ${cls}"><div class="ev-bw-podium-name">${escapeHtml(row.name)}</div><div class="ev-bw-podium-block"><div class="ev-bw-podium-rank">${rank}</div><div class="ev-bw-podium-score">${row.score}/${row.max}</div></div></div>`; }).join('')}</div>${last ? `<div class="ev-bw-last"><strong>Последнее место:</strong> ${escapeHtml(last.name)} · ${last.score}/${last.max}</div>` : ''}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}</section></div>`;
+      $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
+    }
+
+    function renderBestWorstEvent() {
+      if (!bestWorstRoom || bestWorstRoom.status === 'lobby') bwRenderLobby();
+      else if (bestWorstRoom.status === 'finished') bwRenderFinished();
+      else bwRenderRound();
+    }
+
     function render() {
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
@@ -2341,6 +3113,10 @@
       }
       if (activeMode === 'guess') {
         renderGuessBuilder();
+        return;
+      }
+      if (activeMode === 'bestworst') {
+        renderBestWorstEvent();
         return;
       }
       if (isGuest()) {
@@ -5283,7 +6059,7 @@
     function bindShell() {
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          activeMode = btn.dataset.mode === 'guess' ? 'guess' : 'rating';
+          activeMode = ['guess', 'bestworst'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
           if (activeMode !== 'guess') closeGuessGame();
           render();
         });
@@ -5436,6 +6212,26 @@
         console.error('guessCollections snapshot error', error);
         guessCollections = [];
         guessCollectionStatus = 'Не удалось загрузить подборки. Проверь Firebase Rules для guessCollections.';
+        scheduleRender();
+      });
+      onSnapshot(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), snapshot => {
+        bestWorstRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+        if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
+        if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
+        scheduleRender();
+      }, error => {
+        console.error('bestWorstRooms snapshot error', error);
+        bestWorstRoom = null;
+        bestWorstStatus = 'Не удалось прочитать Firebase-лобби bestWorstRooms.';
+        scheduleRender();
+      });
+      onSnapshot(collection(db, BW_SUBMISSION_COLLECTION), snapshot => {
+        bestWorstSubmissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleRender();
+      }, error => {
+        console.error('bestWorstSubmissions snapshot error', error);
+        bestWorstSubmissions = [];
+        bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
         scheduleRender();
       });
       if (LOCAL_EVENTS_MODE) {
