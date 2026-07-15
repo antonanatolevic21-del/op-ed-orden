@@ -362,20 +362,256 @@
     }
 
     .ev-placeholder { padding: 44px 20px; text-align: center; color: var(--muted); font-family: 'Space Mono', monospace; }
-    .ev-guess-placeholder {
-      min-height: 240px;
+    .ev-guess-shell { display: flex; flex-direction: column; gap: 16px; }
+    .ev-guess-filter-card, .ev-guess-results-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .ev-guess-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .ev-guess-card-head h3 { margin: 0 0 5px; font-family: 'Archivo Black', sans-serif; font-size: 18px; }
+    .ev-guess-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .ev-guess-field {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 11px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--panel);
+    }
+    .ev-guess-field.wide { grid-column: span 2; }
+    .ev-guess-field.full { grid-column: 1 / -1; }
+    .ev-guess-label {
+      color: var(--cyan);
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .55px;
+      text-transform: uppercase;
+    }
+    .ev-guess-note { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.4; }
+    .ev-guess-field input[type="text"],
+    .ev-guess-field input[type="number"],
+    .ev-guess-field select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      padding: 9px 10px;
+      font-size: 12px;
+    }
+    .ev-guess-field select { cursor: pointer; }
+    .ev-guess-count-row { display: grid; grid-template-columns: minmax(0, 1fr) 68px; gap: 9px; align-items: center; }
+    .ev-guess-count-row input[type="range"] { width: 100%; accent-color: var(--pink); }
+    .ev-guess-segmented {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--card);
+    }
+    .ev-guess-segmented button {
+      min-width: 0;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 9px;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .ev-guess-segmented button.active {
+      color: var(--text);
+      border-color: var(--pink);
+      background: rgba(255,46,99,.13);
+    }
+    .ev-guess-users {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      max-height: 176px;
+      overflow: auto;
+      padding: 3px 2px;
+    }
+    .ev-guess-user {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted);
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .ev-guess-user:hover { border-color: var(--cyan); color: var(--cyan); }
+    .ev-guess-user.active { border-color: var(--pink); color: var(--pink); background: rgba(255,46,99,.1); }
+    .ev-guess-user input { margin: 0; accent-color: var(--pink); }
+    .ev-guess-rating-row { display: grid; grid-template-columns: 1.25fr .8fr .75fr; gap: 8px; }
+    .ev-guess-create-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .ev-guess-preview { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 11px; line-height: 1.45; }
+    .ev-guess-preview strong { color: var(--cyan); }
+    .ev-guess-result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 10px;
+    }
+    .ev-guess-result {
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 10px;
+      min-width: 0;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: var(--panel);
+    }
+    .ev-guess-result-thumb {
+      width: 68px;
+      aspect-ratio: 1;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 44px 20px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--bg);
+      color: var(--muted);
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 11px;
+    }
+    .ev-guess-result-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ev-guess-result-title { font-weight: 800; font-size: 12.5px; line-height: 1.25; overflow-wrap: anywhere; }
+    .ev-guess-result-meta { margin-top: 5px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.4; }
+    .ev-guess-empty {
+      padding: 30px 16px;
       text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: 11px;
       color: var(--muted);
       font-family: 'Space Mono', monospace;
-      font-size: 12px;
-      border: 1px dashed var(--border);
-      border-radius: 14px;
-      background: rgba(22,18,31,.35);
+      font-size: 11px;
     }
+    .ev-guess-result.correct { border-color: rgba(74,222,128,.55); background: rgba(74,222,128,.06); }
+    .ev-guess-result.wrong { border-color: rgba(251,113,133,.55); background: rgba(251,113,133,.06); }
+    .ev-guess-result-status { margin-top: 6px; font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 800; }
+    .ev-guess-result-status.correct { color: var(--green); }
+    .ev-guess-result-status.wrong { color: var(--red); }
+    .ev-guess-game-dialog { width: min(720px, 100%); position: relative; overflow: hidden; border-color: var(--cyan); }
+    .ev-guess-game-top { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+    .ev-guess-game-title { margin: 0; font-family: 'Archivo Black', sans-serif; font-size: clamp(22px, 4vw, 30px); }
+    .ev-guess-audio-card { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); padding: 16px; margin-bottom: 14px; }
+    .ev-guess-wave { height: 96px; display: grid; grid-template-columns: repeat(48, minmax(2px, 1fr)); gap: 3px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #09080d; overflow: hidden; }
+    .ev-guess-wave span { display: block; width: 100%; min-height: 7px; height: var(--bar-height, 42%); border-radius: 999px; background: linear-gradient(180deg, var(--cyan), var(--pink)); opacity: .42; transform-origin: center; }
+    .ev-guess-wave.playing span { opacity: .95; animation: evGuessWave .64s ease-in-out infinite alternate; animation-delay: var(--bar-delay, 0ms); }
+    @keyframes evGuessWave { from { transform: scaleY(.42); } to { transform: scaleY(1); } }
+    .ev-guess-audio-controls { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    .ev-guess-play { min-width: 170px; }
+    .ev-guess-listens { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 11px; }
+    .ev-guess-listens strong { color: var(--cyan); }
+    .ev-guess-media-status { min-height: 17px; margin-top: 9px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.4; }
+    .ev-guess-media-status.bad { color: var(--red); }
+    .ev-guess-hidden-media { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; left: -9999px; top: -9999px; }
+    .ev-guess-hidden-youtube { position: fixed; width: 200px; height: 200px; left: -10000px; top: -10000px; opacity: .001; pointer-events: none; overflow: hidden; }
+    .ev-guess-hidden-youtube iframe { width: 200px !important; height: 200px !important; border: 0; }
+    .ev-guess-answer-box { border: 1px solid var(--border); border-radius: 14px; background: var(--panel); padding: 14px; }
+    .ev-guess-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+    .ev-guess-option { min-height: 54px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); padding: 10px 12px; font-weight: 800; cursor: pointer; text-align: left; line-height: 1.3; overflow-wrap: anywhere; }
+    .ev-guess-option:hover:not(:disabled) { border-color: var(--cyan); background: rgba(8,217,214,.08); }
+    .ev-guess-option.correct { border-color: var(--green); color: var(--green); background: rgba(74,222,128,.09); }
+    .ev-guess-option.wrong { border-color: var(--red); color: var(--red); background: rgba(251,113,133,.09); }
+    .ev-guess-manual { position: relative; }
+    .ev-guess-manual-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px; }
+    .ev-guess-manual input { width: 100%; min-width: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 9px; padding: 11px 12px; }
+    .ev-guess-suggestions { position: absolute; z-index: 4; left: 0; right: 0; top: calc(100% + 6px); max-height: 230px; overflow: auto; display: none; border: 1px solid var(--cyan); border-radius: 10px; background: var(--card); box-shadow: 0 18px 45px rgba(0,0,0,.48); }
+    .ev-guess-suggestions.open { display: block; }
+    .ev-guess-suggestion { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); padding: 10px 12px; text-align: left; cursor: pointer; }
+    .ev-guess-suggestion:last-child { border-bottom: 0; }
+    .ev-guess-suggestion:hover { background: rgba(8,217,214,.09); color: var(--cyan); }
+    .ev-guess-game-actions { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .ev-guess-feedback { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 22px; background: rgba(11,10,16,.92); backdrop-filter: blur(7px); animation: evGuessFeedback .18s ease-out; }
+    .ev-guess-feedback-icon { width: 112px; height: 112px; border-radius: 999px; display: flex; align-items: center; justify-content: center; border: 4px solid currentColor; font-family: 'Archivo Black', sans-serif; font-size: 72px; line-height: 1; }
+    .ev-guess-feedback.correct { color: var(--green); }
+    .ev-guess-feedback.wrong { color: var(--red); }
+    .ev-guess-feedback-title { font-family: 'Archivo Black', sans-serif; font-size: 25px; }
+    .ev-guess-feedback-answer { max-width: 560px; color: var(--text); font-weight: 800; line-height: 1.35; }
+    @keyframes evGuessFeedback { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+    .ev-guess-summary { text-align: center; padding: 18px 4px 8px; }
+    .ev-guess-summary-score { margin: 18px auto; font-family: 'Archivo Black', sans-serif; font-size: clamp(54px, 12vw, 92px); line-height: 1; color: var(--cyan); }
+    .ev-guess-summary-note { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 11px; }
+    .ev-guess-collection-builder { border-color: rgba(255,200,87,.45); }
+    .ev-guess-collection-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .ev-guess-collection-grid .full { grid-column: 1 / -1; }
+    .ev-guess-collection-search { position: relative; }
+    .ev-guess-collection-suggestions {
+      display: none;
+      position: absolute;
+      z-index: 7;
+      left: 0;
+      right: 0;
+      top: calc(100% + 6px);
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid var(--gold);
+      border-radius: 10px;
+      background: var(--card);
+      box-shadow: 0 18px 45px rgba(0,0,0,.48);
+    }
+    .ev-guess-collection-suggestions.open { display: block; }
+    .ev-guess-collection-selected { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .ev-guess-collection-row {
+      display: grid;
+      grid-template-columns: 34px minmax(0,1fr) auto;
+      gap: 9px;
+      align-items: center;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+    .ev-guess-collection-index { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; }
+    .ev-guess-collection-title { min-width: 0; font-weight: 800; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+    .ev-guess-collection-kind { margin-top: 3px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9px; }
+    .ev-guess-collection-remove { border: 1px solid rgba(251,113,133,.5); background: transparent; color: var(--red); border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+    .ev-guess-collection-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px,1fr)); gap: 10px; }
+    .ev-guess-collection-card { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 12px; min-width: 0; }
+    .ev-guess-collection-card h4 { margin: 0 0 6px; font-family: 'Archivo Black', sans-serif; font-size: 15px; overflow-wrap: anywhere; }
+    .ev-guess-collection-meta { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.45; }
+    .ev-guess-collection-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+    .ev-guess-collection-status { margin-top: 9px; min-height: 16px; color: var(--gold); font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.4; }
 
     .ev-modal {
       position: fixed;
@@ -545,6 +781,9 @@
     .ev-auth-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
     .ev-auth-row input { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 11px 12px; border-radius: 8px; }
 
+    @media (max-width: 980px) {
+      .ev-guess-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
     @media (max-width: 820px) {
       .ev-stage-layout { grid-template-columns: 1fr; }
       .oc-season-op { grid-template-columns: 34px 48px 1fr; }
@@ -561,6 +800,18 @@
       .ev-userbar input { width: 100%; flex: 1 1 180px; }
       .ev-actions { justify-content: flex-start; }
       .ev-auth-row { grid-template-columns: 1fr; }
+      .ev-guess-grid { grid-template-columns: 1fr; }
+      .ev-guess-field.wide, .ev-guess-field.full { grid-column: 1; }
+      .ev-guess-rating-row { grid-template-columns: 1fr; }
+      .ev-guess-create-row .ev-btn-main { width: 100%; }
+      .ev-guess-options { grid-template-columns: 1fr; }
+      .ev-guess-manual-row { grid-template-columns: 1fr; }
+      .ev-guess-play { width: 100%; }
+      .ev-guess-wave { gap: 2px; padding-inline: 8px; }
+      .ev-guess-collection-grid { grid-template-columns: 1fr; }
+      .ev-guess-collection-grid .full { grid-column: 1; }
+      .ev-guess-collection-row { grid-template-columns: 28px minmax(0,1fr); }
+      .ev-guess-collection-remove { grid-column: 2; justify-self: start; }
     }
 
     .ev-basket-status { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 8px; }
@@ -683,6 +934,7 @@
 
   <div class="ev-modal hidden" id="ev-evaluator"></div>
   <div class="ev-modal hidden" id="ev-post-modal"></div>
+  <div class="ev-modal hidden" id="ev-guess-game"></div>
 
   <div class="ev-modal hidden" id="ev-auth-modal">
     <div class="ev-dialog ev-auth-dialog">
@@ -773,6 +1025,7 @@
     const nameError = $('#ev-name-error');
     const evaluatorEl = $('#ev-evaluator');
     const postModalEl = $('#ev-post-modal');
+    const guessGameEl = $('#ev-guess-game');
     const POST_PRIORITY_NICKS = ['Egortos', 'Кофа', 'Toxexex'];
     const FIXED_PARTICIPANTS = ['Egortos', 'Кофа', 'Toxexex'];
 
@@ -785,6 +1038,48 @@
     let activeSeason = 'winter';
     let openings = [];
     let openingsById = new Map();
+    let mainRatings = [];
+    let userProfiles = [];
+    const guessFilters = {
+      search: '',
+      count: 50,
+      answerMode: 'four',
+      answerTarget: 'song',
+      clipSeconds: 10,
+      listenCount: 3,
+      source: 'all',
+      type: '',
+      year: '',
+      season: '',
+      studio: '',
+      director: '',
+      performer: '',
+      franchise: '',
+      content: 'all',
+      users: [],
+      scoreMetric: 'score',
+      scoreCmp: 'gte',
+      scoreValue: 8
+    };
+    let guessResultIds = [];
+    let guessMessage = '';
+    let guessGameState = null;
+    let guessCollections = [];
+    let guessCollectionStatus = '';
+    let guessCollectionDraft = {
+      open: false,
+      editId: '',
+      title: '',
+      autoCount: 0,
+      autoIds: [],
+      manualIds: [],
+      search: ''
+    };
+    let guessPlaybackTimer = null;
+    let guessYouTubePlayer = null;
+    let guessYouTubeApiPromise = null;
+    const guessPlayableSourceCache = new Map();
+    const guessValidatedOpeningSources = new Map();
     let seasonDocs = new Map();
     let eventRatings = [];
     let eventBasket = {};
@@ -1140,7 +1435,10 @@
         franchises: Array.isArray(row.franchises) ? row.franchises : [],
         image: String(row.image || ''),
         link: String(row.link || ''),
-        notes: String(row.notes || '')
+        notes: String(row.notes || ''),
+        isChinese: Boolean(row.isChinese || row.chinese || row.isChina || row.chineseOpening),
+        isMovie: Boolean(row.isMovie || row.movie || row.isFilm || row.filmOpening),
+        isShortened: Boolean(row.isShortened || row.shortened || row.isShort || row.short || row.shortOpening || row.shortenedOpening)
       };
     }
 
@@ -1998,7 +2296,7 @@
         return;
       }
       if (activeMode === 'guess') {
-        appEl.innerHTML = '<div class="ev-guess-placeholder">Раздел «Угадай опенинг» пока пуст.</div>';
+        renderGuessBuilder();
         return;
       }
       if (isGuest()) {
@@ -2009,6 +2307,1616 @@
       else if (activeStage === 'first') renderFirstStage();
       else if (activeStage === 'semi') renderSemiStage();
       else renderPlaceholder(activeStage);
+    }
+
+
+    function guessUniqueValues(field) {
+      const values = [];
+      const seen = new Set();
+      openings.forEach(opening => {
+        const raw = opening?.[field];
+        const list = Array.isArray(raw) ? raw : [raw];
+        list.forEach(value => {
+          const text = String(value || '').trim();
+          const key = text.toLocaleLowerCase('ru');
+          if (!text || seen.has(key)) return;
+          seen.add(key);
+          values.push(text);
+        });
+      });
+      return values.sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+    }
+
+    function guessUserOptions() {
+      const byKey = new Map();
+      const add = (nickname, nicknameKey, avatar = '') => {
+        const display = String(nickname || nicknameKey || '').trim();
+        const key = normalizeNickname(nicknameKey || display);
+        if (!display || !key) return;
+        const current = byKey.get(key) || {};
+        byKey.set(key, {
+          key,
+          nickname: String(current.nickname || display).trim(),
+          avatar: String(current.avatar || avatar || '').trim()
+        });
+      };
+      userProfiles.forEach(profile => add(profile.nickname || profile.displayName || profile.id, profile.nicknameKey || profile.id, profile.avatar));
+      mainRatings.forEach(rating => add(rating.nickname || rating.nicknameKey, rating.nicknameKey, rating.avatar));
+      return [...byKey.values()].sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru', { sensitivity: 'base' }));
+    }
+
+    function guessSelectOptions(values, selected, allLabel = 'Все') {
+      return `<option value="">${escapeHtml(allLabel)}</option>${values.map(value => `<option value="${escapeHtml(value)}" ${String(selected) === String(value) ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}`;
+    }
+
+    function guessContentFlags(mode) {
+      const normalized = ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(mode) ? mode : 'all';
+      return {
+        showChinese: ['chinese', 'chinese-movie', 'chinese-shortened', 'all'].includes(normalized),
+        showMovie: ['movie', 'chinese-movie', 'movie-shortened', 'all'].includes(normalized),
+        showShortened: ['shortened', 'chinese-shortened', 'movie-shortened', 'all'].includes(normalized)
+      };
+    }
+
+    function guessCompare(value, cmp, target) {
+      if (!Number.isFinite(value) || !Number.isFinite(target)) return false;
+      if (cmp === 'gt') return value > target;
+      if (cmp === 'eq') return Math.abs(value - target) < 0.0001;
+      if (cmp === 'lte') return value <= target;
+      if (cmp === 'lt') return value < target;
+      return value >= target;
+    }
+
+    function buildGuessRatingContext() {
+      const selectedUsers = new Set((guessFilters.users || []).map(normalizeNickname).filter(Boolean));
+      const metric = ['score', 'songScore', 'visualScore'].includes(guessFilters.scoreMetric) ? guessFilters.scoreMetric : 'score';
+      const allRatingUsers = new Set();
+      mainRatings.forEach(rating => {
+        const userKey = normalizeNickname(rating.nicknameKey || rating.nickname || '');
+        if (userKey) allRatingUsers.add(userKey);
+      });
+      const allUsersSelected = !selectedUsers.size || (allRatingUsers.size > 0 && [...allRatingUsers].every(key => selectedUsers.has(key)));
+      const valuesByOpening = new Map();
+      mainRatings.forEach(rating => {
+        const openingId = String(rating.openingId || '');
+        const userKey = normalizeNickname(rating.nicknameKey || rating.nickname || '');
+        const value = Number(rating[metric]);
+        if (!openingId || !Number.isFinite(value)) return;
+        if (selectedUsers.size && !selectedUsers.has(userKey)) return;
+        if (!valuesByOpening.has(openingId)) valuesByOpening.set(openingId, []);
+        valuesByOpening.get(openingId).push(value);
+      });
+      return { selectedUsers, metric, allUsersSelected, valuesByOpening };
+    }
+
+    function guessOpeningMatches(opening, ratingContext = null) {
+      const search = String(guessFilters.search || '').trim().toLocaleLowerCase('ru');
+      if (search) {
+        const haystack = [
+          opening.title,
+          opening.anime,
+          ...(opening.studios || []),
+          ...(opening.directors || []),
+          ...(opening.performers || []),
+          ...(opening.franchises || [])
+        ].join(' ').toLocaleLowerCase('ru');
+        if (!haystack.includes(search)) return false;
+      }
+      if (guessFilters.type && opening.type !== guessFilters.type) return false;
+      if (guessFilters.year && String(opening.year ?? '') !== String(guessFilters.year)) return false;
+      if (guessFilters.season && opening.season !== guessFilters.season) return false;
+      if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
+      if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
+      if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
+      if (guessFilters.franchise && !(opening.franchises || []).includes(guessFilters.franchise)) return false;
+      if (guessFilters.answerTarget === 'franchise' && !(opening.franchises || []).some(value => String(value || '').trim())) return false;
+
+      const content = guessContentFlags(guessFilters.content);
+      if (!content.showChinese && opening.isChinese) return false;
+      if (!content.showMovie && opening.isMovie) return false;
+      if (!content.showShortened && opening.isShortened) return false;
+
+      if (guessFilters.source === 'ratings') {
+        const context = ratingContext || buildGuessRatingContext();
+        const values = context.valuesByOpening.get(String(opening.id)) || [];
+        if (!values.length) return false;
+        const target = Number(guessFilters.scoreValue);
+        if (context.allUsersSelected) {
+          const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+          if (!guessCompare(average, guessFilters.scoreCmp, target)) return false;
+        } else if (!values.some(value => guessCompare(value, guessFilters.scoreCmp, target))) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function getGuessCandidates() {
+      const ratingContext = guessFilters.source === 'ratings' ? buildGuessRatingContext() : null;
+      return openings.filter(opening => guessOpeningMatches(opening, ratingContext) && !!getGuessPlaybackSource(opening));
+    }
+
+    function guessShuffle(rows) {
+      const out = [...rows];
+      for (let idx = out.length - 1; idx > 0; idx -= 1) {
+        const swapIdx = Math.floor(Math.random() * (idx + 1));
+        [out[idx], out[swapIdx]] = [out[swapIdx], out[idx]];
+      }
+      return out;
+    }
+
+    function getGuessAnswerForOpening(openingId) {
+      return (guessGameState?.answers || []).find(answer => String(answer.openingId) === String(openingId)) || null;
+    }
+
+    function renderGuessResultCard(opening, index) {
+      const image = opening.image
+        ? `<img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
+        : escapeHtml(opening.type || 'OP');
+      const season = SEASON_LABEL[opening.season] || opening.season || 'сезон не указан';
+      const studio = (opening.studios || []).slice(0, 2).join(', ') || 'студия не указана';
+      const answer = getGuessAnswerForOpening(opening.id);
+      const stateClass = answer ? (answer.correct ? 'correct' : 'wrong') : '';
+      const status = answer
+        ? `<div class="ev-guess-result-status ${stateClass}">${answer.correct ? '✓ Угадано' : '✕ Не угадано'}</div>`
+        : '';
+      return `
+        <article class="ev-guess-result ${stateClass}">
+          <div class="ev-guess-result-thumb">${image}</div>
+          <div>
+            <div class="ev-guess-result-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div>
+            <div class="ev-guess-result-meta">${escapeHtml(opening.type)} · ${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)}<br>${escapeHtml(studio)}</div>
+            ${status}
+          </div>
+        </article>
+      `;
+    }
+
+    function guessClamp(value, min, max, fallback) {
+      const number = Number(value);
+      return Math.max(min, Math.min(max, Number.isFinite(number) ? number : fallback));
+    }
+
+    function resetGuessGame(clearSelection = false) {
+      stopGuessPlayback();
+      guessGameState = null;
+      if (guessGameEl) {
+        guessGameEl.classList.add('hidden');
+        guessGameEl.innerHTML = '';
+      }
+      if (clearSelection) {
+        guessResultIds = [];
+        guessMessage = '';
+      }
+    }
+
+    function guessTitleCatalog() {
+      const byKey = new Map();
+      openings.forEach(opening => {
+        [getOpeningTitle(opening), opening.anime].forEach(value => {
+          const title = String(value || '').trim();
+          const key = title.toLocaleLowerCase('ru').replace(/\s+/g, ' ');
+          if (!title || !key || byKey.has(key)) return;
+          byKey.set(key, title);
+        });
+      });
+      return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+    }
+
+    function guessFranchiseCatalog() {
+      const byKey = new Map();
+      openings.forEach(opening => {
+        (opening.franchises || []).forEach(value => {
+          const title = String(value || '').trim();
+          const key = normalizeGuessAnswer(title);
+          if (!title || !key || byKey.has(key)) return;
+          byKey.set(key, title);
+        });
+      });
+      return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+    }
+
+    function guessAnswerCatalog() {
+      return guessFilters.answerTarget === 'franchise' ? guessFranchiseCatalog() : guessTitleCatalog();
+    }
+
+    function normalizeGuessAnswer(value) {
+      return String(value || '')
+        .trim()
+        .toLocaleLowerCase('ru')
+        .replace(/[«»"']/g, '')
+        .replace(/\s+/g, ' ');
+    }
+
+    function stripGuessVersion(value) {
+      return normalizeGuessAnswer(value)
+        .replace(/версия\s*(?:№|#)?\s*\d*/giu, ' ')
+        .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, ' ')
+        .replace(/\s*[-–—:,]\s*$/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function openingGuessLabels(opening) {
+      if (guessFilters.answerTarget === 'franchise') {
+        return [...new Set((opening?.franchises || []).map(value => String(value || '').trim()).filter(Boolean))];
+      }
+      return [...new Set([getOpeningTitle(opening), opening?.anime].map(value => String(value || '').trim()).filter(Boolean))];
+    }
+
+    function getGuessCorrectDisplay(opening) {
+      const labels = openingGuessLabels(opening);
+      if (guessFilters.answerTarget === 'franchise') return labels.join(' / ') || 'Франшиза не указана';
+      return labels[0] || getOpeningTitle(opening);
+    }
+
+    function acceptedGuessAnswers(opening) {
+      return openingGuessLabels(opening).map(normalizeGuessAnswer).filter(Boolean);
+    }
+
+    function evaluateGuessAnswer(opening, answerValue) {
+      const answer = normalizeGuessAnswer(answerValue);
+      if (!answer) return { correct: false, exact: false, quality: 'wrong' };
+      const labels = openingGuessLabels(opening);
+      const normalizedLabels = labels.map(normalizeGuessAnswer).filter(Boolean);
+      if (guessFilters.answerTarget === 'franchise' && normalizedLabels.includes(answer)) {
+        return { correct: true, exact: true, quality: 'exact' };
+      }
+      const primary = normalizeGuessAnswer(getOpeningTitle(opening));
+      if (guessFilters.answerTarget === 'song' && answer === primary) {
+        return { correct: true, exact: true, quality: 'exact' };
+      }
+      if (guessFilters.answerTarget === 'song' && normalizedLabels.includes(answer)) {
+        return { correct: true, exact: false, quality: 'accepted-alias' };
+      }
+      if (guessFilters.answerTarget === 'song') {
+        const versionLabels = labels.filter(label => /версия/iu.test(label));
+        const answerBase = stripGuessVersion(answer);
+        if (answerBase && versionLabels.some(label => stripGuessVersion(label) === answerBase)) {
+          return { correct: true, exact: false, quality: 'accepted-version' };
+        }
+      }
+      return { correct: false, exact: false, quality: 'wrong' };
+    }
+
+    function buildGuessOptions(opening) {
+      const correct = openingGuessLabels(opening)[0] || getOpeningTitle(opening);
+      const distractors = guessShuffle(guessAnswerCatalog().filter(value => !evaluateGuessAnswer(opening, value).correct)).slice(0, 3);
+      return guessShuffle([correct, ...distractors]);
+    }
+
+    function buildGuessWave(index = 0) {
+      return Array.from({ length: 48 }, (_, barIndex) => {
+        const height = 18 + ((barIndex * 37 + index * 19) % 75);
+        const delay = -((barIndex * 41) % 620);
+        return `<span style="--bar-height:${height}%;--bar-delay:${delay}ms"></span>`;
+      }).join('');
+    }
+
+    function getYouTubeVideoId(value) {
+      const href = safeUrl(value);
+      if (!href) return '';
+      try {
+        const url = new URL(href);
+        const host = url.hostname.replace(/^www\./, '').toLowerCase();
+        if (host === 'youtu.be') return String(url.pathname.split('/').filter(Boolean)[0] || '').trim();
+        if (!host.endsWith('youtube.com')) return '';
+        if (url.pathname.startsWith('/shorts/') || url.pathname.startsWith('/embed/') || url.pathname.startsWith('/live/')) {
+          return String(url.pathname.split('/').filter(Boolean)[1] || '').trim();
+        }
+        return String(url.searchParams.get('v') || '').trim();
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function getGuessPlaybackSources(opening) {
+      const urls = [opening?.link, ...getAltLinks(opening?.id).map(link => link.url)].map(safeUrl).filter(Boolean);
+      const sources = [];
+      const seen = new Set();
+      const add = source => {
+        if (!source || seen.has(source.key)) return;
+        seen.add(source.key);
+        sources.push(source);
+      };
+      urls.forEach(url => {
+        const directType = getDirectVideoType(url);
+        if (directType) add({ kind: 'direct', url, mime: directType, key: `direct:${url}` });
+      });
+      urls.forEach(url => {
+        const videoId = getYouTubeVideoId(url);
+        if (videoId) add({ kind: 'youtube', url, videoId, key: `youtube:${videoId}` });
+      });
+      return sources;
+    }
+
+    function getGuessPlaybackSource(opening) {
+      const openingId = String(opening?.id || '');
+      return guessValidatedOpeningSources.get(openingId) || getGuessPlaybackSources(opening)[0] || null;
+    }
+
+    function ensureYouTubeIframeApi() {
+      if (window.YT?.Player) return Promise.resolve(window.YT);
+      if (guessYouTubeApiPromise) return guessYouTubeApiPromise;
+      guessYouTubeApiPromise = new Promise((resolve, reject) => {
+        const previousReady = window.onYouTubeIframeAPIReady;
+        let settled = false;
+        const finish = () => {
+          if (settled || !window.YT?.Player) return;
+          settled = true;
+          resolve(window.YT);
+        };
+        window.onYouTubeIframeAPIReady = () => {
+          try { if (typeof previousReady === 'function') previousReady(); } catch (_) {}
+          finish();
+        };
+        if (!document.querySelector('script[data-ev-youtube-api]')) {
+          const script = document.createElement('script');
+          script.src = 'https://www.youtube.com/iframe_api';
+          script.async = true;
+          script.dataset.evYoutubeApi = '1';
+          script.onerror = () => {
+            if (settled) return;
+            settled = true;
+            guessYouTubeApiPromise = null;
+            reject(new Error('YouTube IFrame API load failed'));
+          };
+          document.head.appendChild(script);
+        }
+        const timer = setInterval(() => {
+          if (window.YT?.Player) {
+            clearInterval(timer);
+            finish();
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(timer);
+          if (settled) return;
+          settled = true;
+          guessYouTubeApiPromise = null;
+          reject(new Error('YouTube IFrame API timeout'));
+        }, 12000);
+      });
+      return guessYouTubeApiPromise;
+    }
+
+    function validateDirectGuessSource(source) {
+      return new Promise(resolve => {
+        const media = document.createElement('video');
+        let settled = false;
+        const finish = (ok, duration = 0) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try { media.pause(); media.removeAttribute('src'); media.load(); } catch (_) {}
+          resolve({ ok: !!ok, duration: Number(duration) || 0, source });
+        };
+        const ready = () => {
+          const duration = Number(media.duration);
+          finish(Number.isFinite(duration) && duration > 0.15, duration);
+        };
+        const timer = setTimeout(() => finish(false, 0), 9000);
+        media.preload = 'metadata';
+        media.muted = true;
+        media.playsInline = true;
+        media.addEventListener('loadedmetadata', ready, { once: true });
+        media.addEventListener('durationchange', () => {
+          if (Number.isFinite(media.duration) && media.duration > 0.15) ready();
+        }, { once: true });
+        media.addEventListener('error', () => finish(false, 0), { once: true });
+        media.src = source.url;
+        try { media.load(); } catch (_) { finish(false, 0); }
+      });
+    }
+
+    async function validateYouTubeGuessSource(source) {
+      try {
+        const YT = await ensureYouTubeIframeApi();
+        return await new Promise(resolve => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'ev-guess-hidden-youtube';
+          const host = document.createElement('div');
+          wrapper.appendChild(host);
+          document.body.appendChild(wrapper);
+          let player = null;
+          let settled = false;
+          let pollTimer = null;
+          const finish = (ok, duration = 0) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (pollTimer) clearInterval(pollTimer);
+            try { player?.destroy(); } catch (_) {}
+            try { wrapper.remove(); } catch (_) {}
+            resolve({ ok: !!ok, duration: Number(duration) || 0, source });
+          };
+          const checkDuration = () => {
+            let duration = 0;
+            try { duration = Number(player?.getDuration?.() || 0); } catch (_) {}
+            if (Number.isFinite(duration) && duration > 0.15) finish(true, duration);
+          };
+          const timeout = setTimeout(() => finish(false, 0), 10000);
+          try {
+            player = new YT.Player(host, {
+              width: 200,
+              height: 200,
+              videoId: source.videoId,
+              playerVars: { controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
+              events: {
+                onReady: event => {
+                  try { event.target.mute(); event.target.cueVideoById(source.videoId); } catch (_) {}
+                  pollTimer = setInterval(checkDuration, 180);
+                  checkDuration();
+                },
+                onStateChange: checkDuration,
+                onError: () => finish(false, 0)
+              }
+            });
+          } catch (_) {
+            finish(false, 0);
+          }
+        });
+      } catch (_) {
+        return { ok: false, duration: 0, source };
+      }
+    }
+
+    async function validateGuessOpeningPlayback(opening) {
+      const openingId = String(opening?.id || '');
+      const sources = getGuessPlaybackSources(opening);
+      if (!sources.length) return { ok: false, duration: 0, source: null };
+      for (const source of sources) {
+        let result;
+        if (guessPlayableSourceCache.has(source.key)) {
+          result = await guessPlayableSourceCache.get(source.key);
+        } else {
+          const promise = source.kind === 'youtube' ? validateYouTubeGuessSource(source) : validateDirectGuessSource(source);
+          guessPlayableSourceCache.set(source.key, promise);
+          result = await promise;
+          guessPlayableSourceCache.set(source.key, Promise.resolve(result));
+        }
+        if (result.ok) {
+          guessValidatedOpeningSources.set(openingId, source);
+          return result;
+        }
+      }
+      guessValidatedOpeningSources.delete(openingId);
+      return { ok: false, duration: 0, source: null };
+    }
+
+    async function selectValidatedGuessOpenings(candidates, wanted, onProgress) {
+      const queue = guessShuffle(candidates);
+      const selected = [];
+      let checked = 0;
+      const batchSize = 4;
+      for (let offset = 0; offset < queue.length && selected.length < wanted; offset += batchSize) {
+        const batch = queue.slice(offset, offset + batchSize);
+        const results = await Promise.all(batch.map(opening => validateGuessOpeningPlayback(opening)));
+        results.forEach((result, idx) => {
+          checked += 1;
+          if (result.ok && selected.length < wanted) selected.push(batch[idx]);
+        });
+        onProgress?.(checked, queue.length, selected.length);
+      }
+      return { selected, checked };
+    }
+
+    function stopGuessPlayback() {
+      if (guessPlaybackTimer) {
+        clearTimeout(guessPlaybackTimer);
+        guessPlaybackTimer = null;
+      }
+      const media = guessGameEl?.querySelector('#ev-guess-media');
+      if (media) {
+        try { media.pause(); } catch (_) {}
+      }
+      if (guessYouTubePlayer) {
+        try { guessYouTubePlayer.pauseVideo(); } catch (_) {}
+      }
+      if (guessGameState) guessGameState.isPlaying = false;
+      guessGameEl?.querySelector('#ev-guess-wave')?.classList.remove('playing');
+    }
+
+    function updateGuessPlaybackUi() {
+      if (!guessGameState) return;
+      const button = guessGameEl?.querySelector('#ev-guess-play');
+      const counter = guessGameEl?.querySelector('#ev-guess-listens-left');
+      const wave = guessGameEl?.querySelector('#ev-guess-wave');
+      if (counter) counter.textContent = String(Math.max(0, guessGameState.listensLeft));
+      if (button) {
+        const ready = button.dataset.ready === '1';
+        button.disabled = guessGameState.answered || (!guessGameState.isPlaying && (!ready || guessGameState.listensLeft <= 0));
+        button.textContent = guessGameState.isPlaying ? '■ Остановить' : guessGameState.listensLeft > 0 ? '▶ Прослушать фрагмент' : 'Прослушивания закончились';
+      }
+      wave?.classList.toggle('playing', !!guessGameState.isPlaying);
+    }
+
+    function setGuessMediaStatus(text, bad = false) {
+      const status = guessGameEl?.querySelector('#ev-guess-media-status');
+      if (!status) return;
+      status.textContent = text || '';
+      status.classList.toggle('bad', !!bad);
+    }
+
+    function setGuessSegmentReady(duration, sourceLabel = '') {
+      if (!guessGameState) return;
+      const button = guessGameEl?.querySelector('#ev-guess-play');
+      if (!button) return;
+      const index = guessGameState.index;
+      const clipSeconds = guessClamp(guessFilters.clipSeconds, 1, 90, 10);
+      const safeDuration = Number.isFinite(Number(duration)) && Number(duration) > 0 ? Number(duration) : 0;
+      if (!safeDuration) return;
+      const allowedEnd = Math.max(0.1, Math.min(90, safeDuration));
+      const actualLength = Math.min(clipSeconds, allowedEnd);
+      if (!Number.isFinite(guessGameState.segmentStarts[index])) {
+        guessGameState.segmentStarts[index] = Math.random() * Math.max(0, allowedEnd - actualLength);
+      }
+      guessGameState.segmentLengths[index] = actualLength;
+      button.dataset.ready = '1';
+      const sourceText = sourceLabel ? ` · ${sourceLabel}` : '';
+      const fullNote = actualLength >= allowedEnd - 0.05 && safeDuration < clipSeconds
+        ? ` Ролик короче выбранной длины — будет воспроизведён весь доступный фрагмент.`
+        : '';
+      setGuessMediaStatus(`Фрагмент: ${Math.max(1, Math.round(actualLength))} сек. Точка выбрана внутри первых ${Math.max(1, Math.round(allowedEnd))} сек.${sourceText}${fullNote}`);
+      updateGuessPlaybackUi();
+    }
+
+    function prepareDirectGuessMedia(source) {
+      const media = guessGameEl?.querySelector('#ev-guess-media');
+      const button = guessGameEl?.querySelector('#ev-guess-play');
+      if (!media || !button) return;
+      const markReady = () => setGuessSegmentReady(media.duration, 'прямая ссылка');
+      media.addEventListener('loadedmetadata', markReady, { once: true });
+      media.addEventListener('canplay', () => {
+        if (button.dataset.ready !== '1') markReady();
+      }, { once: true });
+      media.addEventListener('error', () => {
+        button.dataset.ready = '0';
+        button.disabled = true;
+        setGuessMediaStatus('Источник перестал открываться. Этот вопрос не должен был попасть в выборку; пересоздай угадайку, чтобы заменить его.', true);
+      }, { once: true });
+      if (media.readyState >= 1) markReady();
+      else {
+        setGuessMediaStatus('Загрузка аудиофрагмента…');
+        try { media.load(); } catch (_) {}
+      }
+    }
+
+    async function prepareYouTubeGuessMedia(source) {
+      const host = guessGameEl?.querySelector('#ev-guess-youtube-player');
+      const button = guessGameEl?.querySelector('#ev-guess-play');
+      if (!host || !button) return;
+      setGuessMediaStatus('Подключение YouTube-плеера…');
+      try {
+        const YT = await ensureYouTubeIframeApi();
+        if (!guessGameState || guessGameState.completed || guessGameState.answered || !host.isConnected) return;
+        let readyMarked = false;
+        let pollTimer = null;
+        const markReady = () => {
+          let duration = 0;
+          try { duration = Number(guessYouTubePlayer?.getDuration?.() || 0); } catch (_) {}
+          if (!Number.isFinite(duration) || duration <= 0.15) return;
+          readyMarked = true;
+          if (pollTimer) clearInterval(pollTimer);
+          setGuessSegmentReady(duration, 'YouTube');
+        };
+        guessYouTubePlayer = new YT.Player(host, {
+          width: 200,
+          height: 200,
+          videoId: source.videoId,
+          playerVars: { controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
+          events: {
+            onReady: event => {
+              try { event.target.unMute(); event.target.cueVideoById(source.videoId); } catch (_) {}
+              pollTimer = setInterval(markReady, 180);
+              markReady();
+            },
+            onStateChange: markReady,
+            onError: () => {
+              if (pollTimer) clearInterval(pollTimer);
+              button.dataset.ready = '0';
+              button.disabled = true;
+              setGuessMediaStatus('YouTube не разрешил встроенное воспроизведение этого ролика. Пересоздай угадайку — такая песня будет исключена при повторной проверке.', true);
+              guessPlayableSourceCache.set(source.key, Promise.resolve({ ok: false, duration: 0, source }));
+            }
+          }
+        });
+        setTimeout(() => {
+          if (!readyMarked && button.dataset.ready !== '1') {
+            if (pollTimer) clearInterval(pollTimer);
+            button.disabled = true;
+            setGuessMediaStatus('YouTube-плеер не успел подготовить ролик. Пересоздай угадайку для повторной проверки источника.', true);
+          }
+        }, 10000);
+      } catch (error) {
+        console.error('youtube guess player failed', error);
+        button.disabled = true;
+        setGuessMediaStatus('Не удалось загрузить YouTube-плеер.', true);
+      }
+    }
+
+    function prepareGuessMedia(source) {
+      if (!guessGameState || guessGameState.completed || guessGameState.answered || !source) return;
+      if (source.kind === 'youtube') prepareYouTubeGuessMedia(source);
+      else prepareDirectGuessMedia(source);
+    }
+
+    async function toggleGuessPlayback() {
+      if (!guessGameState || guessGameState.answered || guessGameState.completed) return;
+      const opening = currentGuessOpening();
+      const source = getGuessPlaybackSource(opening);
+      const media = guessGameEl?.querySelector('#ev-guess-media');
+      const button = guessGameEl?.querySelector('#ev-guess-play');
+      if (!source || !button) return;
+      if (guessGameState.isPlaying) {
+        stopGuessPlayback();
+        updateGuessPlaybackUi();
+        return;
+      }
+      if (button.dataset.ready !== '1' || guessGameState.listensLeft <= 0) return;
+
+      const index = guessGameState.index;
+      const start = Number(guessGameState.segmentStarts[index]) || 0;
+      const length = Number(guessGameState.segmentLengths[index]) || guessClamp(guessFilters.clipSeconds, 1, 90, 10);
+      try {
+        guessGameState.listensLeft -= 1;
+        guessGameState.isPlaying = true;
+        updateGuessPlaybackUi();
+        if (source.kind === 'youtube') {
+          if (!guessYouTubePlayer) throw new Error('YouTube player is not ready');
+          guessYouTubePlayer.seekTo(start, true);
+          guessYouTubePlayer.playVideo();
+        } else {
+          if (!media) throw new Error('Direct media element is missing');
+          media.currentTime = start;
+          await media.play();
+        }
+        guessPlaybackTimer = setTimeout(() => {
+          stopGuessPlayback();
+          updateGuessPlaybackUi();
+        }, Math.max(300, length * 1000));
+      } catch (error) {
+        console.error('guess playback failed', error);
+        guessGameState.listensLeft += 1;
+        guessGameState.isPlaying = false;
+        setGuessMediaStatus('Браузер не смог запустить этот источник. Прослушивание не списано.', true);
+        updateGuessPlaybackUi();
+      }
+    }
+
+    function currentGuessOpening() {
+      if (!guessGameState) return null;
+      return openingsById.get(String(guessGameState.ids[guessGameState.index])) || null;
+    }
+
+    function beginGuessGame(ids = guessResultIds) {
+      const cleanIds = (ids || []).map(String).filter(id => openingsById.has(id));
+      if (!cleanIds.length) return;
+      stopGuessPlayback();
+      guessGameState = {
+        ids: cleanIds,
+        index: 0,
+        correct: 0,
+        wrong: 0,
+        answers: [],
+        options: {},
+        segmentStarts: {},
+        segmentLengths: {},
+        listensLeft: guessClamp(guessFilters.listenCount, 1, 10, 3),
+        answered: false,
+        selectedAnswer: '',
+        wasCorrect: false,
+        answerQuality: 'wrong',
+        completed: false,
+        isPlaying: false
+      };
+      renderGuessGame();
+    }
+
+    function closeGuessGame() {
+      stopGuessPlayback();
+      if (guessYouTubePlayer) {
+        try { guessYouTubePlayer.destroy(); } catch (_) {}
+        guessYouTubePlayer = null;
+      }
+      guessGameEl?.classList.add('hidden');
+    }
+
+    function advanceGuessGame() {
+      if (!guessGameState) return;
+      if (guessGameState.index >= guessGameState.ids.length - 1) {
+        guessGameState.completed = true;
+      } else {
+        guessGameState.index += 1;
+        guessGameState.listensLeft = guessClamp(guessFilters.listenCount, 1, 10, 3);
+        guessGameState.answered = false;
+        guessGameState.selectedAnswer = '';
+        guessGameState.wasCorrect = false;
+        guessGameState.answerQuality = 'wrong';
+      }
+      render();
+      renderGuessGame();
+    }
+
+    function submitGuessAnswer(answerValue, skipped = false) {
+      if (!guessGameState || guessGameState.answered || guessGameState.completed) return;
+      const opening = currentGuessOpening();
+      if (!opening) return;
+      stopGuessPlayback();
+      const answer = String(answerValue || '').trim();
+      const verdict = skipped ? { correct: false, exact: false, quality: 'wrong' } : evaluateGuessAnswer(opening, answer);
+      const correct = verdict.correct;
+      guessGameState.answered = true;
+      guessGameState.selectedAnswer = answer;
+      guessGameState.wasCorrect = correct;
+      guessGameState.answerQuality = verdict.quality;
+      if (correct) guessGameState.correct += 1;
+      else guessGameState.wrong += 1;
+      guessGameState.answers.push({
+        openingId: String(opening.id),
+        answer,
+        correct,
+        exact: !!verdict.exact,
+        quality: verdict.quality,
+        skipped: !!skipped
+      });
+      render();
+      renderGuessGame();
+      setTimeout(advanceGuessGame, 1250);
+    }
+
+    function renderGuessSuggestions(query) {
+      const box = guessGameEl?.querySelector('#ev-guess-suggestions');
+      if (!box) return;
+      const needle = normalizeGuessAnswer(query);
+      if (!needle) {
+        box.classList.remove('open');
+        box.innerHTML = '';
+        return;
+      }
+      const matches = guessAnswerCatalog()
+        .filter(title => normalizeGuessAnswer(title).includes(needle))
+        .sort((a, b) => {
+          const aStarts = normalizeGuessAnswer(a).startsWith(needle) ? 0 : 1;
+          const bStarts = normalizeGuessAnswer(b).startsWith(needle) ? 0 : 1;
+          return aStarts - bStarts || a.localeCompare(b, 'ru', { sensitivity: 'base' });
+        })
+        .slice(0, 8);
+      box.innerHTML = matches.map(title => `<button type="button" class="ev-guess-suggestion" data-guess-suggestion="${escapeHtml(title)}">${escapeHtml(title)}</button>`).join('');
+      box.classList.toggle('open', matches.length > 0);
+      box.querySelectorAll('[data-guess-suggestion]').forEach(button => {
+        button.addEventListener('click', () => {
+          const input = guessGameEl?.querySelector('#ev-guess-manual-input');
+          if (input) input.value = button.dataset.guessSuggestion || '';
+          box.classList.remove('open');
+          input?.focus();
+        });
+      });
+    }
+
+    function renderGuessGame() {
+      if (!guessGameState || !guessGameEl) return;
+      stopGuessPlayback();
+      if (guessYouTubePlayer) {
+        try { guessYouTubePlayer.destroy(); } catch (_) {}
+        guessYouTubePlayer = null;
+      }
+      guessGameEl.classList.remove('hidden');
+
+      if (guessGameState.completed) {
+        const total = guessGameState.ids.length;
+        guessGameEl.innerHTML = `
+          <div class="ev-dialog ev-guess-game-dialog">
+            <div class="ev-guess-summary">
+              <div class="ev-section-label">Готово</div>
+              <h2 class="ev-guess-game-title">Угадайка завершена</h2>
+              <div class="ev-guess-summary-score">${guessGameState.correct}/${total}</div>
+              <div class="ev-guess-summary-note">Ошибок: ${guessGameState.wrong}. Результаты отмечены в списке песен под конструктором.</div>
+              <div class="ev-modal-actions" style="justify-content:center;margin-top:20px;">
+                <button type="button" class="ev-btn-secondary" id="ev-guess-replay">Пройти ещё раз</button>
+                <button type="button" class="ev-btn-main" id="ev-guess-finish">Закрыть</button>
+              </div>
+            </div>
+          </div>`;
+        $('#ev-guess-replay')?.addEventListener('click', () => beginGuessGame(guessGameState.ids));
+        $('#ev-guess-finish')?.addEventListener('click', closeGuessGame);
+        return;
+      }
+
+      const opening = currentGuessOpening();
+      if (!opening) {
+        guessGameEl.innerHTML = '<div class="ev-dialog ev-guess-game-dialog"><div class="ev-empty">Песня не найдена в базе.</div></div>';
+        return;
+      }
+      const currentNumber = guessGameState.index + 1;
+      const total = guessGameState.ids.length;
+      const playbackSource = getGuessPlaybackSource(opening);
+      if (!guessGameState.options[guessGameState.index]) guessGameState.options[guessGameState.index] = buildGuessOptions(opening);
+      const options = guessGameState.options[guessGameState.index];
+      const correctDisplay = getGuessCorrectDisplay(opening);
+      const selectedKey = normalizeGuessAnswer(guessGameState.selectedAnswer);
+      const manualPlaceholder = guessFilters.answerTarget === 'franchise' ? 'Начни вводить франшизу…' : 'Начни вводить название песни…';
+
+      const answerHtml = guessFilters.answerMode === 'manual'
+        ? `
+          <div class="ev-guess-manual">
+            <div class="ev-guess-manual-row">
+              <input id="ev-guess-manual-input" type="text" autocomplete="off" placeholder="${manualPlaceholder}" ${guessGameState.answered ? 'disabled' : ''} />
+              <button type="button" class="ev-btn-main" id="ev-guess-manual-submit" ${guessGameState.answered ? 'disabled' : ''}>Ответить</button>
+            </div>
+            <div class="ev-guess-suggestions" id="ev-guess-suggestions"></div>
+          </div>`
+        : `<div class="ev-guess-options">${options.map(option => {
+            const key = normalizeGuessAnswer(option);
+            const optionIsCorrect = evaluateGuessAnswer(opening, option).correct;
+            let stateClass = '';
+            if (guessGameState.answered && optionIsCorrect) stateClass = 'correct';
+            else if (guessGameState.answered && key === selectedKey && !guessGameState.wasCorrect) stateClass = 'wrong';
+            return `<button type="button" class="ev-guess-option ${stateClass}" data-guess-answer="${escapeHtml(option)}" ${guessGameState.answered ? 'disabled' : ''}>${escapeHtml(option)}</button>`;
+          }).join('')}</div>`;
+
+      const feedbackTitle = guessGameState.wasCorrect
+        ? (guessGameState.answerQuality === 'exact' ? 'Супер правильно!' : 'Правильно!')
+        : 'Неверно';
+      const feedback = guessGameState.answered
+        ? `<div class="ev-guess-feedback ${guessGameState.wasCorrect ? 'correct' : 'wrong'}">
+            <div class="ev-guess-feedback-icon">${guessGameState.wasCorrect ? '✓' : '×'}</div>
+            <div class="ev-guess-feedback-title">${feedbackTitle}</div>
+            <div class="ev-guess-feedback-answer">${guessGameState.wasCorrect ? escapeHtml(correctDisplay) : `Правильный ответ: ${escapeHtml(correctDisplay)}`}</div>
+          </div>`
+        : '';
+
+      guessGameEl.innerHTML = `
+        <div class="ev-dialog ev-guess-game-dialog">
+          <div class="ev-guess-game-top">
+            <div>
+              <div class="ev-progress">Песня ${currentNumber} из ${total} · правильных: ${guessGameState.correct}</div>
+              <h2 class="ev-guess-game-title">${guessFilters.answerTarget === 'franchise' ? 'Угадай франшизу' : 'Угадай песню'}</h2>
+            </div>
+            <button type="button" class="ev-close" id="ev-guess-close">Закрыть</button>
+          </div>
+
+          <section class="ev-guess-audio-card">
+            <div class="ev-guess-wave" id="ev-guess-wave">${buildGuessWave(guessGameState.index)}</div>
+            <div class="ev-guess-audio-controls">
+              <button type="button" class="ev-btn-main ev-guess-play" id="ev-guess-play" data-ready="0" disabled>Загрузка…</button>
+              <div class="ev-guess-listens">Осталось прослушиваний: <strong id="ev-guess-listens-left">${guessGameState.listensLeft}</strong></div>
+            </div>
+            <div class="ev-guess-media-status" id="ev-guess-media-status"></div>
+            ${playbackSource?.kind === 'direct' ? `<video id="ev-guess-media" class="ev-guess-hidden-media" preload="metadata" playsinline src="${escapeHtml(playbackSource.url)}"></video>` : ''}
+            ${playbackSource?.kind === 'youtube' ? '<div class="ev-guess-hidden-youtube"><div id="ev-guess-youtube-player"></div></div>' : ''}
+          </section>
+
+          <section class="ev-guess-answer-box">
+            <div class="ev-guess-label" style="margin-bottom:10px;">${guessFilters.answerMode === 'manual' ? (guessFilters.answerTarget === 'franchise' ? 'Введи франшизу' : 'Введи песню') : (guessFilters.answerTarget === 'franchise' ? 'Выбери франшизу' : 'Выбери песню')}</div>
+            ${answerHtml}
+          </section>
+
+          <div class="ev-guess-game-actions">
+            <div class="ev-guess-note">Используется один случайный фрагмент из первых 90 секунд.</div>
+            <button type="button" class="ev-btn-ghost" id="ev-guess-skip" ${guessGameState.answered ? 'disabled' : ''}>Пропустить</button>
+          </div>
+          ${feedback}
+        </div>`;
+
+      $('#ev-guess-close')?.addEventListener('click', closeGuessGame);
+      $('#ev-guess-play')?.addEventListener('click', toggleGuessPlayback);
+      $('#ev-guess-skip')?.addEventListener('click', () => submitGuessAnswer('', true));
+      guessGameEl.querySelectorAll('[data-guess-answer]').forEach(button => {
+        button.addEventListener('click', () => submitGuessAnswer(button.dataset.guessAnswer || ''));
+      });
+      const manualInput = $('#ev-guess-manual-input');
+      const submitManual = () => {
+        const value = String(manualInput?.value || '').trim();
+        if (value) submitGuessAnswer(value);
+      };
+      manualInput?.addEventListener('input', () => renderGuessSuggestions(manualInput.value));
+      manualInput?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submitManual();
+        }
+      });
+      $('#ev-guess-manual-submit')?.addEventListener('click', submitManual);
+
+      if (!playbackSource) {
+        const button = $('#ev-guess-play');
+        if (button) button.disabled = true;
+        setGuessMediaStatus('У песни нет поддерживаемого источника. Она не должна была попасть в выборку.', true);
+      } else {
+        prepareGuessMedia(playbackSource);
+      }
+    }
+
+    function getGuessCollectionDraftIds() {
+      const seen = new Set();
+      return [...(guessCollectionDraft.autoIds || []), ...(guessCollectionDraft.manualIds || [])]
+        .map(String)
+        .filter(id => id && !seen.has(id) && seen.add(id));
+    }
+
+    function canManageGuessCollection(row) {
+      if (isAdmin()) return true;
+      const ownerKey = normalizeNickname(row?.authorKey || row?.author || '');
+      return !!ownerKey && ownerKey === normalizeNickname(myName);
+    }
+
+    function openGuessCollectionBuilder(row = null) {
+      if (row) {
+        const ids = (row.openingIds || []).map(String).filter(id => openingsById.has(id));
+        guessFilters.count = guessClamp(ids.length || row.count || 1, 1, 200, 1);
+        guessFilters.answerMode = row.answerMode === 'manual' ? 'manual' : 'four';
+        guessFilters.answerTarget = row.answerTarget === 'franchise' ? 'franchise' : 'song';
+        guessFilters.clipSeconds = guessClamp(row.clipSeconds, 1, 90, 10);
+        guessFilters.listenCount = guessClamp(row.listenCount, 1, 10, 3);
+        guessCollectionDraft = {
+          open: true,
+          editId: String(row.id || ''),
+          title: String(row.title || ''),
+          autoCount: 0,
+          autoIds: [],
+          manualIds: ids,
+          search: ''
+        };
+      } else {
+        const total = guessClamp(guessFilters.count, 1, 200, 50);
+        guessCollectionDraft = {
+          open: true,
+          editId: '',
+          title: '',
+          autoCount: total,
+          autoIds: [],
+          manualIds: [],
+          search: ''
+        };
+      }
+      guessCollectionStatus = '';
+      render();
+    }
+
+    function closeGuessCollectionBuilder() {
+      guessCollectionDraft.open = false;
+      guessCollectionStatus = '';
+      render();
+    }
+
+    function renderGuessCollectionSelected() {
+      const autoSet = new Set((guessCollectionDraft.autoIds || []).map(String));
+      const ids = getGuessCollectionDraftIds();
+      if (!ids.length) return '<div class="ev-guess-empty">Автоматическая и ручная части пока пусты.</div>';
+      return `<div class="ev-guess-collection-selected">${ids.map((id, index) => {
+        const opening = openingsById.get(String(id));
+        if (!opening) return '';
+        const kind = autoSet.has(String(id)) ? 'Автоматически' : 'Вручную';
+        const franchise = (opening.franchises || []).join(', ');
+        return `<div class="ev-guess-collection-row">
+          <div class="ev-guess-collection-index">${index + 1}</div>
+          <div>
+            <div class="ev-guess-collection-title">${escapeHtml(getOpeningTitle(opening))}</div>
+            <div class="ev-guess-collection-kind">${kind}${franchise ? ` · ${escapeHtml(franchise)}` : ''}</div>
+          </div>
+          <button type="button" class="ev-guess-collection-remove" data-collection-remove="${escapeHtml(id)}">Удалить</button>
+        </div>`;
+      }).join('')}</div>`;
+    }
+
+    function renderGuessCollectionBuilder(candidates, total) {
+      if (!guessCollectionDraft.open) return '';
+      const selectedCount = getGuessCollectionDraftIds().length;
+      const autoCount = guessClamp(guessCollectionDraft.autoCount, 0, total, total);
+      const remaining = Math.max(0, total - selectedCount);
+      return `
+        <section class="ev-guess-filter-card ev-guess-collection-builder">
+          <div class="ev-guess-card-head">
+            <div>
+              <h3>${guessCollectionDraft.editId ? 'Редактирование подборки' : 'Создание подборки'}</h3>
+              <div class="ev-hint">Общее количество берётся из верхнего ползунка. Часть можно собрать автоматически по текущим фильтрам, остальные песни добавить вручную.</div>
+            </div>
+            <button type="button" class="ev-btn-ghost" id="ev-guess-collection-close">Закрыть</button>
+          </div>
+          <div class="ev-guess-collection-grid">
+            <label class="ev-guess-field">
+              <span class="ev-guess-label">Название подборки</span>
+              <input id="ev-guess-collection-title" type="text" maxlength="100" value="${escapeHtml(guessCollectionDraft.title)}" placeholder="Например: Сложные опенинги 2010-х" />
+            </label>
+            <div class="ev-guess-field">
+              <span class="ev-guess-label">Состав</span>
+              <div class="ev-guess-preview">Нужно: <strong id="ev-guess-collection-total">${total}</strong> · добавлено: <strong id="ev-guess-collection-added">${selectedCount}</strong> · осталось: <strong id="ev-guess-collection-left">${remaining}</strong></div>
+            </div>
+            <label class="ev-guess-field full">
+              <span class="ev-guess-label">Сколько подобрать автоматически</span>
+              <div class="ev-guess-count-row">
+                <input id="ev-guess-collection-auto-range" type="range" min="0" max="${total}" step="1" value="${autoCount}" />
+                <input id="ev-guess-collection-auto-number" type="number" min="0" max="${total}" step="1" value="${autoCount}" />
+              </div>
+              <span class="ev-guess-note">Автоматическая часть использует все фильтры сверху и проверяет воспроизводимость каждой ссылки.</span>
+            </label>
+            <div class="ev-guess-field full">
+              <span class="ev-guess-label">Автоматическая часть</span>
+              <button type="button" class="ev-btn-secondary" id="ev-guess-collection-auto" ${!candidates.length || autoCount <= 0 ? 'disabled' : ''}>Собрать автоматическую часть</button>
+            </div>
+            <div class="ev-guess-field full ev-guess-collection-search">
+              <span class="ev-guess-label">Добавить песню вручную</span>
+              <input id="ev-guess-collection-search" type="text" autocomplete="off" value="${escapeHtml(guessCollectionDraft.search)}" placeholder="Начни вводить название песни…" ${selectedCount >= total ? 'disabled' : ''} />
+              <div class="ev-guess-collection-suggestions" id="ev-guess-collection-suggestions"></div>
+              <span class="ev-guess-note">Показываются только песни, подходящие под текущие фильтры и имеющие поддерживаемую ссылку.</span>
+            </div>
+          </div>
+          ${renderGuessCollectionSelected()}
+          <div class="ev-guess-create-row">
+            <div class="ev-guess-collection-status" id="ev-guess-collection-status">${escapeHtml(guessCollectionStatus)}</div>
+            <button type="button" class="ev-btn-main" id="ev-guess-collection-save" ${selectedCount !== total ? 'disabled' : ''}>${guessCollectionDraft.editId ? 'Сохранить изменения' : 'Сохранить подборку'}</button>
+          </div>
+        </section>`;
+    }
+
+    function renderSavedGuessCollections() {
+      const rows = [...guessCollections].sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru', { sensitivity: 'base' }));
+      return `
+        <section class="ev-guess-results-card">
+          <div class="ev-guess-card-head">
+            <div>
+              <h3>Список подборок</h3>
+              <div class="ev-hint">Сохранённые подборки видны другим пользователям сайта и запускаются с настройками автора.</div>
+            </div>
+          </div>
+          ${rows.length ? `<div class="ev-guess-collection-list">${rows.map(row => {
+            const ids = (row.openingIds || []).map(String).filter(id => openingsById.has(id));
+            const target = row.answerTarget === 'franchise' ? 'франшиза' : 'конкретная песня';
+            const mode = row.answerMode === 'manual' ? 'ввести самому' : '4 варианта';
+            const manage = canManageGuessCollection(row);
+            return `<article class="ev-guess-collection-card">
+              <h4>${escapeHtml(row.title || 'Без названия')}</h4>
+              <div class="ev-guess-collection-meta">Автор: ${escapeHtml(row.author || '—')}<br>${ids.length} песен · ${escapeHtml(mode)} · ответ: ${escapeHtml(target)}<br>${guessClamp(row.clipSeconds,1,90,10)} сек. · ${guessClamp(row.listenCount,1,10,3)} прослуш.</div>
+              <div class="ev-guess-collection-actions">
+                <button type="button" class="ev-btn-secondary" data-collection-play="${escapeHtml(row.id)}" ${!ids.length ? 'disabled' : ''}>Играть</button>
+                ${manage ? `<button type="button" class="ev-btn-ghost" data-collection-edit="${escapeHtml(row.id)}">Изменить</button><button type="button" class="ev-btn-danger" data-collection-delete="${escapeHtml(row.id)}">Удалить</button>` : ''}
+              </div>
+            </article>`;
+          }).join('')}</div>` : '<div class="ev-guess-empty">Сохранённых подборок пока нет.</div>'}
+        </section>`;
+    }
+
+    function collectionCandidateMatches(query) {
+      const needle = normalizeGuessAnswer(query);
+      const selected = new Set(getGuessCollectionDraftIds());
+      return getGuessCandidates()
+        .filter(opening => !selected.has(String(opening.id)))
+        .filter(opening => {
+          if (!needle) return false;
+          const haystack = [getOpeningTitle(opening), opening.anime, ...(opening.franchises || []), ...(opening.performers || [])]
+            .join(' ');
+          return normalizeGuessAnswer(haystack).includes(needle);
+        })
+        .sort((a, b) => getOpeningTitle(a).localeCompare(getOpeningTitle(b), 'ru', { sensitivity: 'base' }))
+        .slice(0, 10);
+    }
+
+    function renderGuessCollectionSuggestions(query) {
+      const box = $('#ev-guess-collection-suggestions');
+      if (!box) return;
+      const matches = collectionCandidateMatches(query);
+      box.innerHTML = matches.map(opening => `<button type="button" class="ev-guess-suggestion" data-collection-add="${escapeHtml(opening.id)}"><strong>${escapeHtml(getOpeningTitle(opening))}</strong><br><span class="ev-guess-note">${escapeHtml((opening.franchises || []).join(', ') || `${opening.type} · ${opening.year || '—'}`)}</span></button>`).join('');
+      box.classList.toggle('open', matches.length > 0);
+      box.querySelectorAll('[data-collection-add]').forEach(button => {
+        button.addEventListener('click', () => addManualGuessCollectionOpening(button.dataset.collectionAdd));
+      });
+    }
+
+    async function addManualGuessCollectionOpening(openingId) {
+      const total = guessClamp(guessFilters.count, 1, 200, 50);
+      if (getGuessCollectionDraftIds().length >= total) return;
+      const opening = openingsById.get(String(openingId));
+      if (!opening) return;
+      guessCollectionStatus = `Проверяю источник: ${getOpeningTitle(opening)}…`;
+      const status = $('#ev-guess-collection-status');
+      if (status) status.textContent = guessCollectionStatus;
+      const result = await validateGuessOpeningPlayback(opening);
+      if (!result.ok) {
+        guessCollectionStatus = 'Эта песня не добавлена: ссылка не воспроизводится или YouTube запрещает встраивание.';
+        render();
+        return;
+      }
+      const selected = new Set(getGuessCollectionDraftIds());
+      if (!selected.has(String(opening.id))) guessCollectionDraft.manualIds.push(String(opening.id));
+      guessCollectionDraft.search = '';
+      guessCollectionStatus = 'Песня добавлена вручную.';
+      render();
+    }
+
+    async function fillGuessCollectionAuto() {
+      const total = guessClamp(guessFilters.count, 1, 200, 50);
+      const manualSet = new Set((guessCollectionDraft.manualIds || []).map(String));
+      const wanted = Math.min(guessClamp(guessCollectionDraft.autoCount, 0, total, total), Math.max(0, total - manualSet.size));
+      const candidates = getGuessCandidates().filter(opening => !manualSet.has(String(opening.id)));
+      const button = $('#ev-guess-collection-auto');
+      guessCollectionStatus = 'Проверяю источники для автоматической части…';
+      if (button) button.disabled = true;
+      const { selected } = await selectValidatedGuessOpenings(candidates, wanted, (done, all, valid) => {
+        if (button) button.textContent = `Проверка ${done}/${all} · найдено ${valid}`;
+      });
+      guessCollectionDraft.autoIds = selected.map(opening => String(opening.id));
+      guessCollectionStatus = selected.length < wanted
+        ? `Автоматически удалось добавить ${selected.length} из ${wanted}: остальных рабочих источников по фильтрам не найдено.`
+        : `Автоматическая часть собрана: ${selected.length} песен.`;
+      render();
+    }
+
+    async function saveGuessCollection() {
+      const total = guessClamp(guessFilters.count, 1, 200, 50);
+      const ids = getGuessCollectionDraftIds().slice(0, total);
+      const title = String($('#ev-guess-collection-title')?.value || guessCollectionDraft.title || '').trim();
+      guessCollectionDraft.title = title;
+      if (!title) {
+        guessCollectionStatus = 'Укажи название подборки.';
+        render();
+        return;
+      }
+      if (ids.length !== total) {
+        guessCollectionStatus = `Нужно добавить ровно ${total} песен. Сейчас: ${ids.length}.`;
+        render();
+        return;
+      }
+      const id = guessCollectionDraft.editId || `${Date.now()}_${normalizeNickname(myName) || 'user'}_${Math.random().toString(36).slice(2,8)}`;
+      const existing = guessCollections.find(row => String(row.id) === String(guessCollectionDraft.editId)) || null;
+      const payload = {
+        title,
+        author: existing?.author || myName || 'Без имени',
+        authorKey: existing?.authorKey || normalizeNickname(myName),
+        openingIds: ids,
+        count: ids.length,
+        answerMode: guessFilters.answerMode === 'manual' ? 'manual' : 'four',
+        answerTarget: guessFilters.answerTarget === 'franchise' ? 'franchise' : 'song',
+        clipSeconds: guessClamp(guessFilters.clipSeconds, 1, 90, 10),
+        listenCount: guessClamp(guessFilters.listenCount, 1, 10, 3),
+        updatedAt: serverTimestamp(),
+        updatedAtLocal: new Date().toISOString()
+      };
+      if (!guessCollectionDraft.editId) payload.createdAt = serverTimestamp();
+      guessCollectionStatus = 'Сохраняю подборку…';
+      const status = $('#ev-guess-collection-status');
+      if (status) status.textContent = guessCollectionStatus;
+      try {
+        await setDoc(doc(db, 'guessCollections', id), payload, { merge: true });
+        guessCollectionDraft.open = false;
+        guessCollectionStatus = 'Подборка сохранена.';
+        render();
+      } catch (error) {
+        console.error('guess collection save failed', error);
+        guessCollectionStatus = 'Не удалось сохранить подборку. Проверь Firebase Rules для guessCollections.';
+        render();
+      }
+    }
+
+    async function validateGuessCollectionRows(rows, onProgress) {
+      const valid = [];
+      for (let index = 0; index < rows.length; index += 1) {
+        const result = await validateGuessOpeningPlayback(rows[index]);
+        if (result.ok) valid.push(rows[index]);
+        onProgress?.(index + 1, rows.length, valid.length);
+      }
+      return valid;
+    }
+
+    async function playGuessCollection(row) {
+      const rows = (row.openingIds || []).map(id => openingsById.get(String(id))).filter(Boolean);
+      if (!rows.length) return;
+      guessFilters.answerMode = row.answerMode === 'manual' ? 'manual' : 'four';
+      guessFilters.answerTarget = row.answerTarget === 'franchise' ? 'franchise' : 'song';
+      guessFilters.clipSeconds = guessClamp(row.clipSeconds, 1, 90, 10);
+      guessFilters.listenCount = guessClamp(row.listenCount, 1, 10, 3);
+      guessFilters.count = guessClamp(rows.length, 1, 200, rows.length);
+      guessMessage = `Проверяется подборка «${row.title || 'Без названия'}»…`;
+      render();
+      const valid = await validateGuessCollectionRows(rows, (done, total, found) => {
+        guessMessage = `Проверка подборки: ${done}/${total}, рабочих источников: ${found}.`;
+        const hint = document.querySelector('.ev-guess-results-card .ev-hint');
+        if (hint) hint.textContent = guessMessage;
+      });
+      guessResultIds = valid.map(opening => String(opening.id));
+      guessMessage = valid.length === rows.length
+        ? `Подборка «${row.title || 'Без названия'}»: ${valid.length} песен.`
+        : `В подборке запущено ${valid.length} из ${rows.length} песен. Неработающие ссылки исключены без поражения.`;
+      render();
+      if (guessResultIds.length) beginGuessGame(guessResultIds);
+    }
+
+    function renderGuessBuilder() {
+      const years = [...new Set(openings.map(opening => Number(opening.year)).filter(Number.isFinite))].sort((a, b) => b - a);
+      const studios = guessUniqueValues('studios');
+      const directors = guessUniqueValues('directors');
+      const performers = guessUniqueValues('performers');
+      const franchises = guessUniqueValues('franchises');
+      const users = guessUserOptions();
+      const selectedUsers = new Set((guessFilters.users || []).map(normalizeNickname).filter(Boolean));
+      const candidates = getGuessCandidates();
+      const count = guessClamp(guessFilters.count, 1, 200, 50);
+      const clipSeconds = guessClamp(guessFilters.clipSeconds, 1, 90, 10);
+      const listenCount = guessClamp(guessFilters.listenCount, 1, 10, 3);
+      const resultRows = guessResultIds.map(id => openingsById.get(String(id))).filter(Boolean);
+      const sourceDisabled = guessFilters.source !== 'ratings';
+      const canResume = guessGameState && guessGameState.ids?.length && guessResultIds.join('|') === guessGameState.ids.join('|');
+
+      appEl.innerHTML = `
+        <div class="ev-guess-shell">
+          <section class="ev-panel-head">
+            <div>
+              <div class="ev-section-label">Конструктор</div>
+              <h2>Угадай опенинг</h2>
+              <div class="ev-hint">Настрой песни, длительность фрагмента и число прослушиваний. В выборку попадут только проверенные прямые видеофайлы и доступные YouTube-ролики.</div>
+            </div>
+          </section>
+
+          <section class="ev-guess-filter-card">
+            <div class="ev-guess-card-head">
+              <div>
+                <h3>Основные параметры</h3>
+                <div class="ev-hint">Во всех списках по умолчанию выбрано «Все».</div>
+              </div>
+              <button type="button" class="ev-btn-ghost" id="ev-guess-reset">Сбросить фильтры</button>
+            </div>
+
+            <div class="ev-guess-grid">
+              <label class="ev-guess-field wide">
+                <span class="ev-guess-label">Поиск</span>
+                <input id="ev-guess-search" type="text" value="${escapeHtml(guessFilters.search)}" placeholder="Название, студия, исполнитель…" />
+              </label>
+
+              <label class="ev-guess-field full">
+                <span class="ev-guess-label">Количество песен</span>
+                <div class="ev-guess-count-row">
+                  <input id="ev-guess-count-range" type="range" min="1" max="200" step="1" value="${count}" />
+                  <input id="ev-guess-count-number" type="number" min="1" max="200" step="1" value="${count}" />
+                </div>
+              </label>
+
+              <div class="ev-guess-field full">
+                <span class="ev-guess-label">Формат ответа</span>
+                <div class="ev-guess-segmented" id="ev-guess-answer-mode">
+                  <button type="button" data-answer-mode="four" class="${guessFilters.answerMode === 'four' ? 'active' : ''}">4 варианта</button>
+                  <button type="button" data-answer-mode="manual" class="${guessFilters.answerMode === 'manual' ? 'active' : ''}">Ввести самому</button>
+                </div>
+                <span class="ev-guess-label" style="margin-top:7px;">Что нужно угадать</span>
+                <div class="ev-guess-segmented" id="ev-guess-answer-target">
+                  <button type="button" data-answer-target="song" class="${guessFilters.answerTarget === 'song' ? 'active' : ''}">Конкретную песню</button>
+                  <button type="button" data-answer-target="franchise" class="${guessFilters.answerTarget === 'franchise' ? 'active' : ''}">Франшизу</button>
+                </div>
+                <span class="ev-guess-note">В режиме франшизы песни без заполненного поля «Франшиза» не участвуют.</span>
+              </div>
+
+              <label class="ev-guess-field wide">
+                <span class="ev-guess-label">Длина фрагмента, секунд</span>
+                <div class="ev-guess-count-row">
+                  <input id="ev-guess-seconds-range" type="range" min="1" max="90" step="1" value="${clipSeconds}" />
+                  <input id="ev-guess-seconds-number" type="number" min="1" max="90" step="1" value="${clipSeconds}" />
+                </div>
+                <span class="ev-guess-note">Максимум — 90 секунд. Если доступная часть ролика короче выбранной длины, она воспроизводится целиком.</span>
+              </label>
+
+              <label class="ev-guess-field wide">
+                <span class="ev-guess-label">Количество прослушиваний</span>
+                <div class="ev-guess-count-row">
+                  <input id="ev-guess-listens-range" type="range" min="1" max="10" step="1" value="${listenCount}" />
+                  <input id="ev-guess-listens-number" type="number" min="1" max="10" step="1" value="${listenCount}" />
+                </div>
+                <span class="ev-guess-note">Для каждого вопроса проигрывается один и тот же случайный фрагмент.</span>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Тип</span>
+                <select id="ev-guess-type">
+                  <option value="" ${!guessFilters.type ? 'selected' : ''}>Все</option>
+                  <option value="OP" ${guessFilters.type === 'OP' ? 'selected' : ''}>Только OP</option>
+                  <option value="ED" ${guessFilters.type === 'ED' ? 'selected' : ''}>Только ED</option>
+                </select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Год</span>
+                <select id="ev-guess-year">${guessSelectOptions(years, guessFilters.year)}</select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Сезон</span>
+                <select id="ev-guess-season">
+                  <option value="" ${!guessFilters.season ? 'selected' : ''}>Все</option>
+                  ${SEASONS.map(season => `<option value="${season}" ${guessFilters.season === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('')}
+                </select>
+              </label>
+
+              <label class="ev-guess-field wide">
+                <span class="ev-guess-label">Китайские, фильмы и укороченные</span>
+                <select id="ev-guess-content">
+                  <option value="all" ${guessFilters.content === 'all' ? 'selected' : ''}>Все</option>
+                  <option value="default" ${guessFilters.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option>
+                  <option value="chinese" ${guessFilters.content === 'chinese' ? 'selected' : ''}>С китайскими</option>
+                  <option value="movie" ${guessFilters.content === 'movie' ? 'selected' : ''}>С фильмами</option>
+                  <option value="shortened" ${guessFilters.content === 'shortened' ? 'selected' : ''}>С укороченными</option>
+                  <option value="chinese-movie" ${guessFilters.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option>
+                  <option value="chinese-shortened" ${guessFilters.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option>
+                  <option value="movie-shortened" ${guessFilters.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option>
+                </select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Студия</span>
+                <select id="ev-guess-studio">${guessSelectOptions(studios, guessFilters.studio)}</select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Режиссёр</span>
+                <select id="ev-guess-director">${guessSelectOptions(directors, guessFilters.director)}</select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Исполнитель</span>
+                <select id="ev-guess-performer">${guessSelectOptions(performers, guessFilters.performer)}</select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Франшиза</span>
+                <select id="ev-guess-franchise">${guessSelectOptions(franchises, guessFilters.franchise)}</select>
+              </label>
+
+              <label class="ev-guess-field wide">
+                <span class="ev-guess-label">Откуда брать песни</span>
+                <select id="ev-guess-source">
+                  <option value="all" ${guessFilters.source === 'all' ? 'selected' : ''}>Из всей базы</option>
+                  <option value="ratings" ${guessFilters.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option>
+                </select>
+                <span class="ev-guess-note">Если аккаунты не отмечены, порог применяется к средней оценке всех пользователей.</span>
+              </label>
+
+              <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}">
+                <span class="ev-guess-label">Пользователи основной страницы</span>
+                <div class="ev-guess-users" id="ev-guess-users">
+                  ${users.length ? users.map(user => {
+                    const active = selectedUsers.has(user.key);
+                    return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled ? 'disabled' : ''} /><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`;
+                  }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}
+                </div>
+                <span class="ev-guess-note">Никто не отмечен = средняя по всем пользователям. Выбрано: ${selectedUsers.size || 'все'}.</span>
+              </div>
+
+              <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}">
+                <span class="ev-guess-label">Фильтр по оценке</span>
+                <div class="ev-guess-rating-row">
+                  <select id="ev-guess-score-metric" ${sourceDisabled ? 'disabled' : ''}>
+                    <option value="score" ${guessFilters.scoreMetric === 'score' ? 'selected' : ''}>Общая оценка</option>
+                    <option value="songScore" ${guessFilters.scoreMetric === 'songScore' ? 'selected' : ''}>Оценка песни</option>
+                    <option value="visualScore" ${guessFilters.scoreMetric === 'visualScore' ? 'selected' : ''}>Оценка визуала</option>
+                  </select>
+                  <select id="ev-guess-score-cmp" ${sourceDisabled ? 'disabled' : ''}>
+                    <option value="gte" ${guessFilters.scoreCmp === 'gte' ? 'selected' : ''}>Больше или равно</option>
+                    <option value="gt" ${guessFilters.scoreCmp === 'gt' ? 'selected' : ''}>Больше</option>
+                    <option value="eq" ${guessFilters.scoreCmp === 'eq' ? 'selected' : ''}>Равно</option>
+                    <option value="lte" ${guessFilters.scoreCmp === 'lte' ? 'selected' : ''}>Меньше или равно</option>
+                    <option value="lt" ${guessFilters.scoreCmp === 'lt' ? 'selected' : ''}>Меньше</option>
+                  </select>
+                  <input id="ev-guess-score-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(guessFilters.scoreValue)}" ${sourceDisabled ? 'disabled' : ''} />
+                </div>
+              </div>
+            </div>
+
+            <div class="ev-guess-create-row">
+              <div class="ev-guess-preview" id="ev-guess-preview">Под фильтры и по типу ссылки подходит: <strong>${candidates.length}</strong>. Перед запуском источники будут проверены. Планируется выбрать: <strong id="ev-guess-preview-count">${Math.min(count, candidates.length)}</strong>.</div>
+              <div class="ev-actions">
+                <button type="button" class="ev-btn-secondary" id="ev-guess-create-collection">Создать подборку</button>
+                <button type="button" class="ev-btn-main" id="ev-guess-create" ${!candidates.length ? 'disabled' : ''}>Создать угадайку</button>
+              </div>
+            </div>
+          </section>
+
+          ${renderGuessCollectionBuilder(candidates, count)}
+
+          <section class="ev-guess-results-card">
+            <div class="ev-guess-card-head">
+              <div>
+                <h3>Выбранные песни</h3>
+                <div class="ev-hint">${escapeHtml(guessMessage || 'Нажми «Создать угадайку», чтобы сформировать случайную выборку.')}</div>
+              </div>
+              ${resultRows.length ? `<button type="button" class="ev-btn-secondary" id="ev-guess-open-game">${canResume ? (guessGameState.completed ? 'Открыть результат' : 'Продолжить игру') : 'Начать игру'}</button>` : ''}
+            </div>
+            ${resultRows.length ? `<div class="ev-guess-result-grid">${resultRows.map(renderGuessResultCard).join('')}</div>` : '<div class="ev-guess-empty">Пока ничего не выбрано.</div>'}
+          </section>
+
+          ${renderSavedGuessCollections()}
+        </div>
+      `;
+      bindGuessControls(candidates.length);
+    }
+
+    function bindGuessControls(candidateCount = 0) {
+      const clearSelectionAndRender = () => {
+        resetGuessGame(true);
+        render();
+      };
+      const setAndRender = (selector, key, parser = value => value, eventName = 'change') => {
+        const el = $(selector);
+        if (!el) return;
+        el.addEventListener(eventName, () => {
+          guessFilters[key] = parser(el.value);
+          clearSelectionAndRender();
+        });
+      };
+
+      setAndRender('#ev-guess-search', 'search', value => String(value || ''), 'change');
+      setAndRender('#ev-guess-type', 'type');
+      setAndRender('#ev-guess-year', 'year');
+      setAndRender('#ev-guess-season', 'season');
+      setAndRender('#ev-guess-content', 'content');
+      setAndRender('#ev-guess-studio', 'studio');
+      setAndRender('#ev-guess-director', 'director');
+      setAndRender('#ev-guess-performer', 'performer');
+      setAndRender('#ev-guess-franchise', 'franchise');
+      setAndRender('#ev-guess-source', 'source');
+      setAndRender('#ev-guess-score-metric', 'scoreMetric');
+      setAndRender('#ev-guess-score-cmp', 'scoreCmp');
+      setAndRender('#ev-guess-score-value', 'scoreValue', value => guessClamp(value, .5, 10, 8));
+
+      const bindRangePair = (rangeSelector, numberSelector, key, min, max, fallback, updatePreview = false) => {
+        const range = $(rangeSelector);
+        const number = $(numberSelector);
+        const update = value => {
+          const next = guessClamp(value, min, max, fallback);
+          guessFilters[key] = next;
+          if (range) range.value = String(next);
+          if (number) number.value = String(next);
+          if (updatePreview) {
+            const previewCount = $('#ev-guess-preview-count');
+            if (previewCount) previewCount.textContent = String(Math.min(next, candidateCount));
+          }
+          if (key === 'count' && guessCollectionDraft.open) {
+            guessCollectionDraft.autoCount = guessClamp(guessCollectionDraft.autoCount, 0, next, next);
+            const totalEl = $('#ev-guess-collection-total');
+            const leftEl = $('#ev-guess-collection-left');
+            const autoRange = $('#ev-guess-collection-auto-range');
+            const autoNumber = $('#ev-guess-collection-auto-number');
+            const added = getGuessCollectionDraftIds().length;
+            if (totalEl) totalEl.textContent = String(next);
+            if (leftEl) leftEl.textContent = String(Math.max(0, next - added));
+            if (autoRange) { autoRange.max = String(next); autoRange.value = String(guessCollectionDraft.autoCount); }
+            if (autoNumber) { autoNumber.max = String(next); autoNumber.value = String(guessCollectionDraft.autoCount); }
+          }
+        };
+        range?.addEventListener('input', () => update(range.value));
+        number?.addEventListener('input', () => update(number.value));
+        number?.addEventListener('change', () => update(number.value));
+      };
+      bindRangePair('#ev-guess-count-range', '#ev-guess-count-number', 'count', 1, 200, 50, true);
+      bindRangePair('#ev-guess-seconds-range', '#ev-guess-seconds-number', 'clipSeconds', 1, 90, 10);
+      bindRangePair('#ev-guess-listens-range', '#ev-guess-listens-number', 'listenCount', 1, 10, 3);
+
+      document.querySelectorAll('[data-answer-mode]').forEach(button => {
+        button.addEventListener('click', () => {
+          guessFilters.answerMode = button.dataset.answerMode === 'manual' ? 'manual' : 'four';
+          document.querySelectorAll('[data-answer-mode]').forEach(item => item.classList.toggle('active', item === button));
+          resetGuessGame(false);
+        });
+      });
+
+      document.querySelectorAll('[data-answer-target]').forEach(button => {
+        button.addEventListener('click', () => {
+          guessFilters.answerTarget = button.dataset.answerTarget === 'franchise' ? 'franchise' : 'song';
+          clearSelectionAndRender();
+        });
+      });
+
+      document.querySelectorAll('#ev-guess-users input[type="checkbox"]').forEach(input => {
+        input.addEventListener('change', () => {
+          const current = new Set((guessFilters.users || []).map(normalizeNickname).filter(Boolean));
+          const key = normalizeNickname(input.value);
+          if (input.checked) current.add(key);
+          else current.delete(key);
+          guessFilters.users = [...current];
+          clearSelectionAndRender();
+        });
+      });
+
+      $('#ev-guess-reset')?.addEventListener('click', () => {
+        Object.assign(guessFilters, {
+          search: '', count: 50, answerMode: 'four', answerTarget: 'song', clipSeconds: 10, listenCount: 3,
+          source: 'all', type: '', year: '', season: '', studio: '', director: '', performer: '', franchise: '',
+          content: 'all', users: [], scoreMetric: 'score', scoreCmp: 'gte', scoreValue: 8
+        });
+        resetGuessGame(true);
+        render();
+      });
+
+      $('#ev-guess-create-collection')?.addEventListener('click', () => openGuessCollectionBuilder());
+      $('#ev-guess-collection-close')?.addEventListener('click', closeGuessCollectionBuilder);
+
+      const collectionTitleInput = $('#ev-guess-collection-title');
+      collectionTitleInput?.addEventListener('input', () => {
+        guessCollectionDraft.title = collectionTitleInput.value;
+      });
+
+      const collectionAutoRange = $('#ev-guess-collection-auto-range');
+      const collectionAutoNumber = $('#ev-guess-collection-auto-number');
+      const updateCollectionAuto = value => {
+        const total = guessClamp(guessFilters.count, 1, 200, 50);
+        const next = guessClamp(value, 0, total, total);
+        guessCollectionDraft.autoCount = next;
+        if (collectionAutoRange) collectionAutoRange.value = String(next);
+        if (collectionAutoNumber) collectionAutoNumber.value = String(next);
+      };
+      collectionAutoRange?.addEventListener('input', () => updateCollectionAuto(collectionAutoRange.value));
+      collectionAutoNumber?.addEventListener('input', () => updateCollectionAuto(collectionAutoNumber.value));
+      collectionAutoNumber?.addEventListener('change', () => updateCollectionAuto(collectionAutoNumber.value));
+
+      $('#ev-guess-collection-auto')?.addEventListener('click', fillGuessCollectionAuto);
+      $('#ev-guess-collection-save')?.addEventListener('click', saveGuessCollection);
+      const collectionSearch = $('#ev-guess-collection-search');
+      collectionSearch?.addEventListener('input', () => {
+        guessCollectionDraft.search = collectionSearch.value;
+        renderGuessCollectionSuggestions(collectionSearch.value);
+      });
+      collectionSearch?.addEventListener('focus', () => renderGuessCollectionSuggestions(collectionSearch.value));
+      document.querySelectorAll('[data-collection-remove]').forEach(button => {
+        button.addEventListener('click', () => {
+          const id = String(button.dataset.collectionRemove || '');
+          guessCollectionDraft.autoIds = (guessCollectionDraft.autoIds || []).filter(value => String(value) !== id);
+          guessCollectionDraft.manualIds = (guessCollectionDraft.manualIds || []).filter(value => String(value) !== id);
+          guessCollectionStatus = 'Песня удалена из подборки.';
+          render();
+        });
+      });
+
+      document.querySelectorAll('[data-collection-play]').forEach(button => {
+        button.addEventListener('click', () => {
+          const row = guessCollections.find(item => String(item.id) === String(button.dataset.collectionPlay));
+          if (row) playGuessCollection(row);
+        });
+      });
+      document.querySelectorAll('[data-collection-edit]').forEach(button => {
+        button.addEventListener('click', () => {
+          const row = guessCollections.find(item => String(item.id) === String(button.dataset.collectionEdit));
+          if (row && canManageGuessCollection(row)) openGuessCollectionBuilder(row);
+        });
+      });
+      document.querySelectorAll('[data-collection-delete]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const row = guessCollections.find(item => String(item.id) === String(button.dataset.collectionDelete));
+          if (!row || !canManageGuessCollection(row)) return;
+          if (!window.confirm(`Удалить подборку «${row.title || 'Без названия'}»?`)) return;
+          try {
+            await deleteDoc(doc(db, 'guessCollections', String(row.id)));
+          } catch (error) {
+            console.error('guess collection delete failed', error);
+            guessCollectionStatus = 'Не удалось удалить подборку. Проверь Firebase Rules для guessCollections.';
+            render();
+          }
+        });
+      });
+
+      $('#ev-guess-create')?.addEventListener('click', async () => {
+        const candidates = getGuessCandidates();
+        const wanted = guessClamp(guessFilters.count, 1, 200, 50);
+        const button = $('#ev-guess-create');
+        const preview = $('#ev-guess-preview');
+        if (button) {
+          button.disabled = true;
+          button.textContent = 'Проверка источников…';
+        }
+        resetGuessGame(true);
+        const { selected, checked } = await selectValidatedGuessOpenings(candidates, wanted, (done, total, valid) => {
+          if (button) button.textContent = `Проверка ${done}/${total}`;
+          if (preview) preview.innerHTML = `Проверено: <strong>${done}</strong> из <strong>${total}</strong>. Рабочих источников найдено: <strong>${valid}</strong>.`;
+        });
+        guessResultIds = selected.map(opening => String(opening.id));
+        const rejected = Math.max(0, checked - selected.length);
+        guessMessage = selected.length < wanted
+          ? `Рабочих источников найдено ${selected.length} из запрошенных ${wanted}. Нерабочие или запрещённые для встраивания ссылки исключены.`
+          : `Создана выборка из ${selected.length} песен. При проверке исключено нерабочих источников: ${rejected}.`;
+        render();
+        if (guessResultIds.length) beginGuessGame(guessResultIds);
+      });
+
+      $('#ev-guess-open-game')?.addEventListener('click', () => {
+        const sameSelection = guessGameState && guessResultIds.join('|') === (guessGameState.ids || []).join('|');
+        if (sameSelection) renderGuessGame();
+        else beginGuessGame(guessResultIds);
+      });
     }
 
 
@@ -3248,6 +5156,7 @@
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
           activeMode = btn.dataset.mode === 'guess' ? 'guess' : 'rating';
+          if (activeMode !== 'guess') closeGuessGame();
           render();
         });
       });
@@ -3375,6 +5284,31 @@
       }, error => {
         console.error('openings snapshot error', error);
         appEl.innerHTML = '<div class="ev-empty">Не удалось загрузить OP/ED из Firebase.</div>';
+      });
+      onSnapshot(collection(db, 'ratings'), snapshot => {
+        mainRatings = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleRender();
+      }, error => {
+        console.error('ratings snapshot error', error);
+        mainRatings = [];
+        scheduleRender();
+      });
+      onSnapshot(collection(db, 'userProfiles'), snapshot => {
+        userProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleRender();
+      }, error => {
+        console.error('userProfiles snapshot error', error);
+        userProfiles = [];
+        scheduleRender();
+      });
+      onSnapshot(collection(db, 'guessCollections'), snapshot => {
+        guessCollections = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleRender();
+      }, error => {
+        console.error('guessCollections snapshot error', error);
+        guessCollections = [];
+        guessCollectionStatus = 'Не удалось загрузить подборки. Проверь Firebase Rules для guessCollections.';
+        scheduleRender();
       });
       if (LOCAL_EVENTS_MODE) {
         loadLocalEventData();
