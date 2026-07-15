@@ -2409,6 +2409,7 @@
     const DEMO_KEY = 'op-ed-demo-loaded';
     const MANUAL_RANKS_KEY = 'manual-ranks';
     const SCALE_KEY = 'rating-scale';
+    const CONTENT_FILTER_KEY = 'content-filter-mode';
     const TIER_ORDERS_KEY = 'tier-orders';
     const TIER_LABELS_KEY = 'tier-labels';
     const TIER_PLACEMENTS_KEY = 'tier-placements';
@@ -3723,6 +3724,19 @@
       catch (e) { console.error('Could not save rating scale', e); }
     }
 
+    async function loadContentFilterMode() {
+      try {
+        const res = await window.storage.get(CONTENT_FILTER_KEY, false);
+        if (res && res.value) setContentFilterMode(res.value, false, false);
+      } catch (e) { /* default visibility stays */ }
+      syncContentFilterSelect();
+    }
+
+    async function saveContentFilterMode(mode) {
+      try { await window.storage.set(CONTENT_FILTER_KEY, normalizeContentFilterMode(mode), false); }
+      catch (e) { console.error('Could not save content filter mode', e); }
+    }
+
     async function loadManualRanks() {
       try {
         const res = await window.storage.get(MANUAL_RANKS_KEY, true);
@@ -4411,8 +4425,9 @@
       if (contentFilterSelect) contentFilterSelect.value = currentContentFilterMode();
     }
 
-    function setContentFilterMode(mode, shouldRender = true) {
-      const flags = contentFilterModeToFlags(mode);
+    function setContentFilterMode(mode, shouldRender = true, shouldSave = true) {
+      const normalizedMode = normalizeContentFilterMode(mode);
+      const flags = contentFilterModeToFlags(normalizedMode);
       filters.hideChinese = flags.hideChinese;
       filters.hideMovie = flags.hideMovie;
       filters.hideShortened = flags.hideShortened;
@@ -4420,6 +4435,7 @@
       seasonHideMovie = flags.hideMovie;
       seasonHideShortened = flags.hideShortened;
       syncContentFilterSelect();
+      if (shouldSave) saveContentFilterMode(normalizedMode);
       if (!shouldRender) return;
       chartPage = 1;
       profileTopPage = { OP: 1, ED: 1 };
@@ -7072,6 +7088,7 @@
       await loadName();
       await loadAvatar();
       await loadScale();
+      await loadContentFilterMode();
       await loadAvatarsMap();
       await loadManualRanks();
       if (myName && !avatarsMap[myName]) avatarsMap[myName] = myAvatar;
