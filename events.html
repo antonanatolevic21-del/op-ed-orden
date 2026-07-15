@@ -184,6 +184,24 @@
     }
     .ev-participant-progress.done { color: var(--green); border-color: rgba(74,222,128,.5); background: rgba(74,222,128,.08); font-size: 15px; }
     .ev-participant-progress.partial { color: var(--gold); border-color: rgba(255,200,87,.45); }
+    button.ev-participant-progress { cursor: pointer; }
+    button.ev-participant-progress:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); background: rgba(8,217,214,.1); }
+    .ev-review-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .ev-review-row {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) max-content;
+      gap: 12px;
+      align-items: start;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .ev-review-row.missing { opacity: .62; border-style: dashed; }
+    .ev-review-rank { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; padding-top: 2px; }
+    .ev-review-title { font-weight: 900; line-height: 1.2; margin-bottom: 5px; overflow-wrap: anywhere; }
+    .ev-review-comment { color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.42; }
+    .ev-review-score { font-family: 'Archivo Black', sans-serif; color: var(--cyan); font-size: 18px; white-space: nowrap; }
     .ev-status-line { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 9px; }
     .ev-status-line.ok { color: var(--green); }
     .ev-status-line.warn { color: var(--gold); }
@@ -2544,10 +2562,14 @@
                   : progress.done > 0
                     ? `Оценено ${progress.done} из ${progress.total}`
                     : 'Оценки ещё не отправлены';
+              const canReview = isAdmin() && !!name && progress.done > 0;
+              const progressEl = canReview
+                ? `<button type="button" class="ev-participant-progress ${progressClass}" data-participant-review="${idx}" title="${escapeHtml(progressTitle)}. Нажми, чтобы посмотреть оценки и комментарии пользователя.">${escapeHtml(progressText)}</button>`
+                : `<span class="ev-participant-progress ${progressClass}" title="${escapeHtml(progressTitle)}">${escapeHtml(progressText)}</span>`;
               return `
                 <div class="ev-participant-slot">
                   <input class="ev-participant-input ${fixed ? 'fixed' : ''}" data-idx="${idx}" value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''} />
-                  <span class="ev-participant-progress ${progressClass}" title="${escapeHtml(progressTitle)}">${escapeHtml(progressText)}</span>
+                  ${progressEl}
                 </div>
               `;
             }).join('')}
@@ -2742,6 +2764,89 @@
       });
     }
 
+    function getParticipantReviewRows(state, participant) {
+      const nicknameKey = String(participant?.nicknameKey || normalizeNickname(participant?.nickname || ''));
+      const selectedIds = (state?.selectedOpeningIds || []).map(String).filter(id => openingsById.has(id));
+      const ratings = getSeasonRatings(state?.key).filter(r => String(r.nicknameKey || normalizeNickname(r.nickname || '')) === nicknameKey);
+      const byOpening = new Map(ratings.map(r => [String(r.openingId || ''), r]));
+      return selectedIds.map((id, idx) => {
+        const opening = openingsById.get(id);
+        const rating = byOpening.get(id) || null;
+        return {
+          idx,
+          id,
+          title: opening?.title || id,
+          rating
+        };
+      });
+    }
+
+    function buildParticipantReviewText(state, participant) {
+      const rows = getParticipantReviewRows(state, participant);
+      const nickname = String(participant?.nickname || '').trim() || 'Пользователь';
+      const lines = [`${nickname} — ${SEASON_LABEL[state.season]} ${state.year}`];
+      rows.forEach(row => {
+        const rating = row.rating;
+        if (!rating) {
+          lines.push(`${row.idx + 1}. ${row.title}: нет оценки`);
+          return;
+        }
+        const comment = normalizeCommentText(rating.comment);
+        lines.push(`${row.idx + 1}. ${row.title}: ${formatPostScore(rating.score)}/10${comment ? ` — ${comment}` : ''}`);
+      });
+      return lines.join('\n');
+    }
+
+    function openParticipantReviewModal(state, participant) {
+      if (!isAdmin() || !participant?.nicknameKey) return;
+      const rows = getParticipantReviewRows(state, participant);
+      const nickname = String(participant.nickname || '').trim() || participant.nicknameKey;
+      const done = rows.filter(row => row.rating && Number.isFinite(Number(row.rating.score))).length;
+      postModalEl.innerHTML = `
+        <div class="ev-dialog">
+          <div class="ev-dialog-top">
+            <div>
+              <div class="ev-progress">${escapeHtml(SEASON_LABEL[state.season])} ${state.year} · ${done}/${rows.length} оценок</div>
+              <div class="ev-modal-title">Оценки пользователя ${escapeHtml(nickname)}</div>
+              <div class="ev-hint">Здесь можно быстро проверить все оценки и комментарии участника по этому сезону.</div>
+            </div>
+            <button class="ev-close" id="ev-review-close">Закрыть</button>
+          </div>
+          <div class="ev-review-list">
+            ${rows.length ? rows.map(row => {
+              const rating = row.rating;
+              const missing = !rating || !Number.isFinite(Number(rating.score));
+              const comment = normalizeCommentText(rating?.comment);
+              return `
+                <div class="ev-review-row ${missing ? 'missing' : ''}">
+                  <div class="ev-review-rank">${row.idx + 1}</div>
+                  <div>
+                    <div class="ev-review-title">${escapeHtml(row.title)}</div>
+                    <div class="ev-review-comment">${missing ? 'Оценка ещё не отправлена.' : escapeHtml(comment || 'Комментарий пустой.')}</div>
+                  </div>
+                  <div class="ev-review-score">${missing ? '—' : `${escapeHtml(formatPostScore(rating.score))}/10`}</div>
+                </div>
+              `;
+            }).join('') : '<div class="ev-empty">В сезоне пока нет OP.</div>'}
+          </div>
+          <div class="ev-error" id="ev-review-status"></div>
+          <div class="ev-modal-actions">
+            <button class="ev-btn-secondary" id="ev-review-copy">Скопировать текстом</button>
+          </div>
+        </div>
+      `;
+      postModalEl.classList.remove('hidden');
+      $('#ev-review-close')?.addEventListener('click', () => postModalEl.classList.add('hidden'));
+      $('#ev-review-copy')?.addEventListener('click', async () => {
+        const ok = await copyTextToClipboard(buildParticipantReviewText(state, participant));
+        const status = $('#ev-review-status');
+        if (status) {
+          status.textContent = ok ? 'Скопировано ✓' : 'Не удалось скопировать автоматически. Выдели текст вручную.';
+          status.style.color = ok ? 'var(--green)' : 'var(--red)';
+        }
+      });
+    }
+
     function bindFirstStageEvents() {
       document.querySelectorAll('.ev-season-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -2756,6 +2861,13 @@
       $('#ev-post-season')?.addEventListener('click', () => openSeasonPostModal(state));
       $('#ev-delete-admin-ratings')?.addEventListener('click', () => deleteAdminRatings(state));
       $('#ev-recalc-semi')?.addEventListener('click', () => recalcSemifinalWinners(state));
+      document.querySelectorAll('[data-participant-review]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.dataset.participantReview);
+          const progress = getParticipantRatingProgress(state)[idx];
+          if (progress) openParticipantReviewModal(state, progress);
+        });
+      });
       document.querySelectorAll('[data-tie-winner]').forEach(btn => {
         btn.addEventListener('click', () => toggleTieWinner(state, btn.dataset.tieWinner));
       });
