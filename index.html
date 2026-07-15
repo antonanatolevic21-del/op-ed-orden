@@ -1945,6 +1945,16 @@
           <option value="half">шкала 0.5–10 (шаг 0.5)</option>
           <option value="five">оценка</option>
         </select>
+        <select id="oc-content-filter-select" title="Фильтр китайских, фильмов и укороченных OP/ED">
+          <option value="default">Без китайских, фильмов и укороченных</option>
+          <option value="chinese">С китайскими</option>
+          <option value="movie">С фильмами</option>
+          <option value="shortened">С укороченными</option>
+          <option value="chinese-movie">С китайскими и фильмами</option>
+          <option value="chinese-shortened">С китайскими и укороченными</option>
+          <option value="movie-shortened">С фильмами и укороченными</option>
+          <option value="all">С китайскими, фильмами и укороченными</option>
+        </select>
         <span id="oc-access-badge" class="oc-access-badge">гость</span>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
         <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
@@ -1989,6 +1999,7 @@
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
         <label class="oc-flag-check"><input id="oc-add-chinese" type="checkbox" /> Китайский OP/ED</label>
         <label class="oc-flag-check"><input id="oc-add-movie" type="checkbox" /> OP/ED фильма</label>
+        <label class="oc-flag-check"><input id="oc-add-shortened" type="checkbox" /> Укороченный OP/ED</label>
         <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
       </div>
       <div class="oc-hint">Несколько студий/режиссёров/исполнителей/франшиз — просто перечислите через запятую, напр. "MAPPA, WIT Studio"</div>
@@ -2008,10 +2019,6 @@
             <option value="OP">Только OP</option>
             <option value="ED">Только ED</option>
           </select>
-        </div>
-        <div class="oc-field oc-flag-filter">
-          <label class="oc-checkline"><input id="oc-f-hide-chinese" type="checkbox" checked /> Не показывать китайские</label>
-          <label class="oc-checkline"><input id="oc-f-hide-movie" type="checkbox" checked /> Не показывать фильмы</label>
         </div>
         <div class="oc-field">
           <label for="oc-f-score-cmp">Оценка</label>
@@ -2101,10 +2108,6 @@
               <option value="OP">Только OP</option>
               <option value="ED">Только ED</option>
             </select>
-          </div>
-          <div class="oc-field oc-flag-filter">
-            <label class="oc-checkline"><input id="oc-p-hide-chinese" type="checkbox" checked /> Не показывать китайские</label>
-            <label class="oc-checkline"><input id="oc-p-hide-movie" type="checkbox" checked /> Не показывать фильмы</label>
           </div>
         <div class="oc-field">
           <label for="oc-p-score-cmp">Оценка</label>
@@ -2246,10 +2249,6 @@
               <div class="oc-season-type-toggle">
                 <button type="button" class="oc-season-type-btn active" data-season-type="OP">Опенинги</button>
                 <button type="button" class="oc-season-type-btn" data-season-type="ED">Эндинги</button>
-              </div>
-              <div class="oc-season-filter-toggle">
-                <label class="oc-checkline"><input type="checkbox" data-season-filter="hideChinese" checked /> Не показывать китайские</label>
-                <label class="oc-checkline"><input type="checkbox" data-season-filter="hideMovie" checked /> Не показывать фильмы</label>
               </div>
               <div class="oc-season-title" id="oc-season-title">Выберите год и сезон</div>
               <div class="oc-season-subtitle" id="oc-season-subtitle">Список лет идёт от актуального года до 1990. Будущие сезоны помечаются как «Скоро будет».</div>
@@ -2399,7 +2398,7 @@
     let avatarsMap = {};
     let ratingScale = 'int'; // 'int', 'half' or personal 'five'
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
-    const filters = { search: '', type: '', year: '', season: '', scoreCmp: '', scoreValue: '', hideChinese: true, hideMovie: true, studios: [], directors: [], performers: [], franchises: [] };
+    const filters = { search: '', type: '', year: '', season: '', scoreCmp: '', scoreValue: '', hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
     let sortMode = 'added_desc';
     let editingId = null;
     let manualRanks = {};
@@ -2429,6 +2428,7 @@
     const avatarBtn = $('#oc-avatar-btn');
     const avatarPicker = $('#oc-avatar-picker');
     const scaleSelect = $('#oc-scale-select');
+    const contentFilterSelect = $('#oc-content-filter-select');
     const filterStatEl = $('#oc-filterstat');
     const mainPanel = $('#oc-main-panel');
     const profilePanel = $('#oc-profile-panel');
@@ -2468,6 +2468,7 @@
     let seasonType = 'OP';
     let seasonHideChinese = true;
     let seasonHideMovie = true;
+    let seasonHideShortened = true;
     let seasonQueue = [];
     let seasonQueueIndex = 0;
     let evaluatorMode = 'season';
@@ -2641,6 +2642,7 @@
       if (Object.prototype.hasOwnProperty.call(extras, 'franchises')) payload.franchises = cleanList(extras.franchises);
       if (Object.prototype.hasOwnProperty.call(extras, 'isChinese')) payload.isChinese = Boolean(extras.isChinese);
       if (Object.prototype.hasOwnProperty.call(extras, 'isMovie')) payload.isMovie = Boolean(extras.isMovie);
+      if (Object.prototype.hasOwnProperty.call(extras, 'isShortened')) payload.isShortened = Boolean(extras.isShortened);
       await ext.setDoc(ext.doc(ext.db, 'openings', String(openingId)), payload, { merge: true });
     }
 
@@ -2982,6 +2984,7 @@
         notes: row.notes || '',
         isChinese: Boolean(row.isChinese || row.chinese || row.isChina || row.chineseOpening),
         isMovie: Boolean(row.isMovie || row.movie || row.isFilm || row.filmOpening),
+        isShortened: Boolean(row.isShortened || row.shortened || row.isShort || row.short || row.shortOpening || row.shortenedOpening),
         createdAt: row.createdAt || null,
         updatedAt: row.updatedAt || null,
         scores: {},
@@ -4028,10 +4031,7 @@
         ['#oc-f-performer', filters.performers], ['#oc-p-performer', filters.performers],
         ['#oc-f-franchise', filters.franchises], ['#oc-p-franchise', filters.franchises]
       ];
-      [['#oc-f-hide-chinese', filters.hideChinese], ['#oc-p-hide-chinese', filters.hideChinese], ['#oc-f-hide-movie', filters.hideMovie], ['#oc-p-hide-movie', filters.hideMovie]].forEach(([selector, value]) => {
-        const el = $(selector);
-        if (el) el.checked = Boolean(value);
-      });
+      syncContentFilterSelect();
       multiPairs.forEach(([selector, selected]) => {
         const el = $(selector);
         if (!el) return;
@@ -4072,7 +4072,7 @@
       if (!entry) return '';
       if (entry.__ocSearchText) return entry.__ocSearchText;
       const text = [
-        entry.title, entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '',
+        entry.title, entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
         ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
       ].join(' ').toLowerCase();
       try { Object.defineProperty(entry, '__ocSearchText', { value: text, configurable: true, enumerable: false }); }
@@ -4083,7 +4083,7 @@
     function filtersCacheKey() {
       return [
         dataVersion, filters.search, filters.type, filters.year, filters.season,
-        filters.scoreCmp, filters.scoreValue, filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie',
+        filters.scoreCmp, filters.scoreValue, filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie', filters.hideShortened ? 'hideShort' : 'showShort',
         filters.studios.join('¦'), filters.directors.join('¦'), filters.performers.join('¦'), filters.franchises.join('¦')
       ].join('|');
     }
@@ -4163,7 +4163,7 @@
           if (!entrySearchText(e).includes(q) && !titleMatchesFuzzySearch(e.title, q)) return false;
         }
         if (filters.type && e.type !== filters.type) return false;
-        if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie)) return false;
+        if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie, filters.hideShortened)) return false;
         if (filters.year && String(e.year) !== filters.year) return false;
         if (filters.season && e.season !== filters.season) return false;
         if (filters.scoreCmp && String(filters.scoreValue || '').trim() !== '') {
@@ -4267,7 +4267,7 @@
 
     function renderFilterStat(filteredList) {
       if (!filterStatEl) return;
-      const filterActive = filters.search || filters.type || filters.year || filters.season || filters.scoreCmp || filters.scoreValue || filters.hideChinese || filters.hideMovie || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
+      const filterActive = filters.search || filters.type || filters.year || filters.season || filters.scoreCmp || filters.scoreValue || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
       if (!filterActive) {
         filterStatEl.classList.remove('show');
         filterStatEl.textContent = '';
@@ -4345,14 +4345,71 @@
       return Boolean(entry && (entry.isMovie || entry.movie || entry.isFilm || entry.filmOpening));
     }
 
-    function entryPassesHiddenFlags(entry, hideChinese, hideMovie) {
+    function entryIsShortened(entry) {
+      return Boolean(entry && (entry.isShortened || entry.shortened || entry.isShort || entry.short || entry.shortOpening || entry.shortenedOpening));
+    }
+
+    function normalizeContentFilterMode(mode) {
+      return ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(mode) ? mode : 'default';
+    }
+
+    function contentFilterModeToFlags(mode) {
+      const normalized = normalizeContentFilterMode(mode);
+      const showChinese = normalized === 'chinese' || normalized === 'chinese-movie' || normalized === 'chinese-shortened' || normalized === 'all';
+      const showMovie = normalized === 'movie' || normalized === 'chinese-movie' || normalized === 'movie-shortened' || normalized === 'all';
+      const showShortened = normalized === 'shortened' || normalized === 'chinese-shortened' || normalized === 'movie-shortened' || normalized === 'all';
+      return { hideChinese: !showChinese, hideMovie: !showMovie, hideShortened: !showShortened };
+    }
+
+    function contentFilterModeFromFlags(hideChinese, hideMovie, hideShortened) {
+      const showChinese = !hideChinese;
+      const showMovie = !hideMovie;
+      const showShortened = !hideShortened;
+      if (showChinese && showMovie && showShortened) return 'all';
+      if (showChinese && showMovie) return 'chinese-movie';
+      if (showChinese && showShortened) return 'chinese-shortened';
+      if (showMovie && showShortened) return 'movie-shortened';
+      if (showChinese) return 'chinese';
+      if (showMovie) return 'movie';
+      if (showShortened) return 'shortened';
+      return 'default';
+    }
+
+    function currentContentFilterMode() {
+      return contentFilterModeFromFlags(filters.hideChinese, filters.hideMovie, filters.hideShortened);
+    }
+
+    function syncContentFilterSelect() {
+      if (contentFilterSelect) contentFilterSelect.value = currentContentFilterMode();
+    }
+
+    function setContentFilterMode(mode, shouldRender = true) {
+      const flags = contentFilterModeToFlags(mode);
+      filters.hideChinese = flags.hideChinese;
+      filters.hideMovie = flags.hideMovie;
+      filters.hideShortened = flags.hideShortened;
+      seasonHideChinese = flags.hideChinese;
+      seasonHideMovie = flags.hideMovie;
+      seasonHideShortened = flags.hideShortened;
+      syncContentFilterSelect();
+      if (!shouldRender) return;
+      chartPage = 1;
+      profileTopPage = { OP: 1, ED: 1 };
+      allRatingsPage = { OP: 1, ED: 1 };
+      render();
+      if (activeTab === 'profile') renderProfile();
+      if (activeTab === 'season') renderSeasonViews();
+    }
+
+    function entryPassesHiddenFlags(entry, hideChinese, hideMovie, hideShortened) {
       if (hideChinese && entryIsChinese(entry)) return false;
       if (hideMovie && entryIsMovie(entry)) return false;
+      if (hideShortened && entryIsShortened(entry)) return false;
       return true;
     }
 
     function entryPassesSeasonVisibility(entry) {
-      return entryPassesHiddenFlags(entry, seasonHideChinese, seasonHideMovie);
+      return entryPassesHiddenFlags(entry, seasonHideChinese, seasonHideMovie, seasonHideShortened);
     }
 
     function openingListForSeason(year, season, type = seasonType) {
@@ -4533,7 +4590,7 @@
       const votesHtml = opts.votesHtml || '';
       const notesHtml = opts.notes && entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : '';
       const missing = opts.showMissingLink === false ? '' : (!entry.link ? '<span class="oc-missing-link" title="Ссылка не добавлена">😡</span>' : '');
-      const flagBadges = `${entryIsChinese(entry) ? '<span class="oc-yr-tag">Китай</span>' : ''}${entryIsMovie(entry) ? '<span class="oc-yr-tag">фильм</span>' : ''}`;
+      const flagBadges = `${entryIsChinese(entry) ? '<span class="oc-yr-tag">Китай</span>' : ''}${entryIsMovie(entry) ? '<span class="oc-yr-tag">фильм</span>' : ''}${entryIsShortened(entry) ? '<span class="oc-yr-tag">укор.</span>' : ''}`;
       return `<div class="oc-season-op oc-unified-card${className}" data-id="${escapeHtml(entry.id)}">
         <div class="oc-rank ${rankClass}">${rankLabel}</div>
         ${imgHtml(entry, 'oc-season-thumb')}
@@ -4557,8 +4614,7 @@
 
     function renderSeasonViews() {
       document.querySelectorAll('.oc-season-type-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.seasonType === seasonType));
-      document.querySelectorAll('[data-season-filter="hideChinese"]').forEach(el => { el.checked = Boolean(seasonHideChinese); });
-      document.querySelectorAll('[data-season-filter="hideMovie"]').forEach(el => { el.checked = Boolean(seasonHideMovie); });
+      syncContentFilterSelect();
       renderSeasonBrowser();
       renderSeasonList();
     }
@@ -4870,6 +4926,7 @@
           <div class="oc-edit-flags">
             <label class="oc-flag-check"><input class="oc-e-chinese" type="checkbox" ${entryIsChinese(entry) ? 'checked' : ''} /> Китайский OP/ED</label>
             <label class="oc-flag-check"><input class="oc-e-movie" type="checkbox" ${entryIsMovie(entry) ? 'checked' : ''} /> OP/ED фильма</label>
+            <label class="oc-flag-check"><input class="oc-e-shortened" type="checkbox" ${entryIsShortened(entry) ? 'checked' : ''} /> Укороченный OP/ED</label>
           </div>
           <div class="oc-edit-actions">
             <button class="oc-cancel-btn" data-action="cancel-edit" data-id="${entry.id}">Отмена</button>
@@ -6420,7 +6477,8 @@
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
             isChinese: Boolean(card.querySelector('.oc-e-chinese') && card.querySelector('.oc-e-chinese').checked),
-            isMovie: Boolean(card.querySelector('.oc-e-movie') && card.querySelector('.oc-e-movie').checked)
+            isMovie: Boolean(card.querySelector('.oc-e-movie') && card.querySelector('.oc-e-movie').checked),
+            isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked)
           };
 
           try {
@@ -6429,7 +6487,7 @@
             populateFilterOptions();
             render();
             await window.OPED_DB.updateOpening(id, updatedEntry);
-            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie });
+            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened });
             setStatus('Изменения сохранены в Firebase ✓');
           } catch (err) {
             console.error(err);
@@ -6518,14 +6576,6 @@
     document.querySelectorAll('[data-season-type]').forEach(btn => {
       btn.addEventListener('click', () => {
         seasonType = btn.dataset.seasonType === 'ED' ? 'ED' : 'OP';
-        renderSeasonViews();
-      });
-    });
-
-    document.querySelectorAll('[data-season-filter]').forEach(input => {
-      input.addEventListener('change', () => {
-        seasonHideChinese = Boolean(document.querySelector('[data-season-filter="hideChinese"]')?.checked);
-        seasonHideMovie = Boolean(document.querySelector('[data-season-filter="hideMovie"]')?.checked);
         renderSeasonViews();
       });
     });
@@ -6644,6 +6694,7 @@
       const link = $('#oc-add-link').value.trim();
       const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
       const isMovie = Boolean($('#oc-add-movie') && $('#oc-add-movie').checked);
+      const isShortened = Boolean($('#oc-add-shortened') && $('#oc-add-shortened').checked);
 
       if (!title) { setStatus('Введите название.', true); return; }
       if (isDuplicateTitle(title, type, null)) { setStatus(`Такой ${type} уже есть. OP и ED проверяются отдельно.`, true); return; }
@@ -6666,10 +6717,11 @@
           link,
           isChinese,
           isMovie,
+          isShortened,
           notes: '',
           createdBy: myName
         });
-        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, isChinese, isMovie });
+        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, isChinese, isMovie, isShortened });
 
         $('#oc-add-title').value = '';
         // Год и сезон оставляем последними введёнными, чтобы быстрее добавлять пачку треков одного сезона.
@@ -6681,6 +6733,7 @@
         $('#oc-add-link').value = '';
         if ($('#oc-add-chinese')) $('#oc-add-chinese').checked = false;
         if ($('#oc-add-movie')) $('#oc-add-movie').checked = false;
+        if ($('#oc-add-shortened')) $('#oc-add-shortened').checked = false;
 
         setStatus('Трек добавлен в Firebase ✓');
       } catch (err) {
@@ -6722,18 +6775,9 @@
     bindSimpleFilter('#oc-p-score-cmp', 'scoreCmp');
     bindSimpleFilter('#oc-f-score-value', 'scoreValue', 'input');
     bindSimpleFilter('#oc-p-score-value', 'scoreValue', 'input');
-    function bindCheckboxFilter(selector, key) {
-      const el = $(selector);
-      if (!el) return;
-      el.addEventListener('change', (e) => {
-        filters[key] = Boolean(e.target.checked);
-        applyFilterChange();
-      });
+    if (contentFilterSelect) {
+      contentFilterSelect.addEventListener('change', (e) => setContentFilterMode(e.target.value));
     }
-    bindCheckboxFilter('#oc-f-hide-chinese', 'hideChinese');
-    bindCheckboxFilter('#oc-p-hide-chinese', 'hideChinese');
-    bindCheckboxFilter('#oc-f-hide-movie', 'hideMovie');
-    bindCheckboxFilter('#oc-p-hide-movie', 'hideMovie');
     $('#oc-sort').addEventListener('change', (e) => { sortMode = e.target.value; chartPage = 1; render(); });
 
     function bindMultiFilter(selector, filterKey) {
@@ -6769,7 +6813,7 @@
 
     function resetAllFilters() {
       filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = '';
-      filters.hideChinese = true; filters.hideMovie = true;
+      setContentFilterMode('default', false);
       filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];
       sortMode = 'added_desc';
       chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 }; arScoreFilter = '';
@@ -7069,6 +7113,7 @@
         notes: String(opening.notes || "").trim(),
         isChinese: Boolean(opening.isChinese || opening.chinese || opening.isChina || opening.chineseOpening),
         isMovie: Boolean(opening.isMovie || opening.movie || opening.isFilm || opening.filmOpening),
+        isShortened: Boolean(opening.isShortened || opening.shortened || opening.isShort || opening.short || opening.shortOpening || opening.shortenedOpening),
         updatedAt: serverTimestamp()
       };
       if (includeCreatedFields) {
