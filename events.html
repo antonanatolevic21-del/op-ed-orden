@@ -1014,10 +1014,98 @@
     .ev-bw-last { margin-top: 14px; border: 1px solid rgba(251,113,133,.48); border-radius: 11px; padding: 12px; background: rgba(251,113,133,.06); text-align: center; }
     @media (max-width: 850px) { .ev-bw-lobby-grid { grid-template-columns: 1fr; } }
     @media (max-width: 650px) {
-      .ev-mode-switch { grid-template-columns: 1fr; }
+      .ev-mode-switch { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .ev-bw-active-target, .ev-bw-answer-row { grid-template-columns: 1fr; }
       .ev-bw-opening-grid { grid-template-columns: 1fr; }
       .ev-bw-podium { justify-content: flex-start; }
+    }
+
+
+    .ev-predict-shell { display: flex; flex-direction: column; gap: 16px; }
+    .ev-predict-layout { display: grid; grid-template-columns: minmax(220px, 290px) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .ev-predict-season-panel, .ev-predict-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .ev-predict-year + .ev-predict-year { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }
+    .ev-predict-year-title { margin-bottom: 9px; color: var(--gold); font-family: 'Archivo Black', sans-serif; font-size: 20px; }
+    .ev-predict-season-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .ev-predict-season-btn {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--panel);
+      color: var(--muted);
+      padding: 9px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .ev-predict-season-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .ev-predict-season-btn.active { border-color: var(--pink); color: var(--pink); background: rgba(255,46,99,.1); }
+    .ev-predict-content { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+    .ev-predict-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+    .ev-predict-card-head h3 { margin: 0 0 5px; font-family: 'Archivo Black', sans-serif; font-size: 18px; }
+    .ev-predict-list { display: flex; flex-direction: column; gap: 8px; }
+    .ev-predict-row {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 118px;
+      gap: 9px;
+      align-items: center;
+      padding: 9px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+    .ev-predict-index { color: var(--muted); font-family: 'Archivo Black', sans-serif; text-align: center; }
+    .ev-predict-row input[type="text"] {
+      width: 100%; min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      padding: 10px 11px;
+    }
+    .ev-predict-check {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 38px;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      background: var(--card);
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ev-predict-check:has(input:checked) { border-color: rgba(74,222,128,.58); color: var(--green); background: rgba(74,222,128,.08); }
+    .ev-predict-check input { margin: 0; accent-color: var(--green); }
+    .ev-predict-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .ev-predict-summary-card { border: 1px solid var(--border); border-radius: 11px; background: var(--panel); padding: 12px; }
+    .ev-predict-summary-label { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .55px; }
+    .ev-predict-summary-value { margin-top: 5px; color: var(--cyan); font-family: 'Archivo Black', sans-serif; font-size: 25px; }
+    .ev-predict-footer { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .ev-predict-updated { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; line-height: 1.45; }
+    @media (max-width: 850px) {
+      .ev-predict-layout { grid-template-columns: 1fr; }
+      .ev-predict-season-buttons { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      .ev-mode-switch { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .ev-predict-season-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .ev-predict-row { grid-template-columns: 28px minmax(0, 1fr); }
+      .ev-predict-check { grid-column: 2; justify-self: start; }
+      .ev-predict-summary { grid-template-columns: 1fr; }
+      .ev-predict-footer .ev-btn-main { width: 100%; }
     }
 
   </style>
@@ -1041,6 +1129,7 @@
       <button class="ev-mode-tab active" type="button" data-mode="rating">Оценка опенингов года</button>
       <button class="ev-mode-tab" type="button" data-mode="guess">Угадай опенинг</button>
       <button class="ev-mode-tab" type="button" data-mode="bestworst">Угадай лучшее / худшее</button>
+      <button class="ev-mode-tab" type="button" data-mode="predictions">Предикты</button>
     </nav>
 
     <nav class="ev-tabs" id="ev-stage-tabs">
@@ -1206,6 +1295,7 @@
     const BW_SUBMISSION_COLLECTION = 'bestWorstSubmissions';
     const bestWorstFilters = {
       mode: 'both',
+      typeFilter: 'OP',
       perRound: 6,
       rounds: 5,
       grouping: 'none',
@@ -1232,6 +1322,16 @@
     let bestWorstDraftKey = '';
     let bestWorstRevealPending = false;
     let bestWorstRenderedRoundKey = '';
+    const PREDICTION_COLLECTION = 'eventPredictions';
+    const PREDICTION_START_YEAR = 2026;
+    const PREDICTION_START_SEASON = 'fall';
+    let predictionDocs = new Map();
+    let predictionYear = 2026;
+    let predictionSeason = 'fall';
+    let predictionDraft = null;
+    let predictionDraftKey = '';
+    let predictionDraftDirty = false;
+    let predictionStatus = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -2452,10 +2552,12 @@
 
     function normalizeBestWorstSettings(raw = {}) {
       const mode = ['best', 'worst', 'both'].includes(raw.mode) ? raw.mode : 'both';
+      const typeFilter = ['OP', 'ED', 'both'].includes(raw.typeFilter) ? raw.typeFilter : 'OP';
       const grouping = ['none', 'year', 'yearSeason', 'performer', 'director', 'studio'].includes(raw.grouping) ? raw.grouping : 'none';
       const content = ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(raw.content) ? raw.content : 'all';
       return {
         mode,
+        typeFilter,
         perRound: bwClamp(raw.perRound, 2, 20, 6),
         rounds: bwClamp(raw.rounds, 1, 20, 5),
         grouping,
@@ -2506,6 +2608,12 @@
       return 'Лучшее и худшее';
     }
 
+    function bwTypeLabel(typeFilter) {
+      if (typeFilter === 'ED') return 'Только эндинги';
+      if (typeFilter === 'both') return 'Опенинги и эндинги';
+      return 'Только опенинги';
+    }
+
     function bwGroupingLabel(grouping) {
       return ({ none: 'Без группировки', year: 'По году', yearSeason: 'По году и сезону', performer: 'По исполнителю', director: 'По режиссёру', studio: 'По студии' })[grouping] || 'Без группировки';
     }
@@ -2529,7 +2637,7 @@
       const players = bwReadyPlayers(room).map(player => player.key).join(',');
       return [
         room.gameId || '', room.status || '', room.phase || '', roundIndex,
-        settings.mode, settings.grouping, settings.perRound,
+        settings.mode, settings.typeFilter, settings.grouping, settings.perRound,
         round.groupKey || '', round.groupLabel || '',
         (round.openingIds || []).join(','), players
       ].join('|');
@@ -2670,7 +2778,7 @@
     }
 
     function bwOpeningMatches(opening, settings, ratingContext) {
-      if (opening.type !== 'OP') return false;
+      if (settings.typeFilter !== 'both' && opening.type !== settings.typeFilter) return false;
       if (!getGuessPlaybackSource(opening)) return false;
       if (settings.year && String(opening.year ?? '') !== settings.year) return false;
       if (settings.season && opening.season !== settings.season) return false;
@@ -2737,9 +2845,9 @@
 
     function bwBuildRounds(settings, players) {
       const candidates = getBestWorstCandidates(settings);
-      if (candidates.length < settings.perRound) throw new Error(`После фильтров осталось ${candidates.length} OP. Нужно хотя бы ${settings.perRound}.`);
+      if (candidates.length < settings.perRound) throw new Error(`После фильтров осталось ${candidates.length} элементов. Нужно хотя бы ${settings.perRound}.`);
       const buckets = bwGroupBuckets(candidates, settings.grouping).filter(bucket => bucket.rows.length >= settings.perRound);
-      if (!buckets.length) throw new Error(`Нет ни одной группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} подходящими OP.`);
+      if (!buckets.length) throw new Error(`Нет ни одной группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} подходящими элементами.`);
       const rounds = [];
       let unused = new Set(candidates.map(opening => String(opening.id)));
       for (let roundIndex = 0; roundIndex < settings.rounds; roundIndex += 1) {
@@ -2789,7 +2897,7 @@
     }
 
     function bwOpeningName(id) {
-      return getOpeningTitle(openingsById.get(String(id)) || { title: 'Неизвестный OP' });
+      return getOpeningTitle(openingsById.get(String(id)) || { title: 'Неизвестный OP/ED' });
     }
 
     function bwRenderMedia(opening) {
@@ -2898,12 +3006,12 @@
       const ownChoice = bestWorstDraft[userKey] || {};
       if (bwModeUses(settings, 'best') && !ownChoice.best) { bestWorstStatus = 'Поставь себе флажок «Лучшее».'; bwPatchRoundUi(); return; }
       if (bwModeUses(settings, 'worst') && !ownChoice.worst) { bestWorstStatus = 'Поставь себе флажок «Худшее».'; bwPatchRoundUi(); return; }
-      if (settings.mode === 'both' && ownChoice.best === ownChoice.worst) { bestWorstStatus = 'Один OP не может быть одновременно твоим лучшим и худшим.'; bwPatchRoundUi(); return; }
+      if (settings.mode === 'both' && ownChoice.best === ownChoice.worst) { bestWorstStatus = 'Один элемент не может быть одновременно твоим лучшим и худшим.'; bwPatchRoundUi(); return; }
       for (const player of players.filter(player => player.key !== userKey)) {
         const answer = bestWorstDraft[player.key] || {};
         if (bwModeUses(settings, 'best') && !answer.best) { bestWorstStatus = `Не выбрано лучшее для пользователя ${player.name}.`; bwPatchRoundUi(); return; }
         if (bwModeUses(settings, 'worst') && !answer.worst) { bestWorstStatus = `Не выбрано худшее для пользователя ${player.name}.`; bwPatchRoundUi(); return; }
-        if (settings.mode === 'both' && answer.best === answer.worst) { bestWorstStatus = `У пользователя ${player.name} один OP не может быть одновременно лучшим и худшим.`; bwPatchRoundUi(); return; }
+        if (settings.mode === 'both' && answer.best === answer.worst) { bestWorstStatus = `У пользователя ${player.name} один элемент не может быть одновременно лучшим и худшим.`; bwPatchRoundUi(); return; }
       }
       const answers = {};
       players.forEach(player => {
@@ -3072,7 +3180,8 @@
       const ready = bwReadyPlayers(room);
       const meKey = bwCurrentUserKey();
       const me = players.find(player => player.key === meKey);
-      const years = [...new Set(openings.filter(row => row.type === 'OP').map(row => Number(row.year)).filter(Number.isFinite))].sort((a, b) => b - a);
+      const typeCandidates = openings.filter(row => settings.typeFilter === 'both' || row.type === settings.typeFilter);
+      const years = [...new Set(typeCandidates.map(row => Number(row.year)).filter(Number.isFinite))].sort((a, b) => b - a);
       const studios = guessUniqueValues('studios');
       const directors = guessUniqueValues('directors');
       const performers = guessUniqueValues('performers');
@@ -3104,10 +3213,11 @@
             </section>
 
             <section class="ev-guess-filter-card">
-              <div class="ev-guess-card-head"><div><h3>Параметры и фильтры</h3><div class="ev-hint">Тип зафиксирован: только OP. Поля названия, четырёх вариантов, франшизы, длины фрагмента и прослушиваний здесь отсутствуют.</div></div><button type="button" class="ev-btn-ghost" id="ev-bw-defaults" ${hostDisabled}>Сбросить</button></div>
+              <div class="ev-guess-card-head"><div><h3>Параметры и фильтры</h3><div class="ev-hint">Можно выбрать только опенинги, только эндинги или оба типа сразу. Поля названия, четырёх вариантов, франшизы, длины фрагмента и прослушиваний здесь отсутствуют.</div></div><button type="button" class="ev-btn-ghost" id="ev-bw-defaults" ${hostDisabled}>Сбросить</button></div>
               <div class="ev-guess-grid">
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Что угадывать</span><select id="ev-bw-mode" ${hostDisabled}><option value="best" ${settings.mode === 'best' ? 'selected' : ''}>Только лучшее</option><option value="worst" ${settings.mode === 'worst' ? 'selected' : ''}>Только худшее</option><option value="both" ${settings.mode === 'both' ? 'selected' : ''}>Лучшее и худшее</option></select></label>
-                <label class="ev-guess-field"><span class="ev-guess-label">OP за раунд</span><input id="ev-bw-per-round" type="number" min="2" max="20" step="1" value="${settings.perRound}" ${hostDisabled} /></label>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Тип</span><select id="ev-bw-type" ${hostDisabled}><option value="both" ${settings.typeFilter === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.typeFilter === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Элементов за раунд</span><input id="ev-bw-per-round" type="number" min="2" max="20" step="1" value="${settings.perRound}" ${hostDisabled} /></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Количество раундов</span><input id="ev-bw-rounds" type="number" min="1" max="20" step="1" value="${settings.rounds}" ${hostDisabled} /></label>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option></select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Год</span><select id="ev-bw-year" ${hostDisabled}>${guessSelectOptions(years, settings.year)}</select></label>
@@ -3116,11 +3226,11 @@
                 <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
-                <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
-                <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
+                <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
               </div>
-              <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> OP с рабочим источником.</div>${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
+              <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> элементов · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · с рабочим источником.</div>${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
             </section>
           </div>
           ${bestWorstStatus ? `<div class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может/i.test(bestWorstStatus) ? 'bad' : 'ok'}">${escapeHtml(bestWorstStatus)}</div>` : ''}
@@ -3134,6 +3244,7 @@
         el?.addEventListener('change', () => { bestWorstFilters[key] = parser(el.value); render(); });
       };
       bind('#ev-bw-mode', 'mode');
+      bind('#ev-bw-type', 'typeFilter');
       bind('#ev-bw-per-round', 'perRound', value => bwClamp(value, 2, 20, 6));
       bind('#ev-bw-rounds', 'rounds', value => bwClamp(value, 1, 20, 5));
       bind('#ev-bw-grouping', 'grouping');
@@ -3153,7 +3264,7 @@
       bind('#ev-bw-score-visual-value', 'scoreVisualValue', parseScore);
       document.querySelectorAll('[data-bw-score-logic]').forEach(button => button.addEventListener('click', () => { bestWorstFilters.scoreLogic = button.dataset.bwScoreLogic === 'or' ? 'or' : 'and'; render(); }));
       document.querySelectorAll('#ev-bw-users input[type="checkbox"]').forEach(input => input.addEventListener('change', () => { const users = new Set((bestWorstFilters.users || []).map(normalizeNickname)); const key = normalizeNickname(input.value); input.checked ? users.add(key) : users.delete(key); bestWorstFilters.users = [...users]; render(); }));
-      $('#ev-bw-defaults')?.addEventListener('click', () => { Object.assign(bestWorstFilters, normalizeBestWorstSettings({ mode:'both', perRound:6, rounds:5, grouping:'none', source:'ratings', content:'all' })); render(); });
+      $('#ev-bw-defaults')?.addEventListener('click', () => { Object.assign(bestWorstFilters, normalizeBestWorstSettings({ mode:'both', typeFilter:'OP', perRound:6, rounds:5, grouping:'none', source:'ratings', content:'all' })); render(); });
       $('#ev-bw-save-lobby')?.addEventListener('click', bwSaveLobby);
       $('#ev-bw-join')?.addEventListener('click', bwJoinLobby);
       $('#ev-bw-ready')?.addEventListener('click', bwToggleReady);
@@ -3181,12 +3292,12 @@
       const concreteGroup = bwConcreteGroupLabel(settings, round);
       appEl.innerHTML = `
         <div class="ev-bw-shell" data-bw-round-root="1">
-          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">${escapeHtml(bwModeLabel(settings.mode))} · ${settings.perRound} OP${concreteGroup ? ` · ${escapeHtml(concreteGroup.kind)}: <strong>${escapeHtml(concreteGroup.value)}</strong>` : ''}</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</section>
+          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">${escapeHtml(bwModeLabel(settings.mode))} · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · ${settings.perRound} элементов${concreteGroup ? ` · ${escapeHtml(concreteGroup.kind)}: <strong>${escapeHtml(concreteGroup.value)}</strong>` : ''}</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</section>
           <section class="ev-guess-filter-card">
             <div class="ev-bw-round-head"><div><h3 style="margin:0 0 5px;font-family:'Archivo Black',sans-serif;">${phaseResults ? 'Результаты раунда' : 'Выбери свои флажки'}</h3><div class="ev-hint">Флажки на карточках — только твои собственные лучшее и худшее. Выборы остальных игроков делаются отдельно в списке ниже.</div></div><div class="ev-bw-pill" id="ev-bw-submitted-count">Ответили: <strong>${submittedKeys.size}/${players.length}</strong></div></div>
             ${concreteGroup ? `<div class="ev-bw-group-banner"><span class="ev-bw-group-kind">${escapeHtml(concreteGroup.kind)}</span><span class="ev-bw-group-value">${escapeHtml(concreteGroup.value)}</span></div>` : ''}
-            ${!phaseResults ? `<div class="ev-bw-active-target"><div><div class="ev-guess-label">Флажки принадлежат</div><div class="ev-bw-answer-name" style="margin-top:7px;">${me ? `${escapeHtml(me.name)} · это ты` : 'Ты не участвуешь в этом раунде'}</div></div><div class="ev-hint">Поставить флажки за другого игрока нельзя. Один OP не может одновременно быть твоим лучшим и худшим.</div></div>` : ''}
-            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(ownAnswer.best || '') === String(id); const isWorst = String(ownAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}" data-bw-opening-card="1" data-opening-id="${escapeHtml(id)}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Моё лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Моё худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
+            ${!phaseResults ? `<div class="ev-bw-active-target"><div><div class="ev-guess-label">Флажки принадлежат</div><div class="ev-bw-answer-name" style="margin-top:7px;">${me ? `${escapeHtml(me.name)} · это ты` : 'Ты не участвуешь в этом раунде'}</div></div><div class="ev-hint">Поставить флажки за другого игрока нельзя. Один элемент не может одновременно быть твоим лучшим и худшим.</div></div>` : ''}
+            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(ownAnswer.best || '') === String(id); const isWorst = String(ownAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}" data-bw-opening-card="1" data-opening-id="${escapeHtml(id)}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.type || '—')} · ${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Моё лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Моё худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
             ${phaseResults ? bwRenderRoundResults(room, round, players, settings) : `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Твои догадки о других игроках</h3><div class="ev-hint">В списке нет тебя самого: угадывать собственные флажки не нужно.</div></div></div><div class="ev-bw-answer-list">${guessTargets.length ? guessTargets.map(player => { const answer = bestWorstDraft[player.key] || {}; return `<div class="ev-bw-answer-row"><div class="ev-bw-answer-name">${escapeHtml(player.name)}</div>${bwModeUses(settings,'best') ? `<label><span class="ev-guess-label">Его/её лучшее</span><select data-bw-answer="best" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.best, settings.mode === 'both' ? answer.worst : '')}</select></label>` : ''}${bwModeUses(settings,'worst') ? `<label><span class="ev-guess-label">Его/её худшее</span><select data-bw-answer="worst" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.worst, settings.mode === 'both' ? answer.best : '')}</select></label>` : ''}</div>`; }).join('') : '<div class="ev-guess-empty">Других игроков для угадывания нет.</div>'}</div><div class="ev-actions" style="margin-top:12px;justify-content:flex-start;"><button type="button" class="ev-btn-main" id="ev-bw-submit" ${canAnswer ? '' : 'disabled'}>${ownSubmitted ? 'Обновить ответ' : 'Готово'}</button></div><div class="ev-bw-progress-list">${players.map(player => `<span class="ev-bw-progress-user ${submittedKeys.has(player.key) ? 'done' : ''}" data-bw-progress-key="${escapeHtml(player.key)}" data-bw-progress-name="${escapeHtml(player.name)}">${submittedKeys.has(player.key) ? '✓' : '…'} ${escapeHtml(player.name)}</span>`).join('')}</div></div>`}
           </section>
           <div id="ev-bw-status" class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может|поставь/i.test(bestWorstStatus) ? 'bad' : 'ok'}" ${bestWorstStatus ? '' : 'hidden'}>${escapeHtml(bestWorstStatus)}</div>
@@ -3238,7 +3349,7 @@
       const order = [top[1], top[0], top[2]].filter(Boolean);
       const classes = top.length >= 3 ? ['second','first','third'] : top.length === 2 ? ['second','first'] : ['first'];
       const last = rows[rows.length - 1];
-      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · общий результат по точным совпадениям.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${order.map((row,index) => { const cls = classes[index]; const rank = cls === 'first' ? 1 : cls === 'second' ? 2 : 3; return `<div class="ev-bw-podium-place ${cls}"><div class="ev-bw-podium-name">${escapeHtml(row.name)}</div><div class="ev-bw-podium-block"><div class="ev-bw-podium-rank">${rank}</div><div class="ev-bw-podium-score">${row.score}/${row.max}</div></div></div>`; }).join('')}</div>${last ? `<div class="ev-bw-last"><strong>Последнее место:</strong> ${escapeHtml(last.name)} · ${last.score}/${last.max}</div>` : ''}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}</section></div>`;
+      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · ${escapeHtml(bwTypeLabel(normalizeBestWorstSettings(room.settings).typeFilter))} · общий результат по точным совпадениям.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${order.map((row,index) => { const cls = classes[index]; const rank = cls === 'first' ? 1 : cls === 'second' ? 2 : 3; return `<div class="ev-bw-podium-place ${cls}"><div class="ev-bw-podium-name">${escapeHtml(row.name)}</div><div class="ev-bw-podium-block"><div class="ev-bw-podium-rank">${rank}</div><div class="ev-bw-podium-score">${row.score}/${row.max}</div></div></div>`; }).join('')}</div>${last ? `<div class="ev-bw-last"><strong>Последнее место:</strong> ${escapeHtml(last.name)} · ${last.score}/${last.max}</div>` : ''}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}</section></div>`;
       $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
     }
 
@@ -3265,6 +3376,241 @@
       bwRenderRound();
     }
 
+
+    function predictionDocKey(year = predictionYear, season = predictionSeason) {
+      return `${Number(year)}_${String(season || '')}`;
+    }
+
+    function predictionSeasonIndex(season) {
+      return SEASONS.indexOf(String(season || ''));
+    }
+
+    function predictionSeasonChoices() {
+      const openingYears = openings.map(row => Number(row.year)).filter(Number.isFinite);
+      const currentYear = new Date().getFullYear();
+      const maxOpeningYear = openingYears.length ? Math.max(...openingYears) : PREDICTION_START_YEAR;
+      const maxYear = Math.max(PREDICTION_START_YEAR + 2, currentYear + 2, maxOpeningYear);
+      const out = [];
+      for (let year = PREDICTION_START_YEAR; year <= maxYear; year += 1) {
+        SEASONS.forEach(season => {
+          if (year === PREDICTION_START_YEAR && predictionSeasonIndex(season) < predictionSeasonIndex(PREDICTION_START_SEASON)) return;
+          out.push({ year, season, key: predictionDocKey(year, season) });
+        });
+      }
+      return out;
+    }
+
+    function normalizePredictionRows(rows, kind) {
+      const source = Array.isArray(rows) ? rows : [];
+      return Array.from({ length: 10 }, (_, index) => {
+        const row = source[index] && typeof source[index] === 'object' ? source[index] : {};
+        if (kind === 'opening') {
+          return {
+            openingId: String(row.openingId || ''),
+            text: String(row.text || row.title || '').slice(0, 300),
+            hit: Boolean(row.hit)
+          };
+        }
+        return { text: String(row.text || '').slice(0, 500), hit: Boolean(row.hit) };
+      });
+    }
+
+    function normalizePredictionDoc(raw = {}) {
+      return {
+        year: Number(raw.year) || predictionYear,
+        season: SEASONS.includes(raw.season) ? raw.season : predictionSeason,
+        textPredictions: normalizePredictionRows(raw.textPredictions, 'text'),
+        openingPredictions: normalizePredictionRows(raw.openingPredictions, 'opening'),
+        updatedBy: String(raw.updatedBy || ''),
+        updatedAt: raw.updatedAt || null
+      };
+    }
+
+    function ensurePredictionDraft(force = false) {
+      const key = predictionDocKey();
+      if (!force && predictionDraft && predictionDraftKey === key) return predictionDraft;
+      const source = predictionDocs.get(key) || { year: predictionYear, season: predictionSeason };
+      predictionDraft = normalizePredictionDoc(source);
+      predictionDraft.year = predictionYear;
+      predictionDraft.season = predictionSeason;
+      predictionDraftKey = key;
+      predictionDraftDirty = false;
+      predictionStatus = '';
+      return predictionDraft;
+    }
+
+    function predictionCandidates() {
+      return openings
+        .filter(opening => opening.type === 'OP' && Number(opening.year) === Number(predictionYear) && opening.season === predictionSeason)
+        .sort((a, b) => getOpeningTitle(a).localeCompare(getOpeningTitle(b), 'ru'));
+    }
+
+    function predictionSummary(draft = ensurePredictionDraft()) {
+      const textFilled = draft.textPredictions.filter(row => String(row.text || '').trim()).length;
+      const textHit = draft.textPredictions.filter(row => String(row.text || '').trim() && row.hit).length;
+      const openingFilled = draft.openingPredictions.filter(row => String(row.text || '').trim()).length;
+      const openingHit = draft.openingPredictions.filter(row => String(row.text || '').trim() && row.hit).length;
+      return { textFilled, textHit, openingFilled, openingHit };
+    }
+
+    function patchPredictionSummary() {
+      const summary = predictionSummary();
+      const textEl = $('#ev-predict-text-summary');
+      const openingEl = $('#ev-predict-opening-summary');
+      if (textEl) textEl.textContent = `${summary.textHit}/${summary.textFilled}`;
+      if (openingEl) openingEl.textContent = `${summary.openingHit}/${summary.openingFilled}`;
+      const statusEl = $('#ev-predict-status');
+      if (statusEl) {
+        statusEl.textContent = predictionStatus || (predictionDraftDirty ? 'Есть несохранённые изменения.' : '');
+        statusEl.classList.toggle('ok', Boolean(predictionStatus) && !/не удалось|ошибка/i.test(predictionStatus));
+        statusEl.classList.toggle('bad', /не удалось|ошибка/i.test(predictionStatus || ''));
+        statusEl.hidden = !statusEl.textContent;
+      }
+    }
+
+    function choosePredictionSeason(year, season) {
+      if (predictionDraftDirty && !confirm('Есть несохранённые изменения. Перейти к другому сезону без сохранения?')) return;
+      predictionYear = Number(year) || PREDICTION_START_YEAR;
+      predictionSeason = SEASONS.includes(season) ? season : PREDICTION_START_SEASON;
+      predictionDraft = null;
+      predictionDraftKey = '';
+      predictionDraftDirty = false;
+      predictionStatus = '';
+      renderPredictionsEvent();
+    }
+
+    async function savePredictionSeason() {
+      const draft = ensurePredictionDraft();
+      const candidates = predictionCandidates();
+      const byTitle = new Map();
+      candidates.forEach(opening => {
+        const title = getOpeningTitle(opening).trim().toLocaleLowerCase('ru');
+        if (title && !byTitle.has(title)) byTitle.set(title, opening);
+      });
+      const payload = {
+        year: predictionYear,
+        season: predictionSeason,
+        textPredictions: normalizePredictionRows(draft.textPredictions, 'text').map(row => ({ text: row.text.trim(), hit: Boolean(row.text.trim()) && row.hit })),
+        openingPredictions: normalizePredictionRows(draft.openingPredictions, 'opening').map(row => {
+          const text = row.text.trim();
+          const match = byTitle.get(text.toLocaleLowerCase('ru'));
+          return { openingId: match ? String(match.id) : String(row.openingId || ''), text, hit: Boolean(text) && row.hit };
+        }),
+        updatedBy: String(myName || '').trim(),
+        updatedAt: serverTimestamp()
+      };
+      predictionStatus = 'Сохраняю…';
+      patchPredictionSummary();
+      try {
+        await setDoc(doc(db, PREDICTION_COLLECTION, predictionDocKey()), payload, { merge: true });
+        predictionDocs.set(predictionDocKey(), { ...payload, updatedAt: new Date() });
+        predictionDraft = normalizePredictionDoc({ ...payload, updatedAt: new Date() });
+        predictionDraftKey = predictionDocKey();
+        predictionDraftDirty = false;
+        predictionStatus = 'Сохранено ✓';
+      } catch (error) {
+        console.error('eventPredictions save failed', error);
+        predictionStatus = 'Не удалось сохранить. Проверь Firebase Rules для eventPredictions.';
+      }
+      patchPredictionSummary();
+    }
+
+    function renderPredictionsEvent() {
+      const draft = ensurePredictionDraft();
+      const choices = predictionSeasonChoices();
+      const grouped = new Map();
+      choices.forEach(item => {
+        if (!grouped.has(item.year)) grouped.set(item.year, []);
+        grouped.get(item.year).push(item);
+      });
+      const candidates = predictionCandidates();
+      const summary = predictionSummary(draft);
+      const current = predictionDocs.get(predictionDocKey());
+      const updatedBy = String(current?.updatedBy || draft.updatedBy || '').trim();
+      const datalistId = `ev-predict-op-list-${predictionYear}-${predictionSeason}`;
+      appEl.innerHTML = `
+        <div class="ev-predict-shell">
+          <section class="ev-panel-head">
+            <div>
+              <div class="ev-section-label">Четвёртый ивент</div>
+              <h2>Предикты</h2>
+              <div class="ev-hint">Сезонные прогнозы начиная с Осени 2026. Галочка означает, что предикт сбылся; пустая галочка — что не сбылся.</div>
+            </div>
+          </section>
+          <div class="ev-predict-layout">
+            <aside class="ev-predict-season-panel">
+              <div class="ev-mini-title" style="margin-bottom:12px;">Сезоны</div>
+              ${[...grouped.entries()].map(([year, rows]) => `<div class="ev-predict-year"><div class="ev-predict-year-title">${year}</div><div class="ev-predict-season-buttons">${rows.map(row => `<button type="button" class="ev-predict-season-btn ${row.year === predictionYear && row.season === predictionSeason ? 'active' : ''}" data-predict-year="${row.year}" data-predict-season="${row.season}">${escapeHtml(SEASON_LABEL[row.season])}</button>`).join('')}</div></div>`).join('')}
+            </aside>
+            <div class="ev-predict-content">
+              <section class="ev-predict-card">
+                <div class="ev-predict-card-head"><div><h3>Обычные предикты</h3><div class="ev-hint">До 10 текстовых прогнозов на ${escapeHtml(SEASON_LABEL[predictionSeason])} ${predictionYear}.</div></div><div class="ev-score-pill">10 слотов</div></div>
+                <div class="ev-predict-list">
+                  ${draft.textPredictions.map((row, index) => `<div class="ev-predict-row"><div class="ev-predict-index">${index + 1}</div><input type="text" maxlength="500" value="${escapeHtml(row.text)}" placeholder="Например: у трёх сериалов будет один исполнитель" data-predict-text-index="${index}"><label class="ev-predict-check"><input type="checkbox" data-predict-text-hit="${index}" ${row.hit ? 'checked' : ''}> Сбылось</label></div>`).join('')}
+                </div>
+              </section>
+              <section class="ev-predict-card">
+                <div class="ev-predict-card-head"><div><h3>Какие опенинги попадут в десятку</h3><div class="ev-hint">Без конкретных мест. Можно выбрать OP из базы выбранного сезона или вписать будущий опенинг вручную. Сейчас в базе найдено: ${candidates.length}.</div></div><div class="ev-score-pill">Топ-10</div></div>
+                <datalist id="${datalistId}">${candidates.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}">${escapeHtml(opening.anime || '')}</option>`).join('')}</datalist>
+                <div class="ev-predict-list">
+                  ${draft.openingPredictions.map((row, index) => `<div class="ev-predict-row"><div class="ev-predict-index">${index + 1}</div><input type="text" maxlength="300" list="${datalistId}" value="${escapeHtml(row.text)}" placeholder="Название опенинга" data-predict-opening-index="${index}"><label class="ev-predict-check"><input type="checkbox" data-predict-opening-hit="${index}" ${row.hit ? 'checked' : ''}> Сбылось</label></div>`).join('')}
+                </div>
+              </section>
+              <section class="ev-predict-summary">
+                <div class="ev-predict-summary-card"><div class="ev-predict-summary-label">Сбывшиеся текстовые предикты</div><div class="ev-predict-summary-value" id="ev-predict-text-summary">${summary.textHit}/${summary.textFilled}</div></div>
+                <div class="ev-predict-summary-card"><div class="ev-predict-summary-label">Угаданные опенинги</div><div class="ev-predict-summary-value" id="ev-predict-opening-summary">${summary.openingHit}/${summary.openingFilled}</div></div>
+              </section>
+              <section class="ev-predict-card ev-predict-footer">
+                <div><div class="ev-predict-updated">${updatedBy ? `Последнее сохранение: ${escapeHtml(updatedBy)}` : 'Сезон ещё не сохранялся.'}</div><div id="ev-predict-status" class="ev-status-line" ${predictionStatus || predictionDraftDirty ? '' : 'hidden'}>${escapeHtml(predictionStatus || (predictionDraftDirty ? 'Есть несохранённые изменения.' : ''))}</div></div>
+                <button type="button" class="ev-btn-main" id="ev-predict-save">Сохранить сезон</button>
+              </section>
+            </div>
+          </div>
+        </div>`;
+
+      document.querySelectorAll('[data-predict-year][data-predict-season]').forEach(button => button.addEventListener('click', () => choosePredictionSeason(button.dataset.predictYear, button.dataset.predictSeason)));
+      document.querySelectorAll('[data-predict-text-index]').forEach(input => input.addEventListener('input', () => {
+        const index = Number(input.dataset.predictTextIndex);
+        draft.textPredictions[index].text = input.value;
+        if (!input.value.trim()) {
+          draft.textPredictions[index].hit = false;
+          const hitInput = document.querySelector(`[data-predict-text-hit="${index}"]`);
+          if (hitInput) hitInput.checked = false;
+        }
+        predictionDraftDirty = true;
+        predictionStatus = '';
+        patchPredictionSummary();
+      }));
+      document.querySelectorAll('[data-predict-text-hit]').forEach(input => input.addEventListener('change', () => {
+        const index = Number(input.dataset.predictTextHit);
+        draft.textPredictions[index].hit = input.checked;
+        predictionDraftDirty = true;
+        predictionStatus = '';
+        patchPredictionSummary();
+      }));
+      document.querySelectorAll('[data-predict-opening-index]').forEach(input => input.addEventListener('input', () => {
+        const index = Number(input.dataset.predictOpeningIndex);
+        draft.openingPredictions[index].text = input.value;
+        draft.openingPredictions[index].openingId = '';
+        if (!input.value.trim()) {
+          draft.openingPredictions[index].hit = false;
+          const hitInput = document.querySelector(`[data-predict-opening-hit="${index}"]`);
+          if (hitInput) hitInput.checked = false;
+        }
+        predictionDraftDirty = true;
+        predictionStatus = '';
+        patchPredictionSummary();
+      }));
+      document.querySelectorAll('[data-predict-opening-hit]').forEach(input => input.addEventListener('change', () => {
+        const index = Number(input.dataset.predictOpeningHit);
+        draft.openingPredictions[index].hit = input.checked;
+        predictionDraftDirty = true;
+        predictionStatus = '';
+        patchPredictionSummary();
+      }));
+      $('#ev-predict-save')?.addEventListener('click', savePredictionSeason);
+    }
+
     function render() {
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
@@ -3280,6 +3626,10 @@
       }
       if (activeMode === 'bestworst') {
         renderBestWorstEvent();
+        return;
+      }
+      if (activeMode === 'predictions') {
+        renderPredictionsEvent();
         return;
       }
       if (isGuest()) {
@@ -6222,7 +6572,7 @@
     function bindShell() {
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          activeMode = ['guess', 'bestworst'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
+          activeMode = ['guess', 'bestworst', 'predictions'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
           if (activeMode !== 'guess') closeGuessGame();
           render();
         });
@@ -6398,6 +6748,19 @@
         bestWorstSubmissions = [];
         bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
         scheduleRender();
+      });
+      onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
+        predictionDocs = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+        if (!predictionDraftDirty) {
+          predictionDraft = null;
+          predictionDraftKey = '';
+          if (activeMode === 'predictions') scheduleRender();
+        }
+      }, error => {
+        console.error('eventPredictions snapshot error', error);
+        predictionDocs = new Map();
+        predictionStatus = 'Не удалось загрузить предикты. Проверь Firebase Rules для eventPredictions.';
+        if (activeMode === 'predictions') scheduleRender();
       });
       if (LOCAL_EVENTS_MODE) {
         loadLocalEventData();
