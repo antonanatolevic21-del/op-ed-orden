@@ -6857,13 +6857,15 @@
 
     function resetAllFilters() {
       filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = '';
-      setContentFilterMode('default', false);
+      // Режим показа китайских / фильмов / укороченных не считаем обычным фильтром.
+      // Он сохраняется отдельно и не должен сбрасываться кнопкой «Сбросить фильтры».
       filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];
       sortMode = 'added_desc';
       chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 }; arScoreFilter = '';
       const sort = $('#oc-sort');
       if (sort) sort.value = 'added_desc';
       populateFilterOptions();
+      syncContentFilterSelect();
       render();
       if (activeTab === 'profile') renderProfile();
     }
