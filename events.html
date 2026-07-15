@@ -956,6 +956,19 @@
     .ev-bw-pill { border: 1px solid var(--border); border-radius: 999px; padding: 7px 10px; background: var(--panel); color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
     .ev-bw-pill strong { color: var(--cyan); }
     .ev-bw-round-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+    .ev-bw-group-banner {
+      display: flex;
+      align-items: baseline;
+      gap: 9px;
+      flex-wrap: wrap;
+      margin-top: 13px;
+      padding: 10px 12px;
+      border: 1px solid rgba(8,217,214,.42);
+      border-radius: 10px;
+      background: rgba(8,217,214,.065);
+    }
+    .ev-bw-group-kind { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px; }
+    .ev-bw-group-value { color: var(--cyan); font-weight: 900; overflow-wrap: anywhere; }
     .ev-bw-opening-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; margin-top: 14px; }
     .ev-bw-opening { min-width: 0; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); overflow: hidden; }
     .ev-bw-opening.active-best { border-color: rgba(74,222,128,.72); box-shadow: 0 0 0 2px rgba(74,222,128,.1); }
@@ -1218,6 +1231,7 @@
     let bestWorstDraft = {};
     let bestWorstDraftKey = '';
     let bestWorstRevealPending = false;
+    let bestWorstRenderedRoundKey = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -2496,6 +2510,93 @@
       return ({ none: 'Без группировки', year: 'По году', yearSeason: 'По году и сезону', performer: 'По исполнителю', director: 'По режиссёру', studio: 'По студии' })[grouping] || 'Без группировки';
     }
 
+    function bwConcreteGroupLabel(settings, round) {
+      const grouping = normalizeBestWorstSettings(settings).grouping;
+      const value = String(round?.groupLabel || '').trim();
+      if (grouping === 'year') return { kind: 'Год', value: value || 'Не указан' };
+      if (grouping === 'yearSeason') return { kind: 'Год и сезон', value: value || 'Не указаны' };
+      if (grouping === 'performer') return { kind: 'Исполнитель', value: value || 'Не указан' };
+      if (grouping === 'director') return { kind: 'Режиссёр', value: value || 'Не указан' };
+      if (grouping === 'studio') return { kind: 'Студия', value: value || 'Не указана' };
+      return null;
+    }
+
+    function bwRoundRenderKey(room = bestWorstRoom) {
+      if (!room || room.status !== 'playing') return '';
+      const roundIndex = Number(room.currentRound || 0);
+      const round = room.rounds?.[roundIndex] || {};
+      const settings = normalizeBestWorstSettings(room.settings);
+      const players = bwReadyPlayers(room).map(player => player.key).join(',');
+      return [
+        room.gameId || '', room.status || '', room.phase || '', roundIndex,
+        settings.mode, settings.grouping, settings.perRound,
+        round.groupKey || '', round.groupLabel || '',
+        (round.openingIds || []).join(','), players
+      ].join('|');
+    }
+
+    function bwPatchRoundDraftUi() {
+      const room = bestWorstRoom;
+      if (!room || room.status !== 'playing' || room.phase !== 'answering') return;
+      const meKey = bwCurrentUserKey();
+      const own = bestWorstDraft[meKey] || {};
+      document.querySelectorAll('[data-bw-opening-card]').forEach(card => {
+        const openingId = String(card.dataset.openingId || '');
+        card.classList.toggle('active-best', String(own.best || '') === openingId);
+        card.classList.toggle('active-worst', String(own.worst || '') === openingId);
+      });
+      document.querySelectorAll('[data-bw-flag]').forEach(button => {
+        const kind = button.dataset.bwFlag;
+        const openingId = String(button.dataset.openingId || '');
+        button.classList.toggle('active', String(own[kind] || '') === openingId);
+      });
+      document.querySelectorAll('[data-bw-answer]').forEach(select => {
+        const targetKey = normalizeNickname(select.dataset.targetKey);
+        const kind = select.dataset.bwAnswer;
+        const row = bestWorstDraft[targetKey] || {};
+        const selected = String(row[kind] || '');
+        const blocked = String(row[kind === 'best' ? 'worst' : 'best'] || '');
+        if (select.value !== selected) select.value = selected;
+        Array.from(select.options).forEach(option => {
+          option.disabled = Boolean(option.value && option.value === blocked && option.value !== selected);
+        });
+      });
+    }
+
+    function bwPatchRoundProgressUi() {
+      const room = bestWorstRoom;
+      if (!room || room.status !== 'playing') return;
+      const players = bwReadyPlayers(room);
+      const submittedKeys = new Set(bwRoundSubmissions(room).map(row => normalizeNickname(row.guesserKey || row.guesserName)));
+      const counter = document.querySelector('#ev-bw-submitted-count strong');
+      if (counter) counter.textContent = `${submittedKeys.size}/${players.length}`;
+      document.querySelectorAll('[data-bw-progress-key]').forEach(item => {
+        const key = normalizeNickname(item.dataset.bwProgressKey);
+        const done = submittedKeys.has(key);
+        item.classList.toggle('done', done);
+        const name = item.dataset.bwProgressName || key;
+        item.textContent = `${done ? '✓' : '…'} ${name}`;
+      });
+      const submit = document.querySelector('#ev-bw-submit');
+      if (submit) submit.textContent = submittedKeys.has(bwCurrentUserKey()) ? 'Обновить ответ' : 'Готово';
+    }
+
+    function bwPatchRoundStatusUi() {
+      const status = document.querySelector('#ev-bw-status');
+      if (!status) return;
+      const bad = /не удалось|нужно|сначала|не выбрано|не может|поставь/i.test(bestWorstStatus || '');
+      status.classList.toggle('bad', bad);
+      status.classList.toggle('ok', Boolean(bestWorstStatus) && !bad);
+      status.textContent = bestWorstStatus || '';
+      status.hidden = !bestWorstStatus;
+    }
+
+    function bwPatchRoundUi() {
+      bwPatchRoundDraftUi();
+      bwPatchRoundProgressUi();
+      bwPatchRoundStatusUi();
+    }
+
     function bwScoreConditions(settings) {
       return [
         { metric: 'score', cmp: settings.scoreOverallCmp, raw: settings.scoreOverallValue },
@@ -2777,6 +2878,7 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
         bestWorstDraftKey = '';
+        bestWorstRenderedRoundKey = '';
         bestWorstStatus = '';
       } catch (error) {
         console.error('best/worst start failed', error);
@@ -2791,17 +2893,17 @@
       const userKey = bwCurrentUserKey();
       const players = bwReadyPlayers(room);
       const me = players.find(player => player.key === userKey);
-      if (!me) { bestWorstStatus = 'Ты не входишь в список готовых участников этой игры.'; render(); return; }
+      if (!me) { bestWorstStatus = 'Ты не входишь в список готовых участников этой игры.'; bwPatchRoundUi(); return; }
       const settings = normalizeBestWorstSettings(room.settings);
       const ownChoice = bestWorstDraft[userKey] || {};
-      if (bwModeUses(settings, 'best') && !ownChoice.best) { bestWorstStatus = 'Поставь себе флажок «Лучшее».'; render(); return; }
-      if (bwModeUses(settings, 'worst') && !ownChoice.worst) { bestWorstStatus = 'Поставь себе флажок «Худшее».'; render(); return; }
-      if (settings.mode === 'both' && ownChoice.best === ownChoice.worst) { bestWorstStatus = 'Один OP не может быть одновременно твоим лучшим и худшим.'; render(); return; }
+      if (bwModeUses(settings, 'best') && !ownChoice.best) { bestWorstStatus = 'Поставь себе флажок «Лучшее».'; bwPatchRoundUi(); return; }
+      if (bwModeUses(settings, 'worst') && !ownChoice.worst) { bestWorstStatus = 'Поставь себе флажок «Худшее».'; bwPatchRoundUi(); return; }
+      if (settings.mode === 'both' && ownChoice.best === ownChoice.worst) { bestWorstStatus = 'Один OP не может быть одновременно твоим лучшим и худшим.'; bwPatchRoundUi(); return; }
       for (const player of players.filter(player => player.key !== userKey)) {
         const answer = bestWorstDraft[player.key] || {};
-        if (bwModeUses(settings, 'best') && !answer.best) { bestWorstStatus = `Не выбрано лучшее для пользователя ${player.name}.`; render(); return; }
-        if (bwModeUses(settings, 'worst') && !answer.worst) { bestWorstStatus = `Не выбрано худшее для пользователя ${player.name}.`; render(); return; }
-        if (settings.mode === 'both' && answer.best === answer.worst) { bestWorstStatus = `У пользователя ${player.name} один OP не может быть одновременно лучшим и худшим.`; render(); return; }
+        if (bwModeUses(settings, 'best') && !answer.best) { bestWorstStatus = `Не выбрано лучшее для пользователя ${player.name}.`; bwPatchRoundUi(); return; }
+        if (bwModeUses(settings, 'worst') && !answer.worst) { bestWorstStatus = `Не выбрано худшее для пользователя ${player.name}.`; bwPatchRoundUi(); return; }
+        if (settings.mode === 'both' && answer.best === answer.worst) { bestWorstStatus = `У пользователя ${player.name} один OP не может быть одновременно лучшим и худшим.`; bwPatchRoundUi(); return; }
       }
       const answers = {};
       players.forEach(player => {
@@ -2825,11 +2927,12 @@
           bestWorstStatus = '';
         } else {
           bestWorstStatus = 'Ответ сохранён. Его можно изменить, пока не ответили остальные участники.';
+          bwPatchRoundUi();
         }
       } catch (error) {
         console.error('best/worst submission failed', error);
         bestWorstStatus = 'Не удалось сохранить ответ. Проверь Firebase Rules для bestWorstSubmissions.';
-        render();
+        bwPatchRoundUi();
       }
     }
 
@@ -2866,6 +2969,7 @@
         await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { currentRound: next, phase: 'answering', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
       }
       bestWorstDraftKey = '';
+      bestWorstRenderedRoundKey = '';
       bestWorstStatus = '';
     }
 
@@ -2875,6 +2979,7 @@
       await deleteDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID));
       bestWorstRoom = null;
       bestWorstDraftKey = '';
+      bestWorstRenderedRoundKey = '';
       bestWorstStatus = 'Текущая игра удалена.';
       render();
     }
@@ -3073,16 +3178,18 @@
       const ownAnswer = bestWorstDraft[meKey] || {};
       const guessTargets = players.filter(player => player.key !== meKey);
       const phaseResults = room.phase === 'results';
+      const concreteGroup = bwConcreteGroupLabel(settings, round);
       appEl.innerHTML = `
-        <div class="ev-bw-shell">
-          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">Группа: <strong>${escapeHtml(round.groupLabel || 'Без группировки')}</strong> · ${escapeHtml(bwModeLabel(settings.mode))} · ${settings.perRound} OP</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</section>
+        <div class="ev-bw-shell" data-bw-round-root="1">
+          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">${escapeHtml(bwModeLabel(settings.mode))} · ${settings.perRound} OP${concreteGroup ? ` · ${escapeHtml(concreteGroup.kind)}: <strong>${escapeHtml(concreteGroup.value)}</strong>` : ''}</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</section>
           <section class="ev-guess-filter-card">
-            <div class="ev-bw-round-head"><div><h3 style="margin:0 0 5px;font-family:'Archivo Black',sans-serif;">${phaseResults ? 'Результаты раунда' : 'Выбери свои флажки'}</h3><div class="ev-hint">Флажки на карточках — только твои собственные лучшее и худшее. Выборы остальных игроков делаются отдельно в списке ниже.</div></div><div class="ev-bw-pill">Ответили: <strong>${submittedKeys.size}/${players.length}</strong></div></div>
+            <div class="ev-bw-round-head"><div><h3 style="margin:0 0 5px;font-family:'Archivo Black',sans-serif;">${phaseResults ? 'Результаты раунда' : 'Выбери свои флажки'}</h3><div class="ev-hint">Флажки на карточках — только твои собственные лучшее и худшее. Выборы остальных игроков делаются отдельно в списке ниже.</div></div><div class="ev-bw-pill" id="ev-bw-submitted-count">Ответили: <strong>${submittedKeys.size}/${players.length}</strong></div></div>
+            ${concreteGroup ? `<div class="ev-bw-group-banner"><span class="ev-bw-group-kind">${escapeHtml(concreteGroup.kind)}</span><span class="ev-bw-group-value">${escapeHtml(concreteGroup.value)}</span></div>` : ''}
             ${!phaseResults ? `<div class="ev-bw-active-target"><div><div class="ev-guess-label">Флажки принадлежат</div><div class="ev-bw-answer-name" style="margin-top:7px;">${me ? `${escapeHtml(me.name)} · это ты` : 'Ты не участвуешь в этом раунде'}</div></div><div class="ev-hint">Поставить флажки за другого игрока нельзя. Один OP не может одновременно быть твоим лучшим и худшим.</div></div>` : ''}
-            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(ownAnswer.best || '') === String(id); const isWorst = String(ownAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Моё лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Моё худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
-            ${phaseResults ? bwRenderRoundResults(room, round, players, settings) : `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Твои догадки о других игроках</h3><div class="ev-hint">В списке нет тебя самого: угадывать собственные флажки не нужно.</div></div></div><div class="ev-bw-answer-list">${guessTargets.length ? guessTargets.map(player => { const answer = bestWorstDraft[player.key] || {}; return `<div class="ev-bw-answer-row"><div class="ev-bw-answer-name">${escapeHtml(player.name)}</div>${bwModeUses(settings,'best') ? `<label><span class="ev-guess-label">Его/её лучшее</span><select data-bw-answer="best" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.best, settings.mode === 'both' ? answer.worst : '')}</select></label>` : ''}${bwModeUses(settings,'worst') ? `<label><span class="ev-guess-label">Его/её худшее</span><select data-bw-answer="worst" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.worst, settings.mode === 'both' ? answer.best : '')}</select></label>` : ''}</div>`; }).join('') : '<div class="ev-guess-empty">Других игроков для угадывания нет.</div>'}</div><div class="ev-actions" style="margin-top:12px;justify-content:flex-start;"><button type="button" class="ev-btn-main" id="ev-bw-submit" ${canAnswer ? '' : 'disabled'}>${ownSubmitted ? 'Обновить ответ' : 'Готово'}</button></div><div class="ev-bw-progress-list">${players.map(player => `<span class="ev-bw-progress-user ${submittedKeys.has(player.key) ? 'done' : ''}">${submittedKeys.has(player.key) ? '✓' : '…'} ${escapeHtml(player.name)}</span>`).join('')}</div></div>`}
+            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(ownAnswer.best || '') === String(id); const isWorst = String(ownAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}" data-bw-opening-card="1" data-opening-id="${escapeHtml(id)}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Моё лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Моё худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
+            ${phaseResults ? bwRenderRoundResults(room, round, players, settings) : `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Твои догадки о других игроках</h3><div class="ev-hint">В списке нет тебя самого: угадывать собственные флажки не нужно.</div></div></div><div class="ev-bw-answer-list">${guessTargets.length ? guessTargets.map(player => { const answer = bestWorstDraft[player.key] || {}; return `<div class="ev-bw-answer-row"><div class="ev-bw-answer-name">${escapeHtml(player.name)}</div>${bwModeUses(settings,'best') ? `<label><span class="ev-guess-label">Его/её лучшее</span><select data-bw-answer="best" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.best, settings.mode === 'both' ? answer.worst : '')}</select></label>` : ''}${bwModeUses(settings,'worst') ? `<label><span class="ev-guess-label">Его/её худшее</span><select data-bw-answer="worst" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.worst, settings.mode === 'both' ? answer.best : '')}</select></label>` : ''}</div>`; }).join('') : '<div class="ev-guess-empty">Других игроков для угадывания нет.</div>'}</div><div class="ev-actions" style="margin-top:12px;justify-content:flex-start;"><button type="button" class="ev-btn-main" id="ev-bw-submit" ${canAnswer ? '' : 'disabled'}>${ownSubmitted ? 'Обновить ответ' : 'Готово'}</button></div><div class="ev-bw-progress-list">${players.map(player => `<span class="ev-bw-progress-user ${submittedKeys.has(player.key) ? 'done' : ''}" data-bw-progress-key="${escapeHtml(player.key)}" data-bw-progress-name="${escapeHtml(player.name)}">${submittedKeys.has(player.key) ? '✓' : '…'} ${escapeHtml(player.name)}</span>`).join('')}</div></div>`}
           </section>
-          ${bestWorstStatus ? `<div class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может|поставь/i.test(bestWorstStatus) ? 'bad' : 'ok'}">${escapeHtml(bestWorstStatus)}</div>` : ''}
+          <div id="ev-bw-status" class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может|поставь/i.test(bestWorstStatus) ? 'bad' : 'ok'}" ${bestWorstStatus ? '' : 'hidden'}>${escapeHtml(bestWorstStatus)}</div>
         </div>`;
       bindBestWorstRoundControls();
     }
@@ -3105,7 +3212,8 @@
         if (kind === 'best' && row.best && row.best === row.worst) row.worst = '';
         if (kind === 'worst' && row.worst && row.worst === row.best) row.best = '';
         bestWorstDraft[targetKey] = row;
-        render();
+        bestWorstStatus = '';
+        bwPatchRoundUi();
       }));
       document.querySelectorAll('[data-bw-answer]').forEach(select => select.addEventListener('change', () => {
         const targetKey = normalizeNickname(select.dataset.targetKey);
@@ -3116,7 +3224,8 @@
         if (kind === 'best' && row.best && row.best === row.worst) row.worst = '';
         if (kind === 'worst' && row.worst && row.worst === row.best) row.best = '';
         bestWorstDraft[targetKey] = row;
-        render();
+        bestWorstStatus = '';
+        bwPatchRoundUi();
       }));
       $('#ev-bw-submit')?.addEventListener('click', bwSubmitRound);
       $('#ev-bw-next')?.addEventListener('click', bwNextRound);
@@ -3134,9 +3243,26 @@
     }
 
     function renderBestWorstEvent() {
-      if (!bestWorstRoom || bestWorstRoom.status === 'lobby') bwRenderLobby();
-      else if (bestWorstRoom.status === 'finished') bwRenderFinished();
-      else bwRenderRound();
+      if (!bestWorstRoom || bestWorstRoom.status === 'lobby') {
+        bestWorstRenderedRoundKey = '';
+        bwRenderLobby();
+        return;
+      }
+      if (bestWorstRoom.status === 'finished') {
+        bestWorstRenderedRoundKey = '';
+        bwRenderFinished();
+        return;
+      }
+      const nextKey = bwRoundRenderKey(bestWorstRoom);
+      if (nextKey && nextKey === bestWorstRenderedRoundKey && appEl.querySelector('[data-bw-round-root]')) {
+        const players = bwReadyPlayers(bestWorstRoom);
+        const round = bestWorstRoom.rounds?.[Number(bestWorstRoom.currentRound || 0)];
+        if (round) bwEnsureDraft(bestWorstRoom, round, players);
+        bwPatchRoundUi();
+        return;
+      }
+      bestWorstRenderedRoundKey = nextKey;
+      bwRenderRound();
     }
 
     function render() {
