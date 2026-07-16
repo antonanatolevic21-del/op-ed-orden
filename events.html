@@ -1634,9 +1634,13 @@
     }
 
     function isAdmin() { return adminUnlocked && accessLevel === 'admin'; }
+    function isUser() { return accessLevel === 'user'; }
     function isGuest() { return accessLevel === 'guest'; }
     function isAdminGuestPreview() { return adminUnlocked && accessLevel === 'guest'; }
-    function hasAccess() { return accessLevel === 'guest' || isAdmin(); }
+    function hasAccess() { return isUser() || accessLevel === 'guest' || isAdmin(); }
+    function canAccessMode(mode) {
+      return !isGuest() || String(mode || 'rating') === 'rating';
+    }
 
     function getSavedAdminNickname() {
       return String(localStorage.getItem(NAME_KEY) || '').trim();
@@ -1665,8 +1669,8 @@
 
     function updateAccessUi() {
       const isAdminPreview = adminUnlocked && isGuest();
-      accessBadge.textContent = isAdmin() ? 'админ' : isGuest() ? `${isAdminPreview ? 'просмотр · ' : ''}гость #${String(guestSlot).padStart(2, '0')}` : 'вход не выполнен';
-      accessBadge.style.color = isAdmin() ? 'var(--pink)' : isGuest() ? 'var(--cyan)' : 'var(--muted)';
+      accessBadge.textContent = isAdmin() ? 'админ' : isUser() ? 'участник' : isGuest() ? `${isAdminPreview ? 'просмотр · ' : ''}гость #${String(guestSlot).padStart(2, '0')}` : 'вход не выполнен';
+      accessBadge.style.color = isAdmin() ? 'var(--pink)' : isUser() ? 'var(--green)' : isGuest() ? 'var(--cyan)' : 'var(--muted)';
       if (nameInput) {
         nameInput.value = myName;
         nameInput.disabled = false;
@@ -1678,7 +1682,14 @@
       }
       const tabs = document.querySelector('.ev-tabs');
       if (tabs) tabs.classList.toggle('guest-mode', isGuest());
+      const modeSwitch = document.querySelector('.ev-mode-switch');
+      if (modeSwitch) modeSwitch.style.gridTemplateColumns = isGuest() ? '1fr' : '';
       document.querySelectorAll('.ev-tab').forEach(btn => { btn.style.display = isGuest() ? 'none' : ''; });
+      document.querySelectorAll('.ev-mode-tab').forEach(btn => {
+        const allowed = canAccessMode(btn.dataset.mode);
+        btn.style.display = allowed ? '' : 'none';
+        btn.disabled = !allowed;
+      });
     }
 
     function escapeHtml(value) {
@@ -3779,6 +3790,7 @@
     }
 
     function render() {
+      if (!canAccessMode(activeMode)) activeMode = 'rating';
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
       document.querySelectorAll('.ev-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.stage === activeStage));
@@ -6788,7 +6800,13 @@
     function bindShell() {
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          activeMode = ['guess', 'bestworst', 'predictions'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
+          const requestedMode = ['guess', 'bestworst', 'predictions'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
+          if (!canAccessMode(requestedMode)) {
+            activeMode = 'rating';
+            render();
+            return;
+          }
+          activeMode = requestedMode;
           if (activeMode !== 'guess') closeGuessGame();
           render();
         });
@@ -6858,6 +6876,11 @@
         guestSlot = 0;
         adminUnlocked = true;
         myName = getSavedAdminNickname() || myName || '';
+      } else if (pass === USER_PASSWORD) {
+        accessLevel = 'user';
+        guestSlot = 0;
+        adminUnlocked = false;
+        myName = getSavedAdminNickname() || myName || '';
       } else if (guestMatch) {
         accessLevel = 'guest';
         guestSlot = Number(guestMatch[1]);
@@ -6872,8 +6895,9 @@
       sessionStorage.setItem(ADMIN_UNLOCKED_KEY, adminUnlocked ? '1' : '0');
       authModal.classList.add('hidden');
       authPass.value = '';
+      if (isGuest()) activeMode = 'rating';
       updateAccessUi();
-      if ((isAdmin() || isGuest()) && !myName) showNameModal();
+      if ((isAdmin() || isUser() || isGuest()) && !myName) showNameModal();
       render();
       maybeShowCompletionNotice();
     }
@@ -6900,9 +6924,10 @@
     }
 
     async function init() {
-      if (accessLevel === 'user') accessLevel = '';
+      if (!['user', 'admin', 'guest'].includes(accessLevel)) accessLevel = '';
       if (accessLevel === 'admin') adminUnlocked = true;
       if (accessLevel === 'guest' && !guestSlot) accessLevel = '';
+      if (accessLevel === 'guest') activeMode = 'rating';
       bindShell();
       updateAccessUi();
       try {
