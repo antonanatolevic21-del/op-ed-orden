@@ -574,7 +574,8 @@
     .ev-guess-suggestions.open { display: block; }
     .ev-guess-suggestion { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text); padding: 10px 12px; text-align: left; cursor: pointer; }
     .ev-guess-suggestion:last-child { border-bottom: 0; }
-    .ev-guess-suggestion:hover { background: rgba(8,217,214,.09); color: var(--cyan); }
+    .ev-guess-suggestion:hover, .ev-guess-suggestion.keyboard-active { background: rgba(8,217,214,.12); color: var(--cyan); }
+    .ev-guess-suggestion.keyboard-active { box-shadow: inset 3px 0 0 var(--cyan); }
     .ev-guess-game-actions { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
     .ev-guess-feedback { position: absolute; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 22px; background: rgba(11,10,16,.92); backdrop-filter: blur(7px); animation: evGuessFeedback .18s ease-out; }
     .ev-guess-feedback-icon { width: 112px; height: 112px; border-radius: 999px; display: flex; align-items: center; justify-content: center; border: 4px solid currentColor; font-family: 'Archivo Black', sans-serif; font-size: 72px; line-height: 1; }
@@ -993,10 +994,19 @@
     .ev-bw-progress-user.done { border-color: rgba(74,222,128,.5); color: var(--green); background: rgba(74,222,128,.06); }
     .ev-bw-truth-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 12px; }
     .ev-bw-truth { border: 1px solid var(--border); border-radius: 11px; background: var(--panel); padding: 11px; }
-    .ev-bw-truth h4 { margin: 0 0 8px; font-family: 'Archivo Black', sans-serif; font-size: 15px; }
-    .ev-bw-truth-line { margin-top: 5px; font-size: 12px; line-height: 1.35; }
+    .ev-bw-truth h4 { margin: 0; font-family: 'Archivo Black', sans-serif; font-size: 15px; }
+    .ev-bw-truth-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .ev-bw-target-score { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 999px; padding: 4px 7px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 800; }
+    .ev-bw-target-score.perfect { color: var(--green); border-color: rgba(74,222,128,.52); background: rgba(74,222,128,.07); }
+    .ev-bw-target-score.partial { color: var(--gold); border-color: rgba(255,200,87,.5); background: rgba(255,200,87,.06); }
+    .ev-bw-target-score.wrong { color: var(--red); border-color: rgba(251,113,133,.5); background: rgba(251,113,133,.06); }
+    .ev-bw-truth-line { margin-top: 7px; font-size: 12px; line-height: 1.35; }
     .ev-bw-truth-line.best strong { color: var(--green); }
     .ev-bw-truth-line.worst strong { color: var(--red); }
+    .ev-bw-verdict { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: 5px; border: 1px solid currentColor; border-radius: 999px; font-family: 'Archivo Black', sans-serif; font-size: 12px; line-height: 1; vertical-align: middle; }
+    .ev-bw-verdict.correct { color: var(--green); background: rgba(74,222,128,.09); }
+    .ev-bw-verdict.wrong { color: var(--red); background: rgba(251,113,133,.09); }
+    .ev-bw-your-choice { margin: 4px 0 0 0; color: var(--muted); opacity: .68; font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.35; }
     .ev-bw-score-table { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
     .ev-bw-score-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
     .ev-bw-score-rank { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; }
@@ -1279,6 +1289,7 @@
     let guessResultIds = [];
     let guessMessage = '';
     let guessGameState = null;
+    let guessSuggestionIndex = -1;
     let guessCollections = [];
     let guessCollectionStatus = '';
     let guessCollectionDraft = {
@@ -2843,11 +2854,63 @@
       return truth;
     }
 
+    // Разные технические версии одного и того же OP/ED не должны попадать
+    // в один раунд. Служебный хвост удаляется только для сравнения:
+    // «Название — TV Version», «Название (NC Version 2)» и
+    // «Название — версия 3» получают один ключ, но исходные названия не меняются.
+    function bwOpeningVariantKey(opening) {
+      const fallback = `id:${String(opening?.id || '')}`;
+      let title = normalizeGuessAnswer(getOpeningTitle(opening));
+      if (!title || title === 'без названия') return fallback;
+
+      const bracketedTechnicalSuffix = /\s*[([{][^\]})]*(?:верси(?:я|и|ю)|version|ver\.?|tv\s*size|tv\s*ver(?:sion)?|nc(?:op|ed)?|creditless|textless|clean|no\s*credits?|без\s*титров|broadcast|bd\s*ver(?:sion)?|pc\s*[-–— ]*верси(?:я|и|ю))[^\]})]*[)\]}]\s*$/iu;
+      const namedVersionSuffix = /\s*(?:[-–—:|/]\s*)?(?:(?:tv|bd|web|broadcast|full|short|pc)\s*[-–— ]*)?(?:version|ver\.?|верси(?:я|и|ю)|вариант|редакция|edit|cut|mix)\s*(?:№|#)?\s*(?:\d+(?:[._-]\d+)*|[ivx]+|[a-zа-я])?\s*$/iu;
+      const technicalSuffix = /\s*(?:[-–—:|/]\s*)?(?:nc(?:op|ed)?|creditless|textless|clean|no\s*credits?|без\s*титров|tv\s*size|tv\s*ver(?:sion)?|bd\s*ver(?:sion)?|broadcast\s*ver(?:sion)?)(?:\s*(?:№|#)?\s*\d+)?\s*$/iu;
+      const compactVersionSuffix = /\s+(?:v\.?|ver\.?)\s*\d+(?:[._-]\d+)*\s*$/iu;
+
+      // Хвостов может быть несколько: например «(TV Size) [Version 2]».
+      let previous = '';
+      while (title && title !== previous) {
+        previous = title;
+        title = title
+          .replace(bracketedTechnicalSuffix, ' ')
+          .replace(namedVersionSuffix, ' ')
+          .replace(technicalSuffix, ' ')
+          .replace(compactVersionSuffix, ' ')
+          .replace(/\s*[-–—:|/]\s*$/u, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      return title ? `title:${title}` : fallback;
+    }
+
+    function bwDistinctVariantCount(rows) {
+      return new Set((rows || []).map(bwOpeningVariantKey)).size;
+    }
+
+    function bwPickDistinctOpenings(rows, count) {
+      const selected = [];
+      const usedVariants = new Set();
+      for (const opening of guessShuffle(rows || [])) {
+        const variantKey = bwOpeningVariantKey(opening);
+        if (usedVariants.has(variantKey)) continue;
+        usedVariants.add(variantKey);
+        selected.push(String(opening.id));
+        if (selected.length >= count) return selected;
+      }
+      return null;
+    }
+
     function bwBuildRounds(settings, players) {
       const candidates = getBestWorstCandidates(settings);
       if (candidates.length < settings.perRound) throw new Error(`После фильтров осталось ${candidates.length} элементов. Нужно хотя бы ${settings.perRound}.`);
-      const buckets = bwGroupBuckets(candidates, settings.grouping).filter(bucket => bucket.rows.length >= settings.perRound);
-      if (!buckets.length) throw new Error(`Нет ни одной группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} подходящими элементами.`);
+      const uniqueCandidateCount = bwDistinctVariantCount(candidates);
+      if (uniqueCandidateCount < settings.perRound) {
+        throw new Error(`После объединения разных версий осталось ${uniqueCandidateCount} уникальных названий. Для раунда нужно хотя бы ${settings.perRound}.`);
+      }
+      const buckets = bwGroupBuckets(candidates, settings.grouping).filter(bucket => bwDistinctVariantCount(bucket.rows) >= settings.perRound);
+      if (!buckets.length) throw new Error(`Нет ни одной группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} разными названиями.`);
       const rounds = [];
       let unused = new Set(candidates.map(opening => String(opening.id)));
       for (let roundIndex = 0; roundIndex < settings.rounds; roundIndex += 1) {
@@ -2856,15 +2919,17 @@
         for (let cycle = 0; cycle < 2 && !selected; cycle += 1) {
           for (const bucket of guessShuffle(buckets)) {
             const rows = bucket.rows.filter(opening => cycle === 1 || unused.has(String(opening.id)));
-            if (rows.length < settings.perRound) continue;
-            selected = guessShuffle(rows).slice(0, settings.perRound).map(opening => String(opening.id));
+            if (bwDistinctVariantCount(rows) < settings.perRound) continue;
+            selected = bwPickDistinctOpenings(rows, settings.perRound);
+            if (!selected) continue;
             selectedBucket = bucket;
             break;
           }
         }
-        if (!selected) throw new Error(`Не удалось собрать раунд ${roundIndex + 1}. Попробуй увеличить выборку или изменить группировку.`);
+        if (!selected) throw new Error(`Не удалось собрать раунд ${roundIndex + 1} без повторяющихся версий одного OP/ED. Попробуй увеличить выборку или изменить группировку.`);
         selected.forEach(id => unused.delete(id));
-        if (unused.size < settings.perRound) unused = new Set(candidates.map(opening => String(opening.id)));
+        const remainingRows = candidates.filter(opening => unused.has(String(opening.id)));
+        if (bwDistinctVariantCount(remainingRows) < settings.perRound) unused = new Set(candidates.map(opening => String(opening.id)));
         rounds.push({ index: roundIndex, groupKey: selectedBucket.key, groupLabel: selectedBucket.label, openingIds: selected });
       }
       return { rounds, candidateCount: candidates.length };
@@ -3139,7 +3204,39 @@
       return targets.length * (normalizeBestWorstSettings(room.settings).mode === 'both' ? 2 : 1);
     }
 
-    function bwScoreboard(room, upToRound = null) {
+    function bwTieOrderValue(seed, playerKey) {
+      const text = `${String(seed || '')}|${normalizeNickname(playerKey)}`;
+      let hash = 2166136261;
+      for (let index = 0; index < text.length; index += 1) {
+        hash ^= text.charCodeAt(index);
+        hash = Math.imul(hash, 16777619);
+      }
+      return hash >>> 0;
+    }
+
+    function bwSortScoreRows(rows, room, seedSuffix = '') {
+      const seed = `${room?.gameId || 'game'}:${seedSuffix}`;
+      return [...rows].sort((a, b) => {
+        const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+        if (scoreDiff) return scoreDiff;
+        const randomDiff = bwTieOrderValue(seed, a.key || a.name) - bwTieOrderValue(seed, b.key || b.name);
+        if (randomDiff) return randomDiff;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'ru', { sensitivity: 'base' });
+      });
+    }
+
+    function bwAssignPlaces(rows) {
+      let place = 0;
+      let previousScore = null;
+      return rows.map((row, index) => {
+        const score = Number(row.score || 0);
+        if (previousScore === null || score !== previousScore) place = index + 1;
+        previousScore = score;
+        return { ...row, place };
+      });
+    }
+
+    function bwScoreboard(room, upToRound = null, seedSuffix = '') {
       const players = bwReadyPlayers(room);
       const settings = normalizeBestWorstSettings(room.settings);
       const lastRound = upToRound == null ? (room.rounds?.length || 0) - 1 : Number(upToRound);
@@ -3156,7 +3253,14 @@
           row.score += result.score;
         });
       }
-      return rows.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }));
+      const tieSeed = seedSuffix || `scoreboard-after-${lastRound}`;
+      return bwSortScoreRows(rows, room, tieSeed);
+    }
+
+    function bwPlayersForRound(room) {
+      const roundIndex = Math.max(0, Number(room?.currentRound || 0));
+      return bwScoreboard(room, roundIndex - 1, `round-${roundIndex}-player-order`)
+        .map(row => ({ key: row.key, name: row.name, ready: true }));
     }
 
     function bwRenderScoreboard(room, currentOnly = false) {
@@ -3164,13 +3268,15 @@
       const roundIndex = Number(room.currentRound || 0);
       let rows;
       if (currentOnly) {
-        rows = bwReadyPlayers(room).map(player => {
+        const unsorted = bwReadyPlayers(room).map(player => {
           const submission = bwRoundSubmissions(room).find(row => normalizeNickname(row.guesserKey || row.guesserName) === player.key);
           const result = submission ? bwSubmissionScore(room, roundIndex, submission, settings) : { score: 0, max: bwPossibleScore(room, roundIndex, player.key) };
           return { ...player, ...result };
-        }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }));
-      } else rows = bwScoreboard(room, roundIndex);
-      return `<div class="ev-bw-score-table">${rows.map((row, index) => `<div class="ev-bw-score-row"><div class="ev-bw-score-rank">${index + 1}</div><div class="ev-bw-score-name">${escapeHtml(row.name)}</div><div class="ev-bw-score-value">${row.score}/${row.max}</div></div>`).join('')}</div>`;
+        });
+        rows = bwSortScoreRows(unsorted, room, `round-${roundIndex}-result-order`);
+      } else rows = bwScoreboard(room, roundIndex, `cumulative-after-${roundIndex}`);
+      const rankedRows = bwAssignPlaces(rows);
+      return `<div class="ev-bw-score-table">${rankedRows.map(row => `<div class="ev-bw-score-row"><div class="ev-bw-score-rank">${row.place}</div><div class="ev-bw-score-name">${escapeHtml(row.name)}</div><div class="ev-bw-score-value">${row.score}/${row.max}</div></div>`).join('')}</div>`;
     }
 
     function bwRenderLobby() {
@@ -3274,7 +3380,7 @@
 
     function bwRenderRound() {
       const room = bestWorstRoom;
-      const players = bwReadyPlayers(room);
+      const players = bwPlayersForRound(room);
       const settings = normalizeBestWorstSettings(room.settings);
       const roundIndex = Number(room.currentRound || 0);
       const round = room.rounds?.[roundIndex];
@@ -3306,9 +3412,41 @@
     }
 
     function bwRenderRoundResults(room, round, players, settings) {
-      const truth = bwRoundTruth(room, Number(room.currentRound || 0));
-      const truthHtml = players.map(player => { const own = truth[player.key] || {}; const best = (own.bestIds || []).map(bwOpeningName).join(' / '); const worst = (own.worstIds || []).map(bwOpeningName).join(' / '); return `<article class="ev-bw-truth"><h4>${escapeHtml(player.name)}</h4>${bwModeUses(settings,'best') ? `<div class="ev-bw-truth-line best"><strong>Поставил(а) как лучшее:</strong> ${escapeHtml(best || '—')}</div>` : ''}${bwModeUses(settings,'worst') ? `<div class="ev-bw-truth-line worst"><strong>Поставил(а) как худшее:</strong> ${escapeHtml(worst || '—')}</div>` : ''}</article>`; }).join('');
-      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Флажки игроков</h3><div class="ev-hint">Это собственный выбор каждого участника. Баллы начисляются только за точное угадывание других игроков.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
+      const roundIndex = Number(room.currentRound || 0);
+      const truth = bwRoundTruth(room, roundIndex);
+      const viewerKey = bwCurrentUserKey();
+      const viewerSubmission = bwRoundSubmissions(room, roundIndex)
+        .find(row => normalizeNickname(row.guesserKey || row.guesserName) === viewerKey);
+      const renderChoice = (player, own, kind, label) => {
+        const actualIds = kind === 'best' ? (own.bestIds || []) : (own.worstIds || []);
+        const actual = actualIds.map(bwOpeningName).join(' / ') || '—';
+        const isSelf = player.key === viewerKey;
+        if (isSelf) return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)}</div>`;
+        if (!viewerSubmission) return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)}<div class="ev-bw-your-choice">Ты не отвечал(а) в этом раунде.</div></div>`;
+        const guessedId = String(viewerSubmission.answers?.[player.key]?.[kind] || '');
+        const correct = actualIds.includes(guessedId);
+        const guessed = guessedId ? bwOpeningName(guessedId) : 'вариант не выбран';
+        return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)} <span class="ev-bw-verdict ${correct ? 'correct' : 'wrong'}" title="${correct ? 'Угадано правильно' : 'Угадано неправильно'}">${correct ? '✓' : '×'}</span>${correct ? '' : `<div class="ev-bw-your-choice">Ты выбрал(а): ${escapeHtml(guessed)}</div>`}</div>`;
+      };
+      const truthHtml = players.map(player => {
+        const own = truth[player.key] || {};
+        const isSelf = player.key === viewerKey;
+        let targetScore = 0;
+        let targetMax = 0;
+        if (!isSelf) {
+          const answer = viewerSubmission?.answers?.[player.key] || {};
+          if (bwModeUses(settings, 'best')) { targetMax += 1; if ((own.bestIds || []).includes(String(answer.best || ''))) targetScore += 1; }
+          if (bwModeUses(settings, 'worst')) { targetMax += 1; if ((own.worstIds || []).includes(String(answer.worst || ''))) targetScore += 1; }
+        }
+        const scoreClass = targetScore === targetMax && targetMax ? 'perfect' : targetScore > 0 ? 'partial' : 'wrong';
+        const badge = isSelf
+          ? '<span class="ev-bw-target-score">твои флажки</span>'
+          : viewerSubmission
+            ? `<span class="ev-bw-target-score ${scoreClass}">твой результат: ${targetScore}/${targetMax}</span>`
+            : '<span class="ev-bw-target-score">без ответа</span>';
+        return `<article class="ev-bw-truth"><div class="ev-bw-truth-head"><h4>${escapeHtml(player.name)}</h4>${badge}</div>${bwModeUses(settings,'best') ? renderChoice(player, own, 'best', 'Поставил(а) как лучшее') : ''}${bwModeUses(settings,'worst') ? renderChoice(player, own, 'worst', 'Поставил(а) как худшее') : ''}</article>`;
+      }).join('');
+      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Флажки игроков и твои ответы</h3><div class="ev-hint">✓ означает точное совпадение. При ошибке показан ×, а ниже полупрозрачным текстом — вариант, который выбрал именно ты.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
     }
 
     function bindBestWorstRoundControls() {
@@ -3344,12 +3482,23 @@
 
     function bwRenderFinished() {
       const room = bestWorstRoom;
-      const rows = bwScoreboard(room);
-      const top = rows.slice(0, 3);
-      const order = [top[1], top[0], top[2]].filter(Boolean);
-      const classes = top.length >= 3 ? ['second','first','third'] : top.length === 2 ? ['second','first'] : ['first'];
-      const last = rows[rows.length - 1];
-      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · ${escapeHtml(bwTypeLabel(normalizeBestWorstSettings(room.settings).typeFilter))} · общий результат по точным совпадениям.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${order.map((row,index) => { const cls = classes[index]; const rank = cls === 'first' ? 1 : cls === 'second' ? 2 : 3; return `<div class="ev-bw-podium-place ${cls}"><div class="ev-bw-podium-name">${escapeHtml(row.name)}</div><div class="ev-bw-podium-block"><div class="ev-bw-podium-rank">${rank}</div><div class="ev-bw-podium-score">${row.score}/${row.max}</div></div></div>`; }).join('')}</div>${last ? `<div class="ev-bw-last"><strong>Последнее место:</strong> ${escapeHtml(last.name)} · ${last.score}/${last.max}</div>` : ''}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}</section></div>`;
+      const rows = bwAssignPlaces(bwScoreboard(room, null, 'final-order'));
+      const podiumRows = rows.filter(row => row.place <= 3).sort((a, b) => {
+        const visualOrder = { 2: 0, 1: 1, 3: 2 };
+        return (visualOrder[a.place] ?? 9) - (visualOrder[b.place] ?? 9);
+      });
+      const lastPlace = rows.length ? rows[rows.length - 1].place : 0;
+      const lastRows = lastPlace > 1 ? rows.filter(row => row.place === lastPlace) : [];
+      const podiumHtml = podiumRows.map(row => {
+        const cls = row.place === 1 ? 'first' : row.place === 2 ? 'second' : 'third';
+        return `<div class="ev-bw-podium-place ${cls}"><div class="ev-bw-podium-name">${escapeHtml(row.name)}</div><div class="ev-bw-podium-block"><div class="ev-bw-podium-rank">${row.place}</div><div class="ev-bw-podium-score">${row.score}/${row.max}</div></div></div>`;
+      }).join('');
+      const lastHtml = lastRows.length
+        ? `<div class="ev-bw-last"><strong>Последнее место (${lastPlace}):</strong> ${lastRows.map(row => `${escapeHtml(row.name)} · ${row.score}/${row.max}`).join(' · ')}</div>`
+        : rows.length > 1
+          ? '<div class="ev-bw-last"><strong>Полная ничья:</strong> все участники разделили 1 место.</div>'
+          : '';
+      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · ${escapeHtml(bwTypeLabel(normalizeBestWorstSettings(room.settings).typeFilter))} · при равенстве баллов участники делят одно место.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${podiumHtml}</div>${lastHtml}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}</section></div>`;
       $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
     }
 
@@ -3377,8 +3526,12 @@
     }
 
 
-    function predictionDocKey(year = predictionYear, season = predictionSeason) {
-      return `${Number(year)}_${String(season || '')}`;
+    function predictionUserKey() {
+      return normalizeNickname(myName);
+    }
+
+    function predictionDocKey(year = predictionYear, season = predictionSeason, userKey = predictionUserKey()) {
+      return `${Number(year)}_${String(season || '')}__${userKey || 'без_ника'}`;
     }
 
     function predictionSeasonIndex(season) {
@@ -3421,7 +3574,9 @@
         season: SEASONS.includes(raw.season) ? raw.season : predictionSeason,
         textPredictions: normalizePredictionRows(raw.textPredictions, 'text'),
         openingPredictions: normalizePredictionRows(raw.openingPredictions, 'opening'),
-        updatedBy: String(raw.updatedBy || ''),
+        ownerKey: String(raw.ownerKey || ''),
+        ownerName: String(raw.ownerName || raw.updatedBy || ''),
+        updatedBy: String(raw.updatedBy || raw.ownerName || ''),
         updatedAt: raw.updatedAt || null
       };
     }
@@ -3429,7 +3584,10 @@
     function ensurePredictionDraft(force = false) {
       const key = predictionDocKey();
       if (!force && predictionDraft && predictionDraftKey === key) return predictionDraft;
-      const source = predictionDocs.get(key) || { year: predictionYear, season: predictionSeason };
+      const legacyKey = `${Number(predictionYear)}_${String(predictionSeason || '')}`;
+      const legacy = predictionDocs.get(legacyKey);
+      const legacyBelongsToCurrentUser = legacy && normalizeNickname(legacy.updatedBy || legacy.ownerName || '') === predictionUserKey();
+      const source = predictionDocs.get(key) || (legacyBelongsToCurrentUser ? legacy : null) || { year: predictionYear, season: predictionSeason };
       predictionDraft = normalizePredictionDoc(source);
       predictionDraft.year = predictionYear;
       predictionDraft.season = predictionSeason;
@@ -3480,6 +3638,12 @@
     }
 
     async function savePredictionSeason() {
+      const ownerKey = predictionUserKey();
+      if (!ownerKey) {
+        predictionStatus = 'Сначала введи никнейм.';
+        patchPredictionSummary();
+        return;
+      }
       const draft = ensurePredictionDraft();
       const candidates = predictionCandidates();
       const byTitle = new Map();
@@ -3496,6 +3660,8 @@
           const match = byTitle.get(text.toLocaleLowerCase('ru'));
           return { openingId: match ? String(match.id) : String(row.openingId || ''), text, hit: Boolean(text) && row.hit };
         }),
+        ownerKey,
+        ownerName: String(myName || '').trim(),
         updatedBy: String(myName || '').trim(),
         updatedAt: serverTimestamp()
       };
@@ -3526,6 +3692,7 @@
       const candidates = predictionCandidates();
       const summary = predictionSummary(draft);
       const current = predictionDocs.get(predictionDocKey());
+      const ownerName = String(myName || current?.ownerName || draft.ownerName || '').trim();
       const updatedBy = String(current?.updatedBy || draft.updatedBy || '').trim();
       const datalistId = `ev-predict-op-list-${predictionYear}-${predictionSeason}`;
       appEl.innerHTML = `
@@ -3533,8 +3700,8 @@
           <section class="ev-panel-head">
             <div>
               <div class="ev-section-label">Четвёртый ивент</div>
-              <h2>Предикты</h2>
-              <div class="ev-hint">Сезонные прогнозы начиная с Осени 2026. Галочка означает, что предикт сбылся; пустая галочка — что не сбылся.</div>
+              <h2>Предикты${ownerName ? ` · ${escapeHtml(ownerName)}` : ''}</h2>
+              <div class="ev-hint">У каждого никнейма отдельный набор сезонных прогнозов начиная с Осени 2026. Сейчас открыты предикты пользователя <strong>${escapeHtml(ownerName || 'ник не указан')}</strong>.</div>
             </div>
           </section>
           <div class="ev-predict-layout">
@@ -3561,8 +3728,8 @@
                 <div class="ev-predict-summary-card"><div class="ev-predict-summary-label">Угаданные опенинги</div><div class="ev-predict-summary-value" id="ev-predict-opening-summary">${summary.openingHit}/${summary.openingFilled}</div></div>
               </section>
               <section class="ev-predict-card ev-predict-footer">
-                <div><div class="ev-predict-updated">${updatedBy ? `Последнее сохранение: ${escapeHtml(updatedBy)}` : 'Сезон ещё не сохранялся.'}</div><div id="ev-predict-status" class="ev-status-line" ${predictionStatus || predictionDraftDirty ? '' : 'hidden'}>${escapeHtml(predictionStatus || (predictionDraftDirty ? 'Есть несохранённые изменения.' : ''))}</div></div>
-                <button type="button" class="ev-btn-main" id="ev-predict-save">Сохранить сезон</button>
+                <div><div class="ev-predict-updated">${updatedBy ? `Твои предикты сохранены: ${escapeHtml(updatedBy)}` : 'У тебя ещё нет сохранённых предиктов на этот сезон.'}</div><div id="ev-predict-status" class="ev-status-line" ${predictionStatus || predictionDraftDirty ? '' : 'hidden'}>${escapeHtml(predictionStatus || (predictionDraftDirty ? 'Есть несохранённые изменения.' : ''))}</div></div>
+                <button type="button" class="ev-btn-main" id="ev-predict-save" ${predictionUserKey() ? '' : 'disabled'}>Сохранить мои предикты</button>
               </section>
             </div>
           </div>
@@ -4444,10 +4611,44 @@
       setTimeout(advanceGuessGame, 1250);
     }
 
+    function getGuessSuggestionButtons() {
+      return [...(guessGameEl?.querySelectorAll('[data-guess-suggestion]') || [])];
+    }
+
+    function setGuessSuggestionIndex(nextIndex) {
+      const buttons = getGuessSuggestionButtons();
+      if (!buttons.length) {
+        guessSuggestionIndex = -1;
+        return;
+      }
+      const normalized = ((Number(nextIndex) % buttons.length) + buttons.length) % buttons.length;
+      guessSuggestionIndex = normalized;
+      buttons.forEach((button, index) => {
+        const active = index === normalized;
+        button.classList.toggle('keyboard-active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      buttons[normalized]?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function chooseGuessSuggestion(index = guessSuggestionIndex) {
+      const buttons = getGuessSuggestionButtons();
+      const button = buttons[Number(index)];
+      if (!button) return false;
+      const input = guessGameEl?.querySelector('#ev-guess-manual-input');
+      if (input) input.value = button.dataset.guessSuggestion || '';
+      const box = guessGameEl?.querySelector('#ev-guess-suggestions');
+      box?.classList.remove('open');
+      guessSuggestionIndex = -1;
+      input?.focus();
+      return true;
+    }
+
     function renderGuessSuggestions(query) {
       const box = guessGameEl?.querySelector('#ev-guess-suggestions');
       if (!box) return;
       const needle = normalizeGuessAnswer(query);
+      guessSuggestionIndex = -1;
       if (!needle) {
         box.classList.remove('open');
         box.innerHTML = '';
@@ -4461,15 +4662,11 @@
           return aStarts - bStarts || a.localeCompare(b, 'ru', { sensitivity: 'base' });
         })
         .slice(0, 8);
-      box.innerHTML = matches.map(title => `<button type="button" class="ev-guess-suggestion" data-guess-suggestion="${escapeHtml(title)}">${escapeHtml(title)}</button>`).join('');
+      box.innerHTML = matches.map((title, index) => `<button type="button" class="ev-guess-suggestion" role="option" aria-selected="false" data-guess-suggestion-index="${index}" data-guess-suggestion="${escapeHtml(title)}">${escapeHtml(title)}</button>`).join('');
       box.classList.toggle('open', matches.length > 0);
       box.querySelectorAll('[data-guess-suggestion]').forEach(button => {
-        button.addEventListener('click', () => {
-          const input = guessGameEl?.querySelector('#ev-guess-manual-input');
-          if (input) input.value = button.dataset.guessSuggestion || '';
-          box.classList.remove('open');
-          input?.focus();
-        });
+        button.addEventListener('mouseenter', () => setGuessSuggestionIndex(Number(button.dataset.guessSuggestionIndex)));
+        button.addEventListener('click', () => chooseGuessSuggestion(Number(button.dataset.guessSuggestionIndex)));
       });
     }
 
@@ -4591,8 +4788,27 @@
       };
       manualInput?.addEventListener('input', () => renderGuessSuggestions(manualInput.value));
       manualInput?.addEventListener('keydown', event => {
+        const box = guessGameEl?.querySelector('#ev-guess-suggestions');
+        const buttons = getGuessSuggestionButtons();
+        if (event.key === 'ArrowDown' && buttons.length) {
+          event.preventDefault();
+          setGuessSuggestionIndex(guessSuggestionIndex < 0 ? 0 : guessSuggestionIndex + 1);
+          return;
+        }
+        if (event.key === 'ArrowUp' && buttons.length) {
+          event.preventDefault();
+          setGuessSuggestionIndex(guessSuggestionIndex < 0 ? buttons.length - 1 : guessSuggestionIndex - 1);
+          return;
+        }
+        if (event.key === 'Escape' && box?.classList.contains('open')) {
+          event.preventDefault();
+          box.classList.remove('open');
+          guessSuggestionIndex = -1;
+          return;
+        }
         if (event.key === 'Enter') {
           event.preventDefault();
+          if (box?.classList.contains('open') && guessSuggestionIndex >= 0 && chooseGuessSuggestion()) return;
           submitManual();
         }
       });
@@ -6750,8 +6966,10 @@
         scheduleRender();
       });
       onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
+        const currentKey = predictionDocKey();
+        const ownDocumentChanged = snapshot.docChanges().some(change => change.doc.id === currentKey);
         predictionDocs = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-        if (!predictionDraftDirty) {
+        if (ownDocumentChanged && !predictionDraftDirty) {
           predictionDraft = null;
           predictionDraftKey = '';
           if (activeMode === 'predictions') scheduleRender();
