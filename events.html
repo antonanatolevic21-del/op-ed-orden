@@ -1118,6 +1118,66 @@
       .ev-predict-footer .ev-btn-main { width: 100%; }
     }
 
+
+    /* Codenames по OP/ED */
+    .ev-mode-switch { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); width: min(1040px, 100%); }
+    .ev-cn-shell { display: flex; flex-direction: column; gap: 16px; }
+    .ev-cn-lobby, .ev-cn-panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .ev-cn-team-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 12px; }
+    .ev-cn-team { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 12px; }
+    .ev-cn-team.red { border-color: rgba(251,113,133,.5); }
+    .ev-cn-team.blue { border-color: rgba(8,217,214,.5); }
+    .ev-cn-team h3 { margin: 0 0 8px; font-family: 'Archivo Black', sans-serif; font-size: 18px; }
+    .ev-cn-team.red h3 { color: var(--red); }
+    .ev-cn-team.blue h3 { color: var(--cyan); }
+    .ev-cn-player-list { display: flex; flex-direction: column; gap: 7px; }
+    .ev-cn-player { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); padding: 8px 9px; font-size: 12px; }
+    .ev-cn-role { color: var(--gold); font-family: 'Space Mono', monospace; font-size: 9.5px; }
+    .ev-cn-join-row { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 7px; margin-top: 10px; }
+    .ev-cn-scorebar { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; }
+    .ev-cn-score { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 11px 12px; }
+    .ev-cn-score.red { text-align: left; border-color: rgba(251,113,133,.45); }
+    .ev-cn-score.blue { text-align: right; border-color: rgba(8,217,214,.45); }
+    .ev-cn-score strong { display: block; font-family: 'Archivo Black', sans-serif; font-size: 22px; }
+    .ev-cn-score.red strong { color: var(--red); }
+    .ev-cn-score.blue strong { color: var(--cyan); }
+    .ev-cn-turn { text-align: center; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); }
+    .ev-cn-clue { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 12px; margin-top: 12px; }
+    .ev-cn-clue-main { font-family: 'Archivo Black', sans-serif; font-size: 24px; }
+    .ev-cn-clue-form { display: grid; grid-template-columns: minmax(150px,1fr) 86px auto; gap: 8px; align-items: end; width: min(580px,100%); }
+    .ev-cn-clue-form input { width: 100%; min-width: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
+    .ev-cn-board { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 9px; margin-top: 14px; }
+    .ev-cn-card { position: relative; min-height: 126px; border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--panel); color: var(--text); padding: 0; cursor: pointer; text-align: left; }
+    .ev-cn-card:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-2px); }
+    .ev-cn-card:disabled { opacity: 1; cursor: default; }
+    .ev-cn-card-image { height: 76px; background: #09080d; overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: 'Archivo Black', sans-serif; }
+    .ev-cn-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ev-cn-card-body { padding: 8px 9px 9px; }
+    .ev-cn-card-title { font-weight: 900; font-size: 11.5px; line-height: 1.23; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .ev-cn-card-meta { margin-top: 4px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 8.5px; }
+    .ev-cn-card.revealed.red, .ev-cn-card.spy-red { border-color: var(--red); background: rgba(251,113,133,.16); }
+    .ev-cn-card.revealed.blue, .ev-cn-card.spy-blue { border-color: var(--cyan); background: rgba(8,217,214,.14); }
+    .ev-cn-card.revealed.neutral, .ev-cn-card.spy-neutral { border-color: #a8a29e; background: rgba(168,162,158,.12); }
+    .ev-cn-card.revealed.assassin, .ev-cn-card.spy-assassin { border-color: #f5f3fa; background: #050507; }
+    .ev-cn-card.revealed .ev-cn-card-image { filter: grayscale(.35) brightness(.6); }
+    .ev-cn-card-badge { position: absolute; top: 6px; right: 6px; z-index: 2; border: 1px solid currentColor; border-radius: 999px; background: rgba(11,10,16,.84); padding: 4px 7px; font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 800; }
+    .ev-cn-card.spy-red .ev-cn-card-badge { color: var(--red); }
+    .ev-cn-card.spy-blue .ev-cn-card-badge { color: var(--cyan); }
+    .ev-cn-card.spy-neutral .ev-cn-card-badge { color: #d6d3d1; }
+    .ev-cn-card.spy-assassin .ev-cn-card-badge { color: #fff; }
+    .ev-cn-log { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+    .ev-cn-log-row { border-left: 3px solid var(--border); padding: 6px 9px; background: var(--panel); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 11px; }
+    .ev-cn-winner { text-align: center; padding: 26px 12px; }
+    .ev-cn-winner strong { display: block; margin-top: 8px; font-family: 'Archivo Black', sans-serif; font-size: clamp(34px,7vw,62px); }
+    @media (max-width: 900px) { .ev-cn-board { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+    @media (max-width: 640px) {
+      .ev-cn-team-grid { grid-template-columns: 1fr; }
+      .ev-cn-scorebar { grid-template-columns: 1fr; }
+      .ev-cn-score.blue { text-align: left; }
+      .ev-cn-board { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .ev-cn-clue-form { grid-template-columns: 1fr; }
+    }
+
   </style>
 </head>
 <body>
@@ -1140,6 +1200,7 @@
       <button class="ev-mode-tab" type="button" data-mode="guess">Угадай опенинг</button>
       <button class="ev-mode-tab" type="button" data-mode="bestworst">Угадай лучшее / худшее</button>
       <button class="ev-mode-tab" type="button" data-mode="predictions">Предикты</button>
+      <button class="ev-mode-tab" type="button" data-mode="codenames">Codenames</button>
     </nav>
 
     <nav class="ev-tabs" id="ev-stage-tabs">
@@ -1343,6 +1404,10 @@
     let predictionDraftKey = '';
     let predictionDraftDirty = false;
     let predictionStatus = '';
+    const CODENAMES_COLLECTION = 'eventCodenames';
+    const CODENAMES_ROOM_ID = 'current';
+    let codenamesRoom = null;
+    let codenamesStatus = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -3789,6 +3854,201 @@
       $('#ev-predict-save')?.addEventListener('click', savePredictionSeason);
     }
 
+
+    function cnTeamLabel(team) { return team === 'red' ? 'Красные' : 'Синие'; }
+    function cnRoleLabel(role) { return role === 'spymaster' ? 'капитан' : 'игрок'; }
+    function cnPlayerKey() { return normalizeNickname(myName); }
+    function cnPlayers(room = codenamesRoom) { return Array.isArray(room?.players) ? room.players.filter(p => p?.key && p?.name) : []; }
+    function cnMyPlayer(room = codenamesRoom) { const key = cnPlayerKey(); return cnPlayers(room).find(p => p.key === key) || null; }
+    function cnIsSpymaster(room = codenamesRoom) { return cnMyPlayer(room)?.role === 'spymaster'; }
+    function cnSettings(room = codenamesRoom) {
+      const raw = room?.settings || {};
+      return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all' };
+    }
+    function cnRoomDoc() { return doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID); }
+    async function cnPatch(patch) {
+      try {
+        await setDoc(cnRoomDoc(), { ...patch, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+        codenamesStatus = '';
+      } catch (error) {
+        console.error('eventCodenames save failed', error);
+        codenamesStatus = 'Не удалось сохранить Codenames. Добавь eventCodenames в Firebase Rules.';
+        render();
+      }
+    }
+    function cnFilteredOpenings(settings = cnSettings()) {
+      const rows = openings.filter(o => settings.typeFilter === 'all' || o.type === settings.typeFilter);
+      const unique = [];
+      const seen = new Set();
+      for (const opening of guessShuffle(rows)) {
+        const key = bwOpeningVariantKey(opening);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(opening);
+      }
+      return unique;
+    }
+    function cnCreateBoard(settings) {
+      const candidates = cnFilteredOpenings(settings);
+      if (candidates.length < 25) throw new Error(`После фильтра осталось ${candidates.length} уникальных OP/ED. Для поля нужно 25.`);
+      const selected = guessShuffle(candidates).slice(0,25);
+      const startingTeam = Math.random() < .5 ? 'red' : 'blue';
+      const otherTeam = startingTeam === 'red' ? 'blue' : 'red';
+      const identities = guessShuffle([
+        ...Array(9).fill(startingTeam),
+        ...Array(8).fill(otherTeam),
+        ...Array(7).fill('neutral'),
+        'assassin'
+      ]);
+      const board = selected.map((opening, index) => ({
+        id: String(opening.id), title: getOpeningTitle(opening), type: opening.type || 'OP', image: opening.image || '', link: opening.link || '',
+        identity: identities[index], revealed: false
+      }));
+      return { board, startingTeam };
+    }
+    function cnRemaining(room, team) {
+      return (Array.isArray(room?.board) ? room.board : []).filter(card => card.identity === team && !card.revealed).length;
+    }
+    function cnWinnerFromBoard(board) {
+      if (!Array.isArray(board)) return '';
+      if (!board.some(card => card.identity === 'red' && !card.revealed)) return 'red';
+      if (!board.some(card => card.identity === 'blue' && !card.revealed)) return 'blue';
+      return '';
+    }
+    async function cnEnsureLobby() {
+      if (codenamesRoom) return;
+      await cnPatch({ status:'lobby', players:[], settings:{ typeFilter:'all' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+    }
+    async function cnJoin(team, role) {
+      const key = cnPlayerKey();
+      if (!key) { codenamesStatus = 'Сначала введи никнейм.'; render(); return; }
+      await cnEnsureLobby();
+      const room = codenamesRoom || { players:[] };
+      let players = cnPlayers(room).filter(p => p.key !== key);
+      if (role === 'spymaster') players = players.map(p => p.team === team && p.role === 'spymaster' ? { ...p, role:'operative' } : p);
+      players.push({ key, name: myName.trim(), team, role });
+      await cnPatch({ players });
+    }
+    async function cnLeave() {
+      const key = cnPlayerKey();
+      if (!key || !codenamesRoom) return;
+      await cnPatch({ players: cnPlayers().filter(p => p.key !== key) });
+    }
+    async function cnSetType(typeFilter) {
+      if (!isAdmin()) return;
+      await cnEnsureLobby();
+      await cnPatch({ settings:{ typeFilter: ['OP','ED','all'].includes(typeFilter) ? typeFilter : 'all' } });
+    }
+    async function cnStartGame() {
+      if (!isAdmin()) return;
+      const players = cnPlayers();
+      if (!players.some(p => p.team === 'red') || !players.some(p => p.team === 'blue')) { codenamesStatus = 'Нужен хотя бы один игрок в каждой команде.'; render(); return; }
+      if (!players.some(p => p.team === 'red' && p.role === 'spymaster') || !players.some(p => p.team === 'blue' && p.role === 'spymaster')) { codenamesStatus = 'В каждой команде должен быть капитан.'; render(); return; }
+      try {
+        const settings = cnSettings();
+        const { board, startingTeam } = cnCreateBoard(settings);
+        await cnPatch({ status:'playing', board, startingTeam, turn:startingTeam, clue:null, guessesLeft:0, winner:'', log:[`Игра началась. Первыми ходят ${cnTeamLabel(startingTeam).toLowerCase()}.`], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      } catch (error) { codenamesStatus = error?.message || 'Не удалось собрать поле.'; render(); }
+    }
+    async function cnSubmitClue() {
+      const room = codenamesRoom;
+      const me = cnMyPlayer(room);
+      if (!room || room.status !== 'playing' || room.winner || !me || me.role !== 'spymaster' || me.team !== room.turn || Number(room.guessesLeft || 0) > 0) return;
+      const word = String($('#ev-cn-clue-word')?.value || '').trim();
+      const count = Math.max(1, Math.min(9, Number($('#ev-cn-clue-count')?.value || 1)));
+      if (!word || word.split(/\s+/).length !== 1) { codenamesStatus = 'Подсказка должна состоять из одного слова.'; render(); return; }
+      const log = [...(Array.isArray(room.log) ? room.log : []), `${me.name}: «${word} — ${count}»`].slice(-80);
+      await cnPatch({ clue:{ word, count, giverKey:me.key, giverName:me.name }, guessesLeft:count + 1, log });
+    }
+    async function cnEndTurn() {
+      const room = codenamesRoom;
+      const me = cnMyPlayer(room);
+      if (!room || room.status !== 'playing' || room.winner || !me || me.team !== room.turn || me.role === 'spymaster' || Number(room.guessesLeft || 0) <= 0) return;
+      const next = room.turn === 'red' ? 'blue' : 'red';
+      const log = [...(Array.isArray(room.log) ? room.log : []), `${me.name} завершил(а) ход.`].slice(-80);
+      await cnPatch({ turn:next, clue:null, guessesLeft:0, log });
+    }
+    async function cnRevealCard(index) {
+      const room = codenamesRoom;
+      const me = cnMyPlayer(room);
+      const board = Array.isArray(room?.board) ? room.board.map(card => ({ ...card })) : [];
+      const card = board[index];
+      if (!room || room.status !== 'playing' || room.winner || !me || me.team !== room.turn || me.role === 'spymaster' || Number(room.guessesLeft || 0) <= 0 || !card || card.revealed) return;
+      card.revealed = true;
+      let turn = room.turn;
+      let clue = room.clue || null;
+      let guessesLeft = Math.max(0, Number(room.guessesLeft || 0) - 1);
+      let winner = '';
+      const other = room.turn === 'red' ? 'blue' : 'red';
+      let message = `${me.name} открыл(а) «${card.title}» — `;
+      if (card.identity === 'assassin') { winner = other; message += 'УБИЙЦА.'; }
+      else if (card.identity === room.turn) { message += 'своя карточка.'; if (guessesLeft <= 0) { turn = other; clue = null; } }
+      else if (card.identity === other) { message += 'карточка соперников.'; turn = other; clue = null; guessesLeft = 0; }
+      else { message += 'нейтральная карточка.'; turn = other; clue = null; guessesLeft = 0; }
+      if (!winner) winner = cnWinnerFromBoard(board);
+      if (winner) message += ` Победили ${cnTeamLabel(winner).toLowerCase()}.`;
+      const log = [...(Array.isArray(room.log) ? room.log : []), message].slice(-80);
+      await cnPatch({ board, turn, clue, guessesLeft, winner, status:winner ? 'finished' : 'playing', log });
+    }
+    async function cnResetGame() {
+      if (!isAdmin()) return;
+      const players = cnPlayers();
+      await cnPatch({ status:'lobby', players, board:[], clue:null, guessesLeft:0, winner:'', log:[], turn:'red', gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+    }
+    function cnRenderPlayers(team) {
+      const rows = cnPlayers().filter(p => p.team === team);
+      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
+    }
+    function cnCardClass(card, seeMap) {
+      if (card.revealed) return `revealed ${card.identity}`;
+      return seeMap ? `spy-${card.identity}` : '';
+    }
+    function cnIdentityLabel(identity) {
+      return identity === 'red' ? 'КРАСНЫЕ' : identity === 'blue' ? 'СИНИЕ' : identity === 'assassin' ? 'УБИЙЦА' : 'НЕЙТРАЛЬНАЯ';
+    }
+    function renderCodenamesEvent() {
+      const room = codenamesRoom;
+      if (!room) {
+        appEl.innerHTML = `<div class="ev-cn-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Пятый ивент</div><h2>Codenames по OP/ED</h2><div class="ev-hint">Две команды, капитаны, подсказка одним словом и поле из 25 OP/ED.</div></div>${isAdmin() ? '<button class="ev-btn-main" id="ev-cn-create">Создать лобби</button>' : ''}</section><div class="ev-empty">Лобби ещё не создано.</div></div>`;
+        $('#ev-cn-create')?.addEventListener('click', cnEnsureLobby);
+        return;
+      }
+      const settings = cnSettings(room);
+      const me = cnMyPlayer(room);
+      if (room.status === 'lobby') {
+        appEl.innerHTML = `<div class="ev-cn-shell">
+          <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>Лобби</h2><div class="ev-hint">Капитан видит цвета карточек и даёт подсказку. Игроки команды открывают карточки. Убийца мгновенно завершает игру.</div></div><div class="ev-actions">${me ? '<button class="ev-btn-ghost" id="ev-cn-leave">Выйти из команды</button>' : ''}${isAdmin() ? '<button class="ev-btn-main" id="ev-cn-start">Начать игру</button>' : ''}</div></section>
+          <section class="ev-cn-lobby"><div class="ev-guess-grid"><label class="ev-guess-field"><span class="ev-guess-label">Карточки</span><select id="ev-cn-type" ${isAdmin() ? '' : 'disabled'}><option value="all" ${settings.typeFilter==='all'?'selected':''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter==='OP'?'selected':''}>Только опенинги</option><option value="ED" ${settings.typeFilter==='ED'?'selected':''}>Только эндинги</option></select><span class="ev-guess-note">Технические версии одного названия не дублируются.</span></label></div>
+          <div class="ev-cn-team-grid"><div class="ev-cn-team red"><h3>Красные</h3><div class="ev-cn-player-list">${cnRenderPlayers('red')}</div><div class="ev-cn-join-row"><button class="ev-btn-danger" data-cn-join="red" data-cn-role="operative">Играть за красных</button><button class="ev-btn-ghost" data-cn-join="red" data-cn-role="spymaster">Стать капитаном</button></div></div><div class="ev-cn-team blue"><h3>Синие</h3><div class="ev-cn-player-list">${cnRenderPlayers('blue')}</div><div class="ev-cn-join-row"><button class="ev-btn-secondary" data-cn-join="blue" data-cn-role="operative">Играть за синих</button><button class="ev-btn-ghost" data-cn-join="blue" data-cn-role="spymaster">Стать капитаном</button></div></div></div>
+          ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
+        $('#ev-cn-type')?.addEventListener('change', e => cnSetType(e.target.value));
+        $('#ev-cn-start')?.addEventListener('click', cnStartGame);
+        $('#ev-cn-leave')?.addEventListener('click', cnLeave);
+        document.querySelectorAll('[data-cn-join]').forEach(btn => btn.addEventListener('click', () => cnJoin(btn.dataset.cnJoin, btn.dataset.cnRole)));
+        return;
+      }
+      const board = Array.isArray(room.board) ? room.board : [];
+      const seeMap = Boolean(me && me.role === 'spymaster');
+      const redRemaining = cnRemaining(room,'red');
+      const blueRemaining = cnRemaining(room,'blue');
+      const canClue = Boolean(me && me.role === 'spymaster' && me.team === room.turn && !room.winner && Number(room.guessesLeft || 0) <= 0);
+      const canGuess = Boolean(me && me.role !== 'spymaster' && me.team === room.turn && !room.winner && Number(room.guessesLeft || 0) > 0);
+      const clue = room.clue || null;
+      const winningTeam = room.winner || '';
+      appEl.innerHTML = `<div class="ev-cn-shell">
+        <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
+        <section class="ev-cn-panel"><div class="ev-cn-scorebar"><div class="ev-cn-score red"><span>Красные</span><strong>${redRemaining}</strong><span>осталось</span></div><div class="ev-cn-turn">Ход: <strong style="color:${room.turn==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(room.turn)}</strong><br>${room.startingTeam===room.turn?'стартовая команда':''}</div><div class="ev-cn-score blue"><span>Синие</span><strong>${blueRemaining}</strong><span>осталось</span></div></div>
+        ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
+        <div class="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${card.image ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="">` : escapeHtml(card.type || 'OP')}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
+        <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
+        ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
+      $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
+      $('#ev-cn-clue-send')?.addEventListener('click', cnSubmitClue);
+      $('#ev-cn-end-turn')?.addEventListener('click', cnEndTurn);
+      $('#ev-cn-clue-word')?.addEventListener('keydown', e => { if (e.key === 'Enter') cnSubmitClue(); });
+      document.querySelectorAll('[data-cn-card]').forEach(btn => btn.addEventListener('click', () => cnRevealCard(Number(btn.dataset.cnCard))));
+    }
+
     function render() {
       if (!canAccessMode(activeMode)) activeMode = 'rating';
       updateAccessUi();
@@ -3809,6 +4069,10 @@
       }
       if (activeMode === 'predictions') {
         renderPredictionsEvent();
+        return;
+      }
+      if (activeMode === 'codenames') {
+        renderCodenamesEvent();
         return;
       }
       if (isGuest()) {
@@ -6800,7 +7064,7 @@
     function bindShell() {
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          const requestedMode = ['guess', 'bestworst', 'predictions'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
+          const requestedMode = ['guess', 'bestworst', 'predictions', 'codenames'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
           if (!canAccessMode(requestedMode)) {
             activeMode = 'rating';
             render();
@@ -6989,6 +7253,15 @@
         bestWorstSubmissions = [];
         bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
         scheduleRender();
+      });
+      onSnapshot(doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID), snapshot => {
+        codenamesRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+        if (activeMode === 'codenames') scheduleRender();
+      }, error => {
+        console.error('eventCodenames snapshot error', error);
+        codenamesRoom = null;
+        codenamesStatus = 'Не удалось загрузить Codenames. Проверь Firebase Rules для eventCodenames.';
+        if (activeMode === 'codenames') scheduleRender();
       });
       onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
         const currentKey = predictionDocKey();
