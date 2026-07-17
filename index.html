@@ -192,7 +192,7 @@
       .oc-addgrid2 { grid-template-columns: 1fr 1fr; }
     }
     .oc-addgrid input, .oc-addgrid select,
-    .oc-addgrid2 input, .oc-addgrid2 select,
+    .oc-addgrid2 input, .oc-addgrid2 select, .oc-addgrid2 textarea,
     .oc-add-alt-row textarea {
       background: #0F0C16;
       border: 1px solid var(--border);
@@ -204,7 +204,7 @@
       width: 100%;
     }
     .oc-addgrid input:focus, .oc-addgrid select:focus,
-    .oc-addgrid2 input:focus, .oc-addgrid2 select:focus,
+    .oc-addgrid2 input:focus, .oc-addgrid2 select:focus, .oc-addgrid2 textarea:focus,
     .oc-add-alt-row textarea:focus {
       outline: 2px solid var(--pink);
       outline-offset: 1px;
@@ -232,6 +232,11 @@
       margin-top: 10px;
     }
     .oc-add-alt-row textarea {
+      min-height: 44px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+    .oc-franchise-area {
       min-height: 44px;
       resize: vertical;
       line-height: 1.35;
@@ -385,6 +390,7 @@
     }
     .oc-editcard textarea { resize: vertical; min-height: 40px; font-family: 'Inter', sans-serif; }
     .oc-e-alt-titles { grid-column: 1 / -1; min-height: 54px; }
+    .oc-e-franchise { min-height: 54px; line-height: 1.35; }
     .oc-editcard input:focus, .oc-editcard select:focus, .oc-editcard textarea:focus {
       outline: 2px solid var(--pink);
       outline-offset: 1px;
@@ -2048,12 +2054,12 @@
         <input id="oc-add-studio" type="text" list="oc-dl-studios" autocomplete="off" placeholder="Студии (через запятую)" />
         <input id="oc-add-director" type="text" list="oc-dl-directors" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
         <input id="oc-add-performer" type="text" list="oc-dl-performers" autocomplete="off" placeholder="Исполнители (через запятую)" />
-        <input id="oc-add-franchise" type="text" list="oc-dl-franchises" autocomplete="off" placeholder="Франшизы (через запятую)" />
+        <textarea id="oc-add-franchise" class="oc-franchise-area" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Если пусто — попробую взять из названия"></textarea>
         <input id="oc-add-image" type="text" placeholder="Картинка / постер (URL)" />
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
       </div>
       <div class="oc-add-alt-row">
-        <textarea id="oc-add-alt-titles" autocomplete="off" placeholder="Альтернативные названия — каждое с новой строки или через ;"></textarea>
+        <textarea id="oc-add-alt-titles" autocomplete="off" placeholder="Альтернативные названия — каждое с новой строки или через ;. Можно оставить пустым"></textarea>
       </div>
       <div class="oc-add-extra-row">
         <div class="oc-add-flags">
@@ -2063,7 +2069,7 @@
         </div>
         <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
       </div>
-      <div class="oc-hint">Несколько студий/режиссёров/исполнителей/франшиз — просто перечислите через запятую, напр. "MAPPA, WIT Studio"</div>
+      <div class="oc-hint">Студии/режиссёры/исполнители — через запятую. Франшизы — по одной на строку, чтобы названия с запятой не дробились.</div>
     </div>
 
     <div class="oc-filterbar">
@@ -2709,7 +2715,7 @@
       if (!openingId || !extras) return;
       const ext = await getExtendedDb();
       const payload = { updatedAt: ext.serverTimestamp() };
-      if (Object.prototype.hasOwnProperty.call(extras, 'franchises')) payload.franchises = cleanList(extras.franchises);
+      if (Object.prototype.hasOwnProperty.call(extras, 'franchises')) payload.franchises = cleanFranchiseList(extras.franchises);
       if (Object.prototype.hasOwnProperty.call(extras, 'alternativeTitles')) payload.alternativeTitles = cleanAliasList(extras.alternativeTitles);
       if (Object.prototype.hasOwnProperty.call(extras, 'isChinese')) payload.isChinese = Boolean(extras.isChinese);
       if (Object.prototype.hasOwnProperty.call(extras, 'isMovie')) payload.isMovie = Boolean(extras.isMovie);
@@ -3043,14 +3049,14 @@
       return {
         id: row.id,
         title: row.title || '',
-        alternativeTitles: cleanList(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames || []),
+        alternativeTitles: cleanAliasList(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames || []),
         type: row.type === 'ED' ? 'ED' : 'OP',
         year: row.year === null || row.year === undefined || row.year === '' ? null : Number(row.year),
         season: row.season || '',
         studios: row.studios || (row.studio ? [row.studio] : []),
         directors: row.directors || [],
         performers: row.performers || [],
-        franchises: row.franchises || (row.franchise ? [row.franchise] : []),
+        franchises: cleanFranchiseList(row.franchises || row.franchise || []),
         image: row.image || '',
         link: row.link || '',
         notes: row.notes || '',
@@ -3563,9 +3569,58 @@
       return Array.isArray(value) ? value.map(v => String(v).trim()).filter(Boolean) : parseList(value);
     }
 
+    function parseFranchiseList(str) {
+      return String(str || '')
+        .split(/\n|;/)
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+
+    function cleanFranchiseList(value) {
+      const raw = Array.isArray(value)
+        ? value.flatMap(v => parseFranchiseList(String(v || '')))
+        : parseFranchiseList(value);
+      return Array.from(new Set(raw.map(v => String(v).trim()).filter(Boolean)));
+    }
+
     function cleanAliasList(value) {
       const raw = Array.isArray(value) ? value : parseAliasList(value);
       return Array.from(new Set(raw.map(v => String(v).trim()).filter(Boolean)));
+    }
+
+    function cleanTitleForAutoAlias(title) {
+      let value = String(title || '').trim();
+      if (!value) return '';
+      const noisyBlock = /(?:\b(?:ncop|nced|op|ed|opening|ending|open|version|ver|tv\s*size|creditless|clean|опенинг|опен|эндинг|версия|верс|вер)\b|\d)/i;
+      value = value.replace(/[\(\[\{【［][^\)\]\}】］]*[\)\]\}】］]/g, part => noisyBlock.test(part) ? ' ' : part);
+      value = value
+        .replace(/\b(?:ncop|nced)\b/gi, ' ')
+        .replace(/\b(?:op|ed)\s*\d*[a-zа-яё]?\b/gi, ' ')
+        .replace(/\b(?:opening|ending|open)\s*\d*[a-zа-яё]?\b/gi, ' ')
+        .replace(/\b(?:version|ver)\.?\s*\d*[a-zа-яё]?\b/gi, ' ')
+        .replace(/\b(?:опенинг|опен|эндинг)\s*\d*[a-zа-яё]?\b/gi, ' ')
+        .replace(/\b(?:версия|верс|вер)\.?\s*\d*[a-zа-яё]?\b/gi, ' ')
+        .replace(/\b(?:tv\s*size|creditless|clean)\b/gi, ' ')
+        .replace(/[№#]?\s*\b\d+(?:\.\d+)?\b/g, ' ')
+        .replace(/\b(?:v|vol)\.?\s*\d+\b/gi, ' ')
+        .replace(/\s*[\-–—:|/\\]+\s*$/g, ' ')
+        .replace(/^[\s\-–—:|/\\]+|[\s\-–—:|/\\]+$/g, ' ')
+        .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      return value;
+    }
+
+    function alternativeTitlesForSave(title, value) {
+      return cleanAliasList(value);
+    }
+
+    function franchisesForSave(title, value) {
+      const typed = cleanFranchiseList(value);
+      if (typed.length) return typed;
+      const autoTitle = cleanTitleForAutoAlias(title);
+      if (!autoTitle) return [];
+      return [autoTitle];
     }
 
     function normalizeTitleForDuplicate(title) {
@@ -5044,7 +5099,7 @@
             <input class="oc-e-studio" type="text" list="oc-dl-studios" autocomplete="off" value="${escapeHtml((entry.studios || []).join(', '))}" placeholder="Студии (через запятую)" />
             <input class="oc-e-director" type="text" list="oc-dl-directors" autocomplete="off" value="${escapeHtml((entry.directors || []).join(', '))}" placeholder="Режиссёры опа (через запятую)" />
             <input class="oc-e-performer" type="text" list="oc-dl-performers" autocomplete="off" value="${escapeHtml((entry.performers || []).join(', '))}" placeholder="Исполнители (через запятую)" />
-            <input class="oc-e-franchise" type="text" list="oc-dl-franchises" autocomplete="off" value="${escapeHtml((entry.franchises || []).join(', '))}" placeholder="Франшизы (через запятую)" />
+            <textarea class="oc-e-franchise" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Если пусто — попробую взять из названия">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
           </div>
           <div class="oc-editgrid3">
             <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Картинка / постер (URL)" />
@@ -5052,7 +5107,7 @@
             <input class="oc-e-notes" type="text" value="${escapeHtml(entry.notes || '')}" placeholder="Заметка (необязательно)" />
           </div>
           <div class="oc-editgrid3">
-            <textarea class="oc-e-alt-titles" placeholder="Альтернативные названия — каждое с новой строки или через ;">${escapeHtml((entry.alternativeTitles || []).join('\n'))}</textarea>
+            <textarea class="oc-e-alt-titles" placeholder="Альтернативные названия — каждое с новой строки или через ;. Можно оставить пустым">${escapeHtml((entry.alternativeTitles || []).join('\n'))}</textarea>
           </div>
           <div class="oc-edit-flags">
             <label class="oc-flag-check"><input class="oc-e-chinese" type="checkbox" ${entryIsChinese(entry) ? 'checked' : ''} /> Китайский OP/ED</label>
@@ -6604,11 +6659,11 @@
             studios: parseList(card.querySelector('.oc-e-studio').value),
             directors: parseList(card.querySelector('.oc-e-director').value),
             performers: parseList(card.querySelector('.oc-e-performer').value),
-            franchises: parseList(card.querySelector('.oc-e-franchise').value),
+            franchises: franchisesForSave(title, card.querySelector('.oc-e-franchise').value),
             image: card.querySelector('.oc-e-image').value.trim(),
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
-            alternativeTitles: cleanAliasList(card.querySelector('.oc-e-alt-titles') ? card.querySelector('.oc-e-alt-titles').value : ''),
+            alternativeTitles: alternativeTitlesForSave(title, card.querySelector('.oc-e-alt-titles') ? card.querySelector('.oc-e-alt-titles').value : ''),
             isChinese: Boolean(card.querySelector('.oc-e-chinese') && card.querySelector('.oc-e-chinese').checked),
             isMovie: Boolean(card.querySelector('.oc-e-movie') && card.querySelector('.oc-e-movie').checked),
             isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked)
@@ -6823,8 +6878,8 @@
       const studios = parseList($('#oc-add-studio').value);
       const directors = parseList($('#oc-add-director').value);
       const performers = parseList($('#oc-add-performer').value);
-      const franchises = parseList($('#oc-add-franchise').value);
-      const alternativeTitles = cleanAliasList($('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
+      const franchises = franchisesForSave(title, $('#oc-add-franchise').value);
+      const alternativeTitles = alternativeTitlesForSave(title, $('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
       const image = $('#oc-add-image').value.trim();
       const link = $('#oc-add-link').value.trim();
       const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
