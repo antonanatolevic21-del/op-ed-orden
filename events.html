@@ -1146,12 +1146,12 @@
     .ev-cn-clue-main { font-family: 'Archivo Black', sans-serif; font-size: 24px; }
     .ev-cn-clue-form { display: grid; grid-template-columns: minmax(150px,1fr) 86px auto; gap: 8px; align-items: end; width: min(580px,100%); }
     .ev-cn-clue-form input { width: 100%; min-width: 0; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
-    .ev-cn-board { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 9px; margin-top: 14px; }
-    .ev-cn-card { position: relative; min-height: 126px; border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--panel); color: var(--text); padding: 0; cursor: pointer; text-align: left; }
+    .ev-cn-board { display: grid; grid-template-columns: repeat(5, minmax(190px,1fr)); gap: 10px; margin-top: 14px; overflow-x: auto; padding: 2px 2px 10px; }
+    .ev-cn-card { position: relative; min-width: 190px; border: 2px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--panel); color: var(--text); padding: 0; cursor: pointer; text-align: left; align-self: start; }
     .ev-cn-card:hover:not(:disabled) { border-color: var(--gold); transform: translateY(-2px); }
     .ev-cn-card:disabled { opacity: 1; cursor: default; }
-    .ev-cn-card-image { height: 76px; background: #09080d; overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: 'Archivo Black', sans-serif; }
-    .ev-cn-card-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ev-cn-card-image { width: 100%; aspect-ratio: 16 / 9; background: #09080d; overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: 'Archivo Black', sans-serif; }
+    .ev-cn-card-image img { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
     .ev-cn-card-body { padding: 8px 9px 9px; }
     .ev-cn-card-title { font-weight: 900; font-size: 11.5px; line-height: 1.23; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .ev-cn-card-meta { margin-top: 4px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 8.5px; }
@@ -1765,6 +1765,31 @@
       return String(opening?.title || opening?.anime || 'Без названия');
     }
 
+    function normalizeOpeningAlternativeTitles(value) {
+      const raw = Array.isArray(value)
+        ? value
+        : String(value || '').split(/\n|;/).flatMap(part => part.split(' / '));
+      const seen = new Set();
+      return raw.map(item => String(item || '').trim()).filter(item => {
+        const key = item.toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    function getOpeningSearchTitles(opening) {
+      const seen = new Set();
+      return [getOpeningTitle(opening), opening?.anime, ...(opening?.alternativeTitles || [])]
+        .map(value => String(value || '').trim())
+        .filter(value => {
+          const key = normalizeGuessAnswer(value);
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+    }
+
     function normalizeOpening(row) {
       return {
         id: String(row.id || ''),
@@ -1777,6 +1802,7 @@
         directors: Array.isArray(row.directors) ? row.directors : [],
         performers: Array.isArray(row.performers) ? row.performers : [],
         franchises: Array.isArray(row.franchises) ? row.franchises : [],
+        alternativeTitles: normalizeOpeningAlternativeTitles(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames),
         image: String(row.image || ''),
         link: String(row.link || ''),
         notes: String(row.notes || ''),
@@ -3502,7 +3528,9 @@
         const guessedId = String(viewerSubmission.answers?.[player.key]?.[kind] || '');
         const correct = actualIds.includes(guessedId);
         const guessed = guessedId ? bwOpeningName(guessedId) : 'вариант не выбран';
-        return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)} <span class="ev-bw-verdict ${correct ? 'correct' : 'wrong'}" title="${correct ? 'Угадано правильно' : 'Угадано неправильно'}">${correct ? '✓' : '×'}</span>${correct ? '' : `<div class="ev-bw-your-choice">Ты выбрал(а): ${escapeHtml(guessed)}</div>`}</div>`;
+        const guesserLabel = String(myName || 'Ты').trim() || 'Ты';
+        const guessKind = kind === 'best' ? 'лучшее' : 'худшее';
+        return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)} <span class="ev-bw-verdict ${correct ? 'correct' : 'wrong'}" title="${correct ? 'Угадано правильно' : 'Угадано неправильно'}">${correct ? '✓' : '×'}</span><div class="ev-bw-your-choice">${escapeHtml(guesserLabel)} считает, что ${guessKind} — «${escapeHtml(guessed)}».</div></div>`;
       };
       const truthHtml = players.map(player => {
         const own = truth[player.key] || {};
@@ -3522,7 +3550,7 @@
             : '<span class="ev-bw-target-score">без ответа</span>';
         return `<article class="ev-bw-truth"><div class="ev-bw-truth-head"><h4>${escapeHtml(player.name)}</h4>${badge}</div>${bwModeUses(settings,'best') ? renderChoice(player, own, 'best', 'Поставил(а) как лучшее') : ''}${bwModeUses(settings,'worst') ? renderChoice(player, own, 'worst', 'Поставил(а) как худшее') : ''}</article>`;
       }).join('');
-      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Флажки игроков и твои ответы</h3><div class="ev-hint">✓ означает точное совпадение. При ошибке показан ×, а ниже полупрозрачным текстом — вариант, который выбрал именно ты.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
+      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Флажки игроков и твои ответы</h3><div class="ev-hint">✓ означает точное совпадение, × — ошибку. Под правильным ответом приглушённо показано, какой вариант выбрал ты.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
     }
 
     function bindBestWorstRoundControls() {
@@ -3724,8 +3752,10 @@
       const candidates = predictionCandidates();
       const byTitle = new Map();
       candidates.forEach(opening => {
-        const title = getOpeningTitle(opening).trim().toLocaleLowerCase('ru');
-        if (title && !byTitle.has(title)) byTitle.set(title, opening);
+        getOpeningSearchTitles(opening).forEach(label => {
+          const title = normalizeGuessAnswer(label);
+          if (title && !byTitle.has(title)) byTitle.set(title, opening);
+        });
       });
       const payload = {
         year: predictionYear,
@@ -3733,8 +3763,9 @@
         textPredictions: normalizePredictionRows(draft.textPredictions, 'text').map(row => ({ text: row.text.trim(), hit: Boolean(row.text.trim()) && row.hit })),
         openingPredictions: normalizePredictionRows(draft.openingPredictions, 'opening').map(row => {
           const text = row.text.trim();
-          const match = byTitle.get(text.toLocaleLowerCase('ru'));
-          return { openingId: match ? String(match.id) : String(row.openingId || ''), text, hit: Boolean(text) && row.hit };
+          const match = byTitle.get(normalizeGuessAnswer(text));
+          const canonicalText = match ? getOpeningTitle(match) : text;
+          return { openingId: match ? String(match.id) : String(row.openingId || ''), text: canonicalText, hit: Boolean(canonicalText) && row.hit };
         }),
         ownerKey,
         ownerName: String(myName || '').trim(),
@@ -3794,7 +3825,7 @@
               </section>
               <section class="ev-predict-card">
                 <div class="ev-predict-card-head"><div><h3>Какие опенинги попадут в десятку</h3><div class="ev-hint">Без конкретных мест. Можно выбрать OP из базы выбранного сезона или вписать будущий опенинг вручную. Сейчас в базе найдено: ${candidates.length}.</div></div><div class="ev-score-pill">Топ-10</div></div>
-                <datalist id="${datalistId}">${candidates.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}">${escapeHtml(opening.anime || '')}</option>`).join('')}</datalist>
+                <datalist id="${datalistId}">${candidates.flatMap(opening => getOpeningSearchTitles(opening).map(label => `<option value="${escapeHtml(label)}">${escapeHtml(label === getOpeningTitle(opening) ? (opening.anime || '') : `→ ${getOpeningTitle(opening)}`)}</option>`)).join('')}</datalist>
                 <div class="ev-predict-list">
                   ${draft.openingPredictions.map((row, index) => `<div class="ev-predict-row"><div class="ev-predict-index">${index + 1}</div><input type="text" maxlength="300" list="${datalistId}" value="${escapeHtml(row.text)}" placeholder="Название опенинга" data-predict-opening-index="${index}"><label class="ev-predict-check"><input type="checkbox" data-predict-opening-hit="${index}" ${row.hit ? 'checked' : ''}> Сбылось</label></div>`).join('')}
                 </div>
@@ -3831,19 +3862,33 @@
         predictionStatus = '';
         patchPredictionSummary();
       }));
-      document.querySelectorAll('[data-predict-opening-index]').forEach(input => input.addEventListener('input', () => {
-        const index = Number(input.dataset.predictOpeningIndex);
-        draft.openingPredictions[index].text = input.value;
-        draft.openingPredictions[index].openingId = '';
-        if (!input.value.trim()) {
-          draft.openingPredictions[index].hit = false;
-          const hitInput = document.querySelector(`[data-predict-opening-hit="${index}"]`);
-          if (hitInput) hitInput.checked = false;
-        }
-        predictionDraftDirty = true;
-        predictionStatus = '';
-        patchPredictionSummary();
-      }));
+      document.querySelectorAll('[data-predict-opening-index]').forEach(input => {
+        input.addEventListener('input', () => {
+          const index = Number(input.dataset.predictOpeningIndex);
+          draft.openingPredictions[index].text = input.value;
+          draft.openingPredictions[index].openingId = '';
+          if (!input.value.trim()) {
+            draft.openingPredictions[index].hit = false;
+            const hitInput = document.querySelector(`[data-predict-opening-hit="${index}"]`);
+            if (hitInput) hitInput.checked = false;
+          }
+          predictionDraftDirty = true;
+          predictionStatus = '';
+          patchPredictionSummary();
+        });
+        input.addEventListener('change', () => {
+          const index = Number(input.dataset.predictOpeningIndex);
+          const needle = normalizeGuessAnswer(input.value);
+          const match = predictionCandidates().find(opening => getOpeningSearchTitles(opening).some(label => normalizeGuessAnswer(label) === needle));
+          if (!match) return;
+          input.value = getOpeningTitle(match);
+          draft.openingPredictions[index].text = getOpeningTitle(match);
+          draft.openingPredictions[index].openingId = String(match.id);
+          predictionDraftDirty = true;
+          predictionStatus = '';
+          patchPredictionSummary();
+        });
+      });
       document.querySelectorAll('[data-predict-opening-hit]').forEach(input => input.addEventListener('change', () => {
         const index = Number(input.dataset.predictOpeningHit);
         draft.openingPredictions[index].hit = input.checked;
@@ -3877,7 +3922,10 @@
       }
     }
     function cnFilteredOpenings(settings = cnSettings()) {
-      const rows = openings.filter(o => settings.typeFilter === 'all' || o.type === settings.typeFilter);
+      const rows = openings.filter(opening => {
+        if (settings.typeFilter !== 'all' && opening.type !== settings.typeFilter) return false;
+        return Boolean(safeUrl(opening.image));
+      });
       const unique = [];
       const seen = new Set();
       for (const opening of guessShuffle(rows)) {
@@ -3890,7 +3938,7 @@
     }
     function cnCreateBoard(settings) {
       const candidates = cnFilteredOpenings(settings);
-      if (candidates.length < 25) throw new Error(`После фильтра осталось ${candidates.length} уникальных OP/ED. Для поля нужно 25.`);
+      if (candidates.length < 25) throw new Error(`После фильтра осталось ${candidates.length} уникальных OP/ED с изображениями. Для поля нужно 25.`);
       const selected = guessShuffle(candidates).slice(0,25);
       const startingTeam = Math.random() < .5 ? 'red' : 'blue';
       const otherTeam = startingTeam === 'red' ? 'blue' : 'red';
@@ -3901,7 +3949,7 @@
         'assassin'
       ]);
       const board = selected.map((opening, index) => ({
-        id: String(opening.id), title: getOpeningTitle(opening), type: opening.type || 'OP', image: opening.image || '', link: opening.link || '',
+        id: String(opening.id), title: getOpeningTitle(opening), type: opening.type || 'OP', image: safeUrl(opening.image), link: opening.link || '',
         identity: identities[index], revealed: false
       }));
       return { board, startingTeam };
@@ -4039,7 +4087,7 @@
         <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
         <section class="ev-cn-panel"><div class="ev-cn-scorebar"><div class="ev-cn-score red"><span>Красные</span><strong>${redRemaining}</strong><span>осталось</span></div><div class="ev-cn-turn">Ход: <strong style="color:${room.turn==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(room.turn)}</strong><br>${room.startingTeam===room.turn?'стартовая команда':''}</div><div class="ev-cn-score blue"><span>Синие</span><strong>${blueRemaining}</strong><span>осталось</span></div></div>
         ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
-        <div class="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${card.image ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="">` : escapeHtml(card.type || 'OP')}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
+        <div class="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(card.title)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
         <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
         ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
       $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
@@ -4219,8 +4267,7 @@
       const search = normalizeGuessAnswer(guessFilters.search || '');
       if (search) {
         const haystack = normalizeGuessAnswer([
-          opening.title,
-          opening.anime,
+          ...getOpeningSearchTitles(opening),
           ...(opening.studios || []),
           ...(opening.directors || []),
           ...(opening.performers || []),
@@ -4314,14 +4361,31 @@
         ? openings.filter(opening => opening.type === guessFilters.type)
         : openings;
       titleOpenings.forEach(opening => {
-        [getOpeningTitle(opening), opening.anime].forEach(value => {
-          const title = String(value || '').trim();
-          const key = normalizeGuessAnswer(title);
-          if (!title || !key || byKey.has(key)) return;
-          byKey.set(key, title);
-        });
+        const title = getOpeningTitle(opening).trim();
+        const key = normalizeGuessAnswer(title);
+        if (!title || !key || byKey.has(key)) return;
+        byKey.set(key, title);
       });
       return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+    }
+
+    function guessSongSuggestionCatalog() {
+      const byKey = new Map();
+      const titleOpenings = guessFilters.type
+        ? openings.filter(opening => opening.type === guessFilters.type)
+        : openings;
+      titleOpenings.forEach(opening => {
+        const value = getOpeningTitle(opening).trim();
+        const key = normalizeGuessAnswer(value);
+        if (!value || !key || byKey.has(key)) return;
+        const labels = getOpeningSearchTitles(opening);
+        byKey.set(key, {
+          value,
+          searchLabels: labels,
+          searchText: normalizeGuessAnswer(labels.join(' '))
+        });
+      });
+      return [...byKey.values()];
     }
 
     function guessFranchiseCatalog() {
@@ -4363,7 +4427,7 @@
       if (guessFilters.answerTarget === 'franchise') {
         return [...new Set((opening?.franchises || []).map(value => String(value || '').trim()).filter(Boolean))];
       }
-      return [...new Set([getOpeningTitle(opening), opening?.anime].map(value => String(value || '').trim()).filter(Boolean))];
+      return getOpeningSearchTitles(opening);
     }
 
     function getGuessCorrectDisplay(opening) {
@@ -4930,15 +4994,17 @@
         box.innerHTML = '';
         return;
       }
-      const matches = guessAnswerCatalog()
-        .filter(title => normalizeGuessAnswer(title).includes(needle))
+      const matches = (guessFilters.answerTarget === 'franchise'
+        ? guessFranchiseCatalog().map(value => ({ value, searchLabels: [value], searchText: normalizeGuessAnswer(value) }))
+        : guessSongSuggestionCatalog())
+        .filter(item => item.searchText.includes(needle))
         .sort((a, b) => {
-          const aStarts = normalizeGuessAnswer(a).startsWith(needle) ? 0 : 1;
-          const bStarts = normalizeGuessAnswer(b).startsWith(needle) ? 0 : 1;
-          return aStarts - bStarts || a.localeCompare(b, 'ru', { sensitivity: 'base' });
+          const aStarts = a.searchLabels.some(label => normalizeGuessAnswer(label).startsWith(needle)) ? 0 : 1;
+          const bStarts = b.searchLabels.some(label => normalizeGuessAnswer(label).startsWith(needle)) ? 0 : 1;
+          return aStarts - bStarts || a.value.localeCompare(b.value, 'ru', { sensitivity: 'base' });
         })
         .slice(0, 8);
-      box.innerHTML = matches.map((title, index) => `<button type="button" class="ev-guess-suggestion" role="option" aria-selected="false" data-guess-suggestion-index="${index}" data-guess-suggestion="${escapeHtml(title)}">${escapeHtml(title)}</button>`).join('');
+      box.innerHTML = matches.map((item, index) => `<button type="button" class="ev-guess-suggestion" role="option" aria-selected="false" data-guess-suggestion-index="${index}" data-guess-suggestion="${escapeHtml(item.value)}">${escapeHtml(item.value)}</button>`).join('');
       box.classList.toggle('open', matches.length > 0);
       box.querySelectorAll('[data-guess-suggestion]').forEach(button => {
         button.addEventListener('mouseenter', () => setGuessSuggestionIndex(Number(button.dataset.guessSuggestionIndex)));
@@ -5260,7 +5326,7 @@
         .filter(opening => !selected.has(String(opening.id)))
         .filter(opening => {
           if (!needle) return false;
-          const haystack = [getOpeningTitle(opening), opening.anime, ...(opening.franchises || []), ...(opening.performers || [])]
+          const haystack = [...getOpeningSearchTitles(opening), ...(opening.franchises || []), ...(opening.performers || [])]
             .join(' ');
           return normalizeGuessAnswer(haystack).includes(needle);
         })
