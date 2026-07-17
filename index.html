@@ -192,7 +192,8 @@
       .oc-addgrid2 { grid-template-columns: 1fr 1fr; }
     }
     .oc-addgrid input, .oc-addgrid select,
-    .oc-addgrid2 input, .oc-addgrid2 select {
+    .oc-addgrid2 input, .oc-addgrid2 select,
+    .oc-add-alt-row textarea {
       background: #0F0C16;
       border: 1px solid var(--border);
       color: var(--text);
@@ -203,7 +204,8 @@
       width: 100%;
     }
     .oc-addgrid input:focus, .oc-addgrid select:focus,
-    .oc-addgrid2 input:focus, .oc-addgrid2 select:focus {
+    .oc-addgrid2 input:focus, .oc-addgrid2 select:focus,
+    .oc-add-alt-row textarea:focus {
       outline: 2px solid var(--pink);
       outline-offset: 1px;
     }
@@ -225,6 +227,33 @@
       white-space: nowrap;
     }
     .oc-addbtn:hover { background: #ff4d78; }
+
+    .oc-add-alt-row {
+      margin-top: 10px;
+    }
+    .oc-add-alt-row textarea {
+      min-height: 44px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+    .oc-check-field {
+      justify-content: flex-end;
+      min-height: 62px;
+    }
+    .oc-filter-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #0F0C16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      min-height: 42px;
+    }
+    .oc-filter-check input { accent-color: var(--pink); }
     .oc-add-extra-row {
       display: flex;
       align-items: center;
@@ -355,6 +384,7 @@
       width: 100%;
     }
     .oc-editcard textarea { resize: vertical; min-height: 40px; font-family: 'Inter', sans-serif; }
+    .oc-e-alt-titles { grid-column: 1 / -1; min-height: 54px; }
     .oc-editcard input:focus, .oc-editcard select:focus, .oc-editcard textarea:focus {
       outline: 2px solid var(--pink);
       outline-offset: 1px;
@@ -2022,6 +2052,9 @@
         <input id="oc-add-image" type="text" placeholder="Картинка / постер (URL)" />
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
       </div>
+      <div class="oc-add-alt-row">
+        <textarea id="oc-add-alt-titles" autocomplete="off" placeholder="Альтернативные названия — каждое с новой строки или через ;"></textarea>
+      </div>
       <div class="oc-add-extra-row">
         <div class="oc-add-flags">
           <label class="oc-flag-check"><input id="oc-add-chinese" type="checkbox" /> Китайский OP/ED</label>
@@ -2075,6 +2108,10 @@
             <option value="summer">Лето</option>
             <option value="fall">Осень</option>
           </select>
+        </div>
+        <div class="oc-field oc-check-field">
+          <label>&nbsp;</label>
+          <label class="oc-filter-check"><input id="oc-f-missing" type="checkbox" /> Только с незаполненными полями</label>
         </div>
         <div class="oc-field">
           <label for="oc-f-studio">Студии (⌘/ctrl — несколько)</label>
@@ -2164,6 +2201,10 @@
               <option value="summer">Лето</option>
               <option value="fall">Осень</option>
             </select>
+          </div>
+          <div class="oc-field oc-check-field">
+            <label>&nbsp;</label>
+            <label class="oc-filter-check"><input id="oc-p-missing" type="checkbox" /> Только с незаполненными полями</label>
           </div>
           <div class="oc-field">
             <label for="oc-p-studio">Студии</label>
@@ -2427,7 +2468,7 @@
     let avatarsMap = {};
     let ratingScale = 'int'; // 'int', 'half' or personal 'five'
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
-    const filters = { search: '', type: '', year: '', season: '', scoreCmp: '', scoreValue: '', hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
+    const filters = { search: '', type: '', year: '', season: '', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
     let sortMode = 'added_desc';
     let editingId = null;
     let manualRanks = {};
@@ -2669,6 +2710,7 @@
       const ext = await getExtendedDb();
       const payload = { updatedAt: ext.serverTimestamp() };
       if (Object.prototype.hasOwnProperty.call(extras, 'franchises')) payload.franchises = cleanList(extras.franchises);
+      if (Object.prototype.hasOwnProperty.call(extras, 'alternativeTitles')) payload.alternativeTitles = cleanAliasList(extras.alternativeTitles);
       if (Object.prototype.hasOwnProperty.call(extras, 'isChinese')) payload.isChinese = Boolean(extras.isChinese);
       if (Object.prototype.hasOwnProperty.call(extras, 'isMovie')) payload.isMovie = Boolean(extras.isMovie);
       if (Object.prototype.hasOwnProperty.call(extras, 'isShortened')) payload.isShortened = Boolean(extras.isShortened);
@@ -3001,6 +3043,7 @@
       return {
         id: row.id,
         title: row.title || '',
+        alternativeTitles: cleanList(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames || []),
         type: row.type === 'ED' ? 'ED' : 'OP',
         year: row.year === null || row.year === undefined || row.year === '' ? null : Number(row.year),
         season: row.season || '',
@@ -3508,8 +3551,21 @@
       return (str || '').split(',').map(s => s.trim()).filter(Boolean);
     }
 
+    function parseAliasList(str) {
+      return String(str || '')
+        .split(/\n|;/)
+        .flatMap(part => part.split(' / '))
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+
     function cleanList(value) {
       return Array.isArray(value) ? value.map(v => String(v).trim()).filter(Boolean) : parseList(value);
+    }
+
+    function cleanAliasList(value) {
+      const raw = Array.isArray(value) ? value : parseAliasList(value);
+      return Array.from(new Set(raw.map(v => String(v).trim()).filter(Boolean)));
     }
 
     function normalizeTitleForDuplicate(title) {
@@ -4067,6 +4123,7 @@
         ['#oc-f-score-value', filters.scoreValue], ['#oc-p-score-value', filters.scoreValue]
       ];
       pairs.forEach(([selector, value]) => { const el = $(selector); if (el) el.value = value; });
+      ['#oc-f-missing', '#oc-p-missing'].forEach(selector => { const el = $(selector); if (el) el.checked = Boolean(filters.missingOnly); });
       const multiPairs = [
         ['#oc-f-studio', filters.studios], ['#oc-p-studio', filters.studios],
         ['#oc-f-director', filters.directors], ['#oc-p-director', filters.directors],
@@ -4114,7 +4171,7 @@
       if (!entry) return '';
       if (entry.__ocSearchText) return entry.__ocSearchText;
       const text = [
-        entry.title, entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
+        entry.title, ...(entry.alternativeTitles || []), entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
         ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
       ].join(' ').toLowerCase();
       try { Object.defineProperty(entry, '__ocSearchText', { value: text, configurable: true, enumerable: false }); }
@@ -4125,7 +4182,7 @@
     function filtersCacheKey() {
       return [
         dataVersion, filters.search, filters.type, filters.year, filters.season,
-        filters.scoreCmp, filters.scoreValue, filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie', filters.hideShortened ? 'hideShort' : 'showShort',
+        filters.scoreCmp, filters.scoreValue, filters.missingOnly ? 'missing' : 'allfields', filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie', filters.hideShortened ? 'hideShort' : 'showShort',
         filters.studios.join('¦'), filters.directors.join('¦'), filters.performers.join('¦'), filters.franchises.join('¦')
       ].join('|');
     }
@@ -4196,16 +4253,42 @@
       profileUser = next;
     }
 
+    function titleMatchesAnySearch(entry, query) {
+      if (!entry) return false;
+      if (titleMatchesFuzzySearch(entry.title, query)) return true;
+      return (entry.alternativeTitles || []).some(title => titleMatchesFuzzySearch(title, query));
+    }
+
+    function missingRequiredFields(entry) {
+      const missing = [];
+      if (!String(entry.title || '').trim()) missing.push('название');
+      if (!String(entry.type || '').trim()) missing.push('тип');
+      if (entry.year === null || entry.year === undefined || entry.year === '' || Number.isNaN(Number(entry.year))) missing.push('год');
+      if (!String(entry.season || '').trim()) missing.push('сезон');
+      if (!(entry.studios || []).length) missing.push('студии');
+      if (!(entry.directors || []).length) missing.push('режиссёры');
+      if (!(entry.performers || []).length) missing.push('исполнители');
+      if (!(entry.franchises || []).length) missing.push('франшизы');
+      if (!String(entry.image || '').trim()) missing.push('картинка');
+      if (!String(entry.link || '').trim()) missing.push('ссылка');
+      return missing;
+    }
+
+    function entryHasMissingRequiredFields(entry) {
+      return missingRequiredFields(entry).length > 0;
+    }
+
     function applyFilters(list) {
       const q = String(filters.search || '').trim().toLowerCase();
       const cacheKey = list === entries ? filtersCacheKey() : '';
       if (cacheKey && filteredCache.key === cacheKey && Array.isArray(filteredCache.value)) return filteredCache.value;
       const result = list.filter(e => {
         if (q) {
-          if (!entrySearchText(e).includes(q) && !titleMatchesFuzzySearch(e.title, q)) return false;
+          if (!entrySearchText(e).includes(q) && !titleMatchesAnySearch(e, q)) return false;
         }
         if (filters.type && e.type !== filters.type) return false;
         if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie, filters.hideShortened)) return false;
+        if (filters.missingOnly && !entryHasMissingRequiredFields(e)) return false;
         if (filters.year && String(e.year) !== filters.year) return false;
         if (filters.season && e.season !== filters.season) return false;
         if (filters.scoreCmp && String(filters.scoreValue || '').trim() !== '') {
@@ -4309,7 +4392,7 @@
 
     function renderFilterStat(filteredList) {
       if (!filterStatEl) return;
-      const filterActive = filters.search || filters.type || filters.year || filters.season || filters.scoreCmp || filters.scoreValue || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
+      const filterActive = filters.search || filters.type || filters.year || filters.season || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
       if (!filterActive) {
         filterStatEl.classList.remove('show');
         filterStatEl.textContent = '';
@@ -4633,7 +4716,8 @@
       const extraHtml = opts.extraHtml || '';
       const votesHtml = opts.votesHtml || '';
       const notesHtml = opts.notes && entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : '';
-      const missing = opts.showMissingLink === false ? '' : (!entry.link ? '<span class="oc-missing-link" title="Ссылка не добавлена">😡</span>' : '');
+      const missingFields = missingRequiredFields(entry);
+      const missing = opts.showMissingLink === false ? '' : (missingFields.length ? `<span class="oc-missing-link" title="Не заполнено: ${escapeHtml(missingFields.join(', '))}">😡</span>` : '');
       const flagBadges = `${entryIsChinese(entry) ? '<span class="oc-yr-tag">Китай</span>' : ''}${entryIsMovie(entry) ? '<span class="oc-yr-tag">фильм</span>' : ''}${entryIsShortened(entry) ? '<span class="oc-yr-tag">укор.</span>' : ''}`;
       return `<div class="oc-season-op oc-unified-card${className}" data-id="${escapeHtml(entry.id)}">
         <div class="oc-rank ${rankClass}">${rankLabel}</div>
@@ -4966,6 +5050,9 @@
             <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Картинка / постер (URL)" />
             <input class="oc-e-link" type="text" value="${escapeHtml(entry.link || '')}" placeholder="Ссылка (anisongdb.com и т.п.)" />
             <input class="oc-e-notes" type="text" value="${escapeHtml(entry.notes || '')}" placeholder="Заметка (необязательно)" />
+          </div>
+          <div class="oc-editgrid3">
+            <textarea class="oc-e-alt-titles" placeholder="Альтернативные названия — каждое с новой строки или через ;">${escapeHtml((entry.alternativeTitles || []).join('\n'))}</textarea>
           </div>
           <div class="oc-edit-flags">
             <label class="oc-flag-check"><input class="oc-e-chinese" type="checkbox" ${entryIsChinese(entry) ? 'checked' : ''} /> Китайский OP/ED</label>
@@ -6220,6 +6307,7 @@
         <div class="oc-detail-box"><div class="oc-detail-label">режиссёры</div><div class="oc-detail-value">${arrayValue(entry.directors)}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">исполнители</div><div class="oc-detail-value">${arrayValue(entry.performers)}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">франшизы</div><div class="oc-detail-value">${arrayValue(entry.franchises)}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">альт. названия</div><div class="oc-detail-value">${arrayValue(entry.alternativeTitles)}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">оценок</div><div class="oc-detail-value">${ratingCount(entry.scores)} общих${ratingCount(entry.songScores) ? ' · ' + ratingCount(entry.songScores) + ' песня' : ''}${ratingCount(entry.visualScores) ? ' · ' + ratingCount(entry.visualScores) + ' визуал' : ''}</div></div>
       `;
       const imageHtml = renderOpeningVideoBlock(entry);
@@ -6520,6 +6608,7 @@
             image: card.querySelector('.oc-e-image').value.trim(),
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
+            alternativeTitles: cleanAliasList(card.querySelector('.oc-e-alt-titles') ? card.querySelector('.oc-e-alt-titles').value : ''),
             isChinese: Boolean(card.querySelector('.oc-e-chinese') && card.querySelector('.oc-e-chinese').checked),
             isMovie: Boolean(card.querySelector('.oc-e-movie') && card.querySelector('.oc-e-movie').checked),
             isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked)
@@ -6527,11 +6616,12 @@
 
           try {
             Object.assign(entry, updatedEntry);
+            touchEntryCache(entry);
             editingId = null;
             populateFilterOptions();
             render();
             await window.OPED_DB.updateOpening(id, updatedEntry);
-            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened });
+            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened });
             setStatus('Изменения сохранены в Firebase ✓');
           } catch (err) {
             console.error(err);
@@ -6734,6 +6824,7 @@
       const directors = parseList($('#oc-add-director').value);
       const performers = parseList($('#oc-add-performer').value);
       const franchises = parseList($('#oc-add-franchise').value);
+      const alternativeTitles = cleanAliasList($('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
       const image = $('#oc-add-image').value.trim();
       const link = $('#oc-add-link').value.trim();
       const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
@@ -6757,6 +6848,7 @@
           directors,
           performers,
           franchises,
+          alternativeTitles,
           image,
           link,
           isChinese,
@@ -6765,7 +6857,7 @@
           notes: '',
           createdBy: myName
         });
-        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, isChinese, isMovie, isShortened });
+        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened });
 
         $('#oc-add-title').value = '';
         // Год и сезон оставляем последними введёнными, чтобы быстрее добавлять пачку треков одного сезона.
@@ -6773,6 +6865,7 @@
         $('#oc-add-director').value = '';
         $('#oc-add-performer').value = '';
         $('#oc-add-franchise').value = '';
+        if ($('#oc-add-alt-titles')) $('#oc-add-alt-titles').value = '';
         $('#oc-add-image').value = '';
         $('#oc-add-link').value = '';
         if ($('#oc-add-chinese')) $('#oc-add-chinese').checked = false;
@@ -6819,6 +6912,11 @@
     bindSimpleFilter('#oc-p-score-cmp', 'scoreCmp');
     bindSimpleFilter('#oc-f-score-value', 'scoreValue', 'input');
     bindSimpleFilter('#oc-p-score-value', 'scoreValue', 'input');
+    ['#oc-f-missing', '#oc-p-missing'].forEach(selector => {
+      const el = $(selector);
+      if (!el) return;
+      el.addEventListener('change', () => { filters.missingOnly = Boolean(el.checked); applyFilterChange(); });
+    });
     if (contentFilterSelect) {
       contentFilterSelect.addEventListener('change', (e) => setContentFilterMode(e.target.value));
     }
@@ -6856,7 +6954,7 @@
     });
 
     function resetAllFilters() {
-      filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = '';
+      filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = ''; filters.missingOnly = false;
       // Режим показа китайских / фильмов / укороченных не считаем обычным фильтром.
       // Он сохраняется отдельно и не должен сбрасываться кнопкой «Сбросить фильтры».
       filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];
@@ -7155,6 +7253,7 @@
         directors: cleanArray(opening.directors),
         performers: cleanArray(opening.performers),
         franchises: cleanArray(opening.franchises),
+        alternativeTitles: cleanArray(opening.alternativeTitles || opening.altTitles || opening.aliases),
         image: String(opening.image || "").trim(),
         link: String(opening.link || "").trim(),
         notes: String(opening.notes || "").trim(),
