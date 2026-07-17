@@ -417,6 +417,8 @@
       font-size: 12px;
     }
     .ev-guess-field select { cursor: pointer; }
+    .ev-season-range-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+    .ev-season-range-pair select { min-width: 0; }
     .ev-guess-count-row { display: grid; grid-template-columns: minmax(0, 1fr) 68px; gap: 9px; align-items: center; }
     .ev-guess-count-row input[type="range"] { width: 100%; accent-color: var(--pink); }
     .ev-guess-segmented {
@@ -853,6 +855,7 @@
       .ev-guess-collection-grid .full { grid-column: 1; }
       .ev-guess-collection-row { grid-template-columns: 28px minmax(0,1fr); }
       .ev-guess-collection-remove { grid-column: 2; justify-self: start; }
+      .ev-season-range-pair { grid-template-columns: 1fr; }
     }
 
     .ev-basket-status { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 8px; }
@@ -1293,6 +1296,59 @@
     const SEASONS = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_LABEL = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
     const STAGE_LABEL = { basket: 'Корзина', first: 'Первый этап', semi: 'Полуфинал', final: 'Финал' };
+
+    function normalizeSeasonRange(raw = {}) {
+      let fromYear = Number.isFinite(Number(raw.fromYear)) && String(raw.fromYear).trim() ? String(Math.trunc(Number(raw.fromYear))) : '';
+      let toYear = Number.isFinite(Number(raw.toYear)) && String(raw.toYear).trim() ? String(Math.trunc(Number(raw.toYear))) : '';
+      let fromSeason = SEASONS.includes(raw.fromSeason) ? raw.fromSeason : 'winter';
+      let toSeason = SEASONS.includes(raw.toSeason) ? raw.toSeason : 'fall';
+
+      // Миграция старых настроек «один год + один сезон».
+      if (!fromYear && !toYear && raw.year !== undefined && raw.year !== null && String(raw.year).trim()) {
+        fromYear = String(Math.trunc(Number(raw.year)));
+        toYear = fromYear;
+        if (SEASONS.includes(raw.season)) {
+          fromSeason = raw.season;
+          toSeason = raw.season;
+        }
+      }
+
+      if (fromYear && toYear) {
+        const fromPoint = Number(fromYear) * 4 + SEASONS.indexOf(fromSeason);
+        const toPoint = Number(toYear) * 4 + SEASONS.indexOf(toSeason);
+        if (fromPoint > toPoint) {
+          [fromYear, toYear] = [toYear, fromYear];
+          [fromSeason, toSeason] = [toSeason, fromSeason];
+        }
+      }
+      return { fromYear, fromSeason, toYear, toSeason };
+    }
+
+    function openingInSeasonRange(opening, raw = {}) {
+      const range = normalizeSeasonRange(raw);
+      const year = Number(opening?.year);
+      const seasonIndex = SEASONS.indexOf(String(opening?.season || ''));
+      if (!Number.isFinite(year) || seasonIndex < 0) return !range.fromYear && !range.toYear;
+      const point = year * 4 + seasonIndex;
+      if (range.fromYear) {
+        const start = Number(range.fromYear) * 4 + SEASONS.indexOf(range.fromSeason);
+        if (point < start) return false;
+      }
+      if (range.toYear) {
+        const end = Number(range.toYear) * 4 + SEASONS.indexOf(range.toSeason);
+        if (point > end) return false;
+      }
+      return true;
+    }
+
+    function seasonRangeYearOptions(values, selected, emptyLabel) {
+      const unique = [...new Set(values.map(Number).filter(Number.isFinite))].sort((a, b) => a - b);
+      return `<option value="">${escapeHtml(emptyLabel)}</option>${unique.map(value => `<option value="${value}" ${String(selected) === String(value) ? 'selected' : ''}>${value}</option>`).join('')}`;
+    }
+
+    function seasonRangeSeasonOptions(selected) {
+      return SEASONS.map(season => `<option value="${season}" ${selected === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('');
+    }
     const SCORE_WORDS = { 1:'залупа', 2:'очень слабо', 3:'слабо', 4:'ниже среднего', 5:'средне', 6:'норм', 7:'хорошо', 8:'сильно', 9:'почти пик', 10:'пик' };
 
     const $ = (sel) => document.querySelector(sel);
@@ -1335,8 +1391,10 @@
       listenCount: 3,
       source: 'all',
       type: '',
-      year: '',
-      season: '',
+      fromYear: '',
+      fromSeason: 'winter',
+      toYear: '',
+      toSeason: 'fall',
       studio: '',
       director: '',
       performer: '',
@@ -1375,8 +1433,10 @@
       perRound: 6,
       rounds: 5,
       grouping: 'none',
-      year: '',
-      season: '',
+      fromYear: '',
+      fromSeason: 'winter',
+      toYear: '',
+      toSeason: 'fall',
       studio: '',
       director: '',
       performer: '',
@@ -2672,14 +2732,14 @@
       const typeFilter = ['OP', 'ED', 'both'].includes(raw.typeFilter) ? raw.typeFilter : 'OP';
       const grouping = ['none', 'year', 'yearSeason', 'performer', 'director', 'studio'].includes(raw.grouping) ? raw.grouping : 'none';
       const content = ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(raw.content) ? raw.content : 'all';
+      const range = normalizeSeasonRange(raw);
       return {
         mode,
         typeFilter,
         perRound: bwClamp(raw.perRound, 2, 20, 6),
         rounds: bwClamp(raw.rounds, 1, 20, 5),
         grouping,
-        year: String(raw.year || ''),
-        season: SEASONS.includes(raw.season) ? raw.season : '',
+        ...range,
         studio: String(raw.studio || ''),
         director: String(raw.director || ''),
         performer: String(raw.performer || ''),
@@ -2897,8 +2957,7 @@
     function bwOpeningMatches(opening, settings, ratingContext) {
       if (settings.typeFilter !== 'both' && opening.type !== settings.typeFilter) return false;
       if (!getGuessPlaybackSource(opening)) return false;
-      if (settings.year && String(opening.year ?? '') !== settings.year) return false;
-      if (settings.season && opening.season !== settings.season) return false;
+      if (!openingInSeasonRange(opening, settings)) return false;
       if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
       if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
       if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
@@ -3432,8 +3491,8 @@
                 <label class="ev-guess-field"><span class="ev-guess-label">Элементов за раунд</span><input id="ev-bw-per-round" type="number" min="2" max="20" step="1" value="${settings.perRound}" ${hostDisabled} /></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Количество раундов</span><input id="ev-bw-rounds" type="number" min="1" max="20" step="1" value="${settings.rounds}" ${hostDisabled} /></label>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option></select></label>
-                <label class="ev-guess-field"><span class="ev-guess-label">Год</span><select id="ev-bw-year" ${hostDisabled}>${guessSelectOptions(years, settings.year)}</select></label>
-                <label class="ev-guess-field"><span class="ev-guess-label">Сезон</span><select id="ev-bw-season" ${hostDisabled}><option value="" ${!settings.season ? 'selected' : ''}>Все</option>${SEASONS.map(season => `<option value="${season}" ${settings.season === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('')}</select></label>
+                <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
+                <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
@@ -3453,15 +3512,21 @@
     function bindBestWorstLobbyControls() {
       const bind = (selector, key, parser = value => value) => {
         const el = $(selector);
-        el?.addEventListener('change', () => { bestWorstFilters[key] = parser(el.value); render(); });
+        el?.addEventListener('change', () => {
+          bestWorstFilters[key] = parser(el.value);
+          if (['fromYear', 'fromSeason', 'toYear', 'toSeason'].includes(key)) Object.assign(bestWorstFilters, normalizeSeasonRange(bestWorstFilters));
+          render();
+        });
       };
       bind('#ev-bw-mode', 'mode');
       bind('#ev-bw-type', 'typeFilter');
       bind('#ev-bw-per-round', 'perRound', value => bwClamp(value, 2, 20, 6));
       bind('#ev-bw-rounds', 'rounds', value => bwClamp(value, 1, 20, 5));
       bind('#ev-bw-grouping', 'grouping');
-      bind('#ev-bw-year', 'year');
-      bind('#ev-bw-season', 'season');
+      bind('#ev-bw-from-year', 'fromYear', value => String(value || ''));
+      bind('#ev-bw-from-season', 'fromSeason');
+      bind('#ev-bw-to-year', 'toYear', value => String(value || ''));
+      bind('#ev-bw-to-season', 'toSeason');
       bind('#ev-bw-content', 'content');
       bind('#ev-bw-studio', 'studio');
       bind('#ev-bw-director', 'director');
@@ -3937,7 +4002,7 @@
     function cnIsSpymaster(room = codenamesRoom) { return cnMyPlayer(room)?.role === 'spymaster'; }
     function cnSettings(room = codenamesRoom) {
       const raw = room?.settings || {};
-      return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all' };
+      return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all', ...normalizeSeasonRange(raw) };
     }
     function cnRoomDoc() { return doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID); }
     async function cnPatch(patch) {
@@ -3953,6 +4018,7 @@
     function cnFilteredOpenings(settings = cnSettings()) {
       const rows = openings.filter(opening => {
         if (settings.typeFilter !== 'all' && opening.type !== settings.typeFilter) return false;
+        if (!openingInSeasonRange(opening, settings)) return false;
         return Boolean(safeUrl(opening.image));
       });
       const unique = [];
@@ -3994,7 +4060,7 @@
     }
     async function cnEnsureLobby() {
       if (codenamesRoom) return;
-      await cnPatch({ status:'lobby', players:[], settings:{ typeFilter:'all' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      await cnPatch({ status:'lobby', players:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
     }
     async function cnJoin(team, role) {
       const key = cnPlayerKey();
@@ -4011,10 +4077,13 @@
       if (!key || !codenamesRoom) return;
       await cnPatch({ players: cnPlayers().filter(p => p.key !== key) });
     }
-    async function cnSetType(typeFilter) {
+    async function cnSetSettings(patch = {}) {
       if (!isAdmin()) return;
       await cnEnsureLobby();
-      await cnPatch({ settings:{ typeFilter: ['OP','ED','all'].includes(typeFilter) ? typeFilter : 'all' } });
+      const next = { ...cnSettings(), ...patch };
+      Object.assign(next, normalizeSeasonRange(next));
+      next.typeFilter = ['OP','ED','all'].includes(next.typeFilter) ? next.typeFilter : 'all';
+      await cnPatch({ settings: next });
     }
     async function cnStartGame() {
       if (!isAdmin()) return;
@@ -4093,12 +4162,17 @@
       const settings = cnSettings(room);
       const me = cnMyPlayer(room);
       if (room.status === 'lobby') {
+        const years = [...new Set(openings.map(opening => Number(opening.year)).filter(Number.isFinite))].sort((a, b) => a - b);
         appEl.innerHTML = `<div class="ev-cn-shell">
           <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>Лобби</h2><div class="ev-hint">Капитан видит цвета карточек и даёт подсказку. Игроки команды открывают карточки. Убийца мгновенно завершает игру.</div></div><div class="ev-actions">${me ? '<button class="ev-btn-ghost" id="ev-cn-leave">Выйти из команды</button>' : ''}${isAdmin() ? '<button class="ev-btn-main" id="ev-cn-start">Начать игру</button>' : ''}</div></section>
-          <section class="ev-cn-lobby"><div class="ev-guess-grid"><label class="ev-guess-field"><span class="ev-guess-label">Карточки</span><select id="ev-cn-type" ${isAdmin() ? '' : 'disabled'}><option value="all" ${settings.typeFilter==='all'?'selected':''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter==='OP'?'selected':''}>Только опенинги</option><option value="ED" ${settings.typeFilter==='ED'?'selected':''}>Только эндинги</option></select><span class="ev-guess-note">Технические версии одного названия не дублируются.</span></label></div>
+          <section class="ev-cn-lobby"><div class="ev-guess-grid"><label class="ev-guess-field"><span class="ev-guess-label">Карточки</span><select id="ev-cn-type" ${isAdmin() ? '' : 'disabled'}><option value="all" ${settings.typeFilter==='all'?'selected':''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter==='OP'?'selected':''}>Только опенинги</option><option value="ED" ${settings.typeFilter==='ED'?'selected':''}>Только эндинги</option></select><span class="ev-guess-note">Технические версии одного названия не дублируются.</span></label><div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-from-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-cn-from-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div><div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-to-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-cn-to-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в поле.</span></div></div>
           <div class="ev-cn-team-grid"><div class="ev-cn-team red"><h3>Красные</h3><div class="ev-cn-player-list">${cnRenderPlayers('red')}</div><div class="ev-cn-join-row"><button class="ev-btn-danger" data-cn-join="red" data-cn-role="operative">Играть за красных</button><button class="ev-btn-ghost" data-cn-join="red" data-cn-role="spymaster">Стать капитаном</button></div></div><div class="ev-cn-team blue"><h3>Синие</h3><div class="ev-cn-player-list">${cnRenderPlayers('blue')}</div><div class="ev-cn-join-row"><button class="ev-btn-secondary" data-cn-join="blue" data-cn-role="operative">Играть за синих</button><button class="ev-btn-ghost" data-cn-join="blue" data-cn-role="spymaster">Стать капитаном</button></div></div></div>
           ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
-        $('#ev-cn-type')?.addEventListener('change', e => cnSetType(e.target.value));
+        $('#ev-cn-type')?.addEventListener('change', e => cnSetSettings({ typeFilter: e.target.value }));
+        $('#ev-cn-from-year')?.addEventListener('change', e => cnSetSettings({ fromYear: e.target.value }));
+        $('#ev-cn-from-season')?.addEventListener('change', e => cnSetSettings({ fromSeason: e.target.value }));
+        $('#ev-cn-to-year')?.addEventListener('change', e => cnSetSettings({ toYear: e.target.value }));
+        $('#ev-cn-to-season')?.addEventListener('change', e => cnSetSettings({ toSeason: e.target.value }));
         $('#ev-cn-start')?.addEventListener('click', cnStartGame);
         $('#ev-cn-leave')?.addEventListener('click', cnLeave);
         document.querySelectorAll('[data-cn-join]').forEach(btn => btn.addEventListener('click', () => cnJoin(btn.dataset.cnJoin, btn.dataset.cnRole)));
@@ -4305,8 +4379,7 @@
         if (!haystack.includes(search)) return false;
       }
       if (guessFilters.type && opening.type !== guessFilters.type) return false;
-      if (guessFilters.year && String(opening.year ?? '') !== String(guessFilters.year)) return false;
-      if (guessFilters.season && opening.season !== guessFilters.season) return false;
+      if (!openingInSeasonRange(opening, guessFilters)) return false;
       if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
       if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
       if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
@@ -5582,18 +5655,22 @@
                 </select>
               </label>
 
-              <label class="ev-guess-field">
-                <span class="ev-guess-label">Год</span>
-                <select id="ev-guess-year">${guessSelectOptions(years, guessFilters.year)}</select>
-              </label>
+              <div class="ev-guess-field wide">
+                <span class="ev-guess-label">Начало диапазона</span>
+                <div class="ev-season-range-pair">
+                  <select id="ev-guess-from-year">${seasonRangeYearOptions(years, guessFilters.fromYear, 'С самого раннего года')}</select>
+                  <select id="ev-guess-from-season">${seasonRangeSeasonOptions(guessFilters.fromSeason)}</select>
+                </div>
+              </div>
 
-              <label class="ev-guess-field">
-                <span class="ev-guess-label">Сезон</span>
-                <select id="ev-guess-season">
-                  <option value="" ${!guessFilters.season ? 'selected' : ''}>Все</option>
-                  ${SEASONS.map(season => `<option value="${season}" ${guessFilters.season === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('')}
-                </select>
-              </label>
+              <div class="ev-guess-field wide">
+                <span class="ev-guess-label">Конец диапазона</span>
+                <div class="ev-season-range-pair">
+                  <select id="ev-guess-to-year">${seasonRangeYearOptions(years, guessFilters.toYear, 'По самый поздний год')}</select>
+                  <select id="ev-guess-to-season">${seasonRangeSeasonOptions(guessFilters.toSeason)}</select>
+                </div>
+                <span class="ev-guess-note">Обе границы включаются в выборку.</span>
+              </div>
 
               <label class="ev-guess-field wide">
                 <span class="ev-guess-label">Китайские, фильмы и укороченные</span>
@@ -5721,14 +5798,17 @@
         if (!el) return;
         el.addEventListener(eventName, () => {
           guessFilters[key] = parser(el.value);
+          if (['fromYear', 'fromSeason', 'toYear', 'toSeason'].includes(key)) Object.assign(guessFilters, normalizeSeasonRange(guessFilters));
           clearSelectionAndRender();
         });
       };
 
       setAndRender('#ev-guess-search', 'search', value => String(value || ''), 'change');
       setAndRender('#ev-guess-type', 'type');
-      setAndRender('#ev-guess-year', 'year');
-      setAndRender('#ev-guess-season', 'season');
+      setAndRender('#ev-guess-from-year', 'fromYear', value => String(value || ''));
+      setAndRender('#ev-guess-from-season', 'fromSeason');
+      setAndRender('#ev-guess-to-year', 'toYear', value => String(value || ''));
+      setAndRender('#ev-guess-to-season', 'toSeason');
       setAndRender('#ev-guess-content', 'content');
       setAndRender('#ev-guess-studio', 'studio');
       setAndRender('#ev-guess-director', 'director');
@@ -5817,7 +5897,7 @@
       $('#ev-guess-reset')?.addEventListener('click', () => {
         Object.assign(guessFilters, {
           search: '', count: 50, answerMode: 'four', answerTarget: 'song', clipSeconds: 10, listenCount: 3,
-          source: 'all', type: '', year: '', season: '', studio: '', director: '', performer: '', franchise: '',
+          source: 'all', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', studio: '', director: '', performer: '', franchise: '',
           content: 'all', users: [], scoreLogic: 'and',
           scoreOverallCmp: 'gte', scoreOverallValue: '',
           scoreSongCmp: 'gte', scoreSongValue: '',
