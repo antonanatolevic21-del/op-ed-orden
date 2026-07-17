@@ -1007,6 +1007,10 @@
     .ev-bw-verdict.correct { color: var(--green); background: rgba(74,222,128,.09); }
     .ev-bw-verdict.wrong { color: var(--red); background: rgba(251,113,133,.09); }
     .ev-bw-your-choice { margin: 4px 0 0 0; color: var(--muted); opacity: .68; font-family: 'Space Mono', monospace; font-size: 9.5px; line-height: 1.35; }
+    .ev-bw-other-guesses { margin-top: 6px; padding: 6px 8px; border-left: 2px solid rgba(139,134,152,.28); background: rgba(255,255,255,.015); border-radius: 0 7px 7px 0; }
+    .ev-bw-other-guesses-title { margin-bottom: 4px; color: var(--muted); opacity: .58; font-family: 'Space Mono', monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: .45px; }
+    .ev-bw-other-guess { color: var(--muted); opacity: .62; font-family: 'Space Mono', monospace; font-size: 9.2px; line-height: 1.4; overflow-wrap: anywhere; }
+    .ev-bw-other-guess + .ev-bw-other-guess { margin-top: 3px; }
     .ev-bw-score-table { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
     .ev-bw-score-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
     .ev-bw-score-rank { font-family: 'Archivo Black', sans-serif; color: var(--muted); text-align: center; }
@@ -3517,21 +3521,46 @@
       const roundIndex = Number(room.currentRound || 0);
       const truth = bwRoundTruth(room, roundIndex);
       const viewerKey = bwCurrentUserKey();
-      const viewerSubmission = bwRoundSubmissions(room, roundIndex)
+      const submissions = bwRoundSubmissions(room, roundIndex);
+      const viewerSubmission = submissions
         .find(row => normalizeNickname(row.guesserKey || row.guesserName) === viewerKey);
+
+      const renderOtherGuesses = (player, kind) => {
+        const guessKind = kind === 'best' ? 'лучшее' : 'худшее';
+        const rows = submissions
+          .filter(row => {
+            const guesserKey = normalizeNickname(row.guesserKey || row.guesserName);
+            return guesserKey && guesserKey !== player.key && guesserKey !== viewerKey;
+          })
+          .map(row => {
+            const guessedId = String(row.answers?.[player.key]?.[kind] || '');
+            if (!guessedId) return '';
+            const guesserName = String(row.guesserName || row.guesserKey || 'Игрок').trim() || 'Игрок';
+            return `<div class="ev-bw-other-guess">${escapeHtml(guesserName)} считает, что ${guessKind} — «${escapeHtml(bwOpeningName(guessedId))}».</div>`;
+          })
+          .filter(Boolean);
+        if (!rows.length) return '';
+        return `<div class="ev-bw-other-guesses"><div class="ev-bw-other-guesses-title">Что выбрали остальные игроки</div>${rows.join('')}</div>`;
+      };
+
       const renderChoice = (player, own, kind, label) => {
         const actualIds = kind === 'best' ? (own.bestIds || []) : (own.worstIds || []);
         const actual = actualIds.map(bwOpeningName).join(' / ') || '—';
+        const otherGuesses = renderOtherGuesses(player, kind);
         const isSelf = player.key === viewerKey;
-        if (isSelf) return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)}</div>`;
-        if (!viewerSubmission) return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)}<div class="ev-bw-your-choice">Ты не отвечал(а) в этом раунде.</div></div>`;
+        if (isSelf) {
+          return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)}${otherGuesses}</div>`;
+        }
+        if (!viewerSubmission) {
+          return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)}<div class="ev-bw-your-choice">Ты не отвечал(а) в этом раунде.</div>${otherGuesses}</div>`;
+        }
         const guessedId = String(viewerSubmission.answers?.[player.key]?.[kind] || '');
         const correct = actualIds.includes(guessedId);
         const guessed = guessedId ? bwOpeningName(guessedId) : 'вариант не выбран';
-        const guesserLabel = String(myName || 'Ты').trim() || 'Ты';
-        const guessKind = kind === 'best' ? 'лучшее' : 'худшее';
-        return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)} <span class="ev-bw-verdict ${correct ? 'correct' : 'wrong'}" title="${correct ? 'Угадано правильно' : 'Угадано неправильно'}">${correct ? '✓' : '×'}</span><div class="ev-bw-your-choice">${escapeHtml(guesserLabel)} считает, что ${guessKind} — «${escapeHtml(guessed)}».</div></div>`;
+        const wrongChoice = correct ? '' : `<div class="ev-bw-your-choice">Ты выбрал(а): «${escapeHtml(guessed)}».</div>`;
+        return `<div class="ev-bw-truth-line ${kind}"><strong>${label}:</strong> ${escapeHtml(actual)} <span class="ev-bw-verdict ${correct ? 'correct' : 'wrong'}" title="${correct ? 'Угадано правильно' : 'Угадано неправильно'}">${correct ? '✓' : '×'}</span>${wrongChoice}${otherGuesses}</div>`;
       };
+
       const truthHtml = players.map(player => {
         const own = truth[player.key] || {};
         const isSelf = player.key === viewerKey;
@@ -3550,7 +3579,7 @@
             : '<span class="ev-bw-target-score">без ответа</span>';
         return `<article class="ev-bw-truth"><div class="ev-bw-truth-head"><h4>${escapeHtml(player.name)}</h4>${badge}</div>${bwModeUses(settings,'best') ? renderChoice(player, own, 'best', 'Поставил(а) как лучшее') : ''}${bwModeUses(settings,'worst') ? renderChoice(player, own, 'worst', 'Поставил(а) как худшее') : ''}</article>`;
       }).join('');
-      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Флажки игроков и твои ответы</h3><div class="ev-hint">✓ означает точное совпадение, × — ошибку. Под правильным ответом приглушённо показано, какой вариант выбрал ты.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
+      return `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Флажки игроков и ответы группы</h3><div class="ev-hint">✓ означает точное совпадение, × — ошибку. Твой вариант показывается только при ошибке; ниже приглушённо перечислено, что выбрали остальные игроки для этого пользователя.</div></div></div><div class="ev-bw-truth-grid">${truthHtml}</div><h3 style="margin:18px 0 0;font-family:'Archivo Black',sans-serif;">Очки за этот раунд</h3>${bwRenderScoreboard(room, true)}<div class="ev-actions" style="margin-top:14px;justify-content:flex-start;">${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-next">${Number(room.currentRound || 0) + 1 >= room.rounds.length ? 'Показать итог' : 'Следующий раунд'}</button>` : '<span class="ev-hint">Ждём, пока админ запустит следующий раунд.</span>'}</div></div>`;
     }
 
     function bindBestWorstRoundControls() {
