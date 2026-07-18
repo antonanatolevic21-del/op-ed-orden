@@ -1165,13 +1165,52 @@
     .ev-cn-card.revealed.red, .ev-cn-card.spy-red { border-color: var(--red); background: rgba(251,113,133,.16); }
     .ev-cn-card.revealed.blue, .ev-cn-card.spy-blue { border-color: var(--cyan); background: rgba(8,217,214,.14); }
     .ev-cn-card.revealed.neutral, .ev-cn-card.spy-neutral { border-color: #a8a29e; background: rgba(168,162,158,.12); }
-    .ev-cn-card.revealed.assassin, .ev-cn-card.spy-assassin { border-color: #f5f3fa; background: #050507; }
+    .ev-cn-card.revealed.assassin { border-color: #f5f3fa; background: #050507; }
+    .ev-cn-card.spy-assassin {
+      border: 4px solid #fff;
+      background: repeating-linear-gradient(135deg, #050507 0 16px, #2b0a12 16px 32px);
+      box-shadow: 0 0 0 3px rgba(251,113,133,.9), 0 0 28px rgba(251,113,133,.72), inset 0 0 30px rgba(255,255,255,.08);
+    }
+    .ev-cn-card.spy-assassin::before {
+      content: '☠';
+      position: absolute;
+      z-index: 3;
+      left: 8px;
+      top: 5px;
+      color: #fff;
+      font-size: 25px;
+      line-height: 1;
+      text-shadow: 0 0 10px #fb7185, 0 0 18px #fb7185;
+      pointer-events: none;
+    }
     .ev-cn-card.revealed .ev-cn-card-image { filter: grayscale(.35) brightness(.6); }
+    .ev-cn-card.spy-revealed { opacity: .38 !important; filter: saturate(.55); }
+    .ev-cn-card.spy-revealed:hover { transform: none; }
     .ev-cn-card-badge { position: absolute; top: 6px; right: 6px; z-index: 2; border: 1px solid currentColor; border-radius: 999px; background: rgba(11,10,16,.84); padding: 4px 7px; font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 800; }
     .ev-cn-card.spy-red .ev-cn-card-badge { color: var(--red); }
     .ev-cn-card.spy-blue .ev-cn-card-badge { color: var(--cyan); }
     .ev-cn-card.spy-neutral .ev-cn-card-badge { color: #d6d3d1; }
-    .ev-cn-card.spy-assassin .ev-cn-card-badge { color: #fff; }
+    .ev-cn-card.spy-assassin .ev-cn-card-badge {
+      color: #fff;
+      border: 2px solid #fff;
+      background: #7f1d1d;
+      padding: 6px 9px;
+      font-size: 10px;
+      box-shadow: 0 0 14px rgba(251,113,133,.85);
+    }
+    .ev-cn-player-main { min-width: 0; display: flex; align-items: center; gap: 7px; }
+    .ev-cn-player-remove {
+      flex: 0 0 auto;
+      border: 1px solid rgba(251,113,133,.55);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--red);
+      padding: 4px 7px;
+      font-family: 'Space Mono', monospace;
+      font-size: 9px;
+      cursor: pointer;
+    }
+    .ev-cn-player-remove:hover { background: rgba(251,113,133,.12); }
     .ev-cn-log { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
     .ev-cn-log-row { border-left: 3px solid var(--border); padding: 6px 9px; background: var(--panel); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 11px; }
     .ev-cn-winner { text-align: center; padding: 26px 12px; }
@@ -4077,6 +4116,25 @@
       if (!key || !codenamesRoom) return;
       await cnPatch({ players: cnPlayers().filter(p => p.key !== key) });
     }
+    async function cnKickPlayer(key) {
+      if (!isAdmin() || !codenamesRoom || codenamesRoom.status !== 'lobby') return;
+      const player = cnPlayers().find(p => p.key === key);
+      if (!player) return;
+      if (!confirm(`Убрать игрока «${player.name}» из лобби?`)) return;
+      await cnPatch({ players: cnPlayers().filter(p => p.key !== key) });
+    }
+    async function cnDeleteGame() {
+      if (!isAdmin() || !codenamesRoom) return;
+      if (!confirm('Полностью удалить текущую игру Codenames и освободить все места?')) return;
+      try {
+        await deleteDoc(cnRoomDoc());
+        codenamesStatus = '';
+      } catch (error) {
+        console.error('eventCodenames delete failed', error);
+        codenamesStatus = 'Не удалось удалить игру. Проверь право delete для eventCodenames в Firebase Rules.';
+        render();
+      }
+    }
     async function cnSetSettings(patch = {}) {
       if (!isAdmin()) return;
       await cnEnsureLobby();
@@ -4143,14 +4201,14 @@
     }
     function cnRenderPlayers(team) {
       const rows = cnPlayers().filter(p => p.team === team);
-      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
+      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span class="ev-cn-player-main"><span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></span>${isAdmin() ? `<button type="button" class="ev-cn-player-remove" data-cn-kick="${escapeHtml(p.key)}">Убрать</button>` : ''}</div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
     }
     function cnCardClass(card, seeMap) {
-      if (card.revealed) return `revealed ${card.identity}`;
+      if (card.revealed) return `revealed ${card.identity}${seeMap ? ' spy-revealed' : ''}`;
       return seeMap ? `spy-${card.identity}` : '';
     }
     function cnIdentityLabel(identity) {
-      return identity === 'red' ? 'КРАСНЫЕ' : identity === 'blue' ? 'СИНИЕ' : identity === 'assassin' ? 'УБИЙЦА' : 'НЕЙТРАЛЬНАЯ';
+      return identity === 'red' ? 'КРАСНЫЕ' : identity === 'blue' ? 'СИНИЕ' : identity === 'assassin' ? '☠ УБИЙЦА' : 'НЕЙТРАЛЬНАЯ';
     }
     function renderCodenamesEvent() {
       const room = codenamesRoom;
@@ -4164,7 +4222,7 @@
       if (room.status === 'lobby') {
         const years = [...new Set(openings.map(opening => Number(opening.year)).filter(Number.isFinite))].sort((a, b) => a - b);
         appEl.innerHTML = `<div class="ev-cn-shell">
-          <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>Лобби</h2><div class="ev-hint">Капитан видит цвета карточек и даёт подсказку. Игроки команды открывают карточки. Убийца мгновенно завершает игру.</div></div><div class="ev-actions">${me ? '<button class="ev-btn-ghost" id="ev-cn-leave">Выйти из команды</button>' : ''}${isAdmin() ? '<button class="ev-btn-main" id="ev-cn-start">Начать игру</button>' : ''}</div></section>
+          <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>Лобби</h2><div class="ev-hint">Капитан видит цвета карточек и даёт подсказку. Игроки команды открывают карточки. Убийца мгновенно завершает игру.</div></div><div class="ev-actions">${me ? '<button class="ev-btn-ghost" id="ev-cn-leave">Выйти из команды</button>' : ''}${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-delete">Удалить игру</button><button class="ev-btn-main" id="ev-cn-start">Начать игру</button>' : ''}</div></section>
           <section class="ev-cn-lobby"><div class="ev-guess-grid"><label class="ev-guess-field"><span class="ev-guess-label">Карточки</span><select id="ev-cn-type" ${isAdmin() ? '' : 'disabled'}><option value="all" ${settings.typeFilter==='all'?'selected':''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter==='OP'?'selected':''}>Только опенинги</option><option value="ED" ${settings.typeFilter==='ED'?'selected':''}>Только эндинги</option></select><span class="ev-guess-note">Технические версии одного названия не дублируются.</span></label><div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-from-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-cn-from-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div><div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-to-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-cn-to-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в поле.</span></div></div>
           <div class="ev-cn-team-grid"><div class="ev-cn-team red"><h3>Красные</h3><div class="ev-cn-player-list">${cnRenderPlayers('red')}</div><div class="ev-cn-join-row"><button class="ev-btn-danger" data-cn-join="red" data-cn-role="operative">Играть за красных</button><button class="ev-btn-ghost" data-cn-join="red" data-cn-role="spymaster">Стать капитаном</button></div></div><div class="ev-cn-team blue"><h3>Синие</h3><div class="ev-cn-player-list">${cnRenderPlayers('blue')}</div><div class="ev-cn-join-row"><button class="ev-btn-secondary" data-cn-join="blue" data-cn-role="operative">Играть за синих</button><button class="ev-btn-ghost" data-cn-join="blue" data-cn-role="spymaster">Стать капитаном</button></div></div></div>
           ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
@@ -4175,11 +4233,13 @@
         $('#ev-cn-to-season')?.addEventListener('change', e => cnSetSettings({ toSeason: e.target.value }));
         $('#ev-cn-start')?.addEventListener('click', cnStartGame);
         $('#ev-cn-leave')?.addEventListener('click', cnLeave);
+        $('#ev-cn-delete')?.addEventListener('click', cnDeleteGame);
+        document.querySelectorAll('[data-cn-kick]').forEach(btn => btn.addEventListener('click', () => cnKickPlayer(btn.dataset.cnKick)));
         document.querySelectorAll('[data-cn-join]').forEach(btn => btn.addEventListener('click', () => cnJoin(btn.dataset.cnJoin, btn.dataset.cnRole)));
         return;
       }
       const board = Array.isArray(room.board) ? room.board : [];
-      const seeMap = Boolean(me && me.role === 'spymaster');
+      const seeMap = Boolean(room.winner || (me && me.role === 'spymaster'));
       const redRemaining = cnRemaining(room,'red');
       const blueRemaining = cnRemaining(room,'blue');
       const canClue = Boolean(me && me.role === 'spymaster' && me.team === room.turn && !room.winner && Number(room.guessesLeft || 0) <= 0);
@@ -4187,13 +4247,14 @@
       const clue = room.clue || null;
       const winningTeam = room.winner || '';
       appEl.innerHTML = `<div class="ev-cn-shell">
-        <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
+        <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${winningTeam ? 'Игра завершена: цвета всех карточек раскрыты для всех.' : seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-delete">Удалить игру</button><button class="ev-btn-ghost" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
         <section class="ev-cn-panel"><div class="ev-cn-scorebar"><div class="ev-cn-score red"><span>Красные</span><strong>${redRemaining}</strong><span>осталось</span></div><div class="ev-cn-turn">Ход: <strong style="color:${room.turn==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(room.turn)}</strong><br>${room.startingTeam===room.turn?'стартовая команда':''}</div><div class="ev-cn-score blue"><span>Синие</span><strong>${blueRemaining}</strong><span>осталось</span></div></div>
         ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
         <div class="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(card.title)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
         <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
         ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
       $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
+      $('#ev-cn-delete')?.addEventListener('click', cnDeleteGame);
       $('#ev-cn-clue-send')?.addEventListener('click', cnSubmitClue);
       $('#ev-cn-end-turn')?.addEventListener('click', cnEndTurn);
       $('#ev-cn-clue-word')?.addEventListener('keydown', e => { if (e.key === 'Enter') cnSubmitClue(); });

@@ -1751,6 +1751,33 @@
       white-space: nowrap;
     }
     .oc-access-badge.admin { color: var(--gold); border-color: rgba(255,200,87,0.45); background: rgba(255,200,87,0.08); }
+    .oc-franchise-repair-btn {
+      width: 23px;
+      height: 23px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--muted);
+      opacity: .28;
+      font-family: 'Space Mono', monospace;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .oc-franchise-repair-btn:hover,
+    .oc-franchise-repair-btn:focus-visible {
+      opacity: 1;
+      color: var(--gold);
+      border-color: rgba(255,200,87,.45);
+      background: rgba(255,200,87,.08);
+      outline: none;
+    }
+    .oc-franchise-repair-btn:disabled { opacity: .15; cursor: wait; }
     .oc-auth-note { margin-top: 10px; font-family: 'Space Mono', monospace; font-size: 10.5px; color: var(--muted); }
     .oc-auth-modal { position: fixed; inset: 0; z-index: 180; background: rgba(11,10,16,0.94); backdrop-filter: blur(9px); display: flex; align-items: center; justify-content: center; padding: 20px; }
     .oc-auth-modal.hidden { display: none; }
@@ -2016,6 +2043,7 @@
           <option value="all">С китайскими, фильмами и укороченными</option>
         </select>
         <span id="oc-access-badge" class="oc-access-badge">гость</span>
+        <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
         <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
       </div>
@@ -2519,6 +2547,7 @@
     const authSaveBtn = $('#oc-auth-save');
     const authError = $('#oc-auth-error');
     const accessBadge = $('#oc-access-badge');
+    const franchiseRepairBtn = $('#oc-franchise-repair-btn');
     const profileUserSelect = $('#oc-profile-user');
     const manualHiddenToggleBtn = $('#oc-manual-hidden-toggle-btn');
     const profileDeleteBtn = $('#oc-profile-delete-btn');
@@ -3571,7 +3600,8 @@
 
     function parseFranchiseList(str) {
       return String(str || '')
-        .split(/\n|;/)
+        .replace(/\r\n/g, '\n')
+        .split('\n')
         .map(s => s.trim())
         .filter(Boolean);
     }
@@ -3615,12 +3645,258 @@
       return cleanAliasList(value);
     }
 
-    function franchisesForSave(title, value) {
-      const typed = cleanFranchiseList(value);
-      if (typed.length) return typed;
+    function compactFranchiseForCompare(name) {
+      return String(name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/ё/g, 'е')
+        .replace(/&/g, 'and')
+        .replace(/[^a-zа-яе0-9]+/gi, '')
+        .trim();
+    }
+
+    function franchiseWordsForCompare(name) {
+      return String(name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/ё/g, 'е')
+        .split(/[^a-zа-яе0-9]+/gi)
+        .map(w => w.trim())
+        .filter(w => w && !['the', 'a', 'an', 'season', 'сезон', 'tv', 'ova', 'ona', 'movie', 'фильм'].includes(w));
+    }
+
+    function knownFranchiseNames(exceptId = null) {
+      const names = [];
+      const seen = new Set();
+      entries.forEach(entry => {
+        if (exceptId && String(entry.id) === String(exceptId)) return;
+        (entry.franchises || []).forEach(name => {
+          const clean = String(name || '').trim();
+          const key = clean.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+          if (!clean || seen.has(key)) return;
+          seen.add(key);
+          names.push(clean);
+        });
+      });
+      return names;
+    }
+
+    function findSimilarFranchiseName(name, exceptId = null) {
+      const source = String(name || '').trim();
+      const target = compactFranchiseForCompare(source);
+      if (target.length < 4) return null;
+
+      const targetWords = franchiseWordsForCompare(source);
+      let best = null;
+
+      knownFranchiseNames(exceptId).forEach(existing => {
+        const other = compactFranchiseForCompare(existing);
+        if (!other || other.length < 4) return;
+
+        if (other === target) {
+          best = { name: existing, score: 999, distance: 0 };
+          return;
+        }
+
+        let score = 0;
+        const maxLen = Math.max(target.length, other.length);
+        const minLen = Math.min(target.length, other.length);
+
+        if (minLen >= 5 && (target.includes(other) || other.includes(target))) {
+          score = 86 + (minLen / maxLen) * 10;
+        } else {
+          const lengthDiff = Math.abs(target.length - other.length);
+          if (lengthDiff > Math.max(4, Math.floor(maxLen * 0.35))) return;
+          const dist = levenshteinDistance(target, other);
+          const ratio = 1 - dist / maxLen;
+          const allowedDistance = maxLen <= 8 ? 2 : (maxLen <= 14 ? 3 : 4);
+          if (dist <= allowedDistance || ratio >= 0.82) score = 70 + ratio * 20 - dist;
+        }
+
+        const otherWords = franchiseWordsForCompare(existing);
+        if (targetWords.length && otherWords.length) {
+          const otherSet = new Set(otherWords);
+          const common = targetWords.filter(w => otherSet.has(w)).length;
+          const coverage = common / Math.min(targetWords.length, otherWords.length);
+          if (common >= 2 && coverage >= 0.55) score = Math.max(score, 78 + coverage * 14);
+        }
+
+        if (score <= 0) return;
+        if (!best || score > best.score || (score === best.score && existing.length < best.name.length)) {
+          best = { name: existing, score };
+        }
+      });
+
+      return best && best.score >= 78 ? best.name : null;
+    }
+
+    function canonicalFranchiseName(name, exceptId = null) {
+      const clean = String(name || '').trim();
+      if (!clean) return '';
+      return findSimilarFranchiseName(clean, exceptId) || clean;
+    }
+
+    function uniqueFranchiseList(values) {
+      const result = [];
+      const seen = new Set();
+      values.forEach(value => {
+        const clean = String(value || '').trim();
+        if (!clean) return;
+        const key = clean.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+        if (seen.has(key)) return;
+        seen.add(key);
+        result.push(clean);
+      });
+      return result;
+    }
+
+    function franchisesForSave(title, value, exceptId = null) {
+      const typed = cleanFranchiseList(value).map(name => canonicalFranchiseName(name, exceptId));
+      if (typed.length) return uniqueFranchiseList(typed);
       const autoTitle = cleanTitleForAutoAlias(title);
       if (!autoTitle) return [];
-      return [autoTitle];
+      return uniqueFranchiseList([canonicalFranchiseName(autoTitle, exceptId)]);
+    }
+
+    function normalizeFranchiseRepairText(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/ё/g, 'е')
+        .replace(/[«»„“”]/g, '"')
+        .replace(/[’‘]/g, "'")
+        .replace(/\s*,\s*/g, ',')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s"'\[\](){}`]+|[\s"'\[\](){}`]+$/g, '')
+        .trim();
+    }
+
+    function franchiseCandidateMatchesTitle(title, candidate) {
+      const normalizedCandidate = normalizeFranchiseRepairText(candidate);
+      if (!normalizedCandidate || !normalizedCandidate.includes(',')) return false;
+
+      const autoTitle = normalizeFranchiseRepairText(cleanTitleForAutoAlias(title));
+      if (autoTitle === normalizedCandidate) return true;
+
+      const rawTitle = normalizeFranchiseRepairText(title);
+      if (!rawTitle.startsWith(normalizedCandidate)) return false;
+      let remainder = rawTitle.slice(normalizedCandidate.length).trim();
+      remainder = remainder.replace(/^[\s\-–—:|/\\·•]+/, '').trim();
+      if (!remainder) return true;
+
+      return /^(?:(?:ncop|nced|op|ed|opening|ending|open|опенинг|опен|эндинг)\b|(?:version|ver|версия|верс|вер)\.?\s*\d*\b|(?:tv\s*size|creditless|clean)\b)/i.test(remainder);
+    }
+
+    function buildFranchiseRepairPlan() {
+      const repairs = [];
+      const knownWholeFranchises = new Set();
+      const knownFullTitles = new Set();
+
+      entries.forEach(entry => {
+        const titleKey = normalizeFranchiseRepairText(cleanTitleForAutoAlias(entry.title));
+        if (titleKey) knownFullTitles.add(titleKey);
+        cleanFranchiseList(entry.franchises || []).forEach(name => {
+          const key = normalizeFranchiseRepairText(name);
+          if (key) knownWholeFranchises.add(key);
+        });
+      });
+
+      entries.forEach(entry => {
+        const current = cleanFranchiseList(entry.franchises || []);
+        if (current.length < 2 || !String(entry.title || '').includes(',')) return;
+
+        const fixed = current.slice();
+        let changed = false;
+
+        for (let start = 0; start < fixed.length - 1; start++) {
+          let bestEnd = -1;
+          let bestCandidate = '';
+
+          for (let end = fixed.length; end >= start + 2; end--) {
+            const parts = fixed.slice(start, end);
+            const candidate = parts.join(', ');
+            if (!franchiseCandidateMatchesTitle(entry.title, candidate)) continue;
+
+            const candidateKey = normalizeFranchiseRepairText(candidate);
+            const alreadyKnownAsWhole = knownWholeFranchises.has(candidateKey);
+            const standaloneTitleMatches = parts.reduce((count, part) =>
+              count + (knownFullTitles.has(normalizeFranchiseRepairText(part)) ? 1 : 0), 0
+            );
+
+            // Если две части сами по себе встречаются как полноценные названия треков,
+            // считаем их отдельными франшизами и не склеиваем без известного полного варианта.
+            if (!alreadyKnownAsWhole && standaloneTitleMatches >= 2) continue;
+
+            bestEnd = end;
+            bestCandidate = candidate;
+            break;
+          }
+
+          if (bestEnd < 0) continue;
+          fixed.splice(start, bestEnd - start, bestCandidate);
+          changed = true;
+        }
+
+        const after = uniqueFranchiseList(fixed);
+        if (!changed || after.length === current.length && after.every((value, index) => value === current[index])) return;
+        repairs.push({
+          id: String(entry.id),
+          title: String(entry.title || ''),
+          before: current,
+          after
+        });
+      });
+
+      return repairs;
+    }
+
+    async function repairBrokenFranchises() {
+      if (!ensureAdmin()) return;
+      const repairs = buildFranchiseRepairPlan();
+      if (!repairs.length) {
+        setStatus('Разбитых франшиз по названию не найдено ✓');
+        return;
+      }
+
+      const preview = repairs.slice(0, 5).map(item =>
+        `• ${item.title}\n  ${item.before.join(' | ')} → ${item.after.join(' | ')}`
+      ).join('\n\n');
+      const tail = repairs.length > 5 ? `\n\n…и ещё ${repairs.length - 5}` : '';
+      const approved = window.confirm(
+        `Найдено треков для починки: ${repairs.length}.\n\n${preview}${tail}\n\nОбъединить совпавшие части франшиз?`
+      );
+      if (!approved) return;
+
+      if (franchiseRepairBtn) franchiseRepairBtn.disabled = true;
+      let fixedCount = 0;
+      const failed = [];
+
+      for (const repair of repairs) {
+        try {
+          await saveOpeningExtras(repair.id, { franchises: repair.after });
+          const localEntry = entriesById.get(String(repair.id));
+          if (localEntry) {
+            localEntry.franchises = repair.after.slice();
+            touchEntryCache(localEntry);
+          }
+          fixedCount += 1;
+        } catch (error) {
+          console.error('Could not repair franchises', repair, error);
+          failed.push(repair.title || repair.id);
+        }
+      }
+
+      if (fixedCount) {
+        rebuildFastIndexes({ catalogChanged: true });
+        refreshVisiblePanels({ forceFilters: true });
+      }
+      if (franchiseRepairBtn) franchiseRepairBtn.disabled = false;
+
+      if (failed.length) {
+        setStatus(`Починено: ${fixedCount}. Ошибок: ${failed.length}.`, true);
+      } else {
+        setStatus(`Франшизы починены: ${fixedCount} ✓`);
+      }
     }
 
     function normalizeTitleForDuplicate(title) {
@@ -6659,7 +6935,7 @@
             studios: parseList(card.querySelector('.oc-e-studio').value),
             directors: parseList(card.querySelector('.oc-e-director').value),
             performers: parseList(card.querySelector('.oc-e-performer').value),
-            franchises: franchisesForSave(title, card.querySelector('.oc-e-franchise').value),
+            franchises: franchisesForSave(title, card.querySelector('.oc-e-franchise').value, id),
             image: card.querySelector('.oc-e-image').value.trim(),
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
@@ -6865,6 +7141,8 @@
     document.addEventListener('click', (e) => {
       if (!avatarPicker.contains(e.target) && e.target !== avatarBtn) avatarPicker.classList.add('hidden');
     });
+
+    if (franchiseRepairBtn) franchiseRepairBtn.addEventListener('click', repairBrokenFranchises);
 
     $('#oc-add-btn').addEventListener('click', async () => {
       if (!ensureAdmin()) return;
