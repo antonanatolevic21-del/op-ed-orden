@@ -1168,8 +1168,8 @@
     .ev-cn-card.revealed.assassin { border-color: #f5f3fa; background: #050507; }
     .ev-cn-card.spy-assassin {
       border: 4px solid #fff;
-      background: repeating-linear-gradient(135deg, #050507 0 16px, #2b0a12 16px 32px);
-      box-shadow: 0 0 0 3px rgba(251,113,133,.9), 0 0 28px rgba(251,113,133,.72), inset 0 0 30px rgba(255,255,255,.08);
+      background: repeating-linear-gradient(135deg, #050507 0 16px, #24133a 16px 32px);
+      box-shadow: 0 0 0 3px rgba(167,139,250,.95), 0 0 28px rgba(167,139,250,.72), inset 0 0 30px rgba(255,255,255,.08);
     }
     .ev-cn-card.spy-assassin::before {
       content: '☠';
@@ -1180,7 +1180,7 @@
       color: #fff;
       font-size: 25px;
       line-height: 1;
-      text-shadow: 0 0 10px #fb7185, 0 0 18px #fb7185;
+      text-shadow: 0 0 10px #a78bfa, 0 0 18px #a78bfa;
       pointer-events: none;
     }
     .ev-cn-card.revealed .ev-cn-card-image { filter: grayscale(.35) brightness(.6); }
@@ -1192,8 +1192,8 @@
     .ev-cn-card.spy-neutral .ev-cn-card-badge { color: #d6d3d1; }
     .ev-cn-card.spy-assassin .ev-cn-card-badge {
       color: #fff;
-      border: 2px solid #fff;
-      background: #7f1d1d;
+      border: 2px solid #c4b5fd;
+      background: #17121f;
       padding: 6px 9px;
       font-size: 10px;
       box-shadow: 0 0 14px rgba(251,113,133,.85);
@@ -1211,6 +1211,42 @@
       cursor: pointer;
     }
     .ev-cn-player-remove:hover { background: rgba(251,113,133,.12); }
+    .ev-cn-team-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex: 0 0 auto;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-family: 'Space Mono', monospace;
+      font-size: 8.5px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .ev-cn-team-badge::before { content: ''; width: 7px; height: 7px; border-radius: 999px; background: currentColor; box-shadow: 0 0 8px currentColor; }
+    .ev-cn-team-badge.red { color: var(--red); background: rgba(251,113,133,.08); }
+    .ev-cn-team-badge.blue { color: var(--cyan); background: rgba(8,217,214,.08); }
+    .ev-cn-roster { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); }
+    .ev-cn-roster-player { display: inline-flex; align-items: center; gap: 7px; min-width: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--card); padding: 6px 9px; font-size: 10px; }
+    .ev-cn-roster-name { font-weight: 800; overflow-wrap: anywhere; }
+    .ev-cn-focus-wrap { display: flex; justify-content: center; margin-top: 12px; }
+    .ev-cn-focus-btn {
+      border: 1px solid var(--gold);
+      border-radius: 10px;
+      background: rgba(255,200,87,.07);
+      color: var(--gold);
+      padding: 9px 13px;
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+      touch-action: none;
+    }
+    .ev-cn-focus-btn.active { background: rgba(255,200,87,.2); box-shadow: 0 0 0 3px rgba(255,200,87,.12); transform: translateY(1px); }
+    .ev-cn-board.cn-focus-own .ev-cn-card:not(.cn-own-unrevealed) { opacity: 0; visibility: hidden; pointer-events: none; }
+    .ev-cn-board.cn-focus-own .ev-cn-card.cn-own-unrevealed { opacity: 1 !important; visibility: visible; filter: none; }
     .ev-cn-log { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
     .ev-cn-log-row { border-left: 3px solid var(--border); padding: 6px 9px; background: var(--panel); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 11px; }
     .ev-cn-winner { text-align: center; padding: 26px 12px; }
@@ -4199,9 +4235,16 @@
       const players = cnPlayers();
       await cnPatch({ status:'lobby', players, board:[], clue:null, guessesLeft:0, winner:'', log:[], turn:'red', gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
     }
+    function cnTeamBadge(team) {
+      return `<span class="ev-cn-team-badge ${team === 'red' ? 'red' : 'blue'}">${team === 'red' ? 'КРАСНЫЕ' : 'СИНИЕ'}</span>`;
+    }
     function cnRenderPlayers(team) {
       const rows = cnPlayers().filter(p => p.team === team);
-      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span class="ev-cn-player-main"><span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></span>${isAdmin() ? `<button type="button" class="ev-cn-player-remove" data-cn-kick="${escapeHtml(p.key)}">Убрать</button>` : ''}</div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
+      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span class="ev-cn-player-main">${cnTeamBadge(p.team)}<span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></span>${isAdmin() ? `<button type="button" class="ev-cn-player-remove" data-cn-kick="${escapeHtml(p.key)}">Убрать</button>` : ''}</div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
+    }
+    function cnRenderRoster(room = codenamesRoom) {
+      const rows = cnPlayers(room);
+      return rows.length ? `<div class="ev-cn-roster">${rows.map(p => `<span class="ev-cn-roster-player">${cnTeamBadge(p.team)}<span class="ev-cn-roster-name">${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></span>`).join('')}</div>` : '';
     }
     function cnCardClass(card, seeMap) {
       if (card.revealed) return `revealed ${card.identity}${seeMap ? ' spy-revealed' : ''}`;
@@ -4249,8 +4292,10 @@
       appEl.innerHTML = `<div class="ev-cn-shell">
         <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${winningTeam ? 'Игра завершена: цвета всех карточек раскрыты для всех.' : seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-delete">Удалить игру</button><button class="ev-btn-ghost" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
         <section class="ev-cn-panel"><div class="ev-cn-scorebar"><div class="ev-cn-score red"><span>Красные</span><strong>${redRemaining}</strong><span>осталось</span></div><div class="ev-cn-turn">Ход: <strong style="color:${room.turn==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(room.turn)}</strong><br>${room.startingTeam===room.turn?'стартовая команда':''}</div><div class="ev-cn-score blue"><span>Синие</span><strong>${blueRemaining}</strong><span>осталось</span></div></div>
+        ${cnRenderRoster(room)}
         ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
-        <div class="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(card.title)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
+        ${me?.role === 'spymaster' && !winningTeam ? '<div class="ev-cn-focus-wrap"><button type="button" class="ev-cn-focus-btn" id="ev-cn-focus-own">Зажми: только свои оставшиеся</button></div>' : ''}
+        <div class="ev-cn-board" id="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)} ${me?.role === 'spymaster' && card.identity === me.team && !card.revealed ? 'cn-own-unrevealed' : ''}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(card.title)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
         <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
         ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
       $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
@@ -4258,6 +4303,19 @@
       $('#ev-cn-clue-send')?.addEventListener('click', cnSubmitClue);
       $('#ev-cn-end-turn')?.addEventListener('click', cnEndTurn);
       $('#ev-cn-clue-word')?.addEventListener('keydown', e => { if (e.key === 'Enter') cnSubmitClue(); });
+      const focusOwnBtn = $('#ev-cn-focus-own');
+      const focusOwnBoard = $('#ev-cn-board');
+      const setCaptainFocus = active => {
+        focusOwnBoard?.classList.toggle('cn-focus-own', Boolean(active));
+        focusOwnBtn?.classList.toggle('active', Boolean(active));
+      };
+      if (focusOwnBtn && focusOwnBoard) {
+        focusOwnBtn.addEventListener('pointerdown', event => { event.preventDefault(); focusOwnBtn.setPointerCapture?.(event.pointerId); setCaptainFocus(true); });
+        ['pointerup','pointercancel','lostpointercapture','pointerleave'].forEach(type => focusOwnBtn.addEventListener(type, () => setCaptainFocus(false)));
+        focusOwnBtn.addEventListener('keydown', event => { if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) { event.preventDefault(); setCaptainFocus(true); } });
+        focusOwnBtn.addEventListener('keyup', event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); setCaptainFocus(false); } });
+        window.addEventListener('blur', () => setCaptainFocus(false), { once:true });
+      }
       document.querySelectorAll('[data-cn-card]').forEach(btn => btn.addEventListener('click', () => cnRevealCard(Number(btn.dataset.cnCard))));
     }
 
