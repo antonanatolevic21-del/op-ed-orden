@@ -3087,6 +3087,7 @@
         performers: row.performers || [],
         franchises: cleanFranchiseList(row.franchises || row.franchise || []),
         image: row.image || '',
+        fallbackImage: row.fallbackImage || row.imageFallback || '',
         link: row.link || '',
         notes: row.notes || '',
         isChinese: Boolean(row.isChinese || row.chinese || row.isChina || row.chineseOpening),
@@ -3483,9 +3484,22 @@
 
     function normalizeUrl(url) {
       if (!url) return '';
-      if (!/^https?:\/\//i.test(url)) return 'https://' + url;
-      return url;
+      const clean = String(url).trim();
+      if (/^(?:\.{0,2}\/|images\/)/i.test(clean)) return clean;
+      if (!/^https?:\/\//i.test(clean)) return 'https://' + clean;
+      return clean;
     }
+
+    window.ocUseFallbackImage = function(img) {
+      if (!img) return;
+      const fallback = String(img.dataset.fallback || '').trim();
+      if (fallback && img.dataset.fallbackTried !== '1') {
+        img.dataset.fallbackTried = '1';
+        img.src = fallback;
+        return;
+      }
+      img.replaceWith(document.createTextNode('нет изображения'));
+    };
 
     function safeExternalUrl(url) {
       const normalized = normalizeUrl(String(url || '').trim());
@@ -3547,7 +3561,7 @@
 
     function renderOpeningVideoBlock(entry) {
       const imageInner = entry.image
-        ? `<img src="${escapeHtml(normalizeUrl(entry.image))}" alt="${escapeHtml(entry.title)}" onerror="this.replaceWith(document.createTextNode('нет изображения'));">`
+        ? `<img src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${escapeHtml(entry.title)}" onerror="window.ocUseFallbackImage(this);">`
         : escapeHtml(entry.type || 'OP');
       const imageBlock = `<div class="oc-eval-image oc-opening-plain-image">${imageInner}</div>`;
       const href = safeExternalUrl(entry.link);
@@ -4958,7 +4972,7 @@
       const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
       const title = escapeHtml(entry && entry.title ? entry.title : 'видео');
       const imageBlock = entry.image
-        ? `<div class="${className}"><img src="${escapeHtml(normalizeUrl(entry.image))}" alt="${title}" onerror="this.replaceWith(document.createTextNode('нет изображения'));"></div>`
+        ? `<div class="${className}"><img src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}" onerror="window.ocUseFallbackImage(this);"></div>`
         : `<div class="${className}">${fallback}</div>`;
       if (!entry.link) return imageBlock;
       return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
@@ -5418,7 +5432,8 @@
             <textarea class="oc-e-franchise" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Пустое поле удалит франшизу">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
           </div>
           <div class="oc-editgrid3">
-            <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Картинка / постер (URL)" />
+            <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Основная картинка / постер (URL)" />
+            <input class="oc-e-fallback-image" type="text" value="${escapeHtml(entry.fallbackImage || '')}" placeholder="Запасная картинка (URL или images/файл.webp)" />
             <input class="oc-e-link" type="text" value="${escapeHtml(entry.link || '')}" placeholder="Ссылка (anisongdb.com и т.п.)" />
             <input class="oc-e-notes" type="text" value="${escapeHtml(entry.notes || '')}" placeholder="Заметка (необязательно)" />
           </div>
@@ -6977,6 +6992,7 @@
             performers: parseList(card.querySelector('.oc-e-performer').value),
             franchises: uniqueFranchiseList(cleanFranchiseList(card.querySelector('.oc-e-franchise').value)),
             image: card.querySelector('.oc-e-image').value.trim(),
+            fallbackImage: card.querySelector('.oc-e-fallback-image').value.trim(),
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
             alternativeTitles: alternativeTitlesForSave(title, card.querySelector('.oc-e-alt-titles') ? card.querySelector('.oc-e-alt-titles').value : ''),
@@ -7637,6 +7653,7 @@
         franchises: cleanArray(opening.franchises),
         alternativeTitles: cleanArray(opening.alternativeTitles || opening.altTitles || opening.aliases),
         image: String(opening.image || "").trim(),
+        fallbackImage: String(opening.fallbackImage || opening.imageFallback || "").trim(),
         link: String(opening.link || "").trim(),
         notes: String(opening.notes || "").trim(),
         isChinese: Boolean(opening.isChinese || opening.chinese || opening.isChina || opening.chineseOpening),
