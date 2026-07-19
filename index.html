@@ -3590,19 +3590,10 @@
         return;
       }
 
-      const startedAt = Date.now();
-      const probe = new Image();
-      let fallbackReady = false;
-      const switchIfSlow = () => {
-        if (img.dataset.primaryLoaded === '1' || img.dataset.fallbackTried === '1' || !fallbackReady) return;
+      img._ocFallbackTimer = setTimeout(() => {
+        if (img.dataset.primaryLoaded === '1' || img.dataset.fallbackTried === '1') return;
         window.ocUseFallbackImage(img);
-      };
-      probe.onload = () => {
-        fallbackReady = true;
-        const remaining = Math.max(0, 1500 - (Date.now() - startedAt));
-        img._ocFallbackTimer = setTimeout(switchIfSlow, remaining);
-      };
-      probe.src = fallback;
+      }, 1000);
       img.addEventListener('load', () => {
         if (img.dataset.fallbackTried !== '1') {
           img.dataset.primaryLoaded = '1';
