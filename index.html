@@ -7600,6 +7600,9 @@
     import { initializeApp, getApp, getApps } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
     import {
       getFirestore,
+      initializeFirestore,
+      persistentLocalCache,
+      persistentMultipleTabManager,
       collection,
       doc,
       addDoc,
@@ -7624,8 +7627,21 @@
     };
 
     const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    let db;
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      });
+    } catch (error) {
+      // Firestore мог быть инициализирован раньше другим модулем страницы.
+      // В таком случае используем уже существующий экземпляр.
+      console.warn("Persistent Firestore cache initialization fallback", error);
+      db = getFirestore(app);
+    }
     const auth = getAuth(app);
+    let initPromise = null;
 
     function normalizeNickname(nickname) {
       return String(nickname || "")
@@ -7669,15 +7685,30 @@
     }
 
     async function init() {
-      await signInAnonymously(auth);
+      if (auth.currentUser) return auth.currentUser;
+      if (!initPromise) {
+        initPromise = signInAnonymously(auth)
+          .then(result => result.user)
+          .catch(error => {
+            initPromise = null;
+            throw error;
+          });
+      }
+      return initPromise;
     }
 
     function watchOpenings(callback) {
-      return onSnapshot(collection(db, "openings"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => console.error("watchOpenings error", error));
+      return onSnapshot(collection(db, "openings"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => {
+        console.error("watchOpenings error", error);
+        callback([]);
+      });
     }
 
     function watchRatings(callback) {
-      return onSnapshot(collection(db, "ratings"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => console.error("watchRatings error", error));
+      return onSnapshot(collection(db, "ratings"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => {
+        console.error("watchRatings error", error);
+        callback([]);
+      });
     }
 
     function watchManualRanks(callback) {
