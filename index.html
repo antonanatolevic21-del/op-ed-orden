@@ -7156,6 +7156,13 @@
           if (!title) { setStatus('Название не может быть пустым.', true); return; }
           const newType = card.querySelector('.oc-e-type').value;
           if (isDuplicateTitle(title, newType, id)) { setStatus(`Такой ${newType} уже есть. Одинаковые названия запрещены отдельно внутри OP и ED.`, true); return; }
+          const previousImage = String(entry.image || '').trim();
+          const previousFallbackImage = String(entry.fallbackImage || '').trim();
+          const nextImage = card.querySelector('.oc-e-image').value.trim();
+          const imageChanged = nextImage !== previousImage;
+          let createdFallbackImage = '';
+          let openingSaved = false;
+
           const updatedEntry = {
             ...entry,
             title,
@@ -7169,7 +7176,7 @@
             directors: parseList(card.querySelector('.oc-e-director').value),
             performers: parseList(card.querySelector('.oc-e-performer').value),
             franchises: uniqueFranchiseList(cleanFranchiseList(card.querySelector('.oc-e-franchise').value)),
-            image: card.querySelector('.oc-e-image').value.trim(),
+            image: nextImage,
             fallbackImage: card.querySelector('.oc-e-fallback-image').value.trim(),
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
@@ -7180,17 +7187,42 @@
           };
 
           try {
+            if (imageChanged) {
+              if (nextImage) {
+                createdFallbackImage = await createFallbackImageCopy(nextImage, title, newType);
+                updatedEntry.fallbackImage = createdFallbackImage;
+              } else {
+                updatedEntry.fallbackImage = '';
+              }
+            }
+
+            await window.OPED_DB.updateOpening(id, updatedEntry);
+            openingSaved = true;
+            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened });
+
             Object.assign(entry, updatedEntry);
             touchEntryCache(entry);
             editingId = null;
             populateFilterOptions();
             render();
-            await window.OPED_DB.updateOpening(id, updatedEntry);
-            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened });
-            setStatus('Изменения сохранены в Firebase ✓');
+
+            if (imageChanged && previousFallbackImage && previousFallbackImage !== updatedEntry.fallbackImage) {
+              try {
+                await deleteFallbackImageCopy(previousFallbackImage);
+                setStatus('Изменения сохранены, старая резервная картинка удалена ✓');
+              } catch (deleteError) {
+                console.error('Old fallback image deletion failed', deleteError);
+                setStatus('Изменения сохранены, но старую картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
+              }
+            } else {
+              setStatus('Изменения сохранены в Firebase ✓');
+            }
           } catch (err) {
             console.error(err);
-            setStatus('Не удалось сохранить изменения в Firebase.', true);
+            if (!openingSaved && createdFallbackImage && createdFallbackImage !== previousFallbackImage) {
+              try { await deleteFallbackImageCopy(createdFallbackImage); } catch (cleanupError) { console.error('New fallback cleanup failed', cleanupError); }
+            }
+            setStatus('Не удалось сохранить изменения: ' + (err.message || err), true);
           }
         });
       });
@@ -7504,6 +7536,34 @@
       setStatus('Загружаю резервную картинку в images/…');
       await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
       return path;
+    }
+
+
+    function managedFallbackImagePath(value) {
+      const path = String(value || '').trim().replace(/^\.\//, '');
+      return /^images\/[a-z0-9][a-z0-9-]{0,99}\.webp$/i.test(path) ? path : '';
+    }
+
+    async function removeFallbackImageFromBrowserCache(path) {
+      if (!('caches' in window)) return;
+      const url = new URL(path, document.baseURI).href;
+      const names = await caches.keys();
+      await Promise.all(names
+        .filter(name => name.startsWith('op-ed-images-'))
+        .map(async name => {
+          const cache = await caches.open(name);
+          await cache.delete(url);
+        }));
+    }
+
+    async function deleteFallbackImageCopy(value) {
+      const path = managedFallbackImagePath(value);
+      if (!path) return false;
+      const secret = getImageUploadSecret();
+      if (!secret) throw new Error('Не введён UPLOAD_SECRET');
+      await workerImageRequest('/delete', secret, { path }, 'json');
+      await removeFallbackImageFromBrowserCache(path);
+      return true;
     }
 
 
