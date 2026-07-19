@@ -2127,7 +2127,8 @@
         <input id="oc-add-director" type="text" list="oc-dl-directors" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
         <input id="oc-add-performer" type="text" list="oc-dl-performers" autocomplete="off" placeholder="Исполнители (через запятую)" />
         <textarea id="oc-add-franchise" class="oc-franchise-area" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Если пусто — попробую взять из названия"></textarea>
-        <input id="oc-add-image" type="text" placeholder="Картинка / постер (URL)" />
+        <input id="oc-add-image" type="text" placeholder="Основная картинка / постер (URL)" />
+        <input id="oc-add-fallback-image" type="text" placeholder="Запасная картинка (например images/название.webp)" />
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
       </div>
       <div class="oc-add-alt-row">
@@ -7540,6 +7541,7 @@
       const franchises = franchisesForSave(title, $('#oc-add-franchise').value);
       const alternativeTitles = alternativeTitlesForSave(title, $('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
       const image = $('#oc-add-image').value.trim();
+      const fallbackImage = $('#oc-add-fallback-image').value.trim();
       const link = $('#oc-add-link').value.trim();
       const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
       const isMovie = Boolean($('#oc-add-movie') && $('#oc-add-movie').checked);
@@ -7564,6 +7566,7 @@
           franchises,
           alternativeTitles,
           image,
+          fallbackImage,
           link,
           isChinese,
           isMovie,
@@ -7581,6 +7584,7 @@
         $('#oc-add-franchise').value = '';
         if ($('#oc-add-alt-titles')) $('#oc-add-alt-titles').value = '';
         $('#oc-add-image').value = '';
+        $('#oc-add-fallback-image').value = '';
         $('#oc-add-link').value = '';
         if ($('#oc-add-chinese')) $('#oc-add-chinese').checked = false;
         if ($('#oc-add-movie')) $('#oc-add-movie').checked = false;
