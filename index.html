@@ -2497,6 +2497,7 @@
         <div class="oc-db-import-actions">
           <button id="oc-image-migration-start" class="oc-addbtn" type="button">Обработать следующие 50</button>
           <button id="oc-image-migration-stop" class="oc-edit-cancel" type="button" disabled>Остановить</button>
+          <button id="oc-image-migration-forget-secret" class="oc-edit-cancel" type="button">Забыть пароль</button>
         </div>
         <div id="oc-image-migration-status" class="oc-db-import-status"></div>
         <div id="oc-image-migration-log" style="max-height:45vh;overflow:auto;font:11px/1.5 'Space Mono',monospace"></div>
@@ -7638,14 +7639,29 @@
 
     function getImageUploadSecret() {
       let secret = '';
-      try { secret = sessionStorage.getItem(IMAGE_UPLOAD_SECRET_KEY) || ''; } catch (_) {}
+      try { secret = localStorage.getItem(IMAGE_UPLOAD_SECRET_KEY) || ''; } catch (_) {}
       if (!secret) {
-        secret = String(window.prompt('Введите UPLOAD_SECRET из Cloudflare. Он сохранится только до закрытия этой вкладки.') || '').trim();
+        try {
+          secret = sessionStorage.getItem(IMAGE_UPLOAD_SECRET_KEY) || '';
+          if (secret) {
+            localStorage.setItem(IMAGE_UPLOAD_SECRET_KEY, secret);
+            sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY);
+          }
+        } catch (_) {}
+      }
+      if (!secret) {
+        secret = String(window.prompt('Введите UPLOAD_SECRET из Cloudflare. Он сохранится в браузере на этом устройстве.') || '').trim();
         if (secret) {
-          try { sessionStorage.setItem(IMAGE_UPLOAD_SECRET_KEY, secret); } catch (_) {}
+          try { localStorage.setItem(IMAGE_UPLOAD_SECRET_KEY, secret); } catch (_) {}
         }
       }
       return secret;
+    }
+
+    function forgetImageUploadSecret() {
+      try { localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
+      try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
+      imageMigrationStatus('Сохранённый пароль удалён с этого устройства.');
     }
 
     function compactImageFileName(title, type, source) {
@@ -7671,6 +7687,7 @@
         let message = 'HTTP ' + response.status;
         try { const data = await response.json(); message = data.error || message; } catch (_) {}
         if (response.status === 401) {
+          try { localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
           try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
         }
         throw new Error(message);
@@ -7827,6 +7844,7 @@
       imageMigrationStopRequested = true;
       imageMigrationStatus('Останавливаю после текущей картинки…');
     });
+    if ($('#oc-image-migration-forget-secret')) $('#oc-image-migration-forget-secret').addEventListener('click', forgetImageUploadSecret);
     if (imageMigrationModal) imageMigrationModal.addEventListener('click', event => {
       if (event.target === imageMigrationModal || event.target.closest('[data-image-migration-close]')) closeImageMigrationModal();
     });
