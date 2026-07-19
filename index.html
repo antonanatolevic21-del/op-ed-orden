@@ -1808,6 +1808,26 @@
     .oc-modal-title { font-family:'Archivo Black', sans-serif; font-size: clamp(20px, 4vw, 30px); line-height:1.08; }
     .oc-modal-close { background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:7px 10px; cursor:pointer; font-family:'Space Mono', monospace; }
     .oc-modal-close:hover { border-color:var(--pink); color:var(--pink); }
+    .oc-franchise-repair-card { width:min(1120px, 100%); max-height:90vh; display:flex; flex-direction:column; overflow:hidden; }
+    .oc-franchise-repair-summary { color:var(--muted); font-size:13px; margin-bottom:12px; }
+    .oc-franchise-repair-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+    .oc-franchise-repair-select-all { display:inline-flex; align-items:center; gap:8px; font-family:'Space Mono', monospace; font-size:12px; cursor:pointer; }
+    .oc-franchise-repair-select-all input, .oc-franchise-repair-check { accent-color:var(--pink); }
+    .oc-franchise-repair-list { overflow:auto; display:flex; flex-direction:column; gap:10px; padding-right:4px; }
+    .oc-franchise-repair-row { display:grid; grid-template-columns:28px minmax(190px,1.1fr) minmax(180px,1fr) minmax(260px,1.4fr); gap:12px; align-items:start; padding:12px; border:1px solid var(--border); border-radius:10px; background:#0F0C16; }
+    .oc-franchise-repair-row:hover { border-color:#3A3350; }
+    .oc-franchise-repair-track { font-weight:600; font-size:13px; overflow-wrap:anywhere; }
+    .oc-franchise-repair-kind { display:inline-block; margin-top:5px; padding:2px 6px; border-radius:4px; border:1px solid var(--border); color:var(--muted); font-family:'Space Mono', monospace; font-size:9px; }
+    .oc-franchise-repair-label { color:var(--muted); font-family:'Space Mono', monospace; font-size:9px; text-transform:uppercase; margin-bottom:5px; }
+    .oc-franchise-repair-before { font-size:12px; overflow-wrap:anywhere; color:var(--muted); }
+    .oc-franchise-repair-input { width:100%; min-height:58px; resize:vertical; background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px; font:12px 'Inter',sans-serif; }
+    .oc-franchise-repair-input:focus { outline:2px solid var(--cyan); outline-offset:1px; }
+    .oc-franchise-repair-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:14px; margin-top:12px; border-top:1px solid var(--border); }
+    @media (max-width:760px) {
+      .oc-franchise-repair-row { grid-template-columns:28px 1fr; }
+      .oc-franchise-repair-row > :nth-child(n+3) { grid-column:2; }
+      .oc-franchise-repair-card { max-height:94vh; }
+    }
     .oc-card-preview { display:grid; grid-template-columns: minmax(170px, 260px) 1fr; gap:16px; align-items:start; }
     .oc-card-preview-img { width:100%; aspect-ratio:16/9; border-radius:12px; }
     .oc-detail-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-top:12px; }
@@ -2438,6 +2458,9 @@
 
     <div id="oc-confirm-modal" class="oc-modal hidden" aria-modal="true" role="dialog"></div>
 
+    <div id="oc-franchise-repair-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Проверка франшиз"></div>
+
+
     <div id="oc-auth-modal" class="oc-auth-modal hidden" aria-modal="true" role="dialog">
       <div class="oc-auth-dialog">
         <div class="oc-section-label">вход на сайт</div>
@@ -2542,6 +2565,7 @@
     const statsPanel = $('#oc-stats-panel');
     const openingModal = $('#oc-opening-modal');
     const confirmModal = $('#oc-confirm-modal');
+    const franchiseRepairModal = $('#oc-franchise-repair-modal');
     const authModal = $('#oc-auth-modal');
     const authPassInput = $('#oc-auth-pass');
     const authSaveBtn = $('#oc-auth-save');
@@ -3817,45 +3841,60 @@
 
       entries.forEach(entry => {
         const current = cleanFranchiseList(entry.franchises || []);
-        if (current.length < 2 || !String(entry.title || '').includes(',')) return;
+        const rawTitle = String(entry.title || '');
+        if (!rawTitle.includes(',')) return;
 
         const fixed = current.slice();
         let changed = false;
 
-        for (let start = 0; start < fixed.length - 1; start++) {
-          let bestEnd = -1;
-          let bestCandidate = '';
+        if (current.length >= 2) {
+          for (let start = 0; start < fixed.length - 1; start++) {
+            let bestEnd = -1;
+            let bestCandidate = '';
 
-          for (let end = fixed.length; end >= start + 2; end--) {
-            const parts = fixed.slice(start, end);
-            const candidate = parts.join(', ');
-            if (!franchiseCandidateMatchesTitle(entry.title, candidate)) continue;
+            for (let end = fixed.length; end >= start + 2; end--) {
+              const parts = fixed.slice(start, end);
+              const candidate = parts.join(', ');
+              if (!franchiseCandidateMatchesTitle(entry.title, candidate)) continue;
 
-            const candidateKey = normalizeFranchiseRepairText(candidate);
-            const alreadyKnownAsWhole = knownWholeFranchises.has(candidateKey);
-            const standaloneTitleMatches = parts.reduce((count, part) =>
-              count + (knownFullTitles.has(normalizeFranchiseRepairText(part)) ? 1 : 0), 0
-            );
+              const candidateKey = normalizeFranchiseRepairText(candidate);
+              const alreadyKnownAsWhole = knownWholeFranchises.has(candidateKey);
+              const standaloneTitleMatches = parts.reduce((count, part) =>
+                count + (knownFullTitles.has(normalizeFranchiseRepairText(part)) ? 1 : 0), 0
+              );
 
-            // Если две части сами по себе встречаются как полноценные названия треков,
-            // считаем их отдельными франшизами и не склеиваем без известного полного варианта.
-            if (!alreadyKnownAsWhole && standaloneTitleMatches >= 2) continue;
+              if (!alreadyKnownAsWhole && standaloneTitleMatches >= 2) continue;
+              bestEnd = end;
+              bestCandidate = candidate;
+              break;
+            }
 
-            bestEnd = end;
-            bestCandidate = candidate;
-            break;
+            if (bestEnd < 0) continue;
+            fixed.splice(start, bestEnd - start, bestCandidate);
+            changed = true;
           }
-
-          if (bestEnd < 0) continue;
-          fixed.splice(start, bestEnd - start, bestCandidate);
-          changed = true;
         }
 
-        const after = uniqueFranchiseList(fixed);
-        if (!changed || after.length === current.length && after.every((value, index) => value === current[index])) return;
+        let after = uniqueFranchiseList(fixed);
+        let kind = 'split';
+
+        // Дополнительная проверка: в названии трека есть запятая,
+        // но ни одна записанная франшиза её не содержит.
+        if (!after.some(name => String(name || '').includes(','))) {
+          const titleFranchise = cleanTitleForAutoAlias(entry.title);
+          if (String(titleFranchise || '').includes(',')) {
+            after = [String(titleFranchise).trim()];
+            changed = true;
+            kind = current.length ? 'missing-comma' : 'empty';
+          }
+        }
+
+        if (!changed || (after.length === current.length && after.every((value, index) => value === current[index]))) return;
         repairs.push({
           id: String(entry.id),
-          title: String(entry.title || ''),
+          title: rawTitle,
+          type: entry.type === 'ED' ? 'ED' : 'OP',
+          kind,
           before: current,
           after
         });
@@ -3864,39 +3903,109 @@
       return repairs;
     }
 
-    async function repairBrokenFranchises() {
+    function closeFranchiseRepairModal() {
+      if (!franchiseRepairModal) return;
+      franchiseRepairModal.classList.add('hidden');
+      franchiseRepairModal.innerHTML = '';
+    }
+
+    function repairKindLabel(kind) {
+      if (kind === 'split') return 'раздроблена по запятой';
+      if (kind === 'empty') return 'франшиза отсутствует';
+      return 'в названии есть запятая, во франшизе нет';
+    }
+
+    function renderFranchiseRepairModal(repairs) {
+      if (!franchiseRepairModal) return;
+      const rows = repairs.map((repair, index) => `
+        <div class="oc-franchise-repair-row" data-repair-id="${escapeHtml(repair.id)}">
+          <input class="oc-franchise-repair-check" type="checkbox" checked aria-label="Выбрать исправление ${index + 1}" />
+          <div>
+            <div class="oc-franchise-repair-track">${escapeHtml(repair.title)}</div>
+            <span class="oc-franchise-repair-kind">${escapeHtml(repair.type)} · ${escapeHtml(repairKindLabel(repair.kind))}</span>
+          </div>
+          <div>
+            <div class="oc-franchise-repair-label">Сейчас</div>
+            <div class="oc-franchise-repair-before">${repair.before.length ? repair.before.map(escapeHtml).join('<br>') : '— пусто —'}</div>
+          </div>
+          <div>
+            <div class="oc-franchise-repair-label">Будет после исправления · можно изменить</div>
+            <textarea class="oc-franchise-repair-input" data-repair-value="${escapeHtml(repair.id)}">${escapeHtml(repair.after.join('\n'))}</textarea>
+          </div>
+        </div>`).join('');
+
+      franchiseRepairModal.innerHTML = `
+        <div class="oc-modal-card oc-franchise-repair-card">
+          <div class="oc-modal-head">
+            <div>
+              <div class="oc-section-label">проверка базы</div>
+              <div class="oc-modal-title">Починка франшиз</div>
+            </div>
+            <button class="oc-modal-close" type="button" data-franchise-repair-close>Закрыть ✕</button>
+          </div>
+          <div class="oc-franchise-repair-summary">
+            Найдено подозрительных треков: ${repairs.length}. Проверь предлагаемые значения и сними галочки там, где менять ничего не нужно.
+          </div>
+          <div class="oc-franchise-repair-tools">
+            <label class="oc-franchise-repair-select-all"><input type="checkbox" data-franchise-repair-select-all checked /> выбрать все</label>
+            <span class="oc-hint" style="margin:0">Одна строка в поле = одна франшиза</span>
+          </div>
+          <div class="oc-franchise-repair-list">${rows}</div>
+          <div class="oc-franchise-repair-actions">
+            <button class="oc-cancel-btn" type="button" data-franchise-repair-close>Отмена</button>
+            <button class="oc-save-btn" type="button" data-franchise-repair-apply>Внести выбранные изменения</button>
+          </div>
+        </div>`;
+      franchiseRepairModal.classList.remove('hidden');
+    }
+
+    function repairBrokenFranchises() {
       if (!ensureAdmin()) return;
       const repairs = buildFranchiseRepairPlan();
       if (!repairs.length) {
-        setStatus('Разбитых франшиз по названию не найдено ✓');
+        setStatus('Подозрительных франшиз по названию не найдено ✓');
+        return;
+      }
+      renderFranchiseRepairModal(repairs);
+    }
+
+    async function applyFranchiseRepairsFromModal() {
+      if (!ensureAdmin() || !franchiseRepairModal) return;
+      const selectedRows = Array.from(franchiseRepairModal.querySelectorAll('.oc-franchise-repair-row'))
+        .filter(row => {
+          const checkbox = row.querySelector('.oc-franchise-repair-check');
+          return checkbox && checkbox.checked;
+        });
+
+      if (!selectedRows.length) {
+        setStatus('Не выбрано ни одного исправления.', true);
         return;
       }
 
-      const preview = repairs.slice(0, 5).map(item =>
-        `• ${item.title}\n  ${item.before.join(' | ')} → ${item.after.join(' | ')}`
-      ).join('\n\n');
-      const tail = repairs.length > 5 ? `\n\n…и ещё ${repairs.length - 5}` : '';
-      const approved = window.confirm(
-        `Найдено треков для починки: ${repairs.length}.\n\n${preview}${tail}\n\nОбъединить совпавшие части франшиз?`
-      );
-      if (!approved) return;
+      const applyBtn = franchiseRepairModal.querySelector('[data-franchise-repair-apply]');
+      if (applyBtn) {
+        applyBtn.disabled = true;
+        applyBtn.textContent = 'Сохраняю…';
+      }
 
-      if (franchiseRepairBtn) franchiseRepairBtn.disabled = true;
       let fixedCount = 0;
       const failed = [];
-
-      for (const repair of repairs) {
+      for (const row of selectedRows) {
+        const id = row.getAttribute('data-repair-id');
+        const input = row.querySelector('.oc-franchise-repair-input');
+        const franchises = uniqueFranchiseList(cleanFranchiseList(input ? input.value : ''));
         try {
-          await saveOpeningExtras(repair.id, { franchises: repair.after });
-          const localEntry = entriesById.get(String(repair.id));
+          await saveOpeningExtras(id, { franchises });
+          const localEntry = entriesById.get(String(id));
           if (localEntry) {
-            localEntry.franchises = repair.after.slice();
+            localEntry.franchises = franchises.slice();
             touchEntryCache(localEntry);
           }
           fixedCount += 1;
+          row.remove();
         } catch (error) {
-          console.error('Could not repair franchises', repair, error);
-          failed.push(repair.title || repair.id);
+          console.error('Could not repair franchise', id, error);
+          failed.push(id);
         }
       }
 
@@ -3904,12 +4013,16 @@
         rebuildFastIndexes({ catalogChanged: true });
         refreshVisiblePanels({ forceFilters: true });
       }
-      if (franchiseRepairBtn) franchiseRepairBtn.disabled = false;
 
-      if (failed.length) {
-        setStatus(`Починено: ${fixedCount}. Ошибок: ${failed.length}.`, true);
+      if (!failed.length) {
+        closeFranchiseRepairModal();
+        setStatus(`Франшизы исправлены: ${fixedCount} ✓`);
       } else {
-        setStatus(`Франшизы починены: ${fixedCount} ✓`);
+        if (applyBtn) {
+          applyBtn.disabled = false;
+          applyBtn.textContent = 'Повторить для оставшихся';
+        }
+        setStatus(`Исправлено: ${fixedCount}. Не удалось сохранить: ${failed.length}.`, true);
       }
     }
 
@@ -7157,6 +7270,20 @@
     });
 
     if (franchiseRepairBtn) franchiseRepairBtn.addEventListener('click', repairBrokenFranchises);
+    if (franchiseRepairModal) {
+      franchiseRepairModal.addEventListener('click', (e) => {
+        if (e.target === franchiseRepairModal || e.target.closest('[data-franchise-repair-close]')) {
+          closeFranchiseRepairModal();
+          return;
+        }
+        const selectAll = e.target.closest('[data-franchise-repair-select-all]');
+        if (selectAll) {
+          franchiseRepairModal.querySelectorAll('.oc-franchise-repair-check').forEach(box => { box.checked = selectAll.checked; });
+          return;
+        }
+        if (e.target.closest('[data-franchise-repair-apply]')) applyFranchiseRepairsFromModal();
+      });
+    }
 
     $('#oc-add-btn').addEventListener('click', async () => {
       if (!ensureAdmin()) return;
