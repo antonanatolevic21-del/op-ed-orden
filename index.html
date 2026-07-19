@@ -2105,7 +2105,7 @@
       <div class="oc-filtergrid">
         <div class="oc-field oc-search-field">
           <label for="oc-f-search">Поиск</label>
-          <input id="oc-f-search" type="search" autocomplete="off" placeholder="Название, исполнитель, франшиза…" />
+          <input id="oc-f-search" type="search" autocomplete="off" placeholder="Название, исполнитель, франшиза или URL картинки…" />
         </div>
         <div class="oc-field">
           <label for="oc-f-type">Тип</label>
@@ -2198,7 +2198,7 @@
         <div class="oc-filtergrid">
           <div class="oc-field oc-search-field">
             <label for="oc-p-search">Поиск</label>
-            <input id="oc-p-search" type="search" autocomplete="off" placeholder="Название, исполнитель, франшиза…" />
+            <input id="oc-p-search" type="search" autocomplete="off" placeholder="Название, исполнитель, франшиза или URL картинки…" />
           </div>
           <div class="oc-field">
             <label for="oc-p-type">Тип</label>
@@ -4543,7 +4543,7 @@
       if (entry.__ocSearchText) return entry.__ocSearchText;
       const text = [
         entry.title, ...(entry.alternativeTitles || []), entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
-        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
+        entry.image || '', ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
       ].join(' ').toLowerCase();
       try { Object.defineProperty(entry, '__ocSearchText', { value: text, configurable: true, enumerable: false }); }
       catch (e) { entry.__ocSearchText = text; }
