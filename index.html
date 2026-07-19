@@ -5375,7 +5375,7 @@
             <input class="oc-e-studio" type="text" list="oc-dl-studios" autocomplete="off" value="${escapeHtml((entry.studios || []).join(', '))}" placeholder="Студии (через запятую)" />
             <input class="oc-e-director" type="text" list="oc-dl-directors" autocomplete="off" value="${escapeHtml((entry.directors || []).join(', '))}" placeholder="Режиссёры опа (через запятую)" />
             <input class="oc-e-performer" type="text" list="oc-dl-performers" autocomplete="off" value="${escapeHtml((entry.performers || []).join(', '))}" placeholder="Исполнители (через запятую)" />
-            <textarea class="oc-e-franchise" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Если пусто — попробую взять из названия">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
+            <textarea class="oc-e-franchise" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Пустое поле удалит франшизу">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
           </div>
           <div class="oc-editgrid3">
             <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Картинка / постер (URL)" />
@@ -6935,7 +6935,7 @@
             studios: parseList(card.querySelector('.oc-e-studio').value),
             directors: parseList(card.querySelector('.oc-e-director').value),
             performers: parseList(card.querySelector('.oc-e-performer').value),
-            franchises: franchisesForSave(title, card.querySelector('.oc-e-franchise').value, id),
+            franchises: uniqueFranchiseList(cleanFranchiseList(card.querySelector('.oc-e-franchise').value)),
             image: card.querySelector('.oc-e-image').value.trim(),
             link: card.querySelector('.oc-e-link').value.trim(),
             notes: card.querySelector('.oc-e-notes').value.trim(),
