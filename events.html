@@ -472,14 +472,6 @@
     .ev-guess-user:hover { border-color: var(--cyan); color: var(--cyan); }
     .ev-guess-user.active { border-color: var(--pink); color: var(--pink); background: rgba(255,46,99,.1); }
     .ev-guess-user input { margin: 0; accent-color: var(--pink); }
-    .ev-franchise-picker {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-      max-height: 210px;
-      overflow: auto;
-      padding: 4px 2px;
-    }
     .ev-guess-rating-row { display: grid; grid-template-columns: minmax(150px, 1.25fr) minmax(150px, .9fr) minmax(90px, .75fr); gap: 8px; align-items: center; }
     .ev-guess-rating-row + .ev-guess-rating-row { margin-top: 8px; }
     .ev-guess-rating-name {
@@ -1471,26 +1463,6 @@
       return SEASONS.map(season => `<option value="${season}" ${selected === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('');
     }
 
-    function normalizeSelectedFranchises(value, legacyValue = '') {
-      const source = Array.isArray(value) ? value : (value ? [value] : (legacyValue ? [legacyValue] : []));
-      return [...new Set(source.map(item => String(item || '').trim()).filter(Boolean))];
-    }
-
-    function openingMatchesFranchises(opening, selected) {
-      const wanted = normalizeSelectedFranchises(selected);
-      if (!wanted.length) return true;
-      const available = new Set((opening?.franchises || []).map(item => String(item || '').trim()).filter(Boolean));
-      return wanted.some(franchise => available.has(franchise));
-    }
-
-    function franchiseCheckboxPicker(values, selected, inputAttribute, disabled = false) {
-      const active = new Set(normalizeSelectedFranchises(selected));
-      const rows = values.map(value => {
-        const checked = active.has(value);
-        return `<label class="ev-guess-user ${checked ? 'active' : ''}"><input type="checkbox" ${inputAttribute} value="${escapeHtml(value)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}><span>${escapeHtml(value)}</span></label>`;
-      }).join('');
-      return `<div class="ev-franchise-picker">${rows || '<span class="ev-guess-note">Франшизы ещё не добавлены.</span>'}</div><span class="ev-guess-note">Отмечено: ${active.size || 'все'}. Можно поставить несколько галочек; ничего не отмечено = все франшизы.</span>`;
-    }
     const SCORE_WORDS = { 1:'залупа', 2:'очень слабо', 3:'слабо', 4:'ниже среднего', 5:'средне', 6:'норм', 7:'хорошо', 8:'сильно', 9:'почти пик', 10:'пик' };
 
     const $ = (sel) => document.querySelector(sel);
@@ -1541,7 +1513,6 @@
       director: '',
       performer: '',
       franchise: '',
-      franchises: [],
       content: 'all',
       users: [],
       scoreLogic: 'and',
@@ -1555,7 +1526,6 @@
     if (savedEventUiPreferences.guessFilters && typeof savedEventUiPreferences.guessFilters === 'object') {
       Object.assign(guessFilters, savedEventUiPreferences.guessFilters);
     }
-    guessFilters.franchises = normalizeSelectedFranchises(guessFilters.franchises, guessFilters.franchise);
     const blindTierFilters = {
       search: '',
       count: 10,
@@ -1569,7 +1539,6 @@
       director: '',
       performer: '',
       franchise: '',
-      franchises: [],
       content: 'all',
       users: [],
       scoreLogic: 'and',
@@ -1584,7 +1553,6 @@
     if (savedEventUiPreferences.blindTierFilters && typeof savedEventUiPreferences.blindTierFilters === 'object') {
       Object.assign(blindTierFilters, savedEventUiPreferences.blindTierFilters);
     }
-    blindTierFilters.franchises = normalizeSelectedFranchises(blindTierFilters.franchises, blindTierFilters.franchise);
     let guessResultIds = [];
     let guessMessage = '';
     let guessGameState = null;
@@ -1616,7 +1584,6 @@
       studio: '',
       director: '',
       performer: '',
-      franchises: [],
       content: 'all',
       source: 'ratings',
       users: [],
@@ -1631,7 +1598,6 @@
     if (savedEventUiPreferences.bestWorstFilters && typeof savedEventUiPreferences.bestWorstFilters === 'object') {
       Object.assign(bestWorstFilters, savedEventUiPreferences.bestWorstFilters);
     }
-    bestWorstFilters.franchises = normalizeSelectedFranchises(bestWorstFilters.franchises);
     let bestWorstRoom = null;
     let bestWorstSubmissions = [];
     let bestWorstStatus = '';
@@ -1663,8 +1629,7 @@
     let whoAmISettingsDraft = {
       type: String(savedEventUiPreferences.whoAmISettings?.type || ''),
       fromYear: String(savedEventUiPreferences.whoAmISettings?.fromYear || ''),
-      toYear: String(savedEventUiPreferences.whoAmISettings?.toYear || ''),
-      franchises: normalizeSelectedFranchises(savedEventUiPreferences.whoAmISettings?.franchises)
+      toYear: String(savedEventUiPreferences.whoAmISettings?.toYear || '')
     };
     let whoAmIQuestionDraft = '';
     let whoAmIGuessDraft = '';
@@ -2959,7 +2924,7 @@
     function normalizeBestWorstSettings(raw = {}) {
       const mode = ['best', 'worst', 'both'].includes(raw.mode) ? raw.mode : 'both';
       const typeFilter = ['OP', 'ED', 'both'].includes(raw.typeFilter) ? raw.typeFilter : 'OP';
-      const grouping = ['none', 'year', 'yearSeason', 'performer', 'director', 'studio'].includes(raw.grouping) ? raw.grouping : 'none';
+      const grouping = ['none', 'year', 'yearSeason', 'performer', 'director', 'studio', 'franchise'].includes(raw.grouping) ? raw.grouping : 'none';
       const content = ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(raw.content) ? raw.content : 'all';
       const range = normalizeSeasonRange(raw);
       return {
@@ -2972,7 +2937,6 @@
         studio: String(raw.studio || ''),
         director: String(raw.director || ''),
         performer: String(raw.performer || ''),
-        franchises: normalizeSelectedFranchises(raw.franchises, raw.franchise),
         content,
         source: raw.source === 'all' ? 'all' : 'ratings',
         users: Array.isArray(raw.users) ? [...new Set(raw.users.map(normalizeNickname).filter(Boolean))] : [],
@@ -3033,6 +2997,7 @@
       if (grouping === 'performer') return { kind: 'Исполнитель', value: value || 'Не указан' };
       if (grouping === 'director') return { kind: 'Режиссёр', value: value || 'Не указан' };
       if (grouping === 'studio') return { kind: 'Студия', value: value || 'Не указана' };
+      if (grouping === 'franchise') return { kind: 'Франшиза', value: value || 'Не указана' };
       return null;
     }
 
@@ -3191,7 +3156,6 @@
       if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
       if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
       if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
-      if (!openingMatchesFranchises(opening, settings.franchises)) return false;
       const content = guessContentFlags(settings.content);
       if (!content.showChinese && opening.isChinese) return false;
       if (!content.showMovie && opening.isMovie) return false;
@@ -3226,6 +3190,7 @@
         else if (grouping === 'performer') (opening.performers || []).forEach(value => add(`performer:${normalizeGuessAnswer(value)}`, value, opening));
         else if (grouping === 'director') (opening.directors || []).forEach(value => add(`director:${normalizeGuessAnswer(value)}`, value, opening));
         else if (grouping === 'studio') (opening.studios || []).forEach(value => add(`studio:${normalizeGuessAnswer(value)}`, value, opening));
+        else if (grouping === 'franchise') (opening.franchises || []).forEach(value => add(`franchise:${normalizeGuessAnswer(value)}`, value, opening));
         else add('all', 'Без группировки', opening);
       });
       return [...buckets.values()];
@@ -3688,7 +3653,6 @@
       const studios = guessUniqueValues('studios');
       const directors = guessUniqueValues('directors');
       const performers = guessUniqueValues('performers');
-      const franchises = guessUniqueValues('franchises');
       const users = guessUserOptions();
       const selectedUsers = new Set((settings.users || []).map(normalizeNickname).filter(Boolean));
       const candidates = getBestWorstCandidates(settings);
@@ -3723,14 +3687,13 @@
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Тип</span><select id="ev-bw-type" ${hostDisabled}><option value="both" ${settings.typeFilter === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.typeFilter === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Элементов за раунд</span><input id="ev-bw-per-round" type="number" min="2" max="20" step="1" value="${settings.perRound}" ${hostDisabled} /></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Количество раундов</span><input id="ev-bw-rounds" type="number" min="1" max="20" step="1" value="${settings.rounds}" ${hostDisabled} /></label>
-                <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option></select></label>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option><option value="franchise" ${settings.grouping === 'franchise' ? 'selected' : ''}>По франшизе</option></select></label>
                 <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
                 <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
-                <div class="ev-guess-field wide"><span class="ev-guess-label">Франшизы</span>${franchiseCheckboxPicker(franchises, settings.franchises, 'data-bw-franchise', Boolean(hostDisabled))}</div>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
                 <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
@@ -3765,7 +3728,6 @@
       bind('#ev-bw-studio', 'studio');
       bind('#ev-bw-director', 'director');
       bind('#ev-bw-performer', 'performer');
-      document.querySelectorAll('[data-bw-franchise]').forEach(input => input.addEventListener('change', () => { bestWorstFilters.franchises = [...document.querySelectorAll('[data-bw-franchise]:checked')].map(row => row.value); render(); }));
       bind('#ev-bw-source', 'source');
       bind('#ev-bw-score-overall-cmp', 'scoreOverallCmp');
       bind('#ev-bw-score-song-cmp', 'scoreSongCmp');
@@ -4237,7 +4199,7 @@
     function cnIsSpymaster(room = codenamesRoom) { return cnMyPlayer(room)?.role === 'spymaster'; }
     function cnSettings(room = codenamesRoom) {
       const raw = room?.settings || {};
-      return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all', ...normalizeSeasonRange(raw), franchises: normalizeSelectedFranchises(raw.franchises, raw.franchise) };
+      return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all', ...normalizeSeasonRange(raw) };
     }
     function cnRoomDoc() { return doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID); }
     async function cnPatch(patch) {
@@ -4254,7 +4216,6 @@
       const rows = openings.filter(opening => {
         if (settings.typeFilter !== 'all' && opening.type !== settings.typeFilter) return false;
         if (!openingInSeasonRange(opening, settings)) return false;
-        if (!openingMatchesFranchises(opening, settings.franchises)) return false;
         return Boolean(safeUrl(opening.image));
       });
       const unique = [];
@@ -4427,7 +4388,7 @@
         const years = [...new Set(openings.map(opening => Number(opening.year)).filter(Number.isFinite))].sort((a, b) => a - b);
         appEl.innerHTML = `<div class="ev-cn-shell">
           <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>Лобби</h2><div class="ev-hint">Капитан видит цвета карточек и даёт подсказку. Игроки команды открывают карточки. Убийца мгновенно завершает игру.</div></div><div class="ev-actions">${me ? '<button class="ev-btn-ghost" id="ev-cn-leave">Выйти из команды</button>' : ''}${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-delete">Удалить игру</button><button class="ev-btn-main" id="ev-cn-start">Начать игру</button>' : ''}</div></section>
-          <section class="ev-cn-lobby"><div class="ev-guess-grid"><label class="ev-guess-field"><span class="ev-guess-label">Карточки</span><select id="ev-cn-type" ${isAdmin() ? '' : 'disabled'}><option value="all" ${settings.typeFilter==='all'?'selected':''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter==='OP'?'selected':''}>Только опенинги</option><option value="ED" ${settings.typeFilter==='ED'?'selected':''}>Только эндинги</option></select><span class="ev-guess-note">Технические версии одного названия не дублируются.</span></label><div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-from-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-cn-from-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div><div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-to-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-cn-to-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в поле.</span></div><div class="ev-guess-field full"><span class="ev-guess-label">Франшизы</span>${franchiseCheckboxPicker(guessUniqueValues('franchises'), settings.franchises, 'data-cn-franchise', !isAdmin())}</div></div>
+          <section class="ev-cn-lobby"><div class="ev-guess-grid"><label class="ev-guess-field"><span class="ev-guess-label">Карточки</span><select id="ev-cn-type" ${isAdmin() ? '' : 'disabled'}><option value="all" ${settings.typeFilter==='all'?'selected':''}>Опенинги и эндинги</option><option value="OP" ${settings.typeFilter==='OP'?'selected':''}>Только опенинги</option><option value="ED" ${settings.typeFilter==='ED'?'selected':''}>Только эндинги</option></select><span class="ev-guess-note">Технические версии одного названия не дублируются.</span></label><div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-from-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-cn-from-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div><div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-cn-to-year" ${isAdmin() ? '' : 'disabled'}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-cn-to-season" ${isAdmin() ? '' : 'disabled'}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в поле.</span></div></div>
           <div class="ev-cn-team-grid"><div class="ev-cn-team red"><h3>Красные</h3><div class="ev-cn-player-list">${cnRenderPlayers('red')}</div><div class="ev-cn-join-row"><button class="ev-btn-danger" data-cn-join="red" data-cn-role="operative">Играть за красных</button><button class="ev-btn-ghost" data-cn-join="red" data-cn-role="spymaster">Стать капитаном</button></div></div><div class="ev-cn-team blue"><h3>Синие</h3><div class="ev-cn-player-list">${cnRenderPlayers('blue')}</div><div class="ev-cn-join-row"><button class="ev-btn-secondary" data-cn-join="blue" data-cn-role="operative">Играть за синих</button><button class="ev-btn-ghost" data-cn-join="blue" data-cn-role="spymaster">Стать капитаном</button></div></div></div>
           ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
         $('#ev-cn-type')?.addEventListener('change', e => cnSetSettings({ typeFilter: e.target.value }));
@@ -4435,7 +4396,6 @@
         $('#ev-cn-from-season')?.addEventListener('change', e => cnSetSettings({ fromSeason: e.target.value }));
         $('#ev-cn-to-year')?.addEventListener('change', e => cnSetSettings({ toYear: e.target.value }));
         $('#ev-cn-to-season')?.addEventListener('change', e => cnSetSettings({ toSeason: e.target.value }));
-        document.querySelectorAll('[data-cn-franchise]').forEach(input => input.addEventListener('change', () => cnSetSettings({ franchises: [...document.querySelectorAll('[data-cn-franchise]:checked')].map(row => row.value) })));
         $('#ev-cn-start')?.addEventListener('click', cnStartGame);
         $('#ev-cn-leave')?.addEventListener('click', cnLeave);
         $('#ev-cn-delete')?.addEventListener('click', cnDeleteGame);
@@ -4601,7 +4561,6 @@
           <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
           <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
           <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>
-          <div class="ev-guess-field wide"><span class="ev-guess-label">Франшизы</span>${franchiseCheckboxPicker(guessUniqueValues('franchises'), blindTierFilters.franchises, 'data-blind-franchise')}</div>
           <label class="ev-guess-field"><span class="ev-guess-label">Контент</span><select data-blind-field="content"><option value="all" ${blindTierFilters.content==='all'?'selected':''}>Всё</option><option value="default" ${blindTierFilters.content==='default'?'selected':''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${blindTierFilters.content==='chinese'?'selected':''}>С китайскими</option><option value="movie" ${blindTierFilters.content==='movie'?'selected':''}>С фильмами</option><option value="shortened" ${blindTierFilters.content==='shortened'?'selected':''}>С укороченными</option></select></label>
           <div class="ev-guess-field full"><span class="ev-guess-label">Пользователи</span><div class="ev-guess-users">${users.map(user=>`<label><input type="checkbox" data-blind-user="${escapeHtml(user.key)}" ${selectedUsers.has(user.key)?'checked':''}> ${escapeHtml(user.avatar||'')} ${escapeHtml(user.nickname)}</label>`).join('')||'<span class="ev-hint">Оценок пользователей пока нет.</span>'}</div></div>
           <div class="ev-guess-field full"><span class="ev-guess-label">Условия оценок</span><div class="ev-guess-segmented"><button type="button" data-blind-score-logic="and" class="${blindTierFilters.scoreLogic!=='or'?'active':''}">И — выполнить все</button><button type="button" data-blind-score-logic="or" class="${blindTierFilters.scoreLogic==='or'?'active':''}">ИЛИ — достаточно одного</button></div>${scoreRows}</div>
@@ -4611,13 +4570,11 @@
             const key=input.dataset.blindField;
             blindTierFilters[key] = key==='count' ? Math.max(3,Math.min(20,Number(input.value||10))) : input.value;
           });
-          blindTierFilters.franchises = [...appEl.querySelectorAll('[data-blind-franchise]:checked')].map(input => input.value);
-          appEl.querySelectorAll('[data-blind-franchise]').forEach(input => input.closest('label')?.classList.toggle('active', input.checked));
           blindTierFilters.users=[...appEl.querySelectorAll('[data-blind-user]:checked')].map(input=>input.dataset.blindUser);
           saveEventUiPreferences();
           const preview=$('#ev-blind-count-preview'); if(preview) preview.textContent=String(blindTierCandidates(blindTierFilters).length);
         };
-        appEl.querySelectorAll('[data-blind-field],[data-blind-user],[data-blind-franchise]').forEach(input=>{input.addEventListener('change',updateBlindFilters);input.addEventListener('input',updateBlindFilters);});
+        appEl.querySelectorAll('[data-blind-field],[data-blind-user]').forEach(input=>{input.addEventListener('change',updateBlindFilters);input.addEventListener('input',updateBlindFilters);});
         appEl.querySelectorAll('[data-blind-score-logic]').forEach(button=>button.addEventListener('click',()=>{blindTierFilters.scoreLogic=button.dataset.blindScoreLogic==='or'?'or':'and';saveEventUiPreferences();renderBlindTier();}));
         $('#ev-blind-start')?.addEventListener('click',()=>{updateBlindFilters();startBlindTier();});
         return;
@@ -4684,7 +4641,6 @@
         if (settings.type && opening.type !== settings.type) return false;
         if (settings.fromYear && (!opening.year || opening.year < settings.fromYear)) return false;
         if (settings.toYear && (!opening.year || opening.year > settings.toYear)) return false;
-        if (!openingMatchesFranchises(opening, settings.franchises)) return false;
         return true;
       })));
     }
@@ -4696,8 +4652,7 @@
       const settings = {
         type:String(whoAmISettingsDraft.type || ''),
         fromYear:Number(whoAmISettingsDraft.fromYear || 0) || null,
-        toYear:Number(whoAmISettingsDraft.toYear || 0) || null,
-        franchises: normalizeSelectedFranchises(whoAmISettingsDraft.franchises)
+        toYear:Number(whoAmISettingsDraft.toYear || 0) || null
       };
       const candidates = whoEligibleOpenings(settings);
       if (candidates.length < players.length) { whoAmIStatus = 'Под фильтры попало недостаточно разных песен.'; renderWhoAmI(); return; }
@@ -4839,7 +4794,7 @@
       const joined = players.some(player => player.key === ownKey);
       const guessed = new Set(Array.isArray(room.guessedKeys) ? room.guessedKeys : []);
       if (room.status === 'lobby') {
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><div style="grid-column:1/-1"><span class="ev-guess-label">Франшизы</span>${franchiseCheckboxPicker(guessUniqueValues('franchises'), whoAmISettingsDraft.franchises, 'data-who-franchise')}</div><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-join')?.addEventListener('click', () => whoJoinRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         ['type','fromYear','toYear'].forEach(key => {
@@ -4848,7 +4803,6 @@
           input?.addEventListener('input', () => { whoAmISettingsDraft[key] = input.value; saveEventUiPreferences(); });
           input?.addEventListener('change', () => { whoAmISettingsDraft[key] = input.value; saveEventUiPreferences(); });
         });
-        document.querySelectorAll('[data-who-franchise]').forEach(input => input.addEventListener('change', () => { whoAmISettingsDraft.franchises = [...document.querySelectorAll('[data-who-franchise]:checked')].map(row => row.value); input.closest('label')?.classList.toggle('active', input.checked); saveEventUiPreferences(); }));
         $('#ev-who-start')?.addEventListener('click', () => whoStartGame().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         return;
       }
@@ -5095,7 +5049,6 @@
       if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
       if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
       if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
-      if (!openingMatchesFranchises(opening, guessFilters.franchises)) return false;
       if (guessFilters.answerTarget === 'franchise' && !(opening.franchises || []).some(value => String(value || '').trim())) return false;
 
       const content = guessContentFlags(guessFilters.content);
@@ -6308,7 +6261,6 @@
       const studios = guessUniqueValues('studios');
       const directors = guessUniqueValues('directors');
       const performers = guessUniqueValues('performers');
-      const franchises = guessUniqueValues('franchises');
       const users = guessUserOptions();
       const selectedUsers = new Set((guessFilters.users || []).map(normalizeNickname).filter(Boolean));
       const candidates = getGuessCandidates();
@@ -6439,10 +6391,6 @@
                 <select id="ev-guess-performer">${guessSelectOptions(performers, guessFilters.performer)}</select>
               </label>
 
-              <div class="ev-guess-field wide">
-                <span class="ev-guess-label">Франшизы</span>
-                ${franchiseCheckboxPicker(franchises, guessFilters.franchises, 'data-guess-franchise')}
-              </div>
 
               <label class="ev-guess-field wide">
                 <span class="ev-guess-label">Откуда брать песни</span>
@@ -6551,10 +6499,6 @@
       setAndRender('#ev-guess-studio', 'studio');
       setAndRender('#ev-guess-director', 'director');
       setAndRender('#ev-guess-performer', 'performer');
-      document.querySelectorAll('[data-guess-franchise]').forEach(input => input.addEventListener('change', () => {
-        guessFilters.franchises = [...document.querySelectorAll('[data-guess-franchise]:checked')].map(row => row.value);
-        clearSelectionAndRender();
-      }));
       setAndRender('#ev-guess-source', 'source');
       setAndRender('#ev-guess-score-overall-cmp', 'scoreOverallCmp');
       setAndRender('#ev-guess-score-song-cmp', 'scoreSongCmp');
@@ -6638,7 +6582,7 @@
       $('#ev-guess-reset')?.addEventListener('click', () => {
         Object.assign(guessFilters, {
           search: '', count: 50, answerMode: 'four', answerTarget: 'song', clipSeconds: 10, listenCount: 3,
-          source: 'all', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', studio: '', director: '', performer: '', franchise: '', franchises: [],
+          source: 'all', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', studio: '', director: '', performer: '', franchise: '',
           content: 'all', users: [], scoreLogic: 'and',
           scoreOverallCmp: 'gte', scoreOverallValue: '',
           scoreSongCmp: 'gte', scoreSongValue: '',
