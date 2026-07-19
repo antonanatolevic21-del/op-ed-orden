@@ -7244,12 +7244,27 @@
             }, 3000);
             return;
           }
+          const entryToDelete = entriesById.get(String(id));
+          const fallbackToDelete = String(entryToDelete && entryToDelete.fallbackImage || '').trim();
           try {
+            await window.OPED_DB.deleteOpening(id);
             entries = entries.filter(x => x.id !== id);
             populateFilterOptions();
             render();
-            await window.OPED_DB.deleteOpening(id);
-            setStatus('Удалено из Firebase ✓');
+
+            if (fallbackToDelete) {
+              try {
+                const removed = await deleteFallbackImageCopy(fallbackToDelete);
+                setStatus(removed
+                  ? 'Трек и резервная картинка удалены ✓'
+                  : 'Трек удалён. Резервная ссылка была внешней, файл не удалялся.');
+              } catch (deleteError) {
+                console.error('Deleted track fallback cleanup failed', deleteError);
+                setStatus('Трек удалён, но резервную картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
+              }
+            } else {
+              setStatus('Удалено из Firebase ✓');
+            }
           } catch (err) {
             console.error(err);
             setStatus('Не удалось удалить из Firebase.', true);
