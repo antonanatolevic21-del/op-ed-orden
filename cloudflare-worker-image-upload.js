@@ -138,6 +138,43 @@ async function uploadImage(request, env) {
   });
 }
 
+
+async function deleteImage(request, env) {
+  let body;
+  try { body = await request.json(); } catch (_) { return json(request, env, { error: "Некорректный JSON" }, 400); }
+  const path = String(body.path || "");
+  if (!/^images\/[a-z0-9][a-z0-9-]{0,99}\.webp$/.test(path)) {
+    return json(request, env, { error: "Удалять можно только WebP-файлы из images/" }, 400);
+  }
+
+  const apiPath = "/contents/" + path.split("/").map(encodeURIComponent).join("/");
+  const existing = await githubRequest(env, apiPath + "?ref=main");
+  if (existing.status === 404) return json(request, env, { ok: true, path, alreadyMissing: true });
+  const current = await existing.json().catch(() => ({}));
+  if (!existing.ok || !current.sha) {
+    return json(request, env, { error: current.message || ("GitHub не разрешил проверить файл: HTTP " + existing.status) }, 502);
+  }
+
+  const removed = await githubRequest(env, apiPath, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: "delete replaced fallback image " + path,
+      sha: current.sha,
+      branch: "main"
+    })
+  });
+  const result = await removed.json().catch(() => ({}));
+  if (!removed.ok) {
+    return json(request, env, { error: result.message || ("GitHub delete failed: HTTP " + removed.status) }, 502);
+  }
+  return json(request, env, {
+    ok: true,
+    path,
+    commit: result.commit && result.commit.sha ? result.commit.sha : ""
+  });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request, env) });
@@ -149,6 +186,7 @@ export default {
     try {
       if (request.method === "POST" && url.pathname === "/proxy-image") return await proxyImage(request, env);
       if (request.method === "POST" && url.pathname === "/upload") return await uploadImage(request, env);
+      if (request.method === "POST" && url.pathname === "/delete") return await deleteImage(request, env);
       return json(request, env, { error: "Маршрут не найден" }, 404);
     } catch (error) {
       console.error(error);
