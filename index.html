@@ -3573,11 +3573,57 @@
       const fallback = String(img.dataset.fallback || '').trim();
       if (fallback && img.dataset.fallbackTried !== '1') {
         img.dataset.fallbackTried = '1';
+        if (img._ocFallbackTimer) clearTimeout(img._ocFallbackTimer);
         img.src = fallback;
         return;
       }
       img.replaceWith(document.createTextNode('нет изображения'));
     };
+
+    function armFastImageFallback(img) {
+      if (!img || img.dataset.fallbackArmed === '1') return;
+      const fallback = String(img.dataset.fallback || '').trim();
+      if (!fallback) return;
+      img.dataset.fallbackArmed = '1';
+      if (img.complete && img.naturalWidth > 0) {
+        img.dataset.primaryLoaded = '1';
+        return;
+      }
+
+      const startedAt = Date.now();
+      const probe = new Image();
+      let fallbackReady = false;
+      const switchIfSlow = () => {
+        if (img.dataset.primaryLoaded === '1' || img.dataset.fallbackTried === '1' || !fallbackReady) return;
+        window.ocUseFallbackImage(img);
+      };
+      probe.onload = () => {
+        fallbackReady = true;
+        const remaining = Math.max(0, 1500 - (Date.now() - startedAt));
+        img._ocFallbackTimer = setTimeout(switchIfSlow, remaining);
+      };
+      probe.src = fallback;
+      img.addEventListener('load', () => {
+        if (img.dataset.fallbackTried !== '1') {
+          img.dataset.primaryLoaded = '1';
+          if (img._ocFallbackTimer) clearTimeout(img._ocFallbackTimer);
+        }
+      });
+    }
+
+    function armFallbackImages(root) {
+      const scope = root && root.querySelectorAll ? root : document;
+      scope.querySelectorAll('img[data-fallback]').forEach(armFastImageFallback);
+      if (root && root.matches && root.matches('img[data-fallback]')) armFastImageFallback(root);
+    }
+
+    const fallbackImageObserver = new MutationObserver(mutations => {
+      mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+        if (node && node.nodeType === 1) armFallbackImages(node);
+      }));
+    });
+    fallbackImageObserver.observe(document.documentElement, { childList: true, subtree: true });
+    armFallbackImages(document);
 
     function safeExternalUrl(url) {
       const normalized = normalizeUrl(String(url || '').trim());
