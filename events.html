@@ -1260,6 +1260,30 @@
       .ev-cn-clue-form { grid-template-columns: 1fr; }
     }
 
+
+    .ev-mini-game { display:grid; gap:14px; }
+    .ev-game-panel { background:var(--panel,#15111e); border:1px solid var(--border); border-radius:14px; padding:16px; }
+    .ev-game-config { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; align-items:end; }
+    .ev-game-config label { display:grid; gap:5px; color:var(--muted); font-size:11px; }
+    .ev-game-config input,.ev-game-config select,.ev-who-input { width:100%; box-sizing:border-box; background:#0f0c16; color:var(--text); border:1px solid var(--border); border-radius:8px; padding:9px; }
+    .ev-blind-current { display:grid; grid-template-columns:minmax(180px,320px) 1fr; gap:16px; align-items:center; }
+    .ev-blind-current img,.ev-blind-slot img,.ev-who-card img { width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:9px; background:#0b0910; }
+    .ev-blind-slots { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:9px; }
+    .ev-blind-slot { min-height:92px; border:1px dashed var(--border); border-radius:10px; padding:8px; background:#0f0c16; color:var(--text); cursor:pointer; text-align:left; }
+    .ev-blind-slot.free:hover { border-color:var(--cyan); transform:translateY(-1px); }
+    .ev-blind-rank { color:var(--cyan); font:700 11px 'Space Mono',monospace; }
+    .ev-blind-slot-title { margin-top:6px; font-weight:800; line-height:1.2; }
+    .ev-who-players,.ev-who-cards { display:flex; flex-wrap:wrap; gap:8px; }
+    .ev-who-player { padding:7px 10px; border:1px solid var(--border); border-radius:999px; color:var(--muted); }
+    .ev-who-player.turn { border-color:var(--cyan); color:var(--cyan); }
+    .ev-who-player.done { border-color:var(--green); color:var(--green); }
+    .ev-who-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+    .ev-who-card { border:1px solid var(--border); border-radius:12px; padding:10px; background:#0f0c16; }
+    .ev-who-secret { display:grid; place-items:center; aspect-ratio:16/9; border-radius:9px; background:linear-gradient(135deg,rgba(255,46,99,.18),rgba(8,217,214,.15)); font:32px 'Archivo Black',sans-serif; }
+    .ev-who-history { display:grid; gap:8px; max-height:320px; overflow:auto; }
+    .ev-who-question { border-left:3px solid var(--border); padding:8px 10px; background:#0f0c16; border-radius:0 8px 8px 0; }
+    .ev-who-answer { font-weight:900; color:var(--cyan); }
+    @media(max-width:700px){.ev-blind-current{grid-template-columns:1fr}.ev-blind-current img{max-height:230px}}
   </style>
 </head>
 <body>
@@ -1283,6 +1307,8 @@
       <button class="ev-mode-tab" type="button" data-mode="bestworst">Угадай лучшее / худшее</button>
       <button class="ev-mode-tab" type="button" data-mode="predictions">Предикты</button>
       <button class="ev-mode-tab" type="button" data-mode="codenames">Codenames</button>
+      <button class="ev-mode-tab" type="button" data-mode="blindtier">Слепой тир-лист</button>
+      <button class="ev-mode-tab" type="button" data-mode="whoami">Кто я?</button>
     </nav>
 
     <nav class="ev-tabs" id="ev-stage-tabs">
@@ -1547,6 +1573,12 @@
     const CODENAMES_ROOM_ID = 'current';
     let codenamesRoom = null;
     let codenamesStatus = '';
+    const BLIND_TIER_KEY = 'aboba-events-blind-tier-v1';
+    const WHO_AM_I_COLLECTION = 'eventCodenames';
+    const WHO_AM_I_ROOM_ID = 'whoami-current';
+    let blindTierState = null;
+    let whoAmIRoom = null;
+    let whoAmIStatus = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -1943,6 +1975,7 @@
         franchises: Array.isArray(row.franchises) ? row.franchises : [],
         alternativeTitles: normalizeOpeningAlternativeTitles(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames),
         image: String(row.image || ''),
+        fallbackImage: String(row.fallbackImage || row.imageFallback || ''),
         link: String(row.link || ''),
         notes: String(row.notes || ''),
         isChinese: Boolean(row.isChinese || row.chinese || row.isChina || row.chineseOpening),
@@ -4319,6 +4352,282 @@
       document.querySelectorAll('[data-cn-card]').forEach(btn => btn.addEventListener('click', () => cnRevealCard(Number(btn.dataset.cnCard))));
     }
 
+
+    function gameShuffle(values) {
+      const out = [...values];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    }
+
+    function openingImageMarkup(opening, alt = '') {
+      const primary = safeUrl(opening?.image);
+      const fallback = safeUrl(opening?.fallbackImage);
+      if (!primary && !fallback) return '<div class="ev-who-secret">♪</div>';
+      const src = primary || fallback;
+      const onerror = fallback && fallback !== src
+        ? `this.onerror=null;this.src='${escapeHtml(fallback)}'`
+        : "this.style.display='none'";
+      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt || getOpeningTitle(opening))}" onerror="${onerror}">`;
+    }
+
+    function loadBlindTierState() {
+      if (blindTierState) return blindTierState;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(BLIND_TIER_KEY) || 'null');
+        if (parsed && Array.isArray(parsed.queue) && Array.isArray(parsed.slots)) blindTierState = parsed;
+      } catch (_) {}
+      return blindTierState;
+    }
+
+    function saveBlindTierState() {
+      try {
+        if (blindTierState) localStorage.setItem(BLIND_TIER_KEY, JSON.stringify(blindTierState));
+        else localStorage.removeItem(BLIND_TIER_KEY);
+      } catch (_) {}
+    }
+
+    function blindTierCandidates(settings) {
+      return openings.filter(opening => {
+        if (settings.type && opening.type !== settings.type) return false;
+        if (settings.fromYear && (!opening.year || opening.year < settings.fromYear)) return false;
+        if (settings.toYear && (!opening.year || opening.year > settings.toYear)) return false;
+        return true;
+      });
+    }
+
+    function startBlindTier() {
+      const count = Math.max(3, Math.min(20, Number($('#ev-blind-count')?.value || 10)));
+      const settings = {
+        count,
+        type: String($('#ev-blind-type')?.value || ''),
+        fromYear: Number($('#ev-blind-from')?.value || 0) || 0,
+        toYear: Number($('#ev-blind-to')?.value || 0) || 0
+      };
+      const candidates = gameShuffle(blindTierCandidates(settings));
+      if (candidates.length < count) {
+        appEl.querySelector('#ev-blind-status').textContent = `Под фильтры попало только ${candidates.length}. Нужно минимум ${count}.`;
+        return;
+      }
+      blindTierState = { settings, queue: candidates.slice(0, count).map(item => item.id), slots: Array(count).fill(''), index: 0 };
+      saveBlindTierState();
+      renderBlindTier();
+    }
+
+    function resetBlindTier() {
+      blindTierState = null;
+      saveBlindTierState();
+      renderBlindTier();
+    }
+
+    function placeBlindTier(slot) {
+      const state = loadBlindTierState();
+      if (!state || state.slots[slot] || state.index >= state.queue.length) return;
+      state.slots[slot] = state.queue[state.index];
+      state.index += 1;
+      saveBlindTierState();
+      renderBlindTier();
+    }
+
+    function renderBlindTier() {
+      const state = loadBlindTierState();
+      if (!state || !state.queue.length) {
+        const years = openings.map(item => item.year).filter(Number.isFinite);
+        const minYear = years.length ? Math.min(...years) : '';
+        const maxYear = years.length ? Math.max(...years) : '';
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-section-label">Игра</div><h2>Слепой тир-лист</h2><p class="ev-hint">Песни появляются по одной. Выбери свободное место сразу — переставлять позже нельзя.</p><div class="ev-game-config"><label>Тип<select id="ev-blind-type"><option value="">OP и ED</option><option value="OP">Только OP</option><option value="ED">Только ED</option></select></label><label>Количество<input id="ev-blind-count" type="number" min="3" max="20" value="10"></label><label>Год от<input id="ev-blind-from" type="number" placeholder="${minYear}"></label><label>Год до<input id="ev-blind-to" type="number" placeholder="${maxYear}"></label><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
+        $('#ev-blind-start')?.addEventListener('click', startBlindTier);
+        return;
+      }
+      const finished = state.index >= state.queue.length;
+      const current = finished ? null : openingsById.get(String(state.queue[state.index]));
+      const slots = state.slots.map((id, index) => {
+        const opening = id ? openingsById.get(String(id)) : null;
+        return `<button type="button" class="ev-blind-slot ${opening ? 'filled' : 'free'}" data-blind-slot="${index}" ${opening || finished ? 'disabled' : ''}><div class="ev-blind-rank">МЕСТО #${index + 1}</div>${opening ? `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getOpeningTitle(opening))}</div>` : '<div class="ev-hint">свободно</div>'}</button>`;
+      }).join('');
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Слепой тир-лист</div><h2>${finished ? 'Готово!' : `Песня ${state.index + 1} из ${state.queue.length}`}</h2></div><button class="ev-btn-ghost" id="ev-blind-reset" type="button">Новая игра</button></div>${finished ? '<p class="ev-hint">Вот каким получился твой окончательный рейтинг.</p>' : `<div class="ev-blind-current">${openingImageMarkup(current)}<div><div class="ev-tag">${escapeHtml(current?.type || '')} · ${escapeHtml(current?.year || 'год неизвестен')}</div><h2>${escapeHtml(getOpeningTitle(current))}</h2><p class="ev-hint">Выбери свободное место. После выбора изменить его нельзя.</p></div></div>`}</div><div class="ev-blind-slots">${slots}</div></section>`;
+      $('#ev-blind-reset')?.addEventListener('click', resetBlindTier);
+      appEl.querySelectorAll('[data-blind-slot]').forEach(button => button.addEventListener('click', () => placeBlindTier(Number(button.dataset.blindSlot))));
+    }
+
+    function whoPlayerKey(name = myName) {
+      return normalizeGuessAnswer(String(name || '')).replace(/[^a-z0-9а-яё_-]+/gi, '-').slice(0, 60);
+    }
+
+    function whoPlayers(room = whoAmIRoom) {
+      return Array.isArray(room?.players) ? room.players.filter(player => player?.key && player?.name) : [];
+    }
+
+    function whoIsHost(room = whoAmIRoom) {
+      return Boolean(room && room.hostKey === whoPlayerKey());
+    }
+
+    async function whoCreateRoom() {
+      const name = String(myName || nameInput?.value || '').trim();
+      if (!name) { whoAmIStatus = 'Сначала укажи никнейм.'; renderWhoAmI(); return; }
+      const player = { key: whoPlayerKey(name), name };
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        status:'lobby', hostKey:player.key, hostName:name, players:[player],
+        settings:{ type:'', fromYear:null, toYear:null }, assignments:{}, questions:[], guessedKeys:[],
+        turnIndex:0, createdAt:serverTimestamp(), updatedAt:serverTimestamp()
+      });
+      whoAmIStatus = 'Комната создана.';
+    }
+
+    async function whoJoinRoom() {
+      if (!whoAmIRoom) return whoCreateRoom();
+      const name = String(myName || nameInput?.value || '').trim();
+      if (!name) { whoAmIStatus = 'Сначала укажи никнейм.'; renderWhoAmI(); return; }
+      const key = whoPlayerKey(name);
+      const players = whoPlayers();
+      if (!players.some(player => player.key === key)) players.push({ key, name });
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { players, updatedAt:serverTimestamp() }, { merge:true });
+    }
+
+    async function whoLeaveRoom() {
+      if (!whoAmIRoom) return;
+      const key = whoPlayerKey();
+      const players = whoPlayers().filter(player => player.key !== key);
+      if (!players.length || whoIsHost()) {
+        await deleteDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID));
+      } else {
+        await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { players, updatedAt:serverTimestamp() }, { merge:true });
+      }
+    }
+
+    function whoEligibleOpenings(settings) {
+      return openings.filter(opening => {
+        if (settings.type && opening.type !== settings.type) return false;
+        if (settings.fromYear && (!opening.year || opening.year < settings.fromYear)) return false;
+        if (settings.toYear && (!opening.year || opening.year > settings.toYear)) return false;
+        return true;
+      });
+    }
+
+    async function whoStartGame() {
+      if (!whoIsHost()) return;
+      const players = whoPlayers();
+      if (players.length < 2) { whoAmIStatus = 'Нужно минимум два игрока.'; renderWhoAmI(); return; }
+      const settings = {
+        type:String($('#ev-who-type')?.value || ''),
+        fromYear:Number($('#ev-who-from')?.value || 0) || null,
+        toYear:Number($('#ev-who-to')?.value || 0) || null
+      };
+      const candidates = gameShuffle(whoEligibleOpenings(settings));
+      if (candidates.length < players.length) { whoAmIStatus = 'Под фильтры попало недостаточно треков.'; renderWhoAmI(); return; }
+      const assignments = {};
+      players.forEach((player,index) => { assignments[player.key] = candidates[index].id; });
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        status:'playing', settings, assignments, questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
+      }, { merge:true });
+      whoAmIStatus = '';
+    }
+
+    function whoCurrentPlayer(room = whoAmIRoom) {
+      const players = whoPlayers(room);
+      const guessed = new Set(Array.isArray(room?.guessedKeys) ? room.guessedKeys : []);
+      if (!players.length || guessed.size >= players.length) return null;
+      for (let offset = 0; offset < players.length; offset++) {
+        const player = players[(Number(room?.turnIndex || 0) + offset) % players.length];
+        if (!guessed.has(player.key)) return player;
+      }
+      return null;
+    }
+
+    async function whoAskQuestion() {
+      const room = whoAmIRoom;
+      const current = whoCurrentPlayer(room);
+      const text = String($('#ev-who-question-input')?.value || '').trim();
+      if (!room || !current || current.key !== whoPlayerKey() || !text) return;
+      const questions = Array.isArray(room.questions) ? [...room.questions] : [];
+      questions.push({ id:Date.now().toString(36), playerKey:current.key, playerName:current.name, text, answer:'', answeredBy:'' });
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { questions, updatedAt:serverTimestamp() }, { merge:true });
+    }
+
+    async function whoAnswerQuestion(answer) {
+      const room = whoAmIRoom;
+      const questions = Array.isArray(room?.questions) ? [...room.questions] : [];
+      const index = questions.map(item => item.answer).lastIndexOf('');
+      if (index < 0 || questions[index].playerKey === whoPlayerKey()) return;
+      questions[index] = { ...questions[index], answer, answeredBy:String(myName || '') };
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { questions, updatedAt:serverTimestamp() }, { merge:true });
+    }
+
+    async function whoGuess() {
+      const room = whoAmIRoom;
+      const current = whoCurrentPlayer(room);
+      if (!room || !current || current.key !== whoPlayerKey()) return;
+      const text = String($('#ev-who-guess-input')?.value || '').trim();
+      const assignedId = String(room.assignments?.[current.key] || '');
+      const assigned = openingsById.get(assignedId);
+      const guessedOpening = openings.find(opening => getOpeningSearchTitles(opening).some(title => normalizeGuessAnswer(title) === normalizeGuessAnswer(text)));
+      if (!assigned || !guessedOpening || guessedOpening.id !== assigned.id) {
+        whoAmIStatus = 'Нет, это не тот трек. Можно задавать следующий вопрос.';
+        renderWhoAmI();
+        return;
+      }
+      const players = whoPlayers(room);
+      const guessedKeys = [...new Set([...(room.guessedKeys || []), current.key])];
+      const currentIndex = players.findIndex(player => player.key === current.key);
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        guessedKeys, turnIndex:(currentIndex + 1) % Math.max(1, players.length), updatedAt:serverTimestamp()
+      }, { merge:true });
+      whoAmIStatus = 'Угадано!';
+    }
+
+    async function whoNextTurn() {
+      if (!whoIsHost() || !whoAmIRoom) return;
+      const players = whoPlayers();
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        turnIndex:(Number(whoAmIRoom.turnIndex || 0) + 1) % Math.max(1, players.length), updatedAt:serverTimestamp()
+      }, { merge:true });
+    }
+
+    async function whoResetRoom() {
+      if (!whoIsHost() || !whoAmIRoom) return;
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        status:'lobby', assignments:{}, questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
+      }, { merge:true });
+    }
+
+    function renderWhoAmI() {
+      const room = whoAmIRoom;
+      const ownKey = whoPlayerKey();
+      if (!room) {
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-section-label">Комнатная игра</div><h2>Кто я?</h2><p class="ev-hint">Каждый видит карточки остальных, но не знает собственный OP/ED. Задавайте вопросы с ответами «да», «нет» или «неизвестно».</p><button class="ev-btn-main" id="ev-who-create" type="button">Создать комнату</button><div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        $('#ev-who-create')?.addEventListener('click', () => whoCreateRoom().catch(error => { whoAmIStatus=error.message;renderWhoAmI(); }));
+        return;
+      }
+      const players = whoPlayers(room);
+      const joined = players.some(player => player.key === ownKey);
+      const guessed = new Set(Array.isArray(room.guessedKeys) ? room.guessedKeys : []);
+      if (room.status !== 'playing') {
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="">OP и ED</option><option value="OP">Только OP</option><option value="ED">Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number"></label><label>Год до<input id="ev-who-to" type="number"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        $('#ev-who-join')?.addEventListener('click', () => whoJoinRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+        $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+        $('#ev-who-start')?.addEventListener('click', () => whoStartGame().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+        return;
+      }
+      const current = whoCurrentPlayer(room);
+      const finished = guessed.size >= players.length;
+      const pending = [...(room.questions || [])].reverse().find(question => !question.answer);
+      const cards = players.map(player => {
+        const opening = openingsById.get(String(room.assignments?.[player.key] || ''));
+        const own = player.key === ownKey && !finished && !guessed.has(player.key);
+        return `<div class="ev-who-card"><div class="ev-blind-rank">${escapeHtml(player.name)}</div>${own ? '<div class="ev-who-secret">?</div><div class="ev-blind-slot-title">Твоя карточка скрыта</div>' : `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getOpeningTitle(opening))}</div>`}</div>`;
+      }).join('');
+      const questions = (room.questions || []).map(question => `<div class="ev-who-question"><b>${escapeHtml(question.playerName)}:</b> ${escapeHtml(question.text)} <span class="ev-who-answer">${escapeHtml(question.answer || '…')}</span>${question.answeredBy ? ` <span class="ev-hint">— ${escapeHtml(question.answeredBy)}</span>` : ''}</div>`).join('');
+      const myTurn = current?.key === ownKey;
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div>${whoIsHost() ? '<div class="ev-actions"><button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button></div>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+      $('#ev-who-ask')?.addEventListener('click', () => whoAskQuestion().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+      $('#ev-who-guess')?.addEventListener('click', () => whoGuess().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+      $('#ev-who-next')?.addEventListener('click', () => whoNextTurn().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+      $('#ev-who-reset')?.addEventListener('click', () => whoResetRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+      appEl.querySelectorAll('[data-who-answer]').forEach(button => button.addEventListener('click', () => whoAnswerQuestion(button.dataset.whoAnswer).catch(error => {whoAmIStatus=error.message;renderWhoAmI();})));
+    }
+
     function render() {
       if (!canAccessMode(activeMode)) activeMode = 'rating';
       updateAccessUi();
@@ -4343,6 +4652,14 @@
       }
       if (activeMode === 'codenames') {
         renderCodenamesEvent();
+        return;
+      }
+      if (activeMode === 'blindtier') {
+        renderBlindTier();
+        return;
+      }
+      if (activeMode === 'whoami') {
+        renderWhoAmI();
         return;
       }
       if (isGuest()) {
@@ -7358,7 +7675,7 @@
     function bindShell() {
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          const requestedMode = ['guess', 'bestworst', 'predictions', 'codenames'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
+          const requestedMode = ['guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
           if (!canAccessMode(requestedMode)) {
             activeMode = 'rating';
             render();
@@ -7547,6 +7864,15 @@
         bestWorstSubmissions = [];
         bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
         scheduleRender();
+      });
+      onSnapshot(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), snapshot => {
+        whoAmIRoom = snapshot.exists() ? { id:snapshot.id, ...snapshot.data() } : null;
+        if (activeMode === 'whoami') scheduleRender();
+      }, error => {
+        console.error('whoami room snapshot error', error);
+        whoAmIRoom = null;
+        whoAmIStatus = 'Не удалось загрузить комнату «Кто я?». Проверь доступ к eventCodenames.';
+        if (activeMode === 'whoami') scheduleRender();
       });
       onSnapshot(doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID), snapshot => {
         codenamesRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
