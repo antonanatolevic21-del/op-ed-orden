@@ -2002,6 +2002,28 @@
       };
     }
 
+    function openingGameSignature(opening) {
+      return JSON.stringify([
+        opening.id,
+        opening.title,
+        opening.anime,
+        opening.type,
+        opening.year,
+        opening.season,
+        opening.studios,
+        opening.directors,
+        opening.performers,
+        opening.franchises,
+        opening.alternativeTitles,
+        opening.image,
+        opening.link,
+        opening.notes,
+        opening.isChinese,
+        opening.isMovie,
+        opening.isShortened
+      ]);
+    }
+
     function safeUrl(value) {
       const raw = String(value || '').trim();
       if (!raw) return '';
@@ -7845,9 +7867,14 @@
         console.error('anonymous auth failed', e);
       }
       onSnapshot(collection(db, 'openings'), snapshot => {
-        openings = snapshot.docs.map(d => normalizeOpening({ id: d.id, ...d.data() }));
+        const nextOpenings = snapshot.docs.map(d => normalizeOpening({ id: d.id, ...d.data() }));
+        const previousSignatures = new Map(openings.map(opening => [String(opening.id), openingGameSignature(opening)]));
+        const gameDataChanged = nextOpenings.length !== openings.length || nextOpenings.some(opening =>
+          previousSignatures.get(String(opening.id)) !== openingGameSignature(opening)
+        );
+        openings = nextOpenings;
         openingsById = new Map(openings.map(o => [String(o.id), o]));
-        scheduleRender();
+        if (gameDataChanged) scheduleRender();
       }, error => {
         console.error('openings snapshot error', error);
         appEl.innerHTML = '<div class="ev-empty">Не удалось загрузить OP/ED из Firebase.</div>';
