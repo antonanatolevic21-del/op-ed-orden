@@ -2546,7 +2546,6 @@
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
     const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
-    const IMAGE_FALLBACK_PREFS_KEY = 'op-ed-image-fallback-prefs-v1';
 
     const EVENT_BASKET_ALLOWED = new Set(['пескошачий', 'egortos']);
     const MIN_PUBLIC_VOTES = 3;
@@ -3553,50 +3552,36 @@
       return clean;
     }
 
-    function imageFallbackPreferenceId(primary) {
-      const nickname = String(myName || '').trim().toLowerCase();
-      if (!nickname || !primary) return '';
-      let hash = 2166136261;
-      const value = String(primary);
-      for (let i = 0; i < value.length; i++) {
-        hash ^= value.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
+    const temporaryImageFallbacks = new Map();
+    const TEMPORARY_IMAGE_FALLBACK_TTL = 5 * 60 * 1000;
+    try { localStorage.removeItem('op-ed-image-fallback-prefs-v1'); } catch (_) {}
+
+    function imagePrimarySource(img) {
+      return String(img && (img.dataset.primarySource || img.getAttribute('src')) || '').trim();
+    }
+
+    function rememberTemporaryImageFallback(img) {
+      const primary = imagePrimarySource(img);
+      if (primary) temporaryImageFallbacks.set(primary, Date.now());
+    }
+
+    function hasTemporaryImageFallback(img) {
+      const primary = imagePrimarySource(img);
+      if (!primary) return false;
+      const failedAt = Number(temporaryImageFallbacks.get(primary) || 0);
+      if (!failedAt) return false;
+      if (Date.now() - failedAt >= TEMPORARY_IMAGE_FALLBACK_TTL) {
+        temporaryImageFallbacks.delete(primary);
+        return false;
       }
-      return nickname + '|' + (hash >>> 0).toString(36);
-    }
-
-    function readImageFallbackPreferences() {
-      try {
-        const value = JSON.parse(localStorage.getItem(IMAGE_FALLBACK_PREFS_KEY) || '{}');
-        return value && typeof value === 'object' ? value : {};
-      } catch (_) { return {}; }
-    }
-
-    function rememberImageFallback(img) {
-      const primary = String(img && (img.dataset.primarySource || img.getAttribute('src')) || '').trim();
-      const id = imageFallbackPreferenceId(primary);
-      if (!id) return;
-      const preferences = readImageFallbackPreferences();
-      preferences[id] = Date.now();
-      const ids = Object.keys(preferences);
-      if (ids.length > 2000) {
-        ids.sort((a, b) => Number(preferences[b] || 0) - Number(preferences[a] || 0));
-        ids.slice(2000).forEach(key => delete preferences[key]);
-      }
-      try { localStorage.setItem(IMAGE_FALLBACK_PREFS_KEY, JSON.stringify(preferences)); } catch (_) {}
-    }
-
-    function hasRememberedImageFallback(img) {
-      const primary = String(img && (img.dataset.primarySource || img.getAttribute('src')) || '').trim();
-      const id = imageFallbackPreferenceId(primary);
-      return Boolean(id && readImageFallbackPreferences()[id]);
+      return true;
     }
 
     window.ocUseFallbackImage = function(img) {
       if (!img) return;
       const fallback = String(img.dataset.fallback || '').trim();
       if (fallback && img.dataset.fallbackTried !== '1') {
-        rememberImageFallback(img);
+        rememberTemporaryImageFallback(img);
         img.dataset.fallbackTried = '1';
         if (img._ocFallbackTimer) clearTimeout(img._ocFallbackTimer);
         img.src = fallback;
@@ -3611,7 +3596,7 @@
       if (!fallback) return;
       img.dataset.fallbackArmed = '1';
       img.dataset.primarySource = String(img.getAttribute('src') || img.src || '').trim();
-      if (hasRememberedImageFallback(img)) {
+      if (hasTemporaryImageFallback(img)) {
         window.ocUseFallbackImage(img);
         return;
       }
@@ -3627,6 +3612,7 @@
       img.addEventListener('load', () => {
         if (img.dataset.fallbackTried !== '1') {
           img.dataset.primaryLoaded = '1';
+          temporaryImageFallbacks.delete(imagePrimarySource(img));
           if (img._ocFallbackTimer) clearTimeout(img._ocFallbackTimer);
         }
       });
