@@ -1632,6 +1632,7 @@
     };
     let whoAmIQuestionDraft = '';
     let whoAmIGuessDraft = '';
+    let whoAmIPickDraft = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -2029,6 +2030,8 @@
         alternativeTitles: normalizeOpeningAlternativeTitles(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames),
         image: String(row.image || ''),
         fallbackImage: String(row.fallbackImage || row.imageFallback || ''),
+        sameSongGroupId: String(row.sameSongGroupId || row.songGroupId || '').trim(),
+        sameSongTitle: String(row.sameSongTitle || row.songGroupTitle || '').trim(),
         link: String(row.link || ''),
         notes: String(row.notes || ''),
         isChinese: Boolean(row.isChinese || row.chinese || row.isChina || row.chineseOpening),
@@ -2051,6 +2054,8 @@
         opening.franchises,
         opening.alternativeTitles,
         opening.image,
+        opening.sameSongGroupId,
+        opening.sameSongTitle,
         opening.link,
         opening.notes,
         opening.isChinese,
@@ -3212,6 +3217,7 @@
     // «Название — TV Version», «Название (NC Version 2)» и
     // «Название — версия 3» получают один ключ, но исходные названия не меняются.
     function bwOpeningVariantKey(opening) {
+      if (opening?.sameSongGroupId) return 'song:' + String(opening.sameSongGroupId);
       const fallback = `id:${String(opening?.id || '')}`;
       let title = normalizeGuessAnswer(getOpeningTitle(opening));
       if (!title || title === 'без названия') return fallback;
@@ -4212,7 +4218,7 @@
       const unique = [];
       const seen = new Set();
       for (const opening of guessShuffle(rows)) {
-        const key = bwOpeningVariantKey(opening);
+        const key = sameSongKey(opening);
         if (seen.has(key)) continue;
         seen.add(key);
         unique.push(opening);
@@ -4629,12 +4635,12 @@
     }
 
     function whoEligibleOpenings(settings) {
-      return openings.filter(opening => {
+      return dedupeSameSongRows(gameShuffle(openings.filter(opening => {
         if (settings.type && opening.type !== settings.type) return false;
         if (settings.fromYear && (!opening.year || opening.year < settings.fromYear)) return false;
         if (settings.toYear && (!opening.year || opening.year > settings.toYear)) return false;
         return true;
-      });
+      })));
     }
 
     async function whoStartGame() {
@@ -4646,14 +4652,63 @@
         fromYear:Number(whoAmISettingsDraft.fromYear || 0) || null,
         toYear:Number(whoAmISettingsDraft.toYear || 0) || null
       };
-      const candidates = gameShuffle(whoEligibleOpenings(settings));
-      if (candidates.length < players.length) { whoAmIStatus = 'Под фильтры попало недостаточно треков.'; renderWhoAmI(); return; }
-      const assignments = {};
-      players.forEach((player,index) => { assignments[player.key] = candidates[index].id; });
+      const candidates = whoEligibleOpenings(settings);
+      if (candidates.length < players.length) { whoAmIStatus = 'Под фильтры попало недостаточно разных песен.'; renderWhoAmI(); return; }
+      const pickerOrder = gameShuffle(players.map(player => player.key));
+      let targetOrder = [];
+      for (let attempt = 0; attempt < 100; attempt++) {
+        targetOrder = gameShuffle(players.map(player => player.key));
+        if (targetOrder.every((targetKey,index) => targetKey !== pickerOrder[index])) break;
+      }
+      if (targetOrder.some((targetKey,index) => targetKey === pickerOrder[index])) {
+        targetOrder = pickerOrder.map((_,index) => pickerOrder[(index + 1) % pickerOrder.length]);
+      }
+      const pickTargets = {};
+      pickerOrder.forEach((pickerKey,index) => { pickTargets[pickerKey] = targetOrder[index]; });
       await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
-        status:'playing', settings, assignments, questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
+        status:'picking', settings, assignments:{}, pickTargets, pickerOrder, pickerIndex:0,
+        questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
       }, { merge:true });
       whoAmIStatus = '';
+    }
+
+    function whoCurrentPicker(room = whoAmIRoom) {
+      const order = Array.isArray(room?.pickerOrder) ? room.pickerOrder : [];
+      const key = String(order[Number(room?.pickerIndex || 0)] || '');
+      return whoPlayers(room).find(player => player.key === key) || null;
+    }
+
+    function whoAvailablePickOpenings(room = whoAmIRoom) {
+      const candidates = whoEligibleOpenings(room?.settings || {});
+      const usedKeys = new Set(Object.values(room?.assignments || {}).map(id => sameSongKey(openingsById.get(String(id)))));
+      return candidates.filter(opening => !usedKeys.has(sameSongKey(opening)));
+    }
+
+    async function whoSubmitPick() {
+      const room = whoAmIRoom;
+      const picker = whoCurrentPicker(room);
+      if (!room || room.status !== 'picking' || picker?.key !== whoPlayerKey()) return;
+      const answer = normalizeGuessAnswer(whoAmIPickDraft);
+      const opening = whoAvailablePickOpenings(room).find(row =>
+        getOpeningSearchTitles(row).some(title => normalizeGuessAnswer(title) === answer)
+        || normalizeGuessAnswer(row.sameSongTitle) === answer
+      );
+      if (!opening) {
+        whoAmIStatus = 'Выбери доступный OP/ED из списка.';
+        renderWhoAmI();
+        return;
+      }
+      const targetKey = String(room.pickTargets?.[picker.key] || '');
+      if (!targetKey || targetKey === picker.key) throw new Error('Некорректное распределение игроков');
+      const assignments = { ...(room.assignments || {}), [targetKey]:opening.id };
+      const nextIndex = Number(room.pickerIndex || 0) + 1;
+      const complete = nextIndex >= (room.pickerOrder || []).length;
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        assignments, pickerIndex:nextIndex, status:complete ? 'playing' : 'picking',
+        turnIndex:0, updatedAt:serverTimestamp()
+      }, { merge:true });
+      whoAmIPickDraft = '';
+      whoAmIStatus = complete ? 'Все карточки выбраны. Игра начинается!' : '';
     }
 
     function whoCurrentPlayer(room = whoAmIRoom) {
@@ -4695,7 +4750,7 @@
       const assignedId = String(room.assignments?.[current.key] || '');
       const assigned = openingsById.get(assignedId);
       const guessedOpening = openings.find(opening => getOpeningSearchTitles(opening).some(title => normalizeGuessAnswer(title) === normalizeGuessAnswer(text)));
-      if (!assigned || !guessedOpening || guessedOpening.id !== assigned.id) {
+      if (!assigned || !guessedOpening || sameSongKey(guessedOpening) !== sameSongKey(assigned)) {
         whoAmIStatus = 'Нет, это не тот трек. Можно задавать следующий вопрос.';
         renderWhoAmI();
         return;
@@ -4721,7 +4776,7 @@
     async function whoResetRoom() {
       if (!whoIsHost() || !whoAmIRoom) return;
       await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
-        status:'lobby', assignments:{}, questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
+        status:'lobby', assignments:{}, pickTargets:{}, pickerOrder:[], pickerIndex:0, questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
       }, { merge:true });
     }
 
@@ -4736,7 +4791,7 @@
       const players = whoPlayers(room);
       const joined = players.some(player => player.key === ownKey);
       const guessed = new Set(Array.isArray(room.guessedKeys) ? room.guessedKeys : []);
-      if (room.status !== 'playing') {
+      if (room.status === 'lobby') {
         appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-join')?.addEventListener('click', () => whoJoinRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
@@ -4747,6 +4802,20 @@
           input?.addEventListener('change', () => { whoAmISettingsDraft[key] = input.value; saveEventUiPreferences(); });
         });
         $('#ev-who-start')?.addEventListener('click', () => whoStartGame().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+        return;
+      }
+      if (room.status === 'picking') {
+        const picker = whoCurrentPicker(room);
+        const targetKey = String(room.pickTargets?.[picker?.key] || '');
+        const target = players.find(player => player.key === targetKey);
+        const available = whoAvailablePickOpenings(room);
+        const total = Array.isArray(room.pickerOrder) ? room.pickerOrder.length : players.length;
+        const done = Math.min(Number(room.pickerIndex || 0), total);
+        const myPick = picker?.key === ownKey;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Выбор карточек</div><h2>${done + 1} из ${total} · выбирает ${escapeHtml(picker?.name || '')}</h2></div>${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${player.key===picker?.key?'turn':''}">${escapeHtml(player.name)}</span>`).join('')}</div>${myPick ? `<div class="ev-game-config" style="margin-top:14px"><label style="grid-column:1/-1">Выбери OP/ED для игрока <b>${escapeHtml(target?.name || '')}</b><input class="ev-who-input" id="ev-who-pick-input" list="ev-who-pick-titles" value="${escapeHtml(whoAmIPickDraft)}" placeholder="Начни вводить название"></label><datalist id="ev-who-pick-titles">${available.flatMap(opening => [getOpeningTitle(opening), opening.sameSongTitle].filter(Boolean).map(title => `<option value="${escapeHtml(title)}"></option>`)).join('')}</datalist><button class="ev-btn-main" id="ev-who-pick-submit" type="button">Назначить тайно</button></div><p class="ev-hint">Игрок ${escapeHtml(target?.name || '')} не увидит выбранную ему карточку. Доступно: ${available.length} разных песен.</p>` : `<p class="ev-hint">Сейчас ${escapeHtml(picker?.name || '')} тайно выбирает карточку для другого случайно назначенного игрока.</p>`}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        $('#ev-who-pick-input')?.addEventListener('input', event => { whoAmIPickDraft = event.target.value; });
+        $('#ev-who-pick-submit')?.addEventListener('click', () => whoSubmitPick().catch(error => { whoAmIStatus=error.message;renderWhoAmI(); }));
+        $('#ev-who-reset')?.addEventListener('click', () => whoResetRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         return;
       }
       const current = whoCurrentPlayer(room);
@@ -4995,7 +5064,7 @@
 
     function getGuessCandidates() {
       const ratingContext = guessFilters.source === 'ratings' ? buildGuessRatingContext() : null;
-      return openings.filter(opening => guessOpeningMatches(opening, ratingContext) && !!getGuessPlaybackSource(opening));
+      return dedupeSameSongRows(guessShuffle(openings.filter(opening => guessOpeningMatches(opening, ratingContext) && !!getGuessPlaybackSource(opening))));
     }
 
     function guessShuffle(rows) {
@@ -5102,6 +5171,28 @@
       return guessFilters.answerTarget === 'franchise' ? guessFranchiseCatalog() : guessTitleCatalog();
     }
 
+    function sameSongKey(opening) {
+      const groupId = String(opening?.sameSongGroupId || '').trim();
+      return groupId ? 'song:' + groupId : 'opening:' + String(opening?.id || '');
+    }
+
+    function sameSongMembers(opening) {
+      const groupId = String(opening?.sameSongGroupId || '').trim();
+      return groupId ? openings.filter(row => String(row.sameSongGroupId || '').trim() === groupId) : [opening].filter(Boolean);
+    }
+
+    function dedupeSameSongRows(rows) {
+      const result = [];
+      const seen = new Set();
+      for (const opening of rows) {
+        const key = sameSongKey(opening);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(opening);
+      }
+      return result;
+    }
+
     function normalizeGuessAnswer(value) {
       return String(value || '')
         .trim()
@@ -5124,13 +5215,17 @@
       if (guessFilters.answerTarget === 'franchise') {
         return [...new Set((opening?.franchises || []).map(value => String(value || '').trim()).filter(Boolean))];
       }
-      return getOpeningSearchTitles(opening);
+      const labels = sameSongMembers(opening).flatMap(member => getOpeningSearchTitles(member));
+      if (opening?.sameSongTitle) labels.unshift(String(opening.sameSongTitle));
+      return [...new Set(labels.map(value => String(value || '').trim()).filter(Boolean))];
     }
 
     function getGuessCorrectDisplay(opening) {
       const labels = openingGuessLabels(opening);
       if (guessFilters.answerTarget === 'franchise') return labels.join(' / ') || 'Франшиза не указана';
-      return labels[0] || getOpeningTitle(opening);
+      return opening?.sameSongTitle
+        ? `${opening.sameSongTitle} · звучала версия: ${getOpeningTitle(opening)}`
+        : (labels[0] || getOpeningTitle(opening));
     }
 
     function acceptedGuessAnswers(opening) {
