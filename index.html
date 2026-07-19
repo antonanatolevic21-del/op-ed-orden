@@ -2088,6 +2088,7 @@
         <span id="oc-access-badge" class="oc-access-badge">гость</span>
         <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
         <button id="oc-db-import-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Импортировать OP/ED из AniSongDB">Импорт из базы</button>
+        <button id="oc-image-migration-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные копии старых изображений">Копии старых картинок</button>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
         <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
       </div>
@@ -2486,6 +2487,22 @@
 
     <div id="oc-franchise-repair-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Проверка франшиз"></div>
 
+    <div id="oc-image-migration-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Копирование старых изображений">
+      <div class="oc-db-import-dialog" style="width:min(760px,100%)">
+        <div class="oc-db-import-head">
+          <div><div class="oc-section-label">резервные изображения</div><h2>Копии старых картинок</h2></div>
+          <button class="oc-edit-cancel" type="button" data-image-migration-close>Закрыть</button>
+        </div>
+        <p class="oc-db-import-muted">Обрабатываются следующие 50 записей, у которых есть основная картинка, но ещё нет fallbackImage. Успешные результаты сразу сохраняются.</p>
+        <div class="oc-db-import-actions">
+          <button id="oc-image-migration-start" class="oc-addbtn" type="button">Обработать следующие 50</button>
+          <button id="oc-image-migration-stop" class="oc-edit-cancel" type="button" disabled>Остановить</button>
+        </div>
+        <div id="oc-image-migration-status" class="oc-db-import-status"></div>
+        <div id="oc-image-migration-log" style="max-height:45vh;overflow:auto;font:11px/1.5 'Space Mono',monospace"></div>
+      </div>
+    </div>
+
     <div id="oc-db-import-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Импорт из AniSongDB">
       <div class="oc-db-import-dialog">
         <div class="oc-db-import-head">
@@ -2618,6 +2635,11 @@
     const franchiseRepairModal = $('#oc-franchise-repair-modal');
     const dbImportModal = $('#oc-db-import-modal');
     const dbImportBtn = $('#oc-db-import-btn');
+    const imageMigrationBtn = $('#oc-image-migration-btn');
+    const imageMigrationModal = $('#oc-image-migration-modal');
+    let imageMigrationRunning = false;
+    let imageMigrationStopRequested = false;
+
     const DB_IMPORT_KEY = 'op-ed-anisong-import-tabs-v1';
     let dbImportState = { tabs: [], activeId: '' };
 
@@ -7705,6 +7727,109 @@
       await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
       return path;
     }
+
+
+    function existingImageMigrationCandidates() {
+      return entries.filter(entry =>
+        entry && entry.id && String(entry.image || '').trim() && !String(entry.fallbackImage || '').trim()
+      );
+    }
+
+    function imageMigrationStatus(message, error) {
+      const el = $('#oc-image-migration-status');
+      if (el) {
+        el.textContent = message || '';
+        el.style.color = error ? 'var(--pink)' : '';
+      }
+    }
+
+    function appendImageMigrationLog(message, error) {
+      const el = $('#oc-image-migration-log');
+      if (!el) return;
+      const row = document.createElement('div');
+      row.textContent = message;
+      row.style.color = error ? 'var(--pink)' : 'var(--muted)';
+      el.appendChild(row);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function openImageMigrationModal() {
+      if (!ensureAdmin()) return;
+      const remaining = existingImageMigrationCandidates().length;
+      imageMigrationStatus('Осталось без резервной копии: ' + remaining);
+      imageMigrationModal.classList.remove('hidden');
+    }
+
+    function closeImageMigrationModal() {
+      if (imageMigrationRunning) {
+        imageMigrationStopRequested = true;
+        imageMigrationStatus('Останавливаю после текущей картинки…');
+        return;
+      }
+      imageMigrationModal.classList.add('hidden');
+    }
+
+    async function runExistingImageMigrationBatch() {
+      if (imageMigrationRunning || !ensureAdmin()) return;
+      const candidates = existingImageMigrationCandidates().slice(0, 50);
+      if (!candidates.length) {
+        imageMigrationStatus('Все существующие картинки уже обработаны ✓');
+        return;
+      }
+      if (!getImageUploadSecret()) {
+        imageMigrationStatus('Не введён UPLOAD_SECRET.', true);
+        return;
+      }
+
+      imageMigrationRunning = true;
+      imageMigrationStopRequested = false;
+      $('#oc-image-migration-start').disabled = true;
+      $('#oc-image-migration-stop').disabled = false;
+      $('#oc-image-migration-log').innerHTML = '';
+      let success = 0;
+      let failed = 0;
+
+      for (let index = 0; index < candidates.length; index++) {
+        if (imageMigrationStopRequested) break;
+        const entry = candidates[index];
+        imageMigrationStatus('Обрабатываю ' + (index + 1) + ' из ' + candidates.length + ': ' + entry.title);
+        try {
+          const fallbackImage = await createFallbackImageCopy(entry.image, entry.title, entry.type);
+          await window.OPED_DB.updateOpening(entry.id, { ...entry, fallbackImage });
+          entry.fallbackImage = fallbackImage;
+          success++;
+          appendImageMigrationLog('✓ ' + entry.title + ' → ' + fallbackImage);
+        } catch (error) {
+          failed++;
+          const message = error && error.message ? error.message : 'неизвестная ошибка';
+          appendImageMigrationLog('✕ ' + entry.title + ': ' + message, true);
+          if (/неверный пароль|unauthorized|401/i.test(message)) {
+            imageMigrationStopRequested = true;
+            appendImageMigrationLog('Пакет остановлен: проверьте UPLOAD_SECRET.', true);
+          }
+        }
+      }
+
+      imageMigrationRunning = false;
+      $('#oc-image-migration-start').disabled = false;
+      $('#oc-image-migration-stop').disabled = true;
+      const remaining = existingImageMigrationCandidates().length;
+      imageMigrationStatus(
+        (imageMigrationStopRequested ? 'Остановлено. ' : 'Пачка завершена. ') +
+        'Успешно: ' + success + ', ошибок: ' + failed + ', осталось: ' + remaining,
+        failed > 0
+      );
+    }
+
+    if (imageMigrationBtn) imageMigrationBtn.addEventListener('click', openImageMigrationModal);
+    if ($('#oc-image-migration-start')) $('#oc-image-migration-start').addEventListener('click', runExistingImageMigrationBatch);
+    if ($('#oc-image-migration-stop')) $('#oc-image-migration-stop').addEventListener('click', () => {
+      imageMigrationStopRequested = true;
+      imageMigrationStatus('Останавливаю после текущей картинки…');
+    });
+    if (imageMigrationModal) imageMigrationModal.addEventListener('click', event => {
+      if (event.target === imageMigrationModal || event.target.closest('[data-image-migration-close]')) closeImageMigrationModal();
+    });
 
     $('#oc-add-btn').addEventListener('click', async () => {
       if (!ensureAdmin()) return;
