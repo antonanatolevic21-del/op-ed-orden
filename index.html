@@ -4188,51 +4188,9 @@
           avatar: myAvatar,
           updatedAt: ext.serverTimestamp()
         };
-        const rankDocWrites = [];
-        const currentOP = new Set(cleanRanks.OP.map(String));
-        const currentED = new Set(cleanRanks.ED.map(String));
-        const touchedRankDocs = new Set();
-        cleanRanks.OP.forEach((openingId, idx) => {
-          const id = String(openingId);
-          touchedRankDocs.add(id);
-          rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${id}`), {
-            openingId: id, nickname: myName, nicknameKey: safeName, avatar: myAvatar,
-            manualRankOP: idx + 1, updatedAt: ext.serverTimestamp()
-          }, { merge: true }));
-        });
-        cleanRanks.ED.forEach((openingId, idx) => {
-          const id = String(openingId);
-          touchedRankDocs.add(id);
-          rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${id}`), {
-            openingId: id, nickname: myName, nicknameKey: safeName, avatar: myAvatar,
-            manualRankED: idx + 1, updatedAt: ext.serverTimestamp()
-          }, { merge: true }));
-        });
-        (firebaseRatings || []).forEach(row => {
-          const openingId = String(row.openingId || '').trim();
-          if (!openingId || openingId === '__manualRanks') return;
-          const rowSafe = String(row.nicknameKey || '').trim() || manualUserSafeKey(row.nickname || row.displayName || row.name || '');
-          if (rowSafe !== safeName) return;
-          const cleanup = { updatedAt: ext.serverTimestamp() };
-          let needsCleanup = false;
-          if (Number.isFinite(Number(row.manualRankOP)) && !currentOP.has(openingId)) {
-            cleanup.manualRankOP = ext.deleteField();
-            needsCleanup = true;
-          }
-          if (Number.isFinite(Number(row.manualRankED)) && !currentED.has(openingId)) {
-            cleanup.manualRankED = ext.deleteField();
-            needsCleanup = true;
-          }
-          if (needsCleanup) {
-            touchedRankDocs.add(openingId);
-            rankDocWrites.push(ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${openingId}`), cleanup, { merge: true }));
-          }
-        });
         await Promise.allSettled([
           ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
-          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true }),
-          ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__manualRanks`), { ...payload, openingId: '__manualRanks', score: ext.deleteField(), songScore: ext.deleteField(), visualScore: ext.deleteField(), personalScore: ext.deleteField() }, { merge: true }),
-          ...rankDocWrites
+          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true })
         ]).then(results => {
           if (results.some(r => r.status === 'fulfilled')) savedRemote = true;
           results.filter(r => r.status === 'rejected').forEach(r => { console.error('Manual rank mirror save failed', r.reason); errors.push(r.reason); });
@@ -7735,24 +7693,9 @@
         manualED: cleanRanks.ED,
         updatedAt: serverTimestamp()
       };
-      const rankDocWrites = [];
-      cleanRanks.OP.forEach((openingId, idx) => {
-        rankDocWrites.push(setDoc(doc(db, "ratings", `${safeName}__${openingId}`), {
-          openingId: String(openingId), nickname: displayName, nicknameKey: safeName,
-          manualRankOP: idx + 1, updatedAt: serverTimestamp()
-        }, { merge: true }));
-      });
-      cleanRanks.ED.forEach((openingId, idx) => {
-        rankDocWrites.push(setDoc(doc(db, "ratings", `${safeName}__${openingId}`), {
-          openingId: String(openingId), nickname: displayName, nicknameKey: safeName,
-          manualRankED: idx + 1, updatedAt: serverTimestamp()
-        }, { merge: true }));
-      });
       const results = await Promise.allSettled([
         setDoc(doc(db, "manualRanks", safeName), payload, { merge: true }),
-        setDoc(doc(db, "userProfiles", safeName), payload, { merge: true }),
-        setDoc(doc(db, "ratings", `${safeName}__manualRanks`), { ...payload, openingId: "__manualRanks", score: deleteField(), songScore: deleteField(), visualScore: deleteField(), personalScore: deleteField() }, { merge: true }),
-        ...rankDocWrites
+        setDoc(doc(db, "userProfiles", safeName), payload, { merge: true })
       ]);
       const firstOk = results.find(r => r.status === 'fulfilled');
       if (!firstOk) throw results[0].reason;
