@@ -2139,6 +2139,7 @@
           <label class="oc-flag-check"><input id="oc-add-chinese" type="checkbox" /> Китайский OP/ED</label>
           <label class="oc-flag-check"><input id="oc-add-movie" type="checkbox" /> OP/ED фильма</label>
           <label class="oc-flag-check"><input id="oc-add-shortened" type="checkbox" /> Укороченный OP/ED</label>
+          <label class="oc-flag-check"><input id="oc-add-backup-image" type="checkbox" checked /> Сжать копию в images</label>
         </div>
         <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
       </div>
@@ -2560,6 +2561,9 @@
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
+    const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
+    const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
+
     const EVENT_BASKET_ALLOWED = new Set(['пескошачий', 'egortos']);
     const MIN_PUBLIC_VOTES = 3;
     const FIVE_SCORE_LABELS = { 1: 'залупа', 2: 'не очень', 3: '50/50', 4: 'норм', 5: 'заебись' };
@@ -7526,6 +7530,99 @@
       });
     }
 
+
+    function getImageUploadSecret() {
+      let secret = '';
+      try { secret = sessionStorage.getItem(IMAGE_UPLOAD_SECRET_KEY) || ''; } catch (_) {}
+      if (!secret) {
+        secret = String(window.prompt('Введите UPLOAD_SECRET из Cloudflare. Он сохранится только до закрытия этой вкладки.') || '').trim();
+        if (secret) {
+          try { sessionStorage.setItem(IMAGE_UPLOAD_SECRET_KEY, secret); } catch (_) {}
+        }
+      }
+      return secret;
+    }
+
+    function compactImageFileName(title, type, source) {
+      const base = String(title || '').toLowerCase().normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '').slice(0, 64) || 'track';
+      let hash = 2166136261;
+      const value = [title, type, source].join('|');
+      for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return 'images/' + base + '-' + type.toLowerCase() + '-' + (hash >>> 0).toString(36) + '.webp';
+    }
+
+    async function workerImageRequest(path, secret, body, responseType) {
+      const response = await fetch(IMAGE_UPLOAD_WORKER + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Upload-Secret': secret },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        let message = 'HTTP ' + response.status;
+        try { const data = await response.json(); message = data.error || message; } catch (_) {}
+        if (response.status === 401) {
+          try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
+        }
+        throw new Error(message);
+      }
+      return responseType === 'blob' ? response.blob() : response.json();
+    }
+
+    function canvasToWebp(canvas, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+          if (!blob || blob.type !== 'image/webp') reject(new Error('Браузер не смог сжать картинку в WebP'));
+          else resolve(blob);
+        }, 'image/webp', quality);
+      });
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+        reader.onerror = () => reject(new Error('Не удалось прочитать сжатую картинку'));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function createFallbackImageCopy(imageUrl, title, type) {
+      const secret = getImageUploadSecret();
+      if (!secret) throw new Error('Не введён UPLOAD_SECRET');
+      setStatus('Скачиваю основную картинку для резервной копии…');
+
+      const sourceBlob = await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob');
+      const bitmap = await createImageBitmap(sourceBlob);
+      if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 50000000) {
+        bitmap.close();
+        throw new Error('Слишком большое разрешение исходной картинки');
+      }
+      const maxSide = 1400;
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const context = canvas.getContext('2d', { alpha: false });
+      context.fillStyle = '#111';
+      context.fillRect(0, 0, width, height);
+      context.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+
+      setStatus('Сжимаю картинку в WebP…');
+      const webp = await canvasToWebp(canvas, 0.78);
+      const contentBase64 = await blobToBase64(webp);
+      const path = compactImageFileName(title, type, imageUrl);
+      setStatus('Загружаю резервную картинку в images/…');
+      await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
+      return path;
+    }
+
     $('#oc-add-btn').addEventListener('click', async () => {
       if (!ensureAdmin()) return;
       if (!ensureNickname()) return;
@@ -7541,7 +7638,8 @@
       const franchises = franchisesForSave(title, $('#oc-add-franchise').value);
       const alternativeTitles = alternativeTitlesForSave(title, $('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
       const image = $('#oc-add-image').value.trim();
-      const fallbackImage = $('#oc-add-fallback-image').value.trim();
+      let fallbackImage = $('#oc-add-fallback-image').value.trim();
+      const makeImageBackup = Boolean($('#oc-add-backup-image') && $('#oc-add-backup-image').checked);
       const link = $('#oc-add-link').value.trim();
       const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
       const isMovie = Boolean($('#oc-add-movie') && $('#oc-add-movie').checked);
@@ -7555,6 +7653,10 @@
       }
 
       try {
+        if (image && makeImageBackup && !fallbackImage) {
+          fallbackImage = await createFallbackImageCopy(image, title, type);
+          $('#oc-add-fallback-image').value = fallbackImage;
+        }
         const createdRef = await window.OPED_DB.addOpening({
           title,
           type,
@@ -7593,7 +7695,8 @@
         setStatus('Трек добавлен в Firebase ✓');
       } catch (err) {
         console.error(err);
-        setStatus('Не удалось добавить трек в Firebase.', true);
+        const message = err && err.message ? err.message : 'неизвестная ошибка';
+        setStatus('Не удалось добавить трек: ' + message + '. Если резервная копия не нужна, снимите галочку «Сжать копию в images».', true);
       }
     });
 
