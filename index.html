@@ -4480,11 +4480,51 @@
     function fillDatalist(selector, values) {
       const el = $(selector);
       if (!el) return;
-      el.innerHTML = uniqueSorted(values).slice(0, 500).map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+      el.innerHTML = uniqueSorted(values).slice(0, 80).map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+    }
+
+    const DATALIST_CATEGORY = {
+      'oc-dl-studios': 'studios',
+      'oc-dl-directors': 'directors',
+      'oc-dl-performers': 'performers',
+      'oc-dl-franchises': 'franchises'
+    };
+
+    function normalizeSuggestionText(value) {
+      return String(value || '').trim().toLowerCase().replace(/ё/g, 'е');
+    }
+
+    function refreshDynamicDatalist(input) {
+      if (!input) return;
+      const listId = input.getAttribute('list') || '';
+      const category = DATALIST_CATEGORY[listId];
+      const datalist = category ? document.getElementById(listId) : null;
+      if (!category || !datalist) return;
+
+      const raw = String(input.value || '');
+      const commaAt = raw.lastIndexOf(',');
+      const prefix = commaAt >= 0 ? raw.slice(0, commaAt + 1) : '';
+      const query = normalizeSuggestionText(commaAt >= 0 ? raw.slice(commaAt + 1) : raw);
+      const values = allCategoryValues(category);
+      const starts = [];
+      const contains = [];
+
+      values.forEach(value => {
+        const normalized = normalizeSuggestionText(value);
+        if (!query || normalized.startsWith(query)) starts.push(value);
+        else if (normalized.includes(query)) contains.push(value);
+      });
+
+      const matches = starts.concat(contains).slice(0, 80);
+      datalist.innerHTML = matches.map(value => {
+        const optionValue = prefix ? `${prefix} ${value}` : value;
+        return `<option value="${escapeHtml(optionValue)}"></option>`;
+      }).join('');
     }
 
     function refreshDatalists(groups) {
-      // Названия не кладём в datalist: для больших баз это очень тяжёлый список и визуально мешает.
+      // Подсказки обновляются динамически по введённому тексту, чтобы список не зависал
+      // и варианты за пределами первых 500 значений тоже всегда находились.
       fillDatalist('#oc-dl-titles', []);
       fillDatalist('#oc-dl-search', []);
       fillDatalist('#oc-dl-studios', groups.studios || []);
@@ -7284,6 +7324,15 @@
     document.querySelectorAll('[data-filter-suggest]').forEach(input => {
       input.addEventListener('change', () => addFilterValueFromInput(input));
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addFilterValueFromInput(input); } });
+    });
+
+    document.addEventListener('input', (e) => {
+      const input = e.target && e.target.closest ? e.target.closest('input[list]') : null;
+      if (input) refreshDynamicDatalist(input);
+    });
+    document.addEventListener('focusin', (e) => {
+      const input = e.target && e.target.closest ? e.target.closest('input[list]') : null;
+      if (input) refreshDynamicDatalist(input);
     });
 
     function resetAllFilters() {
