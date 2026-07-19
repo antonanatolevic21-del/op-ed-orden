@@ -1525,6 +1525,33 @@
     if (savedEventUiPreferences.guessFilters && typeof savedEventUiPreferences.guessFilters === 'object') {
       Object.assign(guessFilters, savedEventUiPreferences.guessFilters);
     }
+    const blindTierFilters = {
+      search: '',
+      count: 10,
+      source: 'all',
+      type: '',
+      fromYear: '',
+      fromSeason: 'winter',
+      toYear: '',
+      toSeason: 'fall',
+      studio: '',
+      director: '',
+      performer: '',
+      franchise: '',
+      content: 'all',
+      users: [],
+      scoreLogic: 'and',
+      scoreOverallCmp: 'gte',
+      scoreOverallValue: '',
+      scoreSongCmp: 'gte',
+      scoreSongValue: '',
+      scoreVisualCmp: 'gte',
+      scoreVisualValue: '',
+      answerTarget: 'song'
+    };
+    if (savedEventUiPreferences.blindTierFilters && typeof savedEventUiPreferences.blindTierFilters === 'object') {
+      Object.assign(blindTierFilters, savedEventUiPreferences.blindTierFilters);
+    }
     let guessResultIds = [];
     let guessMessage = '';
     let guessGameState = null;
@@ -1595,6 +1622,7 @@
     const WHO_AM_I_COLLECTION = 'eventCodenames';
     const WHO_AM_I_ROOM_ID = 'whoami-current';
     let blindTierState = null;
+    let blindTierPreviewOpen = false;
     let whoAmIRoom = null;
     let whoAmIStatus = '';
     let guessPlaybackTimer = null;
@@ -4429,23 +4457,28 @@
       } catch (_) {}
     }
 
-    function blindTierCandidates(settings) {
-      return openings.filter(opening => {
-        if (settings.type && opening.type !== settings.type) return false;
-        if (settings.fromYear && (!opening.year || opening.year < settings.fromYear)) return false;
-        if (settings.toYear && (!opening.year || opening.year > settings.toYear)) return false;
-        return true;
-      });
+    function blindTierCandidates(settings = blindTierFilters) {
+      const previous = { ...guessFilters, users:[...(guessFilters.users || [])] };
+      try {
+        Object.assign(guessFilters, settings, {
+          users:[...(settings.users || [])],
+          answerTarget:'song',
+          answerMode:'manual'
+        });
+        const ratingContext = guessFilters.source === 'ratings' ? buildGuessRatingContext() : null;
+        return openings.filter(opening =>
+          guessOpeningMatches(opening, ratingContext) && Boolean(getGuessPlaybackSource(opening))
+        );
+      } finally {
+        Object.keys(guessFilters).forEach(key => { if (!(key in previous)) delete guessFilters[key]; });
+        Object.assign(guessFilters, previous);
+      }
     }
 
     function startBlindTier() {
-      const count = Math.max(3, Math.min(20, Number($('#ev-blind-count')?.value || 10)));
-      const settings = {
-        count,
-        type: String($('#ev-blind-type')?.value || ''),
-        fromYear: Number($('#ev-blind-from')?.value || 0) || 0,
-        toYear: Number($('#ev-blind-to')?.value || 0) || 0
-      };
+      const count = Math.max(3, Math.min(20, Number(blindTierFilters.count || 10)));
+      blindTierFilters.count = count;
+      const settings = { ...blindTierFilters, users:[...(blindTierFilters.users || [])], count };
       const candidates = gameShuffle(blindTierCandidates(settings));
       if (candidates.length < count) {
         appEl.querySelector('#ev-blind-status').textContent = `Под фильтры попало только ${candidates.length}. Нужно минимум ${count}.`;
@@ -4458,6 +4491,7 @@
 
     function resetBlindTier() {
       blindTierState = null;
+      blindTierPreviewOpen = false;
       saveBlindTierState();
       renderBlindTier();
     }
@@ -4467,18 +4501,62 @@
       if (!state || state.slots[slot] || state.index >= state.queue.length) return;
       state.slots[slot] = state.queue[state.index];
       state.index += 1;
+      blindTierPreviewOpen = false;
       saveBlindTierState();
       renderBlindTier();
+    }
+
+    function blindTierPreviewMarkup(opening) {
+      const source = getGuessPlaybackSource(opening);
+      if (!source) return '<div class="ev-error">Для этого трека нет рабочего видео.</div>';
+      if (source.kind === 'direct') {
+        return `<div class="ev-game-panel"><video controls preload="metadata" style="width:100%;max-height:65vh;border-radius:10px;background:#000"><source src="${escapeHtml(source.url)}" type="${escapeHtml(source.mime || '')}"></video></div>`;
+      }
+      if (source.kind === 'youtube') {
+        return `<div class="ev-game-panel"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(source.videoId)}?rel=0" title="Просмотр OP/ED" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:100%;aspect-ratio:16/9;border:0;border-radius:10px;background:#000"></iframe></div>`;
+      }
+      return '<div class="ev-error">Этот формат нельзя показать во встроенном окне.</div>';
     }
 
     function renderBlindTier() {
       const state = loadBlindTierState();
       if (!state || !state.queue.length) {
-        const years = openings.map(item => item.year).filter(Number.isFinite);
-        const minYear = years.length ? Math.min(...years) : '';
-        const maxYear = years.length ? Math.max(...years) : '';
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-section-label">Игра</div><h2>Слепой тир-лист</h2><p class="ev-hint">Песни появляются по одной. Выбери свободное место сразу — переставлять позже нельзя.</p><div class="ev-game-config"><label>Тип<select id="ev-blind-type"><option value="" ${!savedEventUiPreferences.blindSettings?.type?'selected':''}>OP и ED</option><option value="OP" ${savedEventUiPreferences.blindSettings?.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${savedEventUiPreferences.blindSettings?.type==='ED'?'selected':''}>Только ED</option></select></label><label>Количество<input id="ev-blind-count" type="number" min="3" max="20" value="${escapeHtml(savedEventUiPreferences.blindSettings?.count || 10)}"></label><label>Год от<input id="ev-blind-from" type="number" value="${escapeHtml(savedEventUiPreferences.blindSettings?.fromYear || '')}" placeholder="${minYear}"></label><label>Год до<input id="ev-blind-to" type="number" value="${escapeHtml(savedEventUiPreferences.blindSettings?.toYear || '')}" placeholder="${maxYear}"></label><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
-        $('#ev-blind-start')?.addEventListener('click', startBlindTier);
+        const years = [...new Set(openings.map(item => item.year).filter(Number.isFinite))].sort((a,b)=>a-b);
+        const selectedUsers = new Set((blindTierFilters.users || []).map(normalizeNickname).filter(Boolean));
+        const users = guessUserOptions();
+        const candidatesCount = blindTierCandidates(blindTierFilters).length;
+        const scoreRows = [
+          ['overall','Общая оценка',blindTierFilters.scoreOverallCmp,blindTierFilters.scoreOverallValue],
+          ['song','Оценка песни',blindTierFilters.scoreSongCmp,blindTierFilters.scoreSongValue],
+          ['visual','Оценка визуала',blindTierFilters.scoreVisualCmp,blindTierFilters.scoreVisualValue]
+        ].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${label}</div><select data-blind-field="score${key.charAt(0).toUpperCase()+key.slice(1)}Cmp"><option value="gte" ${cmp==='gte'?'selected':''}>Больше или равно</option><option value="gt" ${cmp==='gt'?'selected':''}>Больше</option><option value="eq" ${cmp==='eq'?'selected':''}>Равно</option><option value="lte" ${cmp==='lte'?'selected':''}>Меньше или равно</option><option value="lt" ${cmp==='lt'?'selected':''}>Меньше</option></select><input data-blind-field="score${key.charAt(0).toUpperCase()+key.slice(1)}Value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value)}" placeholder="не учитывать"></div>`).join('');
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-section-label">Игра</div><h2>Слепой тир-лист</h2><p class="ev-hint">Песни появляются по одной. Перед выбором позиции трек можно посмотреть или прослушать.</p><div class="ev-guess-grid">
+          <label class="ev-guess-field full"><span class="ev-guess-label">Поиск</span><input data-blind-field="search" value="${escapeHtml(blindTierFilters.search)}" placeholder="Название, студия, исполнитель…"></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Количество</span><input data-blind-field="count" type="number" min="3" max="20" value="${escapeHtml(blindTierFilters.count)}"></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Источник</span><select data-blind-field="source"><option value="all" ${blindTierFilters.source==='all'?'selected':''}>Вся база</option><option value="ratings" ${blindTierFilters.source==='ratings'?'selected':''}>Оценки пользователей</option></select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Тип</span><select data-blind-field="type"><option value="" ${!blindTierFilters.type?'selected':''}>OP и ED</option><option value="OP" ${blindTierFilters.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${blindTierFilters.type==='ED'?'selected':''}>Только ED</option></select></label>
+          <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select data-blind-field="fromYear">${seasonRangeYearOptions(years,blindTierFilters.fromYear,'С самого раннего')}</select><select data-blind-field="fromSeason">${seasonRangeSeasonOptions(blindTierFilters.fromSeason)}</select></div></div>
+          <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select data-blind-field="toYear">${seasonRangeYearOptions(years,blindTierFilters.toYear,'По самый поздний')}</select><select data-blind-field="toSeason">${seasonRangeSeasonOptions(blindTierFilters.toSeason)}</select></div></div>
+          <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Франшиза</span><select data-blind-field="franchise">${guessSelectOptions(guessUniqueValues('franchises'),blindTierFilters.franchise)}</select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Контент</span><select data-blind-field="content"><option value="all" ${blindTierFilters.content==='all'?'selected':''}>Всё</option><option value="default" ${blindTierFilters.content==='default'?'selected':''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${blindTierFilters.content==='chinese'?'selected':''}>С китайскими</option><option value="movie" ${blindTierFilters.content==='movie'?'selected':''}>С фильмами</option><option value="shortened" ${blindTierFilters.content==='shortened'?'selected':''}>С укороченными</option></select></label>
+          <div class="ev-guess-field full"><span class="ev-guess-label">Пользователи</span><div class="ev-guess-users">${users.map(user=>`<label><input type="checkbox" data-blind-user="${escapeHtml(user.key)}" ${selectedUsers.has(user.key)?'checked':''}> ${escapeHtml(user.avatar||'')} ${escapeHtml(user.nickname)}</label>`).join('')||'<span class="ev-hint">Оценок пользователей пока нет.</span>'}</div></div>
+          <div class="ev-guess-field full"><span class="ev-guess-label">Условия оценок</span><div class="ev-guess-segmented"><button type="button" data-blind-score-logic="and" class="${blindTierFilters.scoreLogic!=='or'?'active':''}">И — выполнить все</button><button type="button" data-blind-score-logic="or" class="${blindTierFilters.scoreLogic==='or'?'active':''}">ИЛИ — достаточно одного</button></div>${scoreRows}</div>
+        </div><div class="ev-actions"><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button><div class="ev-hint">Под фильтры подходит: <strong id="ev-blind-count-preview">${candidatesCount}</strong></div></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
+        const updateBlindFilters = () => {
+          appEl.querySelectorAll('[data-blind-field]').forEach(input => {
+            const key=input.dataset.blindField;
+            blindTierFilters[key] = key==='count' ? Math.max(3,Math.min(20,Number(input.value||10))) : input.value;
+          });
+          blindTierFilters.users=[...appEl.querySelectorAll('[data-blind-user]:checked')].map(input=>input.dataset.blindUser);
+          saveEventUiPreferences();
+          const preview=$('#ev-blind-count-preview'); if(preview) preview.textContent=String(blindTierCandidates(blindTierFilters).length);
+        };
+        appEl.querySelectorAll('[data-blind-field],[data-blind-user]').forEach(input=>{input.addEventListener('change',updateBlindFilters);input.addEventListener('input',updateBlindFilters);});
+        appEl.querySelectorAll('[data-blind-score-logic]').forEach(button=>button.addEventListener('click',()=>{blindTierFilters.scoreLogic=button.dataset.blindScoreLogic==='or'?'or':'and';saveEventUiPreferences();renderBlindTier();}));
+        $('#ev-blind-start')?.addEventListener('click',()=>{updateBlindFilters();startBlindTier();});
         return;
       }
       const finished = state.index >= state.queue.length;
@@ -4487,8 +4565,9 @@
         const opening = id ? openingsById.get(String(id)) : null;
         return `<button type="button" class="ev-blind-slot ${opening ? 'filled' : 'free'}" data-blind-slot="${index}" ${opening || finished ? 'disabled' : ''}><div class="ev-blind-rank">МЕСТО #${index + 1}</div>${opening ? `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getOpeningTitle(opening))}</div>` : '<div class="ev-hint">свободно</div>'}</button>`;
       }).join('');
-      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Слепой тир-лист</div><h2>${finished ? 'Готово!' : `Песня ${state.index + 1} из ${state.queue.length}`}</h2></div><button class="ev-btn-ghost" id="ev-blind-reset" type="button">Новая игра</button></div>${finished ? '<p class="ev-hint">Вот каким получился твой окончательный рейтинг.</p>' : `<div class="ev-blind-current">${openingImageMarkup(current)}<div><div class="ev-tag">${escapeHtml(current?.type || '')} · ${escapeHtml(current?.year || 'год неизвестен')}</div><h2>${escapeHtml(getOpeningTitle(current))}</h2><p class="ev-hint">Выбери свободное место. После выбора изменить его нельзя.</p></div></div>`}</div><div class="ev-blind-slots">${slots}</div></section>`;
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Слепой тир-лист</div><h2>${finished ? 'Готово!' : `Песня ${state.index + 1} из ${state.queue.length}`}</h2></div><button class="ev-btn-ghost" id="ev-blind-reset" type="button">Новая игра</button></div>${finished ? '<p class="ev-hint">Вот каким получился твой окончательный рейтинг.</p>' : `<div class="ev-blind-current">${openingImageMarkup(current)}<div><div class="ev-tag">${escapeHtml(current?.type || '')} · ${escapeHtml(current?.year || 'год неизвестен')}</div><h2>${escapeHtml(getOpeningTitle(current))}</h2><p class="ev-hint">Можно вспомнить трек, а затем выбрать свободное место.</p><button class="ev-btn-main" id="ev-blind-preview-toggle" type="button">${blindTierPreviewOpen?'Скрыть просмотр':'Посмотреть / послушать'}</button></div></div>${blindTierPreviewOpen ? blindTierPreviewMarkup(current) : ''}`}</div><div class="ev-blind-slots">${slots}</div></section>`;
       $('#ev-blind-reset')?.addEventListener('click', resetBlindTier);
+      $('#ev-blind-preview-toggle')?.addEventListener('click', () => { blindTierPreviewOpen = !blindTierPreviewOpen; renderBlindTier(); });
       appEl.querySelectorAll('[data-blind-slot]').forEach(button => button.addEventListener('click', () => placeBlindTier(Number(button.dataset.blindSlot))));
     }
 
@@ -4678,7 +4757,8 @@
           predictionSeason,
           guessFilters,
           bestWorstFilters,
-          blindSettings: blindTierState?.settings || savedEventUiPreferences.blindSettings || null
+          blindSettings: blindTierState?.settings || savedEventUiPreferences.blindSettings || null,
+          blindTierFilters
         }));
       } catch (_) {}
     }
