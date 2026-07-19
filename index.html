@@ -7652,11 +7652,19 @@
         return;
       }
 
-      try {
-        if (image && makeImageBackup && !fallbackImage) {
+      let backupWarning = '';
+      if (image && makeImageBackup && !fallbackImage) {
+        try {
           fallbackImage = await createFallbackImageCopy(image, title, type);
           $('#oc-add-fallback-image').value = fallbackImage;
+        } catch (backupError) {
+          console.warn('Fallback image upload failed', backupError);
+          backupWarning = backupError && backupError.message ? backupError.message : 'неизвестная ошибка';
+          fallbackImage = '';
         }
+      }
+
+      try {
         const createdRef = await window.OPED_DB.addOpening({
           title,
           type,
@@ -7692,11 +7700,11 @@
         if ($('#oc-add-movie')) $('#oc-add-movie').checked = false;
         if ($('#oc-add-shortened')) $('#oc-add-shortened').checked = false;
 
-        setStatus('Трек добавлен в Firebase ✓');
+        setStatus(backupWarning ? 'Трек добавлен ✓ Но запасная картинка не создана: ' + backupWarning : 'Трек добавлен в Firebase ✓', Boolean(backupWarning));
       } catch (err) {
         console.error(err);
         const message = err && err.message ? err.message : 'неизвестная ошибка';
-        setStatus('Не удалось добавить трек: ' + message + '. Если резервная копия не нужна, снимите галочку «Сжать копию в images».', true);
+        setStatus('Не удалось добавить трек в Firebase: ' + message, true);
       }
     });
 
