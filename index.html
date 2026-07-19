@@ -859,6 +859,29 @@
       justify-self: end;
     }
     .oc-season-re-rate:hover { background: rgba(8,217,214,0.12); }
+
+    /* AniSongDB import */
+    .oc-db-import-btn { border:1px solid var(--cyan); color:var(--cyan); background:rgba(8,217,214,.08); border-radius:8px; padding:7px 10px; cursor:pointer; font:700 10px/1 'Space Mono',monospace; }
+    .oc-db-import-btn:hover { background:rgba(8,217,214,.18); }
+    .oc-db-import-dialog { width:min(1180px,100%); max-height:92vh; overflow:auto; background:var(--card); border:1px solid var(--cyan); border-radius:16px; padding:18px; box-shadow:0 22px 70px rgba(0,0,0,.6); }
+    .oc-db-import-head,.oc-db-import-actions,.oc-db-import-form,.oc-db-import-tabs { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .oc-db-import-head { justify-content:space-between; margin-bottom:14px; }
+    .oc-db-import-head h2 { margin:0; font:24px 'Archivo Black','Arial Black',sans-serif; }
+    .oc-db-import-form { padding:12px; background:#0f0c16; border:1px solid var(--border); border-radius:10px; }
+    .oc-db-import-form input,.oc-db-import-form select,.oc-db-import-table input { background:#0f0c16; color:var(--text); border:1px solid var(--border); border-radius:7px; padding:8px; }
+    .oc-db-import-query { min-width:260px; flex:1; }
+    .oc-db-import-tabs { margin:12px 0; }
+    .oc-db-import-tab { border:1px solid var(--border); background:#15111e; color:var(--muted); border-radius:7px; padding:7px 9px; cursor:pointer; }
+    .oc-db-import-tab.active { border-color:var(--pink); color:var(--text); }
+    .oc-db-import-status { min-height:20px; margin:10px 0; color:var(--muted); font:11px 'Space Mono',monospace; }
+    .oc-db-import-table-wrap { overflow:auto; }
+    .oc-db-import-table { width:100%; min-width:980px; border-collapse:collapse; font-size:12px; }
+    .oc-db-import-table th,.oc-db-import-table td { border-bottom:1px solid var(--border); padding:7px; text-align:left; vertical-align:top; }
+    .oc-db-import-table input { width:100%; min-width:120px; }
+    .oc-db-import-table .oc-db-title { min-width:230px; }
+    .oc-db-import-muted { color:var(--muted); font-size:10px; margin-top:4px; }
+    @media(max-width:700px){.oc-db-import-form>*{width:100%}.oc-db-import-query{min-width:0}}
+
     .oc-name-modal {
       position: fixed;
       inset: 0;
@@ -2064,6 +2087,7 @@
         </select>
         <span id="oc-access-badge" class="oc-access-badge">гость</span>
         <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
+        <button id="oc-db-import-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Импортировать OP/ED из AniSongDB">Импорт из базы</button>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
         <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
       </div>
@@ -2460,6 +2484,26 @@
 
     <div id="oc-franchise-repair-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Проверка франшиз"></div>
 
+    <div id="oc-db-import-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Импорт из AniSongDB">
+      <div class="oc-db-import-dialog">
+        <div class="oc-db-import-head">
+          <div><div class="oc-section-label">AniSongDB + KeyFrame Staff List</div><h2>Импорт OP/ED</h2></div>
+          <button class="oc-edit-cancel" type="button" data-db-import-close>Закрыть</button>
+        </div>
+        <div class="oc-db-import-form">
+          <select id="oc-db-import-mode"><option value="artist">Исполнитель</option><option value="season">Сезон и год</option></select>
+          <input id="oc-db-import-query" class="oc-db-import-query" type="text" placeholder="Например: LiSA" autocomplete="off">
+          <select id="oc-db-import-season" class="hidden"><option value="Winter">Зима</option><option value="Spring">Весна</option><option value="Summer">Лето</option><option value="Fall">Осень</option></select>
+          <input id="oc-db-import-year" class="hidden" type="number" min="1960" max="2100" value="2026">
+          <select id="oc-db-import-type"><option value="all">Все песни</option><option value="OP">Только OP</option><option value="ED">Только ED</option></select>
+          <button id="oc-db-import-search" class="oc-addbtn" type="button">Найти</button>
+        </div>
+        <div id="oc-db-import-tabs" class="oc-db-import-tabs"></div>
+        <div id="oc-db-import-status" class="oc-db-import-status"></div>
+        <div id="oc-db-import-results"></div>
+      </div>
+    </div>
+
 
     <div id="oc-auth-modal" class="oc-auth-modal hidden" aria-modal="true" role="dialog">
       <div class="oc-auth-dialog">
@@ -2566,6 +2610,11 @@
     const openingModal = $('#oc-opening-modal');
     const confirmModal = $('#oc-confirm-modal');
     const franchiseRepairModal = $('#oc-franchise-repair-modal');
+    const dbImportModal = $('#oc-db-import-modal');
+    const dbImportBtn = $('#oc-db-import-btn');
+    const DB_IMPORT_KEY = 'op-ed-anisong-import-tabs-v1';
+    let dbImportState = { tabs: [], activeId: '' };
+
     const authModal = $('#oc-auth-modal');
     const authPassInput = $('#oc-auth-pass');
     const authSaveBtn = $('#oc-auth-save');
@@ -7268,6 +7317,185 @@
     document.addEventListener('click', (e) => {
       if (!avatarPicker.contains(e.target) && e.target !== avatarBtn) avatarPicker.classList.add('hidden');
     });
+
+
+    const dbImportFilters = {
+      opening_filter: true, ending_filter: true, insert_filter: false,
+      normal_broadcast: true, dub: false, rebroadcast: false,
+      standard: true, instrumental: true, chanting: true, character: true,
+      tv_filter: true, movie_filter: true, ova_filter: true, ona_filter: true, special_filter: true, doujin_filter: true,
+      ignore_duplicate: true
+    };
+
+    function loadDbImportState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(DB_IMPORT_KEY) || 'null');
+        if (saved && Array.isArray(saved.tabs)) dbImportState = saved;
+      } catch (_) {}
+    }
+    function saveDbImportState() {
+      try { localStorage.setItem(DB_IMPORT_KEY, JSON.stringify(dbImportState)); } catch (_) {}
+    }
+    function dbImportStatus(message, error) {
+      const el = $('#oc-db-import-status');
+      if (el) { el.textContent = message || ''; el.style.color = error ? 'var(--pink)' : ''; }
+    }
+    function normalizeAniSongType(value) {
+      const text = String(value || '');
+      const kind = /^ending/i.test(text) ? 'ED' : 'OP';
+      const match = text.match(/(\d+)/);
+      return { kind, label: kind + (match ? ' ' + match[1] : '') };
+    }
+    function parseAniVintage(value) {
+      const match = String(value || '').match(/(Winter|Spring|Summer|Fall)\s+(\d{4})/i);
+      return match ? { season: match[1].toLowerCase(), year: Number(match[2]) } : { season: '', year: null };
+    }
+    function russianDirectorName(name) {
+      let s = String(name || '').trim();
+      if (!s) return '';
+      const pairs = [
+        [/shi/gi,'си'],[/chi/gi,'ти'],[/tsu/gi,'цу'],[/fu/gi,'фу'],[/ji/gi,'дзи'],
+        [/sha/gi,'ся'],[/shu/gi,'сю'],[/sho/gi,'сё'],[/cha/gi,'тя'],[/chu/gi,'тю'],[/cho/gi,'тё'],
+        [/kyo/gi,'кё'],[/kyu/gi,'кю'],[/kya/gi,'кя'],[/ryo/gi,'рё'],[/ryu/gi,'рю'],[/rya/gi,'ря'],
+        [/yo/gi,'ё'],[/yu/gi,'ю'],[/ya/gi,'я'],[/a/gi,'а'],[/i/gi,'и'],[/u/gi,'у'],[/e/gi,'э'],[/o/gi,'о'],
+        [/k/gi,'к'],[/g/gi,'г'],[/s/gi,'с'],[/z/gi,'дз'],[/t/gi,'т'],[/d/gi,'д'],[/n/gi,'н'],
+        [/h/gi,'х'],[/f/gi,'ф'],[/b/gi,'б'],[/p/gi,'п'],[/m/gi,'м'],[/r/gi,'р'],[/w/gi,'в'],[/j/gi,'дз']
+      ];
+      s = s.split(/(\s+|-)/).map(part => {
+        if (/^\s+$|^-$/.test(part)) return part;
+        let out = part.toLowerCase();
+        pairs.forEach(([from,to]) => { out = out.replace(from,to); });
+        out = out.replace(/([бвгдзклмнпрстфхцчшщ])\1+/g,'$1$1');
+        return out.charAt(0).toUpperCase() + out.slice(1);
+      }).join('');
+      return s;
+    }
+    async function tryKeyframeDirector(row) {
+      // KeyFrame is a JS application without a documented public cross-origin API.
+      // Keep this adapter isolated: a failed lookup never removes the AniSongDB result.
+      const query = encodeURIComponent([row.anime, row.typeLabel].filter(Boolean).join(' '));
+      row.keyframeUrl = 'https://keyframe-staff-list.com/?search=' + query;
+      return '';
+    }
+    function aniSongRow(song) {
+      const type = normalizeAniSongType(song.songType);
+      const vintage = parseAniVintage(song.animeVintage);
+      const anime = String(song.animeJPName || song.animeENName || '').trim();
+      return {
+        id: String(song.amqSongId || song.annSongId || Math.random()),
+        selected: true, added: false,
+        anime, songName: String(song.songName || '').trim(),
+        title: anime + (anime ? ' — ' : '') + type.label,
+        type: type.kind, typeLabel: type.label,
+        performer: String(song.songArtist || '').trim(),
+        directorOriginal: '', director: '',
+        year: vintage.year, season: vintage.season,
+        link: String(song.HQ || song.MQ || song.audio || '').trim(),
+        keyframeUrl: ''
+      };
+    }
+    function renderDbImport() {
+      const tabsEl = $('#oc-db-import-tabs');
+      const resultsEl = $('#oc-db-import-results');
+      if (!tabsEl || !resultsEl) return;
+      tabsEl.innerHTML = dbImportState.tabs.map(tab => '<button type="button" class="oc-db-import-tab '+(tab.id===dbImportState.activeId?'active':'')+'" data-db-tab="'+escapeHtml(tab.id)+'">'+escapeHtml(tab.label)+' ('+tab.rows.length+')</button>').join('');
+      const tab = dbImportState.tabs.find(item => item.id === dbImportState.activeId);
+      if (!tab) { resultsEl.innerHTML = '<div class="oc-empty">Здесь появятся результаты поиска.</div>'; return; }
+      resultsEl.innerHTML = '<div class="oc-db-import-actions"><label><input type="checkbox" data-db-select-all checked> выбрать все</label><button type="button" class="oc-addbtn" data-db-add-selected>Добавить выбранные</button><button type="button" class="oc-edit-cancel" data-db-delete-tab>Удалить вкладку</button></div>'+
+        '<div class="oc-db-import-table-wrap"><table class="oc-db-import-table"><thead><tr><th></th><th>Название</th><th>Исполнитель</th><th>Режиссёр</th><th>Видео</th><th></th></tr></thead><tbody>'+
+        tab.rows.map((row,index) => '<tr data-db-row="'+index+'"><td><input type="checkbox" data-db-field="selected" '+(row.selected&&!row.added?'checked':'')+' '+(row.added?'disabled':'')+'></td>'+
+          '<td><input class="oc-db-title" data-db-field="title" value="'+escapeHtml(row.title)+'"><div class="oc-db-import-muted">'+escapeHtml(row.songName)+' · '+escapeHtml(row.typeLabel)+' · '+(row.year||'год неизвестен')+'</div></td>'+
+          '<td><input data-db-field="performer" value="'+escapeHtml(row.performer)+'"></td>'+
+          '<td><input data-db-field="director" placeholder="можно заполнить вручную" value="'+escapeHtml(row.director)+'"><div class="oc-db-import-muted">'+(row.keyframeUrl?'<a href="'+escapeHtml(row.keyframeUrl)+'" target="_blank" rel="noopener">проверить KeyFrame</a>':'KeyFrame не найден')+'</div></td>'+
+          '<td><input data-db-field="link" value="'+escapeHtml(row.link)+'"></td>'+
+          '<td><button type="button" class="oc-addbtn" data-db-add-one '+(row.added?'disabled':'')+'>'+(row.added?'Добавлено':'Добавить')+'</button></td></tr>').join('')+
+        '</tbody></table></div>';
+    }
+    function openDbImport() {
+      if (!ensureAdmin()) return;
+      loadDbImportState(); renderDbImport();
+      dbImportModal.classList.remove('hidden');
+    }
+    function closeDbImport() { if (dbImportModal) dbImportModal.classList.add('hidden'); }
+    async function searchAniSongDb() {
+      const mode = $('#oc-db-import-mode').value;
+      const type = $('#oc-db-import-type').value;
+      const body = { ...dbImportFilters };
+      body.opening_filter = type !== 'ED';
+      body.ending_filter = type !== 'OP';
+      let endpoint, label;
+      if (mode === 'artist') {
+        const query = $('#oc-db-import-query').value.trim();
+        if (!query) { dbImportStatus('Введите исполнителя.', true); return; }
+        endpoint = '/api/search_request';
+        body.artist_search_filter = { search: query, partial_match: true, match_case: false, group_granularity: 0, max_other_artist: 99 };
+        label = 'Исполнитель: ' + query + ' · ' + type;
+      } else {
+        const season = $('#oc-db-import-season').value;
+        const year = $('#oc-db-import-year').value;
+        if (!year) { dbImportStatus('Укажите год.', true); return; }
+        endpoint = '/api/season_request'; body.season = season + ' ' + year;
+        label = season + ' ' + year + ' · ' + type;
+      }
+      dbImportStatus('Ищу в AniSongDB…');
+      $('#oc-db-import-search').disabled = true;
+      try {
+        const response = await fetch('https://anisongdb.com' + endpoint, { method:'POST', headers:{'Content-Type':'application/json','X-Client-Id':'OP-ED-Orden'}, body:JSON.stringify(body) });
+        if (!response.ok) throw new Error('AniSongDB: HTTP ' + response.status);
+        const songs = await response.json();
+        const rows = songs.map(aniSongRow).filter(row => row.type === 'OP' || row.type === 'ED');
+        await Promise.all(rows.map(async row => { row.directorOriginal = await tryKeyframeDirector(row); row.director = russianDirectorName(row.directorOriginal); }));
+        const tab = { id: Date.now().toString(36), label, createdAt:Date.now(), rows };
+        dbImportState.tabs.unshift(tab); dbImportState.tabs = dbImportState.tabs.slice(0,12); dbImportState.activeId = tab.id;
+        saveDbImportState(); renderDbImport();
+        dbImportStatus('Найдено: ' + rows.length + '. Ссылка HQ выбрана первой; режиссёра можно проверить в KeyFrame и исправить перед добавлением.');
+      } catch (error) {
+        console.error(error); dbImportStatus('Поиск не выполнен: ' + (error.message || error), true);
+      } finally { $('#oc-db-import-search').disabled = false; }
+    }
+    async function addImportedRow(tab, row) {
+      if (row.added) return;
+      if (!row.title.trim()) throw new Error('Пустое название');
+      if (isDuplicateTitle(row.title.trim(), row.type, null)) throw new Error('Такой '+row.type+' уже есть');
+      const ref = await window.OPED_DB.addOpening({
+        title:row.title.trim(), type:row.type, year:row.year, season:row.season,
+        studios:[], directors:parseList(row.director), performers:parseList(row.performer),
+        franchises:franchisesForSave(row.title,''), alternativeTitles:[], image:'', link:row.link.trim(),
+        isChinese:false, isMovie:false, isShortened:false, notes:'Импортировано из AniSongDB', createdBy:myName
+      });
+      if (ref && ref.id) await saveOpeningExtras(ref.id,{franchises:franchisesForSave(row.title,''),alternativeTitles:[],isChinese:false,isMovie:false,isShortened:false});
+      row.added = true; row.selected = false; saveDbImportState();
+    }
+    async function addSelectedImportedRows() {
+      if (!ensureAdmin() || !ensureNickname()) return;
+      const tab = dbImportState.tabs.find(item => item.id === dbImportState.activeId); if (!tab) return;
+      const rows = tab.rows.filter(row => row.selected && !row.added);
+      if (!rows.length) { dbImportStatus('Ничего не выбрано.', true); return; }
+      let ok=0, failed=[];
+      for (const row of rows) { try { await addImportedRow(tab,row); ok++; dbImportStatus('Добавлено '+ok+' из '+rows.length+'…'); } catch(error) { failed.push(row.title+': '+error.message); } }
+      renderDbImport(); dbImportStatus('Добавлено: '+ok+(failed.length?'. Пропущено: '+failed.length+' — '+failed.slice(0,2).join('; '):' ✓'),Boolean(failed.length));
+    }
+
+    if (dbImportBtn) dbImportBtn.addEventListener('click', openDbImport);
+    if (dbImportModal) {
+      dbImportModal.addEventListener('click', async e => {
+        if (e.target === dbImportModal || e.target.closest('[data-db-import-close]')) { closeDbImport(); return; }
+        const tabButton=e.target.closest('[data-db-tab]'); if(tabButton){dbImportState.activeId=tabButton.dataset.dbTab;saveDbImportState();renderDbImport();return;}
+        if(e.target.closest('[data-db-delete-tab]')){dbImportState.tabs=dbImportState.tabs.filter(t=>t.id!==dbImportState.activeId);dbImportState.activeId=dbImportState.tabs[0]?.id||'';saveDbImportState();renderDbImport();return;}
+        if(e.target.closest('[data-db-add-selected]')){await addSelectedImportedRows();return;}
+        const add=e.target.closest('[data-db-add-one]'); if(add){const tr=add.closest('[data-db-row]');const tab=dbImportState.tabs.find(t=>t.id===dbImportState.activeId);try{await addImportedRow(tab,tab.rows[Number(tr.dataset.dbRow)]);renderDbImport();dbImportStatus('Трек добавлен ✓');}catch(error){dbImportStatus(error.message,true);}return;}
+      });
+      dbImportModal.addEventListener('input', e => {
+        const tr=e.target.closest('[data-db-row]'); if(!tr)return; const tab=dbImportState.tabs.find(t=>t.id===dbImportState.activeId); const row=tab?.rows[Number(tr.dataset.dbRow)]; if(!row)return;
+        const field=e.target.dataset.dbField; if(!field)return; row[field]=e.target.type==='checkbox'?e.target.checked:e.target.value; saveDbImportState();
+      });
+      dbImportModal.addEventListener('change', e => {
+        if(e.target.id==='oc-db-import-mode'){const season=e.target.value==='season';$('#oc-db-import-query').classList.toggle('hidden',season);$('#oc-db-import-season').classList.toggle('hidden',!season);$('#oc-db-import-year').classList.toggle('hidden',!season);}
+        if(e.target.matches('[data-db-select-all]')){const tab=dbImportState.tabs.find(t=>t.id===dbImportState.activeId);tab?.rows.forEach(row=>{if(!row.added)row.selected=e.target.checked;});saveDbImportState();renderDbImport();}
+      });
+    }
+    const dbSearchButton=$('#oc-db-import-search'); if(dbSearchButton) dbSearchButton.addEventListener('click',searchAniSongDb);
+
 
     if (franchiseRepairBtn) franchiseRepairBtn.addEventListener('click', repairBrokenFranchises);
     if (franchiseRepairModal) {
