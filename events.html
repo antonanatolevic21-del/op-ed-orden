@@ -73,7 +73,7 @@
     .ev-mode-switch {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      width: min(980px, 100%);
+      width: 100%;
       gap: 5px;
       padding: 5px;
       margin-bottom: 18px;
@@ -1127,7 +1127,7 @@
 
 
     /* Codenames по OP/ED */
-    .ev-mode-switch { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); width: min(1040px, 100%); }
+    .ev-mode-switch { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); width: 100%; }
     .ev-cn-shell { display: flex; flex-direction: column; gap: 16px; }
     .ev-cn-lobby, .ev-cn-panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
     .ev-cn-team-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 12px; }
@@ -1387,6 +1387,18 @@
     const LOCAL_EVENT_SEASONS_KEY = 'aboba-events-local-seasons-v1';
     const LOCAL_EVENT_RATINGS_KEY = 'aboba-events-local-ratings-v1';
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
+    const EVENT_UI_PREFS_KEY = 'aboba-events-ui-preferences-v1';
+
+    function readEventUiPreferences() {
+      try {
+        const value = JSON.parse(localStorage.getItem(EVENT_UI_PREFS_KEY) || '{}');
+        return value && typeof value === 'object' ? value : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    const savedEventUiPreferences = readEventUiPreferences();
     const WINNER_COUNT_BY_TARGET = { 10: 2, 15: 3, 20: 4 };
     const WILDCARD_SLOT_COUNT_BY_TARGET = { 10: 2, 15: 1, 20: 0 };
     const BASE_WILDCARD_SLOT_COUNT = 2;
@@ -1472,13 +1484,13 @@
     const POST_PRIORITY_NICKS = ['Egortos', 'Кофа', 'Toxexex'];
     const FIXED_PARTICIPANTS = ['Egortos', 'Кофа', 'Toxexex'];
 
-    let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
-    let guestSlot = Math.max(0, Math.min(15, Number(sessionStorage.getItem(GUEST_SLOT_KEY) || 0) || 0));
-    let adminUnlocked = sessionStorage.getItem(ADMIN_UNLOCKED_KEY) === '1' || accessLevel === 'admin';
+    let accessLevel = localStorage.getItem(ACCESS_KEY) || '';
+    let guestSlot = Math.max(0, Math.min(15, Number(localStorage.getItem(GUEST_SLOT_KEY) || 0) || 0));
+    let adminUnlocked = localStorage.getItem(ADMIN_UNLOCKED_KEY) === '1' || accessLevel === 'admin';
     let myName = localStorage.getItem(NAME_KEY) || '';
-    let activeMode = 'rating';
-    let activeStage = 'basket';
-    let activeSeason = 'winter';
+    let activeMode = String(savedEventUiPreferences.activeMode || 'rating');
+    let activeStage = String(savedEventUiPreferences.activeStage || 'basket');
+    let activeSeason = SEASONS.includes(savedEventUiPreferences.activeSeason) ? savedEventUiPreferences.activeSeason : 'winter';
     let openings = [];
     let openingsById = new Map();
     let mainRatings = [];
@@ -1510,6 +1522,9 @@
       scoreVisualCmp: 'gte',
       scoreVisualValue: ''
     };
+    if (savedEventUiPreferences.guessFilters && typeof savedEventUiPreferences.guessFilters === 'object') {
+      Object.assign(guessFilters, savedEventUiPreferences.guessFilters);
+    }
     let guessResultIds = [];
     let guessMessage = '';
     let guessGameState = null;
@@ -1552,6 +1567,9 @@
       scoreVisualCmp: 'gte',
       scoreVisualValue: ''
     };
+    if (savedEventUiPreferences.bestWorstFilters && typeof savedEventUiPreferences.bestWorstFilters === 'object') {
+      Object.assign(bestWorstFilters, savedEventUiPreferences.bestWorstFilters);
+    }
     let bestWorstRoom = null;
     let bestWorstSubmissions = [];
     let bestWorstStatus = '';
@@ -1563,8 +1581,8 @@
     const PREDICTION_START_YEAR = 2026;
     const PREDICTION_START_SEASON = 'fall';
     let predictionDocs = new Map();
-    let predictionYear = 2026;
-    let predictionSeason = 'fall';
+    let predictionYear = Number(savedEventUiPreferences.predictionYear || 2026);
+    let predictionSeason = SEASONS.includes(savedEventUiPreferences.predictionSeason) ? savedEventUiPreferences.predictionSeason : 'fall';
     let predictionDraft = null;
     let predictionDraftKey = '';
     let predictionDraftDirty = false;
@@ -4437,7 +4455,7 @@
         const years = openings.map(item => item.year).filter(Number.isFinite);
         const minYear = years.length ? Math.min(...years) : '';
         const maxYear = years.length ? Math.max(...years) : '';
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-section-label">Игра</div><h2>Слепой тир-лист</h2><p class="ev-hint">Песни появляются по одной. Выбери свободное место сразу — переставлять позже нельзя.</p><div class="ev-game-config"><label>Тип<select id="ev-blind-type"><option value="">OP и ED</option><option value="OP">Только OP</option><option value="ED">Только ED</option></select></label><label>Количество<input id="ev-blind-count" type="number" min="3" max="20" value="10"></label><label>Год от<input id="ev-blind-from" type="number" placeholder="${minYear}"></label><label>Год до<input id="ev-blind-to" type="number" placeholder="${maxYear}"></label><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-section-label">Игра</div><h2>Слепой тир-лист</h2><p class="ev-hint">Песни появляются по одной. Выбери свободное место сразу — переставлять позже нельзя.</p><div class="ev-game-config"><label>Тип<select id="ev-blind-type"><option value="" ${!savedEventUiPreferences.blindSettings?.type?'selected':''}>OP и ED</option><option value="OP" ${savedEventUiPreferences.blindSettings?.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${savedEventUiPreferences.blindSettings?.type==='ED'?'selected':''}>Только ED</option></select></label><label>Количество<input id="ev-blind-count" type="number" min="3" max="20" value="${escapeHtml(savedEventUiPreferences.blindSettings?.count || 10)}"></label><label>Год от<input id="ev-blind-from" type="number" value="${escapeHtml(savedEventUiPreferences.blindSettings?.fromYear || '')}" placeholder="${minYear}"></label><label>Год до<input id="ev-blind-to" type="number" value="${escapeHtml(savedEventUiPreferences.blindSettings?.toYear || '')}" placeholder="${maxYear}"></label><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
         $('#ev-blind-start')?.addEventListener('click', startBlindTier);
         return;
       }
@@ -4628,7 +4646,23 @@
       appEl.querySelectorAll('[data-who-answer]').forEach(button => button.addEventListener('click', () => whoAnswerQuestion(button.dataset.whoAnswer).catch(error => {whoAmIStatus=error.message;renderWhoAmI();})));
     }
 
+    function saveEventUiPreferences() {
+      try {
+        localStorage.setItem(EVENT_UI_PREFS_KEY, JSON.stringify({
+          activeMode,
+          activeStage,
+          activeSeason,
+          predictionYear,
+          predictionSeason,
+          guessFilters,
+          bestWorstFilters,
+          blindSettings: blindTierState?.settings || savedEventUiPreferences.blindSettings || null
+        }));
+      } catch (_) {}
+    }
+
     function render() {
+      saveEventUiPreferences();
       if (!canAccessMode(activeMode)) activeMode = 'rating';
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
@@ -7723,9 +7757,9 @@
             guestSlot = Number(match[1]);
             myName = savedAdminName || myName || getSavedAdminNickname() || '';
           }
-          sessionStorage.setItem(ACCESS_KEY, accessLevel);
-          sessionStorage.setItem(GUEST_SLOT_KEY, String(guestSlot || 0));
-          sessionStorage.setItem(ADMIN_UNLOCKED_KEY, '1');
+          localStorage.setItem(ACCESS_KEY, accessLevel);
+          localStorage.setItem(GUEST_SLOT_KEY, String(guestSlot || 0));
+          localStorage.setItem(ADMIN_UNLOCKED_KEY, '1');
           updateAccessUi();
           render();
           maybeShowCompletionNotice();
@@ -7765,9 +7799,9 @@
         authError.textContent = 'Неверный пароль.';
         return;
       }
-      sessionStorage.setItem(ACCESS_KEY, accessLevel);
-      sessionStorage.setItem(GUEST_SLOT_KEY, String(guestSlot || 0));
-      sessionStorage.setItem(ADMIN_UNLOCKED_KEY, adminUnlocked ? '1' : '0');
+      localStorage.setItem(ACCESS_KEY, accessLevel);
+      localStorage.setItem(GUEST_SLOT_KEY, String(guestSlot || 0));
+      localStorage.setItem(ADMIN_UNLOCKED_KEY, adminUnlocked ? '1' : '0');
       authModal.classList.add('hidden');
       authPass.value = '';
       if (isGuest()) activeMode = 'rating';
