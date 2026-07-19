@@ -1625,6 +1625,13 @@
     let blindTierPreviewOpen = false;
     let whoAmIRoom = null;
     let whoAmIStatus = '';
+    let whoAmISettingsDraft = {
+      type: String(savedEventUiPreferences.whoAmISettings?.type || ''),
+      fromYear: String(savedEventUiPreferences.whoAmISettings?.fromYear || ''),
+      toYear: String(savedEventUiPreferences.whoAmISettings?.toYear || '')
+    };
+    let whoAmIQuestionDraft = '';
+    let whoAmIGuessDraft = '';
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -2889,6 +2896,11 @@
       const total = state.selectedOpeningIds.length * users.length;
       const doneSet = new Set(ratings.filter(r => state.selectedOpeningIds.includes(String(r.openingId || ''))).map(r => `${r.nicknameKey}__${r.openingId}`));
       return { done: doneSet.size, total };
+    }
+
+    function scheduleFirebaseRender(source = 'other') {
+      if (activeMode === 'whoami' && source !== 'whoami' && source !== 'openings-initial') return;
+      scheduleRender();
     }
 
     function scheduleRender() {
@@ -4630,9 +4642,9 @@
       const players = whoPlayers();
       if (players.length < 2) { whoAmIStatus = 'Нужно минимум два игрока.'; renderWhoAmI(); return; }
       const settings = {
-        type:String($('#ev-who-type')?.value || ''),
-        fromYear:Number($('#ev-who-from')?.value || 0) || null,
-        toYear:Number($('#ev-who-to')?.value || 0) || null
+        type:String(whoAmISettingsDraft.type || ''),
+        fromYear:Number(whoAmISettingsDraft.fromYear || 0) || null,
+        toYear:Number(whoAmISettingsDraft.toYear || 0) || null
       };
       const candidates = gameShuffle(whoEligibleOpenings(settings));
       if (candidates.length < players.length) { whoAmIStatus = 'Под фильтры попало недостаточно треков.'; renderWhoAmI(); return; }
@@ -4658,11 +4670,12 @@
     async function whoAskQuestion() {
       const room = whoAmIRoom;
       const current = whoCurrentPlayer(room);
-      const text = String($('#ev-who-question-input')?.value || '').trim();
+      const text = String(whoAmIQuestionDraft || '').trim();
       if (!room || !current || current.key !== whoPlayerKey() || !text) return;
       const questions = Array.isArray(room.questions) ? [...room.questions] : [];
       questions.push({ id:Date.now().toString(36), playerKey:current.key, playerName:current.name, text, answer:'', answeredBy:'' });
       await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { questions, updatedAt:serverTimestamp() }, { merge:true });
+      whoAmIQuestionDraft = '';
     }
 
     async function whoAnswerQuestion(answer) {
@@ -4678,7 +4691,7 @@
       const room = whoAmIRoom;
       const current = whoCurrentPlayer(room);
       if (!room || !current || current.key !== whoPlayerKey()) return;
-      const text = String($('#ev-who-guess-input')?.value || '').trim();
+      const text = String(whoAmIGuessDraft || '').trim();
       const assignedId = String(room.assignments?.[current.key] || '');
       const assigned = openingsById.get(assignedId);
       const guessedOpening = openings.find(opening => getOpeningSearchTitles(opening).some(title => normalizeGuessAnswer(title) === normalizeGuessAnswer(text)));
@@ -4693,6 +4706,7 @@
       await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
         guessedKeys, turnIndex:(currentIndex + 1) % Math.max(1, players.length), updatedAt:serverTimestamp()
       }, { merge:true });
+      whoAmIGuessDraft = '';
       whoAmIStatus = 'Угадано!';
     }
 
@@ -4723,9 +4737,15 @@
       const joined = players.some(player => player.key === ownKey);
       const guessed = new Set(Array.isArray(room.guessedKeys) ? room.guessedKeys : []);
       if (room.status !== 'playing') {
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="">OP и ED</option><option value="OP">Только OP</option><option value="ED">Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number"></label><label>Год до<input id="ev-who-to" type="number"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-join')?.addEventListener('click', () => whoJoinRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+        ['type','fromYear','toYear'].forEach(key => {
+          const id = key === 'type' ? '#ev-who-type' : (key === 'fromYear' ? '#ev-who-from' : '#ev-who-to');
+          const input = $(id);
+          input?.addEventListener('input', () => { whoAmISettingsDraft[key] = input.value; saveEventUiPreferences(); });
+          input?.addEventListener('change', () => { whoAmISettingsDraft[key] = input.value; saveEventUiPreferences(); });
+        });
         $('#ev-who-start')?.addEventListener('click', () => whoStartGame().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         return;
       }
@@ -4739,7 +4759,9 @@
       }).join('');
       const questions = (room.questions || []).map(question => `<div class="ev-who-question"><b>${escapeHtml(question.playerName)}:</b> ${escapeHtml(question.text)} <span class="ev-who-answer">${escapeHtml(question.answer || '…')}</span>${question.answeredBy ? ` <span class="ev-hint">— ${escapeHtml(question.answeredBy)}</span>` : ''}</div>`).join('');
       const myTurn = current?.key === ownKey;
-      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div>${whoIsHost() ? '<div class="ev-actions"><button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button></div>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div>${whoIsHost() ? '<div class="ev-actions"><button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button></div>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" value="${escapeHtml(whoAmIQuestionDraft)}" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" value="${escapeHtml(whoAmIGuessDraft)}" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+      $('#ev-who-question-input')?.addEventListener('input', event => { whoAmIQuestionDraft = event.target.value; });
+      $('#ev-who-guess-input')?.addEventListener('input', event => { whoAmIGuessDraft = event.target.value; });
       $('#ev-who-ask')?.addEventListener('click', () => whoAskQuestion().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
       $('#ev-who-guess')?.addEventListener('click', () => whoGuess().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
       $('#ev-who-next')?.addEventListener('click', () => whoNextTurn().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
@@ -4758,7 +4780,8 @@
           guessFilters,
           bestWorstFilters,
           blindSettings: blindTierState?.settings || savedEventUiPreferences.blindSettings || null,
-          blindTierFilters
+          blindTierFilters,
+          whoAmISettings: whoAmISettingsDraft
         }));
       } catch (_) {}
     }
@@ -7947,6 +7970,7 @@
         console.error('anonymous auth failed', e);
       }
       onSnapshot(collection(db, 'openings'), snapshot => {
+        const firstOpeningLoad = openings.length === 0;
         const nextOpenings = snapshot.docs.map(d => normalizeOpening({ id: d.id, ...d.data() }));
         const previousSignatures = new Map(openings.map(opening => [String(opening.id), openingGameSignature(opening)]));
         const gameDataChanged = nextOpenings.length !== openings.length || nextOpenings.some(opening =>
@@ -7954,75 +7978,75 @@
         );
         openings = nextOpenings;
         openingsById = new Map(openings.map(o => [String(o.id), o]));
-        if (gameDataChanged) scheduleRender();
+        if (gameDataChanged) scheduleFirebaseRender(firstOpeningLoad ? 'openings-initial' : 'openings');
       }, error => {
         console.error('openings snapshot error', error);
         appEl.innerHTML = '<div class="ev-empty">Не удалось загрузить OP/ED из Firebase.</div>';
       });
       onSnapshot(collection(db, 'ratings'), snapshot => {
         mainRatings = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        scheduleRender();
+        scheduleFirebaseRender('other');
       }, error => {
         console.error('ratings snapshot error', error);
         mainRatings = [];
-        scheduleRender();
+        scheduleFirebaseRender('other');
       });
       onSnapshot(collection(db, 'userProfiles'), snapshot => {
         userProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        scheduleRender();
+        scheduleFirebaseRender('other');
       }, error => {
         console.error('userProfiles snapshot error', error);
         userProfiles = [];
-        scheduleRender();
+        scheduleFirebaseRender('other');
       });
       onSnapshot(collection(db, 'guessCollections'), snapshot => {
         guessCollections = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        scheduleRender();
+        scheduleFirebaseRender('other');
       }, error => {
         console.error('guessCollections snapshot error', error);
         guessCollections = [];
         guessCollectionStatus = 'Не удалось загрузить подборки. Проверь Firebase Rules для guessCollections.';
-        scheduleRender();
+        scheduleFirebaseRender('other');
       });
       onSnapshot(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), snapshot => {
         bestWorstRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
         if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
         if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
         void bwMaybeAutoReveal();
-        scheduleRender();
+        scheduleFirebaseRender('other');
       }, error => {
         console.error('bestWorstRooms snapshot error', error);
         bestWorstRoom = null;
         bestWorstStatus = 'Не удалось прочитать Firebase-лобби bestWorstRooms.';
-        scheduleRender();
+        scheduleFirebaseRender('other');
       });
       onSnapshot(collection(db, BW_SUBMISSION_COLLECTION), snapshot => {
         bestWorstSubmissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         void bwMaybeAutoReveal();
-        scheduleRender();
+        scheduleFirebaseRender('other');
       }, error => {
         console.error('bestWorstSubmissions snapshot error', error);
         bestWorstSubmissions = [];
         bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
-        scheduleRender();
+        scheduleFirebaseRender('other');
       });
       onSnapshot(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), snapshot => {
         whoAmIRoom = snapshot.exists() ? { id:snapshot.id, ...snapshot.data() } : null;
-        if (activeMode === 'whoami') scheduleRender();
+        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
       }, error => {
         console.error('whoami room snapshot error', error);
         whoAmIRoom = null;
         whoAmIStatus = 'Не удалось загрузить комнату «Кто я?». Проверь доступ к eventCodenames.';
-        if (activeMode === 'whoami') scheduleRender();
+        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
       });
       onSnapshot(doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID), snapshot => {
         codenamesRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
-        if (activeMode === 'codenames') scheduleRender();
+        if (activeMode === 'codenames') scheduleFirebaseRender('other');
       }, error => {
         console.error('eventCodenames snapshot error', error);
         codenamesRoom = null;
         codenamesStatus = 'Не удалось загрузить Codenames. Проверь Firebase Rules для eventCodenames.';
-        if (activeMode === 'codenames') scheduleRender();
+        if (activeMode === 'codenames') scheduleFirebaseRender('other');
       });
       onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
         const currentKey = predictionDocKey();
@@ -8031,39 +8055,39 @@
         if (ownDocumentChanged && !predictionDraftDirty) {
           predictionDraft = null;
           predictionDraftKey = '';
-          if (activeMode === 'predictions') scheduleRender();
+          if (activeMode === 'predictions') scheduleFirebaseRender('other');
         }
       }, error => {
         console.error('eventPredictions snapshot error', error);
         predictionDocs = new Map();
         predictionStatus = 'Не удалось загрузить предикты. Проверь Firebase Rules для eventPredictions.';
-        if (activeMode === 'predictions') scheduleRender();
+        if (activeMode === 'predictions') scheduleFirebaseRender('other');
       });
       if (LOCAL_EVENTS_MODE) {
         loadLocalEventData();
-        scheduleRender();
+        scheduleFirebaseRender('other');
       } else {
         onSnapshot(collection(db, 'eventSeasons'), snapshot => {
           seasonDocs = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-          scheduleRender();
+          scheduleFirebaseRender('other');
         }, error => console.error('eventSeasons snapshot error', error));
         onSnapshot(collection(db, 'eventRatings'), snapshot => {
           eventRatings = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          scheduleRender();
+          scheduleFirebaseRender('other');
         }, error => console.error('eventRatings snapshot error', error));
         onSnapshot(collection(db, 'eventBasket'), snapshot => {
           eventBasketError = '';
           eventBasket = {};
           snapshot.docs.forEach(d => { eventBasket[d.id] = { id: d.id, ...d.data() }; });
-          scheduleRender();
+          scheduleFirebaseRender('other');
         }, error => {
           console.error('eventBasket snapshot error', error);
           eventBasketError = 'Не удалось прочитать Firebase-корзину eventBasket. Проверь Rules для eventBasket.';
-          scheduleRender();
+          scheduleFirebaseRender('other');
         });
         onSnapshot(collection(db, 'eventAltLinks'), snapshot => {
           eventAltLinks = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-          scheduleRender();
+          scheduleFirebaseRender('other');
         }, error => console.error('eventAltLinks snapshot error', error));
         onSnapshot(collection(db, 'eventNotifications'), snapshot => {
           eventNotifications = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
@@ -8074,7 +8098,7 @@
         window.addEventListener('storage', (e) => {
           if (e.key === EVENT_BASKET_KEY) {
             loadEventBasket();
-            scheduleRender();
+            scheduleFirebaseRender('other');
           }
         });
       }
