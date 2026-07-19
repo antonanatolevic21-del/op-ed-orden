@@ -7370,21 +7370,33 @@
       }).join('');
       return s;
     }
+    function keyframeSlug(value) {
+      return String(value || '').toLowerCase()
+        .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
     async function tryKeyframeDirector(row) {
-      // KeyFrame is a JS application without a documented public cross-origin API.
-      // Keep this adapter isolated: a failed lookup never removes the AniSongDB result.
-      const query = encodeURIComponent([row.anime, row.typeLabel].filter(Boolean).join(' '));
-      row.keyframeUrl = 'https://keyframe-staff-list.com/?search=' + query;
+      // KeyFrame searches Staff Lists by the anime title/season. On the anime page
+      // the OP and ED credits live in separate tabs, so retain both the tab and number.
+      row.keyframeQuery = [row.keyframeAnime || row.anime, row.typeLabel].filter(Boolean).join(' ');
+      const slug = keyframeSlug(row.keyframeAnime || row.anime);
+      row.keyframeCatalogUrl = 'https://keyframe-staff-list.com/staff-lists';
+      row.keyframeUrl = slug
+        ? 'https://keyframe-staff-list.com/staff/' + slug + '#' + row.type
+        : row.keyframeCatalogUrl;
+      // The site's data is rendered client-side and is not exposed through a documented
+      // cross-origin API. The row stays editable when automatic extraction is unavailable.
       return '';
     }
     function aniSongRow(song) {
       const type = normalizeAniSongType(song.songType);
       const vintage = parseAniVintage(song.animeVintage);
       const anime = String(song.animeJPName || song.animeENName || '').trim();
+      const keyframeAnime = String(song.animeENName || song.animeJPName || '').trim();
       return {
         id: String(song.amqSongId || song.annSongId || Math.random()),
         selected: true, added: false,
-        anime, songName: String(song.songName || '').trim(),
+        anime, keyframeAnime, songName: String(song.songName || '').trim(),
         title: anime + (anime ? ' — ' : '') + type.label,
         type: type.kind, typeLabel: type.label,
         performer: String(song.songArtist || '').trim(),
@@ -7406,7 +7418,7 @@
         tab.rows.map((row,index) => '<tr data-db-row="'+index+'"><td><input type="checkbox" data-db-field="selected" '+(row.selected&&!row.added?'checked':'')+' '+(row.added?'disabled':'')+'></td>'+
           '<td><input class="oc-db-title" data-db-field="title" value="'+escapeHtml(row.title)+'"><div class="oc-db-import-muted">'+escapeHtml(row.songName)+' · '+escapeHtml(row.typeLabel)+' · '+(row.year||'год неизвестен')+'</div></td>'+
           '<td><input data-db-field="performer" value="'+escapeHtml(row.performer)+'"></td>'+
-          '<td><input data-db-field="director" placeholder="можно заполнить вручную" value="'+escapeHtml(row.director)+'"><div class="oc-db-import-muted">'+(row.keyframeUrl?'<a href="'+escapeHtml(row.keyframeUrl)+'" target="_blank" rel="noopener">проверить KeyFrame</a>':'KeyFrame не найден')+'</div></td>'+
+          '<td><input data-db-field="director" placeholder="можно заполнить вручную" value="'+escapeHtml(row.director)+'"><div class="oc-db-import-muted">'+(row.keyframeUrl?'<a href="'+escapeHtml(row.keyframeUrl)+'" target="_blank" rel="noopener">открыть '+escapeHtml(row.typeLabel)+' на KeyFrame</a> · <a href="'+escapeHtml(row.keyframeCatalogUrl||'https://keyframe-staff-list.com/staff-lists')+'" target="_blank" rel="noopener">поиск аниме</a><br><span title="Запрос для каталога KeyFrame">'+escapeHtml(row.keyframeQuery||row.keyframeAnime||row.anime)+'</span>':'KeyFrame не найден')+'</div></td>'+
           '<td><input data-db-field="link" value="'+escapeHtml(row.link)+'"></td>'+
           '<td><button type="button" class="oc-addbtn" data-db-add-one '+(row.added?'disabled':'')+'>'+(row.added?'Добавлено':'Добавить')+'</button></td></tr>').join('')+
         '</tbody></table></div>';
@@ -7448,7 +7460,7 @@
         const tab = { id: Date.now().toString(36), label, createdAt:Date.now(), rows };
         dbImportState.tabs.unshift(tab); dbImportState.tabs = dbImportState.tabs.slice(0,12); dbImportState.activeId = tab.id;
         saveDbImportState(); renderDbImport();
-        dbImportStatus('Найдено: ' + rows.length + '. Ссылка HQ выбрана первой; режиссёра можно проверить в KeyFrame и исправить перед добавлением.');
+        dbImportStatus('Найдено: ' + rows.length + '. Для KeyFrame подготовлены название аниме/сезона и точная вкладка OP или ED; если прямой адрес не совпал, откройте рядом «поиск аниме».');
       } catch (error) {
         console.error(error); dbImportStatus('Поиск не выполнен: ' + (error.message || error), true);
       } finally { $('#oc-db-import-search').disabled = false; }
