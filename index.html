@@ -2114,7 +2114,7 @@
         <input id="oc-add-director" type="text" list="oc-dl-directors" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
         <input id="oc-add-performer" type="text" list="oc-dl-performers" autocomplete="off" placeholder="Исполнители (через запятую)" />
         <input id="oc-add-same-song" type="text" list="oc-dl-same-songs" autocomplete="off" placeholder="Одинаковая песня — общее название (необязательно)" />
-        <textarea id="oc-add-franchise" class="oc-franchise-area" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Если пусто — попробую взять из названия"></textarea>
+        <textarea id="oc-add-franchise" class="oc-franchise-area" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Заполняется только вручную"></textarea>
         <input id="oc-add-image" type="text" placeholder="Основная картинка / постер (URL)" />
         <input id="oc-add-fallback-image" type="text" placeholder="Запасная картинка (например images/название.webp)" />
         <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
@@ -3901,12 +3901,8 @@
       return result;
     }
 
-    function franchisesForSave(title, value, exceptId = null) {
-      const typed = cleanFranchiseList(value).map(name => canonicalFranchiseName(name, exceptId));
-      if (typed.length) return uniqueFranchiseList(typed);
-      const autoTitle = cleanTitleForAutoAlias(title);
-      if (!autoTitle) return [];
-      return uniqueFranchiseList([canonicalFranchiseName(autoTitle, exceptId)]);
+    function franchisesForSave(value) {
+      return uniqueFranchiseList(cleanFranchiseList(value));
     }
 
     function normalizeFranchiseRepairText(value) {
@@ -7724,7 +7720,7 @@
       const directors = parseList($('#oc-add-director').value);
       const performers = parseList($('#oc-add-performer').value);
       const sameSong = sameSongFields($('#oc-add-same-song')?.value);
-      const franchises = franchisesForSave(title, $('#oc-add-franchise').value);
+      const franchises = franchisesForSave($('#oc-add-franchise').value);
       const alternativeTitles = alternativeTitlesForSave(title, $('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
       const image = $('#oc-add-image').value.trim();
       let fallbackImage = $('#oc-add-fallback-image').value.trim();
