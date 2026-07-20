@@ -654,6 +654,12 @@
     .ev-guess-collapse[open] > summary::after { content: 'Свернуть ↑'; color: var(--cyan); }
     .ev-guess-collapse > summary:hover { border-color: var(--cyan); background: rgba(8,217,214,.07); }
     .ev-guess-collapse-content { margin-top: 12px; }
+    .ev-bw-round-summary-list { display: flex; flex-direction: column; gap: 10px; }
+    .ev-bw-round-summary { border: 1px solid var(--border); border-radius: 11px; background: var(--panel); padding: 12px; }
+    .ev-bw-round-summary-title { margin-bottom: 9px; color: var(--text); font-family: 'Archivo Black', sans-serif; font-size: 14px; }
+    .ev-bw-round-summary-scores { display: flex; flex-wrap: wrap; gap: 7px; }
+    .ev-bw-round-summary-score { padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted); font-family: 'Space Mono', monospace; font-size: 10px; }
+    .ev-bw-round-summary-score strong { color: var(--cyan); }
 
     .ev-modal {
       position: fixed;
@@ -2986,7 +2992,7 @@
     }
 
     function bwGroupingLabel(grouping) {
-      return ({ none: 'Без группировки', year: 'По году', yearSeason: 'По году и сезону', performer: 'По исполнителю', director: 'По режиссёру', studio: 'По студии' })[grouping] || 'Без группировки';
+      return ({ none: 'Без группировки', year: 'По году', yearSeason: 'По году и сезону', performer: 'По исполнителю', director: 'По режиссёру', studio: 'По студии', franchise: 'По франшизе' })[grouping] || 'Без группировки';
     }
 
     function bwConcreteGroupLabel(settings, round) {
@@ -3875,6 +3881,29 @@
       $('#ev-bw-next')?.addEventListener('click', bwNextRound);
     }
 
+    function bwRenderFinishedRoundSummaries(room) {
+      const settings = normalizeBestWorstSettings(room.settings);
+      const players = bwReadyPlayers(room);
+      const rounds = Array.isArray(room.rounds) ? room.rounds : [];
+      const items = rounds.map((round, roundIndex) => {
+        const group = bwConcreteGroupLabel(settings, round);
+        const roundTitle = group
+          ? `Раунд ${roundIndex + 1} · ${group.kind}: ${group.value}`
+          : `Раунд ${roundIndex + 1} · Без группировки`;
+        const submissions = bwRoundSubmissions(room, roundIndex);
+        const byPlayer = new Map(submissions.map(row => [normalizeNickname(row.guesserKey || row.guesserName), row]));
+        const scores = players.map(player => {
+          const submission = byPlayer.get(player.key);
+          const result = submission
+            ? bwSubmissionScore(room, roundIndex, submission, settings)
+            : { score: 0, max: bwPossibleScore(room, roundIndex, player.key) };
+          return `<span class="ev-bw-round-summary-score">${escapeHtml(player.name)} — <strong>${result.score}/${result.max}</strong></span>`;
+        }).join('');
+        return `<div class="ev-bw-round-summary"><div class="ev-bw-round-summary-title">${escapeHtml(roundTitle)}</div><div class="ev-bw-round-summary-scores">${scores}</div></div>`;
+      }).join('');
+      return `<details class="ev-guess-collapse"><summary>Результаты по раундам (${rounds.length})</summary><div class="ev-guess-collapse-content"><div class="ev-bw-round-summary-list">${items || '<div class="ev-guess-empty">Раундов нет.</div>'}</div></div></details>`;
+    }
+
     function bwRenderFinished() {
       const room = bestWorstRoom;
       const rows = bwAssignPlaces(bwScoreboard(room, null, 'final-order'));
@@ -3893,7 +3922,7 @@
         : rows.length > 1
           ? '<div class="ev-bw-last"><strong>Полная ничья:</strong> все участники разделили 1 место.</div>'
           : '';
-      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · ${escapeHtml(bwTypeLabel(normalizeBestWorstSettings(room.settings).typeFilter))} · при равенстве баллов участники делят одно место.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${podiumHtml}</div>${lastHtml}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}</section></div>`;
+      appEl.innerHTML = `<div class="ev-bw-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Игра завершена</div><h2>Итоговый пьедестал</h2><div class="ev-hint">${room.rounds?.length || 0} раундов · ${escapeHtml(bwModeLabel(room.settings?.mode))} · ${escapeHtml(bwTypeLabel(normalizeBestWorstSettings(room.settings).typeFilter))} · при равенстве баллов участники делят одно место.</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Новая игра</button>' : ''}</section><section class="ev-guess-results-card"><div class="ev-bw-podium">${podiumHtml}</div>${lastHtml}<h3 style="margin:20px 0 0;font-family:'Archivo Black',sans-serif;">Полная таблица</h3>${bwRenderScoreboard(room)}${bwRenderFinishedRoundSummaries(room)}</section></div>`;
       $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
     }
 
