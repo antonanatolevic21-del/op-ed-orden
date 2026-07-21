@@ -2045,6 +2045,36 @@
     .oc-basket-add-btn { border-color: rgba(255,200,87,.55); color: var(--gold); }
     .oc-basket-add-btn:hover { background: rgba(255,200,87,.12); color: var(--gold); }
 
+    .oc-daily-bell { position:relative; width:38px; height:38px; border:1px solid var(--border); border-radius:10px; background:var(--card); color:var(--text); font-size:19px; cursor:pointer; }
+    .oc-daily-bell:hover { border-color:var(--cyan); }
+    .oc-daily-bell-dot { position:absolute; right:5px; top:5px; width:9px; height:9px; border-radius:50%; background:var(--pink); box-shadow:0 0 0 3px var(--card); }
+    .oc-daily-bell-dot.hidden { display:none; }
+    .oc-daily-panel { margin:16px 0 20px; padding:16px; border:1px solid var(--border); border-radius:14px; background:var(--card); }
+    .oc-daily-panel.hidden { display:none; }
+    .oc-daily-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .oc-daily-head h3 { margin:3px 0 5px; font-family:'Archivo Black',sans-serif; font-size:20px; }
+    .oc-daily-settings { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .oc-daily-settings label { display:flex; flex-direction:column; gap:6px; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; }
+    .oc-daily-settings select { width:100%; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); padding:9px; }
+    .oc-daily-settings .wide { grid-column:span 2; }
+    .oc-daily-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .oc-daily-calendar-wrap { margin-top:18px; padding-top:16px; border-top:1px solid var(--border); }
+    .oc-daily-calendar-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+    .oc-daily-calendar-nav { border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); padding:6px 10px; cursor:pointer; }
+    .oc-daily-calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
+    .oc-daily-calendar-weekday { padding:5px; text-align:center; color:var(--muted); font-family:'Space Mono',monospace; font-size:9px; }
+    .oc-daily-day { min-height:46px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--muted); font-size:11px; }
+    .oc-daily-day.done { border-color:rgba(74,222,128,.55); color:var(--green); background:rgba(74,222,128,.07); }
+    .oc-daily-day.missed { border-color:rgba(255,46,99,.5); color:var(--pink); background:rgba(255,46,99,.06); }
+    .oc-daily-day.pending { border-color:rgba(255,200,87,.55); color:var(--gold); }
+    .oc-daily-day.empty { visibility:hidden; }
+    .oc-daily-toast { position:fixed; right:16px; bottom:16px; z-index:1100; width:min(360px,calc(100vw - 32px)); padding:14px; border:1px solid var(--pink); border-radius:14px; background:rgba(22,18,31,.97); box-shadow:0 16px 42px rgba(0,0,0,.45); }
+    .oc-daily-toast.hidden { display:none; }
+    .oc-daily-toast-close { position:absolute; right:9px; top:8px; border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:18px; }
+    .oc-daily-toast h3 { margin:0 28px 6px 0; font-family:'Archivo Black',sans-serif; font-size:17px; }
+    .oc-daily-toast p { margin:0 0 11px; color:var(--muted); font-size:12px; line-height:1.45; }
+    @media (max-width:760px) { .oc-daily-settings { grid-template-columns:1fr 1fr; } .oc-daily-settings .wide { grid-column:1/-1; } .oc-daily-toast { right:10px; bottom:10px; width:min(330px,calc(100vw - 20px)); } }
+
   </style>
 </head>
 <body>
@@ -2076,6 +2106,7 @@
         <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
         <button id="oc-image-migration-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные копии старых изображений">Копии старых картинок</button>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
+        <button id="oc-daily-bell" class="oc-daily-bell" type="button" title="Ежедневная оценка" aria-label="Ежедневная оценка">🔔<span id="oc-daily-bell-dot" class="oc-daily-bell-dot hidden"></span></button>
         <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
       </div>
     </div>
@@ -2298,6 +2329,7 @@
         </div>
       </div>
       <div class="oc-profile-stats" id="oc-profile-stats"></div>
+      <section id="oc-daily-panel" class="oc-daily-panel hidden"></section>
 
       <div class="oc-topmode-toggle">
         <button class="oc-topmode-btn" id="oc-topmode-score" data-mode="score" style="display:none">По оценке</button>
@@ -2453,6 +2485,7 @@
     </div>
 
     <div id="oc-season-evaluator" class="oc-evaluator hidden"></div>
+    <aside id="oc-daily-toast" class="oc-daily-toast hidden" aria-live="polite"></aside>
 
     <div id="oc-name-modal" class="oc-name-modal hidden" aria-modal="true" role="dialog">
       <div class="oc-name-dialog">
@@ -2548,6 +2581,9 @@
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
     const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
+    const DAILY_DISMISSED_KEY = 'op-ed-daily-dismissed-v1';
+    const DAILY_MSK_OFFSET_HOURS = 3;
+    const DAILY_RELEASE_HOUR = 18;
 
     const EVENT_BASKET_ALLOWED = new Set(['пескошачий', 'egortos']);
     const MIN_PUBLIC_VOTES = 3;
@@ -2588,6 +2624,10 @@
     const nameInput = $('#oc-myname');
     const avatarBtn = $('#oc-avatar-btn');
     const avatarPicker = $('#oc-avatar-picker');
+    const dailyBell = $('#oc-daily-bell');
+    const dailyBellDot = $('#oc-daily-bell-dot');
+    const dailyPanel = $('#oc-daily-panel');
+    const dailyToast = $('#oc-daily-toast');
     const scaleSelect = $('#oc-scale-select');
     const contentFilterSelect = $('#oc-content-filter-select');
     const filterStatEl = $('#oc-filterstat');
@@ -2641,6 +2681,9 @@
     let seasonQueue = [];
     let seasonQueueIndex = 0;
     let evaluatorMode = 'season';
+    let dailyActiveKey = '';
+    let dailyCalendarMonth = null;
+    let dailyRefreshTimer = null;
     let firebaseOpenings = [];
     let firebaseRatings = [];
     let firebaseManualRanks = [];
@@ -3341,6 +3384,7 @@
       try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
       persistManualRanksCache();
       scheduleVisibleRefresh();
+      refreshDailyUi();
     }
 
     function setStatus(msg, isError) {
@@ -3424,6 +3468,7 @@
       render();
       renderSeasonViews();
       if (activeTab === 'profile') renderProfile();
+      refreshDailyUi();
       return true;
     }
 
@@ -5117,6 +5162,267 @@
       return true;
     }
 
+    function dailyDateKeyFromDate(date) {
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+    }
+
+    function dailyDateFromKey(key) {
+      const parts = String(key || '').split('-').map(Number);
+      return parts.length === 3 && parts.every(Number.isFinite) ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
+    }
+
+    function dailyShiftKey(key, days) {
+      const date = dailyDateFromKey(key);
+      if (!date) return '';
+      date.setUTCDate(date.getUTCDate() + Number(days || 0));
+      return dailyDateKeyFromDate(date);
+    }
+
+    function dailyClock(now = new Date()) {
+      const msk = new Date(now.getTime() + DAILY_MSK_OFFSET_HOURS * 3600000);
+      const today = dailyDateKeyFromDate(msk);
+      const released = msk.getUTCHours() >= DAILY_RELEASE_HOUR;
+      return { msk, today, released, key: released ? today : dailyShiftKey(today, -1), nextKey: released ? dailyShiftKey(today, 1) : today };
+    }
+
+    function dailyProfileFor(name = myName) {
+      const safe = manualUserSafeKey(name);
+      return firebaseUserProfiles.find(row => {
+        const display = String(row.nickname || row.displayName || row.name || '').trim();
+        const key = String(row.nicknameKey || row.id || '').trim();
+        return manualSameUser(display, name) || key === safe;
+      }) || null;
+    }
+
+    function normalizeDailySettings(raw = {}) {
+      return {
+        enabled: Boolean(raw.enabled),
+        type: ['OP', 'ED', 'both'].includes(raw.type) ? raw.type : 'both',
+        fromYear: String(raw.fromYear || ''),
+        fromSeason: SEASON_ORDER.includes(raw.fromSeason) ? raw.fromSeason : 'winter',
+        toYear: String(raw.toYear || ''),
+        toSeason: SEASON_ORDER.includes(raw.toSeason) ? raw.toSeason : 'fall',
+        enabledAt: String(raw.enabledAt || ''),
+        firstRequiredKey: String(raw.firstRequiredKey || ''),
+        optionalKey: String(raw.optionalKey || ''),
+        publicCalendar: Boolean(raw.publicCalendar)
+      };
+    }
+
+    function dailySeasonPoint(entry) {
+      const year = Number(entry?.year);
+      const season = SEASON_ORDER.indexOf(String(entry?.season || ''));
+      return Number.isFinite(year) && season >= 0 ? year * 4 + season : null;
+    }
+
+    function dailyEligibleEntries(settings) {
+      const from = settings.fromYear ? Number(settings.fromYear) * 4 + SEASON_ORDER.indexOf(settings.fromSeason) : null;
+      const to = settings.toYear ? Number(settings.toYear) * 4 + SEASON_ORDER.indexOf(settings.toSeason) : null;
+      return entries.filter(entry => {
+        if (settings.type !== 'both' && entry.type !== settings.type) return false;
+        const point = dailySeasonPoint(entry);
+        if (point === null) return false;
+        if (from !== null && point < from) return false;
+        if (to !== null && point > to) return false;
+        return true;
+      });
+    }
+
+    function dailyHash(text) {
+      let hash = 2166136261;
+      const source = String(text || '');
+      for (let i = 0; i < source.length; i += 1) { hash ^= source.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+      return hash >>> 0;
+    }
+
+    function dailyAssignmentFor(name, key, settings, savedIds = null) {
+      if (Array.isArray(savedIds) && savedIds.length) return savedIds.map(String).filter(id => entriesById.has(id));
+      const candidates = dailyEligibleEntries(settings);
+      if (candidates.length < 10) return [];
+      const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}`;
+      const shuffled = candidates.slice().sort((a, b) => dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`));
+      const count = Math.min(candidates.length, 10 + dailyHash(seed) % 6);
+      return shuffled.slice(0, count).map(entry => String(entry.id));
+    }
+
+    async function saveDailyProfilePatch(patch) {
+      if (!myName) return;
+      const ext = await getExtendedDb();
+      const safe = manualUserSafeKey(myName);
+      await ext.setDoc(ext.doc(ext.db, 'userProfiles', safe), {
+        nickname: myName,
+        nicknameKey: safe,
+        avatar: myAvatar,
+        ...patch,
+        updatedAt: ext.serverTimestamp()
+      }, { merge: true });
+      const existing = dailyProfileFor(myName);
+      if (existing) Object.assign(existing, patch);
+      else firebaseUserProfiles.push({ id: safe, nickname: myName, nicknameKey: safe, avatar: myAvatar, ...patch });
+    }
+
+    function dailyCurrentState(name = myName) {
+      const profile = dailyProfileFor(name);
+      const settings = normalizeDailySettings(profile?.dailySettings || {});
+      const clock = dailyClock();
+      const assignments = profile?.dailyAssignments && typeof profile.dailyAssignments === 'object' ? profile.dailyAssignments : {};
+      const completed = profile?.dailyCompleted && typeof profile.dailyCompleted === 'object' ? profile.dailyCompleted : {};
+      const ids = settings.enabled ? dailyAssignmentFor(name, clock.key, settings, assignments[clock.key]) : [];
+      const required = Boolean(settings.enabled && settings.firstRequiredKey && clock.key >= settings.firstRequiredKey);
+      const offered = required || settings.optionalKey === clock.key;
+      return { profile, settings, clock, assignments, completed, ids, required, offered, available: offered && ids.length >= 10, done: Boolean(completed[clock.key]) };
+    }
+
+    async function saveDailySettingsFromPanel() {
+      if (!ensureNickname()) return;
+      const old = normalizeDailySettings(dailyProfileFor(myName)?.dailySettings || {});
+      const clock = dailyClock();
+      let fromYear = String($('#oc-daily-from-year')?.value || '');
+      let toYear = String($('#oc-daily-to-year')?.value || '');
+      let fromSeason = String($('#oc-daily-from-season')?.value || 'winter');
+      let toSeason = String($('#oc-daily-to-season')?.value || 'fall');
+      if (fromYear && toYear && Number(fromYear) * 4 + SEASON_ORDER.indexOf(fromSeason) > Number(toYear) * 4 + SEASON_ORDER.indexOf(toSeason)) {
+        [fromYear, toYear] = [toYear, fromYear];
+        [fromSeason, toSeason] = [toSeason, fromSeason];
+      }
+      const firstStart = !old.enabled;
+      const settings = {
+        enabled: true,
+        type: String($('#oc-daily-type')?.value || 'both'),
+        fromYear, fromSeason, toYear, toSeason,
+        enabledAt: old.enabledAt || new Date().toISOString(),
+        firstRequiredKey: old.firstRequiredKey || clock.nextKey,
+        optionalKey: old.optionalKey || (clock.released ? clock.key : ''),
+        publicCalendar: Boolean($('#oc-daily-public')?.checked)
+      };
+      await saveDailyProfilePatch({ dailySettings: settings });
+      setStatus(firstStart ? 'Ежедневная оценка подключена ✓' : 'Настройки ежедневной оценки сохранены ✓');
+      renderDailyProfilePanel();
+      refreshDailyUi();
+    }
+
+    async function startDailyRating(key = dailyClock().key) {
+      if (!ensureNickname()) return;
+      const profile = dailyProfileFor(myName);
+      const settings = normalizeDailySettings(profile?.dailySettings || {});
+      if (!settings.enabled) { switchTab('profile'); setStatus('Сначала подключи ежедневную оценку в своём профиле.', true); return; }
+      const assignments = { ...(profile?.dailyAssignments || {}) };
+      let ids = dailyAssignmentFor(myName, key, settings, assignments[key]);
+      if (ids.length < 10) { setStatus('Под выбранные критерии нашлось меньше 10 песен — дейлик сегодня не сформировался.', true); return; }
+      if (!Array.isArray(assignments[key]) || !assignments[key].length) {
+        assignments[key] = ids;
+        await saveDailyProfilePatch({ dailyAssignments: assignments });
+      }
+      const progressMap = { ...(profile?.dailyProgress || {}) };
+      const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
+      seasonQueue = ids.filter(id => !progressed.has(String(id))).map(id => entriesById.get(String(id))).filter(Boolean);
+      if (!seasonQueue.length) { await finalizeDaily(key); return; }
+      dailyActiveKey = key;
+      evaluatorMode = 'daily';
+      seasonQueueIndex = 0;
+      localStorage.setItem(DAILY_DISMISSED_KEY, `${manualUserSafeKey(myName)}|${key}`);
+      if (dailyToast) dailyToast.classList.add('hidden');
+      renderEvaluator();
+    }
+
+    async function markDailyEntryDone(entryId) {
+      if (!dailyActiveKey) return;
+      const profile = dailyProfileFor(myName) || {};
+      const progress = { ...(profile.dailyProgress || {}) };
+      const ids = new Set(Array.isArray(progress[dailyActiveKey]) ? progress[dailyActiveKey].map(String) : []);
+      ids.add(String(entryId));
+      progress[dailyActiveKey] = [...ids];
+      await saveDailyProfilePatch({ dailyProgress: progress });
+    }
+
+    async function finalizeDaily(key) {
+      const profile = dailyProfileFor(myName) || {};
+      const assigned = Array.isArray(profile.dailyAssignments?.[key]) ? profile.dailyAssignments[key].map(String) : [];
+      const progressed = new Set(Array.isArray(profile.dailyProgress?.[key]) ? profile.dailyProgress[key].map(String) : []);
+      if (!assigned.length || !assigned.every(id => progressed.has(id))) {
+        setStatus('Дейлик пока не завершён: пропущенные песни можно оценить через колокольчик.', true);
+        refreshDailyUi();
+        return;
+      }
+      const completed = { ...(profile.dailyCompleted || {}), [key]: new Date().toISOString() };
+      await saveDailyProfilePatch({ dailyCompleted: completed });
+      setStatus('Ежедневная оценка завершена ✓');
+      refreshDailyUi();
+      if (activeTab === 'profile') renderDailyProfilePanel();
+    }
+
+    function dailyYearOptions(selected, emptyText) {
+      const years = Array.from(new Set(entries.map(entry => Number(entry.year)).filter(Number.isFinite))).sort((a, b) => a - b);
+      return `<option value="">${escapeHtml(emptyText)}</option>${years.map(year => `<option value="${year}" ${String(selected) === String(year) ? 'selected' : ''}>${year}</option>`).join('')}`;
+    }
+
+    function dailySeasonOptions(selected) {
+      return SEASON_ORDER.map(season => `<option value="${season}" ${season === selected ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('');
+    }
+
+    function dailyCalendarHtml(name, settings, profile) {
+      const now = dailyClock();
+      const currentMsk = now.msk;
+      if (!dailyCalendarMonth) dailyCalendarMonth = new Date(Date.UTC(currentMsk.getUTCFullYear(), currentMsk.getUTCMonth(), 1));
+      const year = dailyCalendarMonth.getUTCFullYear();
+      const month = dailyCalendarMonth.getUTCMonth();
+      const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+      const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+      const completed = profile?.dailyCompleted || {};
+      const assignments = profile?.dailyAssignments || {};
+      const eligible = dailyEligibleEntries(settings).length >= 10;
+      const cells = Array.from({ length:firstWeekday }, () => '<div class="oc-daily-day empty"></div>');
+      for (let day = 1; day <= days; day += 1) {
+        const key = dailyDateKeyFromDate(new Date(Date.UTC(year, month, day)));
+        let cls = '';
+        let mark = '';
+        if (completed[key]) { cls = 'done'; mark = '✓'; }
+        else if (settings.firstRequiredKey && key >= settings.firstRequiredKey && key < now.key && (Array.isArray(assignments[key]) ? assignments[key].length >= 10 : eligible)) { cls = 'missed'; mark = '×'; }
+        else if (key === now.key && settings.firstRequiredKey && key >= settings.firstRequiredKey && eligible) { cls = 'pending'; mark = '•'; }
+        cells.push(`<div class="oc-daily-day ${cls}"><span>${day}</span><strong>${mark}</strong></div>`);
+      }
+      const monthName = new Intl.DateTimeFormat('ru-RU', { month:'long', year:'numeric', timeZone:'UTC' }).format(dailyCalendarMonth);
+      return `<div class="oc-daily-calendar-wrap"><div class="oc-daily-calendar-head"><button class="oc-daily-calendar-nav" data-daily-month="-1">←</button><strong>${escapeHtml(monthName)}</strong><button class="oc-daily-calendar-nav" data-daily-month="1">→</button></div><div class="oc-daily-calendar">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(day => `<div class="oc-daily-calendar-weekday">${day}</div>`).join('')}${cells.join('')}</div></div>`;
+    }
+
+    function renderDailyProfilePanel() {
+      if (!dailyPanel) return;
+      const viewed = profileUser || myName;
+      const profile = dailyProfileFor(viewed);
+      const settings = normalizeDailySettings(profile?.dailySettings || {});
+      const own = Boolean(myName && manualSameUser(viewed, myName));
+      const maySeeCalendar = own || settings.publicCalendar;
+      if (!own && (!settings.enabled || !maySeeCalendar)) { dailyPanel.classList.add('hidden'); dailyPanel.innerHTML = ''; return; }
+      dailyPanel.classList.remove('hidden');
+      const state = own ? dailyCurrentState(myName) : null;
+      const todayButton = own && settings.enabled && state.available && !state.done
+        ? `<button type="button" class="oc-addbtn" id="oc-daily-start-today">Пройти текущий дейлик (${state.ids.length})</button>` : '';
+      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">Что оцениваем<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label><label>Начальный год<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, 'С самого раннего')}</select></label><label>Начальный сезон<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>Конечный год<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, 'По самый поздний')}</select></label><label>Конечный сезон<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>Видимость календаря</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> показывать календарь всем в моём профиле</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? 'Сохранить настройки' : 'Запустить ежедневную оценку'}</button>${todayButton}</div>` : '';
+      dailyPanel.innerHTML = `<div class="oc-daily-head"><div><div class="oc-section-label">ежедневная оценка</div><h3>${own ? 'Твой дейлик' : `Календарь · ${escapeHtml(viewed)}`}</h3><div class="oc-hint">Новый набор появляется ежедневно в 18:00 МСК. В наборе — от 10 до 15 случайных песен.</div></div></div>${settingsHtml}${settings.enabled && maySeeCalendar ? dailyCalendarHtml(viewed, settings, profile) : ''}`;
+      $('#oc-daily-save-settings')?.addEventListener('click', () => saveDailySettingsFromPanel().catch(error => { console.error(error); setStatus('Не удалось сохранить настройки дейлика.', true); }));
+      $('#oc-daily-start-today')?.addEventListener('click', () => startDailyRating().catch(error => { console.error(error); setStatus('Не удалось открыть дейлик.', true); }));
+      dailyPanel.querySelectorAll('[data-daily-month]').forEach(button => button.addEventListener('click', () => { dailyCalendarMonth.setUTCMonth(dailyCalendarMonth.getUTCMonth() + Number(button.dataset.dailyMonth)); renderDailyProfilePanel(); }));
+    }
+
+    function refreshDailyUi() {
+      if (!dailyBellDot || !dailyToast) return;
+      const state = dailyCurrentState(myName);
+      const pending = Boolean(myName && state.required && state.available && !state.done);
+      dailyBellDot.classList.toggle('hidden', !pending);
+      const dismissal = `${manualUserSafeKey(myName)}|${state.clock.key}`;
+      const dismissed = localStorage.getItem(DAILY_DISMISSED_KEY) === dismissal;
+      if (pending && !dismissed) {
+        dailyToast.innerHTML = `<button class="oc-daily-toast-close" type="button" aria-label="Закрыть">×</button><h3>Твой новый дейлик готов</h3><p>${state.ids.length} песен ждут ежедневной оценки. Уведомление больше не появится до следующего обновления в 18:00 МСК.</p><button class="oc-addbtn" type="button" data-daily-toast-start>Пройти дейлик</button>`;
+        dailyToast.classList.remove('hidden');
+        dailyToast.querySelector('.oc-daily-toast-close')?.addEventListener('click', () => { localStorage.setItem(DAILY_DISMISSED_KEY, dismissal); dailyToast.classList.add('hidden'); });
+        dailyToast.querySelector('[data-daily-toast-start]')?.addEventListener('click', () => startDailyRating().catch(console.error));
+      } else dailyToast.classList.add('hidden');
+      if (activeTab === 'profile') renderDailyProfilePanel();
+      if (dailyRefreshTimer) clearTimeout(dailyRefreshTimer);
+      const nextRelease = new Date(`${state.clock.nextKey}T15:00:02.000Z`).getTime();
+      dailyRefreshTimer = setTimeout(refreshDailyUi, Math.max(1000, Math.min(2147483647, nextRelease - Date.now())));
+    }
+
     function entryPassesSeasonVisibility(entry) {
       return entryPassesHiddenFlags(entry, seasonHideChinese, seasonHideMovie, seasonHideShortened);
     }
@@ -5488,15 +5794,22 @@
       evaluatorEl.innerHTML = '';
       seasonQueue = [];
       seasonQueueIndex = 0;
+      dailyActiveKey = '';
     }
 
     function renderEvaluator() {
       if (!seasonQueue.length || seasonQueueIndex >= seasonQueue.length) {
+        const completedMode = evaluatorMode;
+        const completedDailyKey = dailyActiveKey;
         closeEvaluator();
         renderSeasonViews();
+        if (completedMode === 'daily') {
+          finalizeDaily(completedDailyKey).catch(error => { console.error(error); setStatus('Не удалось завершить дейлик.', true); });
+          return;
+        }
         setStatus(isPersonalScale()
-          ? (evaluatorMode === 'single' ? 'Оценка сохранена ✓' : 'Оценки сезона проставлены ✓')
-          : (evaluatorMode === 'single' ? 'Оценка сохранена ✓' : 'Сезонная оценка завершена ✓'));
+          ? (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Оценки сезона проставлены ✓')
+          : (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Сезонная оценка завершена ✓'));
         return;
       }
       const entry = seasonQueue[seasonQueueIndex];
@@ -5510,7 +5823,9 @@
       const inputStep = scaleStep();
       const progressText = evaluatorMode === 'single'
         ? `Переоценка · ${entry.year || 'год не указан'}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`
-        : `${seasonQueueIndex + 1} из ${seasonQueue.length} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`;
+        : evaluatorMode === 'daily'
+          ? `Ежедневная оценка · ${seasonQueueIndex + 1} из ${seasonQueue.length} оставшихся`
+          : `${seasonQueueIndex + 1} из ${seasonQueue.length} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`;
       evaluatorEl.classList.remove('hidden');
       evaluatorEl.innerHTML = `<div class="oc-eval-modal">
         <div class="oc-eval-top">
@@ -5593,6 +5908,7 @@
         }
         touchEntryCache(entry);
         markRatingDataChanged();
+        if (evaluatorMode === 'daily') await markDailyEntryDone(entry.id);
         setStatus('Оценка сохранена в Firebase ✓');
         render();
         renderSeasonViews();
@@ -6375,6 +6691,7 @@
 
       populateArScoreOptions(profileUser, allRatingsFiltered);
       renderAllRatings(profileUser, allRatingsFiltered);
+      renderDailyProfilePanel();
     }
 
     function setTopMode(mode) {
@@ -7414,6 +7731,11 @@
         </div>`;
 
     avatarBtn.addEventListener('click', (e) => { e.stopPropagation(); avatarPicker.classList.toggle('hidden'); });
+    if (dailyBell) dailyBell.addEventListener('click', () => {
+      const state = dailyCurrentState(myName);
+      if (state.settings.enabled && state.available && !state.done) startDailyRating().catch(error => { console.error(error); setStatus('Не удалось открыть дейлик.', true); });
+      else { switchTab('profile'); renderDailyProfilePanel(); }
+    });
 
     avatarPicker.addEventListener('click', async (e) => {
       const btn = e.target.closest('button[data-emoji]');
@@ -8119,6 +8441,7 @@
       if (myName && !avatarsMap[myName]) avatarsMap[myName] = myAvatar;
       await loadTierOrders();
       await loadEntries();
+      refreshDailyUi();
       if (!myName) showNameModal('Введите никнейм, чтобы продолжить.');
     })();
   })();
