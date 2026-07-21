@@ -1345,12 +1345,14 @@
   </div>
 
   <div class="ev-modal hidden" id="ev-name-modal">
-    <div class="ev-dialog ev-auth-dialog">
-      <h2>Никнейм</h2>
-      <p>Введи никнейм. Оценивать сезон можно только если этот ник есть в списке 15 участников выбранного сезона.</p>
-      <div class="ev-auth-row">
-        <input id="ev-modal-name" type="text" placeholder="Напр. Kofa" />
-        <button class="ev-btn-main" id="ev-name-save">Сохранить</button>
+    <div class="ev-dialog ev-auth-dialog" style="position:relative;">
+      <button id="ev-name-close" class="ev-close" type="button" title="Вернуться к текущему аккаунту" style="position:absolute;right:14px;top:12px;">×</button>
+      <h2>Вход в аккаунт</h2>
+      <p>Если для ника установлен личный пароль, введи его. Оценивать сезон можно только от имени участника соответствующего слота.</p>
+      <div class="ev-auth-row" style="flex-wrap:wrap;">
+        <input id="ev-modal-name" type="text" placeholder="Напр. Kofa" autocomplete="nickname" />
+        <input id="ev-modal-account-pass" type="password" placeholder="Личный пароль, если установлен" autocomplete="current-password" />
+        <button class="ev-btn-main" id="ev-name-save">Войти</button>
       </div>
       <div class="ev-error" id="ev-name-error"></div>
     </div>
@@ -1367,7 +1369,7 @@
       onSnapshot,
       serverTimestamp
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -1484,7 +1486,9 @@
     const authError = $('#ev-auth-error');
     const nameModal = $('#ev-name-modal');
     const modalName = $('#ev-modal-name');
+    const modalAccountPass = $('#ev-modal-account-pass');
     const nameSave = $('#ev-name-save');
+    const nameClose = $('#ev-name-close');
     const nameError = $('#ev-name-error');
     const evaluatorEl = $('#ev-evaluator');
     const postModalEl = $('#ev-post-modal');
@@ -1839,6 +1843,27 @@
         .toLowerCase()
         .replace(/[^a-zа-яё0-9_-]+/gi, '_')
         .slice(0, 60);
+    }
+
+    async function authEmailForNickname(nickname) {
+      const safeName = normalizeNickname(nickname);
+      if (!safeName) throw new Error('Никнейм обязателен');
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(safeName));
+      const hash = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+      return hash + '@users.oped-orden.invalid';
+    }
+
+    function protectedProfile(name) {
+      const key = normalizeNickname(name);
+      return userProfiles.find(row => normalizeNickname(row.nicknameKey || row.nickname || row.id) === key && row.authUid) || null;
+    }
+
+    function knownEventAccount(name) {
+      const key = normalizeNickname(name);
+      if (!key) return false;
+      if (userProfiles.some(row => normalizeNickname(row.nicknameKey || row.nickname || row.id) === key)) return true;
+      if (mainRatings.some(row => normalizeNickname(row.nicknameKey || row.nickname) === key)) return true;
+      return SEASONS.some(season => cleanParticipantSlots(getSeasonState(season).allowedNicknames || []).some(nick => normalizeNickname(nick) === key));
     }
 
     function seasonKey(season) {
@@ -8022,7 +8047,15 @@
       authSave.addEventListener('click', handleAuth);
       authPass.addEventListener('keydown', e => { if (e.key === 'Enter') handleAuth(); });
       nameSave.addEventListener('click', handleNameSave);
+      if (nameClose) nameClose.addEventListener('click', () => {
+        nameModal.classList.add('hidden');
+        modalName.value = myName || getSavedAdminNickname() || '';
+        if (modalAccountPass) modalAccountPass.value = '';
+        nameError.textContent = '';
+        nameInput.value = myName || getSavedAdminNickname() || '';
+      });
       modalName.addEventListener('keydown', e => { if (e.key === 'Enter') handleNameSave(); });
+      if (modalAccountPass) modalAccountPass.addEventListener('keydown', e => { if (e.key === 'Enter') handleNameSave(); });
     }
 
     function showAuthModal(message = '') {
@@ -8067,12 +8100,13 @@
 
     function showNameModal() {
       modalName.value = myName || '';
+      if (modalAccountPass) modalAccountPass.value = '';
       nameError.textContent = '';
       nameModal.classList.remove('hidden');
       setTimeout(() => modalName.focus(), 50);
     }
 
-    function handleNameSave() {
+    async function handleNameSave() {
       const name = String(modalName.value || '').trim();
       if (!name) {
         nameError.textContent = 'Никнейм обязателен.';
@@ -8082,9 +8116,29 @@
         nameError.textContent = 'Админский вход разрешён только аккаунтам: Пёс кошачий, Toxexex, Egortos и Кофа.';
         return;
       }
+      const profile = protectedProfile(name);
+      if (profile && auth.currentUser?.uid !== profile.authUid) {
+        const password = String(modalAccountPass?.value || '');
+        if (!password) {
+          nameError.textContent = 'Для этого аккаунта установлен личный пароль.';
+          return;
+        }
+        try {
+          const email = await authEmailForNickname(name);
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+          if (credential.user.uid !== profile.authUid) throw new Error('Пароль относится к другому аккаунту.');
+        } catch (error) {
+          nameError.textContent = error?.code === 'auth/invalid-credential' ? 'Неверный личный пароль.' : ('Не удалось войти: ' + (error?.message || error));
+          return;
+        }
+      } else if (!profile && !knownEventAccount(name) && normalizeNickname(name) !== normalizeNickname(myName)) {
+        nameError.textContent = 'Такого аккаунта нет. Сначала зарегистрируй его на странице профиля основного сайта.';
+        return;
+      }
       myName = name;
       localStorage.setItem(NAME_KEY, myName);
       nameModal.classList.add('hidden');
+      if (modalAccountPass) modalAccountPass.value = '';
       updateAccessUi();
       render();
       maybeShowCompletionNotice();
