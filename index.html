@@ -3603,85 +3603,16 @@
       return clean;
     }
 
-    const temporaryImageFallbacks = new Map();
-    const TEMPORARY_IMAGE_FALLBACK_TTL = 5 * 60 * 1000;
-    try { localStorage.removeItem('op-ed-image-fallback-prefs-v1'); } catch (_) {}
-
-    function imagePrimarySource(img) {
-      return String(img && (img.dataset.primarySource || img.getAttribute('src')) || '').trim();
-    }
-
-    function rememberTemporaryImageFallback(img) {
-      const primary = imagePrimarySource(img);
-      if (primary) temporaryImageFallbacks.set(primary, Date.now());
-    }
-
-    function hasTemporaryImageFallback(img) {
-      const primary = imagePrimarySource(img);
-      if (!primary) return false;
-      const failedAt = Number(temporaryImageFallbacks.get(primary) || 0);
-      if (!failedAt) return false;
-      if (Date.now() - failedAt >= TEMPORARY_IMAGE_FALLBACK_TTL) {
-        temporaryImageFallbacks.delete(primary);
-        return false;
-      }
-      return true;
-    }
-
     window.ocUseFallbackImage = function(img) {
       if (!img) return;
       const fallback = String(img.dataset.fallback || '').trim();
       if (fallback && img.dataset.fallbackTried !== '1') {
-        rememberTemporaryImageFallback(img);
         img.dataset.fallbackTried = '1';
-        if (img._ocFallbackTimer) clearTimeout(img._ocFallbackTimer);
         img.src = fallback;
         return;
       }
       img.replaceWith(document.createTextNode('нет изображения'));
     };
-
-    function armFastImageFallback(img) {
-      if (!img || img.dataset.fallbackArmed === '1') return;
-      const fallback = String(img.dataset.fallback || '').trim();
-      if (!fallback) return;
-      img.dataset.fallbackArmed = '1';
-      img.dataset.primarySource = String(img.getAttribute('src') || img.src || '').trim();
-      if (hasTemporaryImageFallback(img)) {
-        window.ocUseFallbackImage(img);
-        return;
-      }
-      if (img.complete && img.naturalWidth > 0) {
-        img.dataset.primaryLoaded = '1';
-        return;
-      }
-
-      img._ocFallbackTimer = setTimeout(() => {
-        if (img.dataset.primaryLoaded === '1' || img.dataset.fallbackTried === '1') return;
-        window.ocUseFallbackImage(img);
-      }, 1500);
-      img.addEventListener('load', () => {
-        if (img.dataset.fallbackTried !== '1') {
-          img.dataset.primaryLoaded = '1';
-          temporaryImageFallbacks.delete(imagePrimarySource(img));
-          if (img._ocFallbackTimer) clearTimeout(img._ocFallbackTimer);
-        }
-      });
-    }
-
-    function armFallbackImages(root) {
-      const scope = root && root.querySelectorAll ? root : document;
-      scope.querySelectorAll('img[data-fallback]').forEach(armFastImageFallback);
-      if (root && root.matches && root.matches('img[data-fallback]')) armFastImageFallback(root);
-    }
-
-    const fallbackImageObserver = new MutationObserver(mutations => {
-      mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
-        if (node && node.nodeType === 1) armFallbackImages(node);
-      }));
-    });
-    fallbackImageObserver.observe(document.documentElement, { childList: true, subtree: true });
-    armFallbackImages(document);
 
     function safeExternalUrl(url) {
       const normalized = normalizeUrl(String(url || '').trim());
@@ -3743,7 +3674,7 @@
 
     function renderOpeningVideoBlock(entry) {
       const imageInner = entry.image
-        ? `<img src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${escapeHtml(entry.title)}" onerror="window.ocUseFallbackImage(this);">`
+        ? `<img loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${escapeHtml(entry.title)}" onerror="window.ocUseFallbackImage(this);">`
         : escapeHtml(entry.type || 'OP');
       const imageBlock = `<div class="oc-eval-image oc-opening-plain-image">${imageInner}</div>`;
       const href = safeExternalUrl(entry.link);
@@ -5486,7 +5417,7 @@
       const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
       const title = escapeHtml(entry && entry.title ? entry.title : 'видео');
       const imageBlock = entry.image
-        ? `<div class="${className}"><img src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}" onerror="window.ocUseFallbackImage(this);"></div>`
+        ? `<div class="${className}"><img loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}" onerror="window.ocUseFallbackImage(this);"></div>`
         : `<div class="${className}">${fallback}</div>`;
       if (!entry.link) return imageBlock;
       return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
