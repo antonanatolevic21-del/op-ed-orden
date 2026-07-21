@@ -1353,6 +1353,7 @@
         <input id="ev-modal-name" type="text" placeholder="Напр. Kofa" autocomplete="nickname" />
         <input id="ev-modal-account-email" type="email" placeholder="Email защищённого аккаунта" autocomplete="email" />
         <input id="ev-modal-account-pass" type="password" placeholder="Личный пароль, если установлен" autocomplete="current-password" />
+        <label style="display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;cursor:pointer;"><input id="ev-remember-account" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
         <button class="ev-btn-main" id="ev-name-save">Войти</button>
       </div>
       <div class="ev-error" id="ev-name-error"></div>
@@ -1370,7 +1371,7 @@
       onSnapshot,
       serverTimestamp
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -1491,6 +1492,7 @@
     const modalName = $('#ev-modal-name');
     const modalAccountEmail = $('#ev-modal-account-email');
     const modalAccountPass = $('#ev-modal-account-pass');
+    const rememberAccountInput = $('#ev-remember-account');
     const nameSave = $('#ev-name-save');
     const nameClose = $('#ev-name-close');
     const nameError = $('#ev-name-error');
@@ -8127,6 +8129,7 @@
           return;
         }
         try {
+          await setPersistence(auth, rememberAccountInput?.checked ? browserLocalPersistence : browserSessionPersistence);
           const credential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
           if (credential.user.uid !== profile.authUid) throw new Error('Пароль относится к другому аккаунту.');
         } catch (error) {
