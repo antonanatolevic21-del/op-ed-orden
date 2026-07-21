@@ -1969,6 +1969,7 @@
     function canAccessMode(mode) {
       const requested = String(mode || 'rating');
       if (requested === 'rating') return isGuest() || isAdmin();
+      if (requested === 'predictions') return isAdmin();
       return !isGuest();
     }
 
