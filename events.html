@@ -3419,6 +3419,37 @@
       await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
     }
 
+    async function bwLeaveGame() {
+      if (!bestWorstRoom) return;
+      const key = bwCurrentUserKey();
+      if (!key || !bwPlayers(bestWorstRoom).some(player => player.key === key)) return;
+      const remaining = bwPlayers(bestWorstRoom).filter(player => player.key !== key);
+      try {
+        if (bestWorstRoom.status === 'playing') {
+          const submissionRef = doc(db, BW_SUBMISSION_COLLECTION, bwSubmissionId(bestWorstRoom.gameId, Number(bestWorstRoom.currentRound || 0), key));
+          await deleteDoc(submissionRef).catch(() => {});
+        }
+        if (remaining.length < 2) {
+          await deleteDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID));
+          bestWorstStatus = 'Игроков стало меньше двух — игра завершена.';
+        } else {
+          const patch = { players: remaining, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() };
+          if (normalizeNickname(bestWorstRoom.hostKey) === key || !remaining.some(player => player.key === normalizeNickname(bestWorstRoom.hostKey))) {
+            patch.hostKey = remaining[0].key;
+            patch.hostName = remaining[0].name;
+          }
+          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), patch, { merge: true });
+          bestWorstStatus = 'Ты вышел из игры. Остальные продолжают.';
+        }
+        bestWorstDraftKey = '';
+        bestWorstDraft = {};
+        bestWorstStatusKey = '';
+      } catch (error) {
+        console.error('bestWorst leave failed', error);
+        bestWorstStatus = 'Не удалось выйти из игры.';
+        render();
+      }
+    }
     async function bwToggleReady() {
       if (!bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
       const name = String(myName || '').trim();
@@ -3711,7 +3742,7 @@
               <div class="ev-bw-summary-strip"><span class="ev-bw-pill">Участников: <strong>${players.length}</strong></span><span class="ev-bw-pill">Готовы: <strong>${ready.length}</strong></span><span class="ev-bw-pill">Минимум: <strong>2</strong></span></div>
               <div class="ev-actions" style="margin-top:12px;justify-content:flex-start;">
                 ${room && !me ? '<button type="button" class="ev-btn-secondary" id="ev-bw-join">Присоединиться</button>' : ''}
-                ${room && me ? `<button type="button" class="${me.ready ? 'ev-btn-ghost' : 'ev-btn-secondary'}" id="ev-bw-ready">${me.ready ? 'Отменить готовность' : 'Готов'}</button>` : ''}
+                ${room && me ? `<button type="button" class="${me.ready ? 'ev-btn-ghost' : 'ev-btn-secondary'}" id="ev-bw-ready">${me.ready ? 'Отменить готовность' : 'Готов'}</button><button type="button" class="ev-btn-ghost" id="ev-bw-leave">Выйти из лобби</button>` : ''}
                 ${room ? `<button type="button" class="ev-btn-main" id="ev-bw-start" ${canStart ? '' : 'disabled'}>Запустить игру</button>` : ''}
               </div>
               <div class="ev-status-line ${ready.length >= 2 ? 'ok' : 'warn'}">${ready.length >= 2 ? 'Минимум готовых набран.' : 'Ждём хотя бы двух готовых участников.'}</div>
@@ -3779,6 +3810,7 @@
       $('#ev-bw-save-lobby')?.addEventListener('click', bwSaveLobby);
       $('#ev-bw-join')?.addEventListener('click', bwJoinLobby);
       $('#ev-bw-ready')?.addEventListener('click', bwToggleReady);
+      $('#ev-bw-leave')?.addEventListener('click', bwLeaveGame);
       $('#ev-bw-start')?.addEventListener('click', bwStartGame);
       $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
     }
@@ -3803,7 +3835,7 @@
       const concreteGroup = bwConcreteGroupLabel(settings, round);
       appEl.innerHTML = `
         <div class="ev-bw-shell" data-bw-round-root="1">
-          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">${escapeHtml(bwModeLabel(settings.mode))} · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · ${settings.perRound} элементов${concreteGroup ? ` · ${escapeHtml(concreteGroup.kind)}: <strong>${escapeHtml(concreteGroup.value)}</strong>` : ''}</div></div>${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</section>
+          <section class="ev-panel-head"><div><div class="ev-section-label">Раунд ${roundIndex + 1} из ${room.rounds.length}</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">${escapeHtml(bwModeLabel(settings.mode))} · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · ${settings.perRound} элементов${concreteGroup ? ` · ${escapeHtml(concreteGroup.kind)}: <strong>${escapeHtml(concreteGroup.value)}</strong>` : ''}</div></div><div class="ev-actions">${me ? '<button type="button" class="ev-btn-ghost" id="ev-bw-leave">Выйти из игры</button>' : ''}${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</div></section>
           <section class="ev-guess-filter-card">
             <div class="ev-bw-round-head"><div><h3 style="margin:0 0 5px;font-family:'Archivo Black',sans-serif;">${phaseResults ? 'Результаты раунда' : 'Выбери свои флажки'}</h3><div class="ev-hint">Флажки на карточках — только твои собственные лучшее и худшее. Выборы остальных игроков делаются отдельно в списке ниже.</div></div><div class="ev-bw-pill" id="ev-bw-submitted-count">Ответили: <strong>${submittedKeys.size}/${players.length}</strong></div></div>
             ${concreteGroup ? `<div class="ev-bw-group-banner"><span class="ev-bw-group-kind">${escapeHtml(concreteGroup.kind)}</span><span class="ev-bw-group-value">${escapeHtml(concreteGroup.value)}</span></div>` : ''}
@@ -3883,6 +3915,7 @@
 
     function bindBestWorstRoundControls() {
       $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
+      $('#ev-bw-leave')?.addEventListener('click', bwLeaveGame);
       document.querySelectorAll('[data-bw-flag]').forEach(button => button.addEventListener('click', () => {
         const targetKey = bwCurrentUserKey();
         if (!targetKey) return;
@@ -4332,7 +4365,25 @@
     async function cnLeave() {
       const key = cnPlayerKey();
       if (!key || !codenamesRoom) return;
-      await cnPatch({ players: cnPlayers().filter(p => p.key !== key) });
+      const currentPlayers = cnPlayers();
+      const leaving = currentPlayers.find(player => player.key === key);
+      if (!leaving) return;
+      let players = currentPlayers.filter(player => player.key !== key);
+      const playing = codenamesRoom.status === 'playing';
+      const hasRed = players.some(player => player.team === 'red');
+      const hasBlue = players.some(player => player.team === 'blue');
+      if (players.length < 2 || (playing && (!hasRed || !hasBlue))) {
+        await deleteDoc(cnRoomDoc());
+        codenamesStatus = 'Игроков стало меньше необходимого минимума — игра завершена.';
+        return;
+      }
+      if (playing && leaving.role === 'spymaster' && !players.some(player => player.team === leaving.team && player.role === 'spymaster')) {
+        const replacement = players.find(player => player.team === leaving.team);
+        if (replacement) players = players.map(player => player.key === replacement.key ? { ...player, role:'spymaster' } : player);
+      }
+      const log = [...(Array.isArray(codenamesRoom.log) ? codenamesRoom.log : []), `${leaving.name} вышел из игры.`].slice(-80);
+      await cnPatch({ players, log });
+      codenamesStatus = 'Ты вышел. Игра остальных продолжается.';
     }
     async function cnKickPlayer(key) {
       if (!isAdmin() || !codenamesRoom || codenamesRoom.status !== 'lobby') return;
@@ -4472,7 +4523,7 @@
       const clue = room.clue || null;
       const winningTeam = room.winner || '';
       appEl.innerHTML = `<div class="ev-cn-shell">
-        <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${winningTeam ? 'Игра завершена: цвета всех карточек раскрыты для всех.' : seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-delete">Удалить игру</button><button class="ev-btn-ghost" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
+        <section class="ev-panel-head"><div><div class="ev-section-label">Codenames</div><h2>${winningTeam ? 'Игра завершена' : 'Игра идёт'}</h2><div class="ev-hint">${winningTeam ? 'Игра завершена: цвета всех карточек раскрыты для всех.' : seeMap ? 'Ты капитан: цвета скрытых карточек видны только капитанам.' : me ? `Ты играешь за команду «${cnTeamLabel(me.team)}».` : 'Ты наблюдаешь за игрой.'}</div></div><div class="ev-actions">${me ? '<button class="ev-btn-ghost" id="ev-cn-leave">Выйти из игры</button>' : ''}${isAdmin() ? '<button class="ev-btn-danger" id="ev-cn-delete">Удалить игру</button><button class="ev-btn-ghost" id="ev-cn-reset">Вернуться в лобби</button>' : ''}</div></section>
         <section class="ev-cn-panel"><div class="ev-cn-scorebar"><div class="ev-cn-score red"><span>Красные</span><strong>${redRemaining}</strong><span>осталось</span></div><div class="ev-cn-turn">Ход: <strong style="color:${room.turn==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(room.turn)}</strong><br>${room.startingTeam===room.turn?'стартовая команда':''}</div><div class="ev-cn-score blue"><span>Синие</span><strong>${blueRemaining}</strong><span>осталось</span></div></div>
         ${cnRenderRoster(room)}
         ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
@@ -4481,6 +4532,7 @@
         <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
         ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
       $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
+      $('#ev-cn-leave')?.addEventListener('click', cnLeave);
       $('#ev-cn-delete')?.addEventListener('click', cnDeleteGame);
       $('#ev-cn-clue-send')?.addEventListener('click', cnSubmitClue);
       $('#ev-cn-end-turn')?.addEventListener('click', cnEndTurn);
@@ -4688,12 +4740,34 @@
     async function whoLeaveRoom() {
       if (!whoAmIRoom) return;
       const key = whoPlayerKey();
-      const players = whoPlayers().filter(player => player.key !== key);
-      if (!players.length || whoIsHost()) {
+      const oldPlayers = whoPlayers();
+      if (!oldPlayers.some(player => player.key === key)) return;
+      const players = oldPlayers.filter(player => player.key !== key);
+      if (players.length < 2) {
         await deleteDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID));
-      } else {
-        await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { players, updatedAt:serverTimestamp() }, { merge:true });
+        whoAmIStatus = 'Игроков стало меньше двух — игра завершена.';
+        return;
       }
+      const activeKeys = new Set(players.map(player => player.key));
+      const pickerOrder = (Array.isArray(whoAmIRoom.pickerOrder) ? whoAmIRoom.pickerOrder : []).filter(playerKey => activeKeys.has(playerKey));
+      const assignments = Object.fromEntries(Object.entries(whoAmIRoom.assignments || {}).filter(([playerKey]) => activeKeys.has(playerKey)));
+      const guessedKeys = (Array.isArray(whoAmIRoom.guessedKeys) ? whoAmIRoom.guessedKeys : []).filter(playerKey => activeKeys.has(playerKey));
+      const questions = (Array.isArray(whoAmIRoom.questions) ? whoAmIRoom.questions : []).filter(question => activeKeys.has(question.playerKey));
+      const pickTargets = {};
+      pickerOrder.forEach((pickerKey, index) => {
+        const oldTarget = whoAmIRoom.pickTargets?.[pickerKey];
+        pickTargets[pickerKey] = activeKeys.has(oldTarget) && oldTarget !== pickerKey ? oldTarget : pickerOrder[(index + 1) % pickerOrder.length];
+      });
+      const oldHostKey = normalizeNickname(whoAmIRoom.hostKey);
+      const nextHost = activeKeys.has(oldHostKey) ? players.find(player => player.key === oldHostKey) : players[0];
+      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+        players, pickerOrder, pickTargets, assignments, guessedKeys, questions,
+        hostKey: nextHost.key, hostName: nextHost.name,
+        pickerIndex: Math.min(Number(whoAmIRoom.pickerIndex || 0), Math.max(0, pickerOrder.length - 1)),
+        turnIndex: Number(whoAmIRoom.turnIndex || 0) % players.length,
+        updatedAt: serverTimestamp()
+      }, { merge:true });
+      whoAmIStatus = 'Ты вышел. Игра остальных продолжается.';
     }
 
     function whoEligibleOpenings(settings) {
@@ -4854,7 +4928,7 @@
       const joined = players.some(player => player.key === ownKey);
       const guessed = new Set(Array.isArray(room.guessedKeys) ? room.guessedKeys : []);
       if (room.status === 'lobby') {
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div><button class="ev-btn-ghost" id="ev-who-leave" type="button">${whoIsHost() ? 'Удалить комнату' : 'Выйти'}</button></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div>${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из лобби</button>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-join')?.addEventListener('click', () => whoJoinRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         ['type','fromYear','toYear'].forEach(key => {
@@ -4874,10 +4948,11 @@
         const total = Array.isArray(room.pickerOrder) ? room.pickerOrder.length : players.length;
         const done = Math.min(Number(room.pickerIndex || 0), total);
         const myPick = picker?.key === ownKey;
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Выбор карточек</div><h2>${done + 1} из ${total} · выбирает ${escapeHtml(picker?.name || '')}</h2></div>${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${player.key===picker?.key?'turn':''}">${escapeHtml(player.name)}</span>`).join('')}</div>${myPick ? `<div class="ev-game-config" style="margin-top:14px"><label style="grid-column:1/-1">Выбери OP/ED для игрока <b>${escapeHtml(target?.name || '')}</b><input class="ev-who-input" id="ev-who-pick-input" list="ev-who-pick-titles" value="${escapeHtml(whoAmIPickDraft)}" placeholder="Начни вводить название"></label><datalist id="ev-who-pick-titles">${available.flatMap(opening => [getOpeningTitle(opening), opening.sameSongTitle].filter(Boolean).map(title => `<option value="${escapeHtml(title)}"></option>`)).join('')}</datalist><button class="ev-btn-main" id="ev-who-pick-submit" type="button">Назначить тайно</button></div><p class="ev-hint">Игрок ${escapeHtml(target?.name || '')} не увидит выбранную ему карточку. Доступно: ${available.length} разных песен.</p>` : `<p class="ev-hint">Сейчас ${escapeHtml(picker?.name || '')} тайно выбирает карточку для другого случайно назначенного игрока.</p>`}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Выбор карточек</div><h2>${done + 1} из ${total} · выбирает ${escapeHtml(picker?.name || '')}</h2></div><div class="ev-actions">${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из игры</button>' : ''}${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${player.key===picker?.key?'turn':''}">${escapeHtml(player.name)}</span>`).join('')}</div>${myPick ? `<div class="ev-game-config" style="margin-top:14px"><label style="grid-column:1/-1">Выбери OP/ED для игрока <b>${escapeHtml(target?.name || '')}</b><input class="ev-who-input" id="ev-who-pick-input" list="ev-who-pick-titles" value="${escapeHtml(whoAmIPickDraft)}" placeholder="Начни вводить название"></label><datalist id="ev-who-pick-titles">${available.flatMap(opening => [getOpeningTitle(opening), opening.sameSongTitle].filter(Boolean).map(title => `<option value="${escapeHtml(title)}"></option>`)).join('')}</datalist><button class="ev-btn-main" id="ev-who-pick-submit" type="button">Назначить тайно</button></div><p class="ev-hint">Игрок ${escapeHtml(target?.name || '')} не увидит выбранную ему карточку. Доступно: ${available.length} разных песен.</p>` : `<p class="ev-hint">Сейчас ${escapeHtml(picker?.name || '')} тайно выбирает карточку для другого случайно назначенного игрока.</p>`}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-pick-input')?.addEventListener('input', event => { whoAmIPickDraft = event.target.value; });
         $('#ev-who-pick-submit')?.addEventListener('click', () => whoSubmitPick().catch(error => { whoAmIStatus=error.message;renderWhoAmI(); }));
         $('#ev-who-reset')?.addEventListener('click', () => whoResetRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+        $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         return;
       }
       const current = whoCurrentPlayer(room);
@@ -4890,13 +4965,14 @@
       }).join('');
       const questions = (room.questions || []).map(question => `<div class="ev-who-question"><b>${escapeHtml(question.playerName)}:</b> ${escapeHtml(question.text)} <span class="ev-who-answer">${escapeHtml(question.answer || '…')}</span>${question.answeredBy ? ` <span class="ev-hint">— ${escapeHtml(question.answeredBy)}</span>` : ''}</div>`).join('');
       const myTurn = current?.key === ownKey;
-      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div>${whoIsHost() ? '<div class="ev-actions"><button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button></div>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" value="${escapeHtml(whoAmIQuestionDraft)}" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" value="${escapeHtml(whoAmIGuessDraft)}" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div><div class="ev-actions">${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из игры</button>' : ''}${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" value="${escapeHtml(whoAmIQuestionDraft)}" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" value="${escapeHtml(whoAmIGuessDraft)}" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
       $('#ev-who-question-input')?.addEventListener('input', event => { whoAmIQuestionDraft = event.target.value; });
       $('#ev-who-guess-input')?.addEventListener('input', event => { whoAmIGuessDraft = event.target.value; });
       $('#ev-who-ask')?.addEventListener('click', () => whoAskQuestion().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
       $('#ev-who-guess')?.addEventListener('click', () => whoGuess().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
       $('#ev-who-next')?.addEventListener('click', () => whoNextTurn().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
       $('#ev-who-reset')?.addEventListener('click', () => whoResetRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
+      $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
       appEl.querySelectorAll('[data-who-answer]').forEach(button => button.addEventListener('click', () => whoAnswerQuestion(button.dataset.whoAnswer).catch(error => {whoAmIStatus=error.message;renderWhoAmI();})));
     }
 
