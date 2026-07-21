@@ -2030,6 +2030,11 @@
       .oc-card-actions .oc-ar-rank-btn { max-width: 100%; white-space: normal; }
       .oc-tier-card-controls { opacity: 1; }
       .oc-auth-row, .oc-name-modal-row { grid-template-columns: 1fr; }
+      .oc-account-panel { padding:16px; }
+      .oc-account-head { flex-direction:column; gap:10px; }
+      .oc-account-form { grid-template-columns:1fr; }
+      .oc-account-actions { align-items:stretch; flex-direction:column; }
+      .oc-account-submit { width:100%; min-width:0; }
 
       .oc-evaluator { align-items: flex-start; padding: 10px; overflow-y: auto; }
       .oc-eval-modal { width: 100%; max-height: calc(100dvh - 20px); padding: 14px; }
@@ -2051,6 +2056,24 @@
     .oc-daily-bell-dot.hidden { display:none; }
     .oc-daily-panel { margin:16px 0 20px; padding:16px; border:1px solid var(--border); border-radius:14px; background:var(--card); }
     .oc-daily-panel.hidden { display:none; }
+
+    .oc-account-panel { position:relative; overflow:hidden; margin:16px 0 22px; padding:22px; border:1px solid rgba(8,217,214,.24); border-radius:16px; background:linear-gradient(135deg,rgba(8,217,214,.055),rgba(255,46,99,.035) 60%,var(--card)); }
+    .oc-account-panel::before { content:''; position:absolute; width:170px; height:170px; right:-80px; top:-95px; border-radius:50%; background:rgba(8,217,214,.08); filter:blur(3px); pointer-events:none; }
+    .oc-account-head { position:relative; display:flex; align-items:flex-start; justify-content:space-between; gap:18px; max-width:980px; }
+    .oc-account-title { margin:5px 0 7px; font-family:'Archivo Black','Arial Black',sans-serif; font-size:21px; line-height:1.15; }
+    .oc-account-copy { max-width:760px; margin:0; color:var(--muted); font-family:'Space Mono',monospace; font-size:10px; line-height:1.55; }
+    .oc-account-status { flex:0 0 auto; display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border:1px solid rgba(255,200,87,.35); border-radius:999px; background:rgba(255,200,87,.07); color:var(--gold); font:10px 'Space Mono',monospace; text-transform:uppercase; letter-spacing:.08em; }
+    .oc-account-status::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--gold); box-shadow:0 0 10px rgba(255,200,87,.7); }
+    .oc-account-form { position:relative; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; max-width:980px; margin-top:18px; }
+    .oc-account-field { display:flex; flex-direction:column; gap:6px; min-width:0; color:var(--muted); font:10px 'Space Mono',monospace; text-transform:uppercase; letter-spacing:.05em; }
+    .oc-account-field input { width:100%; box-sizing:border-box; min-width:0; border:1px solid var(--border); border-radius:10px; background:#0F0C16; color:var(--text); padding:12px 13px; font:14px 'Inter',sans-serif; text-transform:none; letter-spacing:0; transition:border-color .16s ease,box-shadow .16s ease,background .16s ease; }
+    .oc-account-field input:focus { outline:none; border-color:var(--cyan); box-shadow:0 0 0 3px rgba(8,217,214,.1); background:#110e19; }
+    .oc-account-actions { position:relative; display:flex; align-items:center; justify-content:space-between; gap:14px; max-width:980px; margin-top:14px; padding-top:14px; border-top:1px solid rgba(255,255,255,.055); }
+    .oc-account-remember { display:flex; align-items:center; gap:9px; color:var(--muted); font-size:12px; cursor:pointer; user-select:none; }
+    .oc-account-remember input { width:16px; height:16px; margin:0; accent-color:var(--cyan); }
+    .oc-account-submit { min-width:250px; padding:11px 18px; }
+    .oc-account-panel .oc-name-modal-error { max-width:980px; margin-top:10px; }
+
     .oc-daily-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
     .oc-daily-head h3 { margin:3px 0 5px; font-family:'Archivo Black',sans-serif; font-size:20px; }
     .oc-daily-settings { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px; }
@@ -2330,17 +2353,32 @@
       </div>
       <div class="oc-profile-stats" id="oc-profile-stats"></div>
       <section id="oc-daily-panel" class="oc-daily-panel hidden"></section>
-      <section id="oc-account-registration" class="oc-daily-panel" style="margin-top:14px;">
-        <div class="oc-section-label">личный аккаунт</div>
-        <h3 style="margin:6px 0 8px;">Установить пароль или зарегистрировать новый ник</h3>
-        <p class="oc-meta" style="margin:0 0 10px;">Каркас подготовлен, но регистрация временно отключена до обновления настроек Firebase. Пароль будет храниться в Firebase Authentication, а email использоваться для восстановления.</p>
-        <div class="oc-name-modal-row" style="align-items:stretch;flex-wrap:wrap;">
-          <input id="oc-register-name" type="text" placeholder="никнейм" autocomplete="nickname" />
-          <input id="oc-register-email" type="email" placeholder="email для восстановления" autocomplete="email" />
-          <input id="oc-register-pass" type="password" placeholder="пароль" autocomplete="new-password" />
-          <input id="oc-register-pass-confirm" type="password" placeholder="повтори пароль" autocomplete="new-password" />
-          <label style="display:flex;align-items:center;gap:7px;color:#8B8698;font-size:12px;cursor:pointer;"><input id="oc-register-remember" type="checkbox" checked /> Запомнить вход на этом устройстве</label>
-          <button class="oc-addbtn" id="oc-register-save" type="button">Зарегистрировать / защитить</button>
+      <section id="oc-account-registration" class="oc-account-panel">
+        <div class="oc-account-head">
+          <div>
+            <div class="oc-section-label">личный аккаунт</div>
+            <h3 class="oc-account-title">Защитить аккаунт паролем</h3>
+            <p class="oc-account-copy">Email понадобится только для входа и восстановления пароля. Функция появится после обновления настроек Firebase — сейчас можно посмотреть, как будет выглядеть форма.</p>
+          </div>
+          <div class="oc-account-status">Скоро</div>
+        </div>
+        <div class="oc-account-form">
+          <label class="oc-account-field">Никнейм
+            <input id="oc-register-name" type="text" placeholder="Например: Пёс кошачий" autocomplete="nickname" />
+          </label>
+          <label class="oc-account-field">Email
+            <input id="oc-register-email" type="email" placeholder="name@example.com" autocomplete="email" />
+          </label>
+          <label class="oc-account-field">Пароль
+            <input id="oc-register-pass" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" />
+          </label>
+          <label class="oc-account-field">Повторите пароль
+            <input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" />
+          </label>
+        </div>
+        <div class="oc-account-actions">
+          <label class="oc-account-remember"><input id="oc-register-remember" type="checkbox" checked /> Запомнить вход на этом устройстве</label>
+          <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button">Зарегистрировать аккаунт</button>
         </div>
         <div class="oc-name-modal-error" id="oc-register-error"></div>
       </section>
