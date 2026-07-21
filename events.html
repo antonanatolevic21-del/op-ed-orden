@@ -1351,6 +1351,7 @@
       <p>Если для ника установлен личный пароль, введи его. Оценивать сезон можно только от имени участника соответствующего слота.</p>
       <div class="ev-auth-row" style="flex-wrap:wrap;">
         <input id="ev-modal-name" type="text" placeholder="Напр. Kofa" autocomplete="nickname" />
+        <input id="ev-modal-account-email" type="email" placeholder="Email защищённого аккаунта" autocomplete="email" />
         <input id="ev-modal-account-pass" type="password" placeholder="Личный пароль, если установлен" autocomplete="current-password" />
         <button class="ev-btn-main" id="ev-name-save">Войти</button>
       </div>
@@ -1413,6 +1414,8 @@
     const MAX_WILDCARD_SLOT_COUNT_PER_UNKNOWN_SEASON = 2;
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
+    const PERSONAL_ACCOUNT_AUTH_ENABLED = false;
+    const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация и вход по email пока временно недоступны. Попробуйте немного позже.';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
     const SEASONS = ['winter', 'spring', 'summer', 'fall'];
@@ -1486,6 +1489,7 @@
     const authError = $('#ev-auth-error');
     const nameModal = $('#ev-name-modal');
     const modalName = $('#ev-modal-name');
+    const modalAccountEmail = $('#ev-modal-account-email');
     const modalAccountPass = $('#ev-modal-account-pass');
     const nameSave = $('#ev-name-save');
     const nameClose = $('#ev-name-close');
@@ -1843,14 +1847,6 @@
         .toLowerCase()
         .replace(/[^a-zа-яё0-9_-]+/gi, '_')
         .slice(0, 60);
-    }
-
-    async function authEmailForNickname(nickname) {
-      const safeName = normalizeNickname(nickname);
-      if (!safeName) throw new Error('Никнейм обязателен');
-      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(safeName));
-      const hash = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
-      return hash + '@users.oped-orden.invalid';
     }
 
     function protectedProfile(name) {
@@ -8050,6 +8046,7 @@
       if (nameClose) nameClose.addEventListener('click', () => {
         nameModal.classList.add('hidden');
         modalName.value = myName || getSavedAdminNickname() || '';
+        if (modalAccountEmail) modalAccountEmail.value = '';
         if (modalAccountPass) modalAccountPass.value = '';
         nameError.textContent = '';
         nameInput.value = myName || getSavedAdminNickname() || '';
@@ -8100,6 +8097,7 @@
 
     function showNameModal() {
       modalName.value = myName || '';
+      if (modalAccountEmail) modalAccountEmail.value = '';
       if (modalAccountPass) modalAccountPass.value = '';
       nameError.textContent = '';
       nameModal.classList.remove('hidden');
@@ -8118,14 +8116,18 @@
       }
       const profile = protectedProfile(name);
       if (profile && auth.currentUser?.uid !== profile.authUid) {
+        if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
+          nameError.textContent = PERSONAL_ACCOUNT_DISABLED_MESSAGE;
+          return;
+        }
+        const email = String(modalAccountEmail?.value || '').trim();
         const password = String(modalAccountPass?.value || '');
-        if (!password) {
-          nameError.textContent = 'Для этого аккаунта установлен личный пароль.';
+        if (!email || !password) {
+          nameError.textContent = 'Для этого аккаунта нужны email и личный пароль.';
           return;
         }
         try {
-          const email = await authEmailForNickname(name);
-          const credential = await signInWithEmailAndPassword(auth, email, password);
+          const credential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
           if (credential.user.uid !== profile.authUid) throw new Error('Пароль относится к другому аккаунту.');
         } catch (error) {
           nameError.textContent = error?.code === 'auth/invalid-credential' ? 'Неверный личный пароль.' : ('Не удалось войти: ' + (error?.message || error));
@@ -8138,6 +8140,7 @@
       myName = name;
       localStorage.setItem(NAME_KEY, myName);
       nameModal.classList.add('hidden');
+      if (modalAccountEmail) modalAccountEmail.value = '';
       if (modalAccountPass) modalAccountPass.value = '';
       updateAccessUi();
       render();
