@@ -5215,7 +5215,11 @@
       return Number.isFinite(year) && season >= 0 ? year * 4 + season : null;
     }
 
-    function dailyEligibleEntries(settings) {
+    function dailyEntryHasUserScore(entry, name) {
+      return hasRated(entry, name) || hasPersonalRated(entry, name);
+    }
+
+    function dailyEligibleEntries(settings, name = myName, includeRated = false) {
       const from = settings.fromYear ? Number(settings.fromYear) * 4 + SEASON_ORDER.indexOf(settings.fromSeason) : null;
       const to = settings.toYear ? Number(settings.toYear) * 4 + SEASON_ORDER.indexOf(settings.toSeason) : null;
       return entries.filter(entry => {
@@ -5224,6 +5228,7 @@
         if (point === null) return false;
         if (from !== null && point < from) return false;
         if (to !== null && point > to) return false;
+        if (!includeRated && dailyEntryHasUserScore(entry, name)) return false;
         return true;
       });
     }
@@ -5237,7 +5242,7 @@
 
     function dailyAssignmentFor(name, key, settings, savedIds = null) {
       if (Array.isArray(savedIds) && savedIds.length) return savedIds.map(String).filter(id => entriesById.has(id));
-      const candidates = dailyEligibleEntries(settings);
+      const candidates = dailyEligibleEntries(settings, name);
       if (candidates.length < 10) return [];
       const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}`;
       const shuffled = candidates.slice().sort((a, b) => dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`));
@@ -5315,6 +5320,12 @@
       }
       const progressMap = { ...(profile?.dailyProgress || {}) };
       const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
+      ids.forEach(id => {
+        const entry = entriesById.get(String(id));
+        if (entry && dailyEntryHasUserScore(entry, myName)) progressed.add(String(id));
+      });
+      progressMap[key] = [...progressed];
+      await saveDailyProfilePatch({ dailyProgress: progressMap });
       seasonQueue = ids.filter(id => !progressed.has(String(id))).map(id => entriesById.get(String(id))).filter(Boolean);
       if (!seasonQueue.length) { await finalizeDaily(key); return; }
       dailyActiveKey = key;
@@ -5370,7 +5381,7 @@
       const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
       const completed = profile?.dailyCompleted || {};
       const assignments = profile?.dailyAssignments || {};
-      const eligible = dailyEligibleEntries(settings).length >= 10;
+      const eligible = dailyEligibleEntries(settings, name, true).length >= 10;
       const cells = Array.from({ length:firstWeekday }, () => '<div class="oc-daily-day empty"></div>');
       for (let day = 1; day <= days; day += 1) {
         const key = dailyDateKeyFromDate(new Date(Date.UTC(year, month, day)));
