@@ -981,6 +981,9 @@
     .ev-bw-group-value { color: var(--cyan); font-weight: 900; overflow-wrap: anywhere; }
     .ev-bw-opening-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; margin-top: 14px; }
     .ev-bw-opening { min-width: 0; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); overflow: hidden; }
+    button.ev-bw-opening { width: 100%; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+    button.ev-bw-opening:disabled { cursor: default; opacity: 1; }
+    button.ev-bw-opening:not(:disabled):hover { transform: translateY(-2px); border-color: var(--cyan); }
     .ev-bw-opening.active-best { border-color: rgba(74,222,128,.72); box-shadow: 0 0 0 2px rgba(74,222,128,.1); }
     .ev-bw-opening.active-worst { border-color: rgba(251,113,133,.72); box-shadow: 0 0 0 2px rgba(251,113,133,.1); }
     .ev-bw-media { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 1px solid var(--border); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--muted); }
@@ -2970,6 +2973,7 @@
         perRound: bwClamp(raw.perRound, 2, 20, 6),
         rounds: bwClamp(raw.rounds, 1, 20, 5),
         grouping,
+        banDraft: Boolean(raw.banDraft),
         ...range,
         studio: String(raw.studio || ''),
         director: String(raw.director || ''),
@@ -3301,22 +3305,51 @@
       return null;
     }
 
-    function bwBuildRounds(settings, players) {
+    function bwDraftEligibleBuckets(settings, bannedKeys = []) {
       const candidates = getBestWorstCandidates(settings);
-      if (candidates.length < settings.perRound) throw new Error(`После фильтров осталось ${candidates.length} элементов. Нужно хотя бы ${settings.perRound}.`);
+      const originalBuckets = bwGroupBuckets(candidates, settings.grouping);
+      const banned = new Set((bannedKeys || []).map(String));
+      const bannedOpeningIds = new Set(originalBuckets.filter(bucket => banned.has(bucket.key)).flatMap(bucket => bucket.rows.map(row => String(row.id))));
+      const allowedCandidates = candidates.filter(opening => !bannedOpeningIds.has(String(opening.id)));
+      const buckets = bwGroupBuckets(allowedCandidates, settings.grouping).filter(bucket => bwDistinctVariantCount(bucket.rows) >= settings.perRound && !banned.has(bucket.key));
+      return { candidates: allowedCandidates, buckets };
+    }
+
+    function bwDraftChoiceMap(buckets, players) {
+      const pool = guessShuffle(buckets).map(bucket => ({ key: bucket.key, label: bucket.label }));
+      if (pool.length < 3) throw new Error('Для бана и антибана нужно хотя бы три подходящие группы.');
+      const choices = {};
+      players.forEach((player, playerIndex) => {
+        const offset = (playerIndex * 3) % pool.length;
+        choices[player.key] = Array.from({ length: 3 }, (_, cardIndex) => pool[(offset + cardIndex) % pool.length]);
+      });
+      return choices;
+    }
+
+    function bwBuildRounds(settings, players, options = {}) {
+      const bannedKeys = [...new Set((options.bannedKeys || []).map(String).filter(Boolean))];
+      const requiredKeys = [...new Set((options.requiredKeys || []).map(String).filter(Boolean))];
+      const prepared = bwDraftEligibleBuckets(settings, bannedKeys);
+      const candidates = prepared.candidates;
+      if (candidates.length < settings.perRound) throw new Error(`После банов и фильтров осталось ${candidates.length} элементов. Нужно хотя бы ${settings.perRound}.`);
       const uniqueCandidateCount = bwDistinctVariantCount(candidates);
-      if (uniqueCandidateCount < settings.perRound) {
-        throw new Error(`После объединения разных версий осталось ${uniqueCandidateCount} уникальных названий. Для раунда нужно хотя бы ${settings.perRound}.`);
-      }
-      const buckets = bwGroupBuckets(candidates, settings.grouping).filter(bucket => bwDistinctVariantCount(bucket.rows) >= settings.perRound);
-      if (!buckets.length) throw new Error(`Нет ни одной группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} разными названиями.`);
+      if (uniqueCandidateCount < settings.perRound) throw new Error(`После банов осталось ${uniqueCandidateCount} уникальных названий. Для раунда нужно хотя бы ${settings.perRound}.`);
+      const buckets = prepared.buckets;
+      if (!buckets.length) throw new Error(`Нет ни одной разрешённой группы «${bwGroupingLabel(settings.grouping)}» минимум с ${settings.perRound} разными названиями.`);
+      const bucketByKey = new Map(buckets.map(bucket => [bucket.key, bucket]));
+      const missingRequired = requiredKeys.filter(key => !bucketByKey.has(key));
+      if (missingRequired.length) throw new Error('После банов одна из антибан-групп больше не может собрать полный раунд.');
+      if (requiredKeys.length > settings.rounds) throw new Error('Антибанов больше, чем раундов. Увеличь количество раундов.');
       const rounds = [];
       let unused = new Set(candidates.map(opening => String(opening.id)));
+      const plannedBuckets = requiredKeys.map(key => bucketByKey.get(key));
+      const unusedGroupKeys = new Set(buckets.map(bucket => bucket.key).filter(key => !requiredKeys.includes(key)));
       for (let roundIndex = 0; roundIndex < settings.rounds; roundIndex += 1) {
         let selected = null;
-        let selectedBucket = null;
+        let selectedBucket = plannedBuckets[roundIndex] || null;
+        const bucketOrder = selectedBucket ? [selectedBucket] : guessShuffle(buckets).sort((a, b) => Number(unusedGroupKeys.has(b.key)) - Number(unusedGroupKeys.has(a.key)));
         for (let cycle = 0; cycle < 2 && !selected; cycle += 1) {
-          for (const bucket of guessShuffle(buckets)) {
+          for (const bucket of bucketOrder) {
             const rows = bucket.rows.filter(opening => cycle === 1 || unused.has(String(opening.id)));
             if (bwDistinctVariantCount(rows) < settings.perRound) continue;
             selected = bwPickDistinctOpenings(rows, settings.perRound);
@@ -3325,13 +3358,14 @@
             break;
           }
         }
-        if (!selected) throw new Error(`Не удалось собрать раунд ${roundIndex + 1} без повторяющихся версий одного OP/ED. Попробуй увеличить выборку или изменить группировку.`);
+        if (!selected || !selectedBucket) throw new Error(`Не удалось собрать раунд ${roundIndex + 1} без повторяющихся версий одного OP/ED.`);
         selected.forEach(id => unused.delete(id));
+        unusedGroupKeys.delete(selectedBucket.key);
         const remainingRows = candidates.filter(opening => unused.has(String(opening.id)));
         if (bwDistinctVariantCount(remainingRows) < settings.perRound) unused = new Set(candidates.map(opening => String(opening.id)));
         rounds.push({ index: roundIndex, groupKey: selectedBucket.key, groupLabel: selectedBucket.label, openingIds: selected });
       }
-      return { rounds, candidateCount: candidates.length };
+      return { rounds, candidateCount: candidates.length, bannedKeys, requiredKeys };
     }
 
     function bwSubmissionId(gameId, roundIndex, userKey) {
@@ -3421,12 +3455,13 @@
 
     async function bwLeaveGame() {
       if (!bestWorstRoom) return;
+      const room = bestWorstRoom;
       const key = bwCurrentUserKey();
-      if (!key || !bwPlayers(bestWorstRoom).some(player => player.key === key)) return;
-      const remaining = bwPlayers(bestWorstRoom).filter(player => player.key !== key);
+      if (!key || !bwPlayers(room).some(player => player.key === key)) return;
+      const remaining = bwPlayers(room).filter(player => player.key !== key);
       try {
-        if (bestWorstRoom.status === 'playing') {
-          const submissionRef = doc(db, BW_SUBMISSION_COLLECTION, bwSubmissionId(bestWorstRoom.gameId, Number(bestWorstRoom.currentRound || 0), key));
+        if (room.status === 'playing') {
+          const submissionRef = doc(db, BW_SUBMISSION_COLLECTION, bwSubmissionId(room.gameId, Number(room.currentRound || 0), key));
           await deleteDoc(submissionRef).catch(() => {});
         }
         if (remaining.length < 2) {
@@ -3434,9 +3469,31 @@
           bestWorstStatus = 'Игроков стало меньше двух — игра завершена.';
         } else {
           const patch = { players: remaining, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() };
-          if (normalizeNickname(bestWorstRoom.hostKey) === key || !remaining.some(player => player.key === normalizeNickname(bestWorstRoom.hostKey))) {
+          if (normalizeNickname(room.hostKey) === key || !remaining.some(player => player.key === normalizeNickname(room.hostKey))) {
             patch.hostKey = remaining[0].key;
             patch.hostName = remaining[0].name;
+          }
+          if (room.status === 'draft') {
+            const keepPlayers = values => Object.fromEntries(Object.entries(values || {}).filter(([playerKey]) => remaining.some(player => player.key === playerKey)));
+            patch.banChoices = keepPlayers(room.banChoices);
+            patch.banSelections = keepPlayers(room.banSelections);
+            patch.antiBanChoices = keepPlayers(room.antiBanChoices);
+            patch.antiBanSelections = keepPlayers(room.antiBanSelections);
+            const settings = normalizeBestWorstSettings(room.settings);
+            if (room.phase === 'ban' && remaining.every(player => patch.banSelections[player.key])) {
+              const bannedKeys = [...new Set(remaining.map(player => patch.banSelections[player.key]).filter(Boolean))];
+              const { buckets } = bwDraftEligibleBuckets(settings, bannedKeys);
+              patch.phase = 'antiban';
+              patch.bannedGroupKeys = bannedKeys;
+              patch.antiBanChoices = bwDraftChoiceMap(buckets, remaining);
+              patch.antiBanSelections = {};
+            } else if (room.phase === 'antiban' && remaining.every(player => patch.antiBanSelections[player.key])) {
+              const bannedKeys = [...new Set(Object.values(patch.banSelections).filter(Boolean))];
+              const requiredKeys = [...new Set(remaining.map(player => patch.antiBanSelections[player.key]).filter(Boolean))];
+              await bwLaunchBestWorst(settings, remaining, bannedKeys, requiredKeys);
+              bestWorstStatus = 'Ты вышел. Остальные продолжают игру.';
+              return;
+            }
           }
           await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), patch, { merge: true });
           bestWorstStatus = 'Ты вышел из игры. Остальные продолжают.';
@@ -3446,7 +3503,7 @@
         bestWorstStatusKey = '';
       } catch (error) {
         console.error('bestWorst leave failed', error);
-        bestWorstStatus = 'Не удалось выйти из игры.';
+        bestWorstStatus = error?.message || 'Не удалось выйти из игры.';
         render();
       }
     }
@@ -3462,27 +3519,101 @@
       await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
     }
 
+    async function bwLaunchBestWorst(settings, players, bannedKeys = [], requiredKeys = []) {
+      const built = bwBuildRounds(settings, players, { bannedKeys, requiredKeys });
+      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+        status: 'playing',
+        phase: 'answering',
+        players,
+        rounds: built.rounds,
+        currentRound: 0,
+        candidateCount: built.candidateCount,
+        bannedGroupKeys: built.bannedKeys,
+        antiBanGroupKeys: built.requiredKeys,
+        startedAtLocal: new Date().toISOString(),
+        updatedAtLocal: new Date().toISOString(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      bestWorstDraftKey = '';
+      bestWorstRenderedRoundKey = '';
+      bestWorstStatus = '';
+    }
+
+    async function bwBeginBanDraft(settings, players) {
+      if (settings.grouping === 'none') throw new Error('Для бана и антибана выбери группировку: франшиза, исполнитель, студия или другую.');
+      if (players.length > settings.rounds) throw new Error(`При бане и антибане раундов должно быть не меньше, чем игроков: сейчас игроков ${players.length}, а раундов ${settings.rounds}.`);
+      const { buckets } = bwDraftEligibleBuckets(settings);
+      const banChoices = bwDraftChoiceMap(buckets, players);
+      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+        status: 'draft',
+        phase: 'ban',
+        players,
+        banChoices,
+        banSelections: {},
+        antiBanChoices: {},
+        antiBanSelections: {},
+        bannedGroupKeys: [],
+        antiBanGroupKeys: [],
+        rounds: [],
+        currentRound: 0,
+        updatedAtLocal: new Date().toISOString(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      bestWorstStatus = '';
+    }
+
+    async function bwChooseDraftCard(kind, groupKey) {
+      const room = bestWorstRoom;
+      const userKey = bwCurrentUserKey();
+      if (!room || room.status !== 'draft' || !userKey) return;
+      const isBan = kind === 'ban';
+      if ((isBan && room.phase !== 'ban') || (!isBan && room.phase !== 'antiban')) return;
+      const choicesField = isBan ? 'banChoices' : 'antiBanChoices';
+      const selectionsField = isBan ? 'banSelections' : 'antiBanSelections';
+      const choices = Array.isArray(room[choicesField]?.[userKey]) ? room[choicesField][userKey] : [];
+      if (!choices.some(choice => String(choice.key) === String(groupKey))) return;
+      const players = bwReadyPlayers(room);
+      if (!players.some(player => player.key === userKey)) return;
+      const selections = { ...(room[selectionsField] || {}), [userKey]: String(groupKey) };
+      try {
+        if (!players.every(player => selections[player.key])) {
+          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { [selectionsField]: selections, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+          return;
+        }
+        const settings = normalizeBestWorstSettings(room.settings);
+        if (isBan) {
+          const bannedKeys = [...new Set(players.map(player => selections[player.key]).filter(Boolean))];
+          const { buckets } = bwDraftEligibleBuckets(settings, bannedKeys);
+          const antiBanChoices = bwDraftChoiceMap(buckets, players);
+          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+            phase: 'antiban',
+            banSelections: selections,
+            bannedGroupKeys: bannedKeys,
+            antiBanChoices,
+            antiBanSelections: {},
+            updatedAtLocal: new Date().toISOString(),
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        } else {
+          const bannedKeys = [...new Set(Object.values(room.banSelections || {}).map(String).filter(Boolean))];
+          const requiredKeys = [...new Set(players.map(player => selections[player.key]).filter(Boolean))];
+          await bwLaunchBestWorst(settings, players, bannedKeys, requiredKeys);
+        }
+      } catch (error) {
+        console.error('best/worst draft choice failed', error);
+        bestWorstStatus = error?.message || 'Не удалось сохранить выбор.';
+        render();
+      }
+    }
+
     async function bwStartGame() {
       if (!isAdmin() || !bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
       const players = bwReadyPlayers(bestWorstRoom);
       if (players.length < 2) { bestWorstStatus = 'Для запуска должны нажать «Готов» хотя бы два человека.'; render(); return; }
       const settings = normalizeBestWorstSettings(bestWorstRoom.settings);
       try {
-        const built = bwBuildRounds(settings, players);
-        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
-          status: 'playing',
-          phase: 'answering',
-          players,
-          rounds: built.rounds,
-          currentRound: 0,
-          candidateCount: built.candidateCount,
-          startedAtLocal: new Date().toISOString(),
-          updatedAtLocal: new Date().toISOString(),
-          updatedAt: serverTimestamp()
-        }, { merge: true });
-        bestWorstDraftKey = '';
-        bestWorstRenderedRoundKey = '';
-        bestWorstStatus = '';
+        if (settings.banDraft) await bwBeginBanDraft(settings, players);
+        else await bwLaunchBestWorst(settings, players);
       } catch (error) {
         console.error('best/worst start failed', error);
         bestWorstStatus = error?.message || 'Не удалось собрать раунды.';
@@ -3726,7 +3857,8 @@
       const candidates = getBestWorstCandidates(settings);
       const hostDisabled = isAdmin() ? '' : 'disabled';
       const sourceDisabled = settings.source !== 'ratings';
-      const canStart = isAdmin() && ready.length >= 2;
+      const banDraftIssue = settings.banDraft && settings.grouping === 'none' ? 'Для бана и антибана выбери группировку.' : (settings.banDraft && ready.length > settings.rounds ? `Раундов должно быть не меньше, чем готовых игроков: ${ready.length}.` : '');
+      const canStart = isAdmin() && ready.length >= 2 && !banDraftIssue;
       appEl.innerHTML = `
         <div class="ev-bw-shell">
           <section class="ev-panel-head">
@@ -3745,7 +3877,7 @@
                 ${room && me ? `<button type="button" class="${me.ready ? 'ev-btn-ghost' : 'ev-btn-secondary'}" id="ev-bw-ready">${me.ready ? 'Отменить готовность' : 'Готов'}</button><button type="button" class="ev-btn-ghost" id="ev-bw-leave">Выйти из лобби</button>` : ''}
                 ${room ? `<button type="button" class="ev-btn-main" id="ev-bw-start" ${canStart ? '' : 'disabled'}>Запустить игру</button>` : ''}
               </div>
-              <div class="ev-status-line ${ready.length >= 2 ? 'ok' : 'warn'}">${ready.length >= 2 ? 'Минимум готовых набран.' : 'Ждём хотя бы двух готовых участников.'}</div>
+              <div class="ev-status-line ${ready.length >= 2 && !banDraftIssue ? 'ok' : 'warn'}">${banDraftIssue || (ready.length >= 2 ? 'Минимум готовых набран.' : 'Ждём хотя бы двух готовых участников.')}</div>
             </section>
 
             <section class="ev-guess-filter-card">
@@ -3756,6 +3888,7 @@
                 <label class="ev-guess-field"><span class="ev-guess-label">Элементов за раунд</span><input id="ev-bw-per-round" type="number" min="2" max="20" step="1" value="${settings.perRound}" ${hostDisabled} /></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Количество раундов</span><input id="ev-bw-rounds" type="number" min="1" max="20" step="1" value="${settings.rounds}" ${hostDisabled} /></label>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option><option value="franchise" ${settings.grouping === 'franchise' ? 'selected' : ''}>По франшизе</option></select></label>
+                <label class="ev-guess-field wide"><span class="ev-guess-label">Предыгровой выбор</span><span class="ev-guess-user ${settings.banDraft ? 'active' : ''}"><input id="ev-bw-ban-draft" type="checkbox" ${settings.banDraft ? 'checked' : ''} ${hostDisabled}/><span>Включить бан и антибан</span></span><span class="ev-guess-note">Каждый игрок выбирает один бан из трёх карточек, затем один обязательный антибан из трёх новых.</span></label>
                 <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
                 <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
@@ -3788,6 +3921,7 @@
       bind('#ev-bw-per-round', 'perRound', value => bwClamp(value, 2, 20, 6));
       bind('#ev-bw-rounds', 'rounds', value => bwClamp(value, 1, 20, 5));
       bind('#ev-bw-grouping', 'grouping');
+      $('#ev-bw-ban-draft')?.addEventListener('change', event => { bestWorstFilters.banDraft = Boolean(event.target.checked); render(); });
       bind('#ev-bw-from-year', 'fromYear', value => String(value || ''));
       bind('#ev-bw-from-season', 'fromSeason');
       bind('#ev-bw-to-year', 'toYear', value => String(value || ''));
@@ -3815,6 +3949,45 @@
       $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
     }
 
+    function bwDraftSelectionLabel(room, field, playerKey) {
+      const selectedKey = String(room?.[field]?.[playerKey] || '');
+      if (!selectedKey) return '';
+      const choiceField = field === 'banSelections' ? 'banChoices' : 'antiBanChoices';
+      const choice = (room?.[choiceField]?.[playerKey] || []).find(item => String(item.key) === selectedKey);
+      return String(choice?.label || selectedKey);
+    }
+
+    function bwRenderDraft() {
+      const room = bestWorstRoom;
+      const players = bwReadyPlayers(room);
+      const meKey = bwCurrentUserKey();
+      const me = players.find(player => player.key === meKey);
+      const isBan = room?.phase === 'ban';
+      const choicesField = isBan ? 'banChoices' : 'antiBanChoices';
+      const selectionsField = isBan ? 'banSelections' : 'antiBanSelections';
+      const selections = room?.[selectionsField] || {};
+      const choices = me ? (Array.isArray(room?.[choicesField]?.[meKey]) ? room[choicesField][meKey] : []) : [];
+      const selectedKey = String(selections[meKey] || '');
+      const done = players.filter(player => selections[player.key]).length;
+      const title = isBan ? 'Выбери бан' : 'Выбери антибан';
+      const hint = isBan
+        ? 'Выбранная группа и все относящиеся к ней карточки гарантированно не попадут в игру.'
+        : 'Выбранная группа гарантированно получит хотя бы один отдельный раунд. Забанированные группы здесь уже исключены.';
+      appEl.innerHTML = `
+        <div class="ev-bw-shell">
+          <section class="ev-panel-head"><div><div class="ev-section-label">Предыгровой этап · ${isBan ? '1 из 2' : '2 из 2'}</div><h2>${title}</h2><div class="ev-hint">${hint}</div></div><div class="ev-actions">${me ? '<button type="button" class="ev-btn-ghost" id="ev-bw-leave">Выйти</button>' : ''}${isAdmin() ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить игру</button>' : ''}</div></section>
+          <section class="ev-guess-filter-card">
+            <div class="ev-guess-card-head"><div><h3>${me ? 'Твои три варианта' : 'Ты наблюдаешь за выбором'}</h3><div class="ev-hint">Выбрали: ${done} из ${players.length}. После выбора всех игроков этап переключится автоматически.</div></div></div>
+            ${me ? `<div class="ev-bw-opening-grid">${choices.map(choice => { const active = selectedKey === String(choice.key); return `<button type="button" class="ev-bw-opening ${active ? (isBan ? 'active-worst' : 'active-best') : ''}" data-bw-draft-kind="${isBan ? 'ban' : 'antiban'}" data-bw-draft-key="${escapeHtml(choice.key)}" ${selectedKey ? 'disabled' : ''}><div class="ev-bw-opening-body"><div class="ev-section-label">${isBan ? 'Отправить в бан' : 'Гарантировать раунд'}</div><div class="ev-bw-opening-title">${escapeHtml(choice.label)}</div></div></button>`; }).join('')}</div>` : '<div class="ev-guess-empty">В текущую игру можно только смотреть.</div>'}
+            ${selectedKey ? `<div class="ev-status-line ok">Выбор сохранён: <strong>${escapeHtml(bwDraftSelectionLabel(room, selectionsField, meKey))}</strong>. Ждём остальных.</div>` : ''}
+          </section>
+          <section class="ev-guess-filter-card"><h3 style="margin-top:0">Участники</h3><div class="ev-bw-player-list">${players.map(player => `<div class="ev-bw-player ${selections[player.key] ? 'ready' : ''}"><div class="ev-bw-player-name">${escapeHtml(player.name)}</div><div class="ev-bw-player-state">${selections[player.key] ? '✓ ВЫБРАЛ' : 'ВЫБИРАЕТ'}</div></div>`).join('')}</div></section>
+          ${bestWorstStatus ? `<div class="ev-status-line warn">${escapeHtml(bestWorstStatus)}</div>` : ''}
+        </div>`;
+      document.querySelectorAll('[data-bw-draft-key]').forEach(button => button.addEventListener('click', () => bwChooseDraftCard(button.dataset.bwDraftKind, button.dataset.bwDraftKey)));
+      $('#ev-bw-leave')?.addEventListener('click', bwLeaveGame);
+      $('#ev-bw-reset')?.addEventListener('click', bwResetGame);
+    }
     function bwRenderRound() {
       const room = bestWorstRoom;
       const players = bwPlayersForRound(room);
@@ -3994,6 +4167,11 @@
       if (!bestWorstRoom || bestWorstRoom.status === 'lobby') {
         bestWorstRenderedRoundKey = '';
         bwRenderLobby();
+        return;
+      }
+      if (bestWorstRoom.status === 'draft') {
+        bestWorstRenderedRoundKey = '';
+        bwRenderDraft();
         return;
       }
       if (bestWorstRoom.status === 'finished') {
