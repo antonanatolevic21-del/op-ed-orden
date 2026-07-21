@@ -54,6 +54,7 @@
       letter-spacing: -.7px;
     }
     .ev-sub { color: var(--muted); font-family: 'Space Mono', monospace; font-size: 12px; margin-top: 8px; }
+    .ev-home-link { display:none; width:max-content; margin-top:11px; padding:7px 12px; font-size:11px; }
     .ev-userbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 12px; }
     .ev-userbar input, .ev-role-switch {
       width: 150px;
@@ -1301,6 +1302,7 @@
       <div>
         <h1 class="ev-title">АБОБА EVENTS</h1>
         <div class="ev-sub">отдельная страница ивентов · данные берутся из той же Firebase-базы OP/ED</div>
+        <a class="ev-link ev-home-link" id="ev-back-home" href="index.html">← Вернуться в OP/ED</a>
       </div>
       <div class="ev-userbar">
         ВЫ:
@@ -1325,7 +1327,6 @@
       <button class="ev-tab" data-stage="first">Первый этап</button>
       <button class="ev-tab" data-stage="semi">Полуфинал</button>
       <button class="ev-tab" data-stage="final">Финал</button>
-      <a class="ev-link" href="index.html">← OP/ED-чарт</a>
     </nav>
 
     <main id="ev-app"><div class="ev-empty">Загрузка ивентов…</div></main>
@@ -2013,6 +2014,8 @@
         roleSwitch.classList.toggle('hidden', !adminUnlocked);
         roleSwitch.value = isGuest() ? `guest-${String(guestSlot).padStart(2, '0')}` : 'admin';
       }
+      const homeLink = document.querySelector('#ev-back-home');
+      if (homeLink) homeLink.style.display = hasAccess() && !isGuest() ? 'inline-flex' : 'none';
       const tabs = document.querySelector('.ev-tabs');
       if (tabs) tabs.classList.toggle('guest-mode', isGuest());
       const modeSwitch = document.querySelector('.ev-mode-switch');
