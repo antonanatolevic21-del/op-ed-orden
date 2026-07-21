@@ -1966,7 +1966,13 @@
     function isAdminGuestPreview() { return adminUnlocked && accessLevel === 'guest' && isAdminNickname(getSavedAdminNickname()); }
     function hasAccess() { return isUser() || accessLevel === 'guest' || isAdmin(); }
     function canAccessMode(mode) {
-      return !isGuest() || String(mode || 'rating') === 'rating';
+      const requested = String(mode || 'rating');
+      if (requested === 'rating') return isGuest() || isAdmin();
+      return !isGuest();
+    }
+
+    function defaultAccessibleMode() {
+      return isGuest() || isAdmin() ? 'rating' : 'guess';
     }
 
     function getSavedAdminNickname() {
@@ -5173,7 +5179,7 @@
 
     function render() {
       saveEventUiPreferences();
-      if (!canAccessMode(activeMode)) activeMode = 'rating';
+      if (!canAccessMode(activeMode)) activeMode = defaultAccessibleMode();
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
       document.querySelectorAll('.ev-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.stage === activeStage));
@@ -8242,7 +8248,7 @@
         btn.addEventListener('click', () => {
           const requestedMode = ['guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
           if (!canAccessMode(requestedMode)) {
-            activeMode = 'rating';
+            activeMode = defaultAccessibleMode();
             render();
             return;
           }
