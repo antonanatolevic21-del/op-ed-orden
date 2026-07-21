@@ -2077,6 +2077,8 @@
     .oc-account-success.hidden { display:none; }
     .oc-account-success strong { color:var(--green); font:18px 'Archivo Black',sans-serif; }
     .oc-account-success span { color:var(--muted); font:11px/1.55 'Space Mono',monospace; }
+    .oc-auth-register-link { border:0; background:transparent; color:var(--muted); padding:4px 0; font:11px 'Space Mono',monospace; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+    .oc-auth-register-link:hover { color:var(--text); }
 
     .oc-daily-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
     .oc-daily-head h3 { margin:3px 0 5px; font-family:'Archivo Black',sans-serif; font-size:20px; }
@@ -2357,37 +2359,6 @@
       </div>
       <div class="oc-profile-stats" id="oc-profile-stats"></div>
       <section id="oc-daily-panel" class="oc-daily-panel hidden"></section>
-      <section id="oc-account-registration" class="oc-account-panel">
-        <div class="oc-account-head">
-          <div>
-            <div class="oc-section-label">личный аккаунт</div>
-            <h3 class="oc-account-title" id="oc-account-title">Защитить аккаунт паролем</h3>
-            <p class="oc-account-copy" id="oc-account-copy">Email используется для входа и восстановления пароля. После регистрации личный пароль вводится при входе или переключении на этот ник; общий пользовательский и админский пароли остаются отдельным входом на сайт.</p>
-          </div>
-          <div class="oc-account-status" id="oc-account-status">Работает</div>
-        </div>
-        <div class="oc-account-form" id="oc-account-form">
-          <label class="oc-account-field">Никнейм
-            <input id="oc-register-name" type="text" placeholder="Например: Пёс кошачий" autocomplete="nickname" />
-          </label>
-          <label class="oc-account-field">Email
-            <input id="oc-register-email" type="email" placeholder="name@example.com" autocomplete="email" />
-          </label>
-          <label class="oc-account-field">Пароль
-            <input id="oc-register-pass" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" />
-          </label>
-          <label class="oc-account-field">Повторите пароль
-            <input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" />
-          </label>
-        </div>
-        <div class="oc-account-actions" id="oc-account-actions">
-          <label class="oc-account-remember"><input id="oc-register-remember" type="checkbox" checked /> Запомнить вход на этом устройстве</label>
-          <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button">Зарегистрировать аккаунт</button>
-        </div>
-        <div class="oc-account-success hidden" id="oc-account-success"><strong id="oc-account-success-title">Аккаунт успешно создан ✓</strong><span id="oc-account-success-copy"></span><button class="oc-edit-cancel" id="oc-account-reset-password" type="button" style="align-self:flex-start;margin-top:6px;">Сбросить пароль</button></div>
-        <div class="oc-name-modal-error" id="oc-register-error"></div>
-      </section>
-
       <div class="oc-topmode-toggle">
         <button class="oc-topmode-btn" id="oc-topmode-score" data-mode="score" style="display:none">По оценке</button>
         <button class="oc-topmode-btn active" id="oc-topmode-manual" data-mode="manual">Вручную (свой топ)</button>
@@ -2598,11 +2569,29 @@
           <label class="oc-account-remember"><input id="oc-auth-remember" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
           <button class="oc-addbtn" id="oc-auth-save" type="button">Войти в аккаунт</button>
           <button class="oc-edit-cancel" id="oc-auth-forgot" type="button">Забыли пароль?</button>
+          <button class="oc-auth-register-link" id="oc-auth-register-open" type="button">Нет аккаунта? Зарегистрироваться</button>
         </div>
         <div class="oc-auth-error" id="oc-auth-error"></div>
       </div>
     </div>
 
+    <div id="oc-register-modal" class="oc-auth-modal hidden" aria-modal="true" role="dialog">
+      <div class="oc-auth-dialog" style="position:relative;max-width:720px;">
+        <button id="oc-register-close" type="button" aria-label="Закрыть" title="Закрыть окно" style="position:absolute;right:14px;top:12px;border:0;background:transparent;color:#8B8698;font-size:25px;cursor:pointer;">×</button>
+        <div class="oc-section-label">регистрация</div>
+        <h2>Создать аккаунт</h2>
+        <p>Подтверждение почты пока не требуется. Заполни четыре поля, затем войди в созданный аккаунт.</p>
+        <div class="oc-account-form" style="margin-top:16px;">
+          <label class="oc-account-field">Логин<input id="oc-register-name" type="text" placeholder="Никнейм" autocomplete="nickname" /></label>
+          <label class="oc-account-field">Email<input id="oc-register-email" type="email" placeholder="name@example.com" autocomplete="email" /></label>
+          <label class="oc-account-field">Пароль<input id="oc-register-pass" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" /></label>
+          <label class="oc-account-field">Повторите пароль<input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" /></label>
+        </div>
+        <label class="oc-account-remember" style="margin-top:14px;"><input id="oc-register-remember" type="checkbox" checked /> Запомнить меня после входа</label>
+        <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button" style="margin-top:14px;">Создать аккаунт</button>
+        <div class="oc-name-modal-error" id="oc-register-error"></div>
+      </div>
+    </div>
     <datalist id="oc-dl-search"></datalist>
     <datalist id="oc-dl-titles"></datalist>
     <datalist id="oc-dl-studios"></datalist>
@@ -2721,6 +2710,9 @@
     const authRememberInput = $('#oc-auth-remember');
     const authSaveBtn = $('#oc-auth-save');
     const authForgotBtn = $('#oc-auth-forgot');
+    const authRegisterOpenBtn = $('#oc-auth-register-open');
+    const registerModal = $('#oc-register-modal');
+    const registerCloseBtn = $('#oc-register-close');
     const authError = $('#oc-auth-error');
     const authCloseBtn = $('#oc-auth-close');
     const accessBadge = $('#oc-access-badge');
@@ -3520,6 +3512,25 @@
       if (authPassInput) authPassInput.value = '';
     }
 
+    function showRegistrationModal() {
+      hideAuthModal();
+      if (registerError) registerError.textContent = '';
+      if (registerNameInput && !registerNameInput.value) registerNameInput.value = '';
+      registerModal?.classList.remove('hidden');
+      setTimeout(() => registerNameInput?.focus(), 0);
+    }
+
+    function hideRegistrationModal() {
+      registerModal?.classList.add('hidden');
+      if (registerError) registerError.textContent = '';
+    }
+
+    function requireAccount(message = 'Войди в аккаунт, чтобы открыть этот раздел.') {
+      if (accessLevel) return true;
+      showAuthModal(message);
+      return false;
+    }
+
     async function applyPersonalAccountSession(result, remember = true) {
       const profile = result?.profile;
       const nickname = String(profile?.nickname || profile?.nicknameKey || profile?.id || '').trim();
@@ -3597,26 +3608,6 @@
     function accountProfile(name) {
       const safe = normalizedAccountName(name);
       return firebaseUserProfiles.find(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === safe) || null;
-    }
-
-    function syncAccountRegistrationPanel() {
-      const currentProfile = accountProfile(myName);
-      const nickname = String(currentProfile?.authUid ? myName : (registerNameInput?.value || myName || '')).trim();
-      const profile = currentProfile?.authUid ? currentProfile : accountProfile(nickname);
-      const registered = Boolean(profile?.authUid);
-      const isCurrentAccount = registered && normalizedAccountName(nickname) === normalizedAccountName(myName);
-      accountForm?.classList.toggle('hidden', registered);
-      accountActions?.classList.toggle('hidden', registered);
-      accountSuccess?.classList.toggle('hidden', !registered);
-      if (accountTitle) accountTitle.textContent = registered ? 'Аккаунт защищён личным паролем' : 'Защитить аккаунт паролем';
-      if (accountCopy) accountCopy.textContent = registered
-        ? 'Форма регистрации больше не нужна. Для входа в этот ник используй привязанный email и личный пароль.'
-        : 'Email используется для входа и восстановления пароля. После регистрации личный пароль вводится при входе или переключении на этот ник; общий пользовательский и админский пароли остаются отдельным входом на сайт.';
-      if (accountStatus) accountStatus.textContent = registered ? 'Создан' : 'Работает';
-      if (accountSuccessTitle) accountSuccessTitle.textContent = isCurrentAccount ? 'Аккаунт успешно создан ✓' : 'Этот аккаунт уже защищён ✓';
-      if (accountSuccessCopy) accountSuccessCopy.textContent = `Ник: ${profile?.nickname || nickname}. Вход по email и личному паролю активен.`;
-      if (registerSaveBtn) registerSaveBtn.disabled = registered;
-      if (registered && registerError) registerError.textContent = '';
     }
 
     function knownLegacyAccount(name) {
@@ -3699,6 +3690,7 @@
     }
 
     function ensureNickname() {
+      if (!requireAccount('Войди в аккаунт, чтобы продолжить.')) return false;
       if (myName) return true;
       showNameModal('Введите никнейм, чтобы оценивать треки.');
       return false;
@@ -5904,6 +5896,7 @@
     }
 
     function switchTab(tab) {
+      if (tab !== 'chart' && !requireAccount()) return;
       activeTab = tab;
       document.querySelectorAll('.oc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
       mainPanel.classList.toggle('hidden', tab !== 'chart');
@@ -6863,7 +6856,6 @@
       if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
         registerNameInput.value = myName || '';
       }
-      syncAccountRegistrationPanel();
     }
 
     function setTopMode(mode) {
@@ -7361,6 +7353,7 @@
     }
 
     function openCardModal(id) {
+      if (!requireAccount('Войди в аккаунт, чтобы открыть карточку и выставлять оценки.')) return;
       const entry = entriesById.get(String(id));
       if (!entry || !openingModal) return;
       const score = avg(entry.scores);
@@ -7791,7 +7784,15 @@
 
 
     document.querySelectorAll('.oc-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      btn.addEventListener('click', event => {
+        const tab = btn.dataset.tab;
+        if ((!tab || tab !== 'chart') && !accessLevel) {
+          event.preventDefault();
+          showAuthModal('Войди в аккаунт, чтобы открыть этот раздел.');
+          return;
+        }
+        if (tab) switchTab(tab);
+      });
     });
 
     seasonYearsEl.addEventListener('click', (e) => {
@@ -7878,7 +7879,7 @@
       if (action === 'save-next') await saveEvaluatorScore();
     });
 
-    nameInput.addEventListener('focus', () => { nameInput.dataset.accountBeforeEdit = myName || ''; });
+    nameInput.addEventListener('focus', () => { if (!requireAccount('Войди в аккаунт, чтобы выбрать ник.')) { nameInput.blur(); return; } nameInput.dataset.accountBeforeEdit = myName || ''; });
     nameInput.addEventListener('change', (e) => {
       const val = e.target.value.trim();
       if (!val || normalizedAccountName(val) === normalizedAccountName(myName)) {
@@ -7923,8 +7924,9 @@
           <button type="button" id="oc-avatar-custom-btn">OK</button>
         </div>`;
 
-    avatarBtn.addEventListener('click', (e) => { e.stopPropagation(); avatarPicker.classList.toggle('hidden'); });
+    avatarBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!requireAccount('Войди в аккаунт, чтобы изменить аватар.')) return; avatarPicker.classList.toggle('hidden'); });
     if (dailyBell) dailyBell.addEventListener('click', () => {
+      if (!requireAccount('Войди в аккаунт, чтобы открыть ежедневную оценку.')) return;
       const state = dailyCurrentState(myName);
       if (state.settings.enabled && state.available && !state.done) startDailyRating().catch(error => { console.error(error); setStatus('Не удалось открыть дейлик.', true); });
       else { switchTab('profile'); renderDailyProfilePanel(); }
@@ -8512,6 +8514,8 @@
       });
     });
 
+    authRegisterOpenBtn?.addEventListener('click', showRegistrationModal);
+    registerCloseBtn?.addEventListener('click', () => { hideRegistrationModal(); showAuthModal('Войди или создай аккаунт.'); });
     if (authSaveBtn) authSaveBtn.addEventListener('click', commitPersonalLogin);
     if (authCloseBtn) authCloseBtn.addEventListener('click', hideAuthModal);
     if (authIdentifierInput) authIdentifierInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); authPassInput?.focus(); } });
@@ -8528,29 +8532,6 @@
       } catch (error) { showAuthModal('Не удалось отправить письмо: ' + (error?.message || error)); }
     });
 
-    registerNameInput?.addEventListener('input', syncAccountRegistrationPanel);
-
-    accountResetPasswordBtn?.addEventListener('click', async () => {
-      const profile = accountProfile(myName);
-      const email = String(profile?.loginEmail || '').trim();
-      if (!email) {
-        if (accountSuccessCopy) accountSuccessCopy.textContent = 'Для первого сброса сначала войди в аккаунт по email — после этого он будет связан с ником.';
-        return;
-      }
-      accountResetPasswordBtn.disabled = true;
-      const oldText = accountResetPasswordBtn.textContent;
-      accountResetPasswordBtn.textContent = 'Отправляем…';
-      try {
-        const db = await waitForFirebaseDb();
-        await db.resetAccountPassword(email);
-        if (accountSuccessCopy) accountSuccessCopy.textContent = `Письмо для сброса пароля отправлено на ${email} ✓`;
-      } catch (error) {
-        if (accountSuccessCopy) accountSuccessCopy.textContent = 'Не удалось отправить письмо: ' + (error?.message || error);
-      } finally {
-        accountResetPasswordBtn.disabled = false;
-        accountResetPasswordBtn.textContent = oldText;
-      }
-    });
     if (registerSaveBtn) registerSaveBtn.addEventListener('click', async () => {
       const nickname = String(registerNameInput?.value || myName || '').trim();
       const email = String(registerEmailInput?.value || '').trim();
@@ -8577,17 +8558,15 @@
         const row = accountProfile(nickname);
         if (row) Object.assign(row, patch);
         else firebaseUserProfiles.push({ id: normalizedAccountName(nickname), nickname, nicknameKey: normalizedAccountName(nickname), ...patch });
-        await saveName(nickname);
-        localStorage.setItem(PRIMARY_NAME_KEY, nickname);
-        nameInput.value = nickname;
-        registerNameInput.value = nickname;
+        registerNameInput.value = '';
         registerEmailInput.value = '';
         registerPassInput.value = '';
         registerPassConfirmInput.value = '';
-        if (registerError) { registerError.textContent = 'Аккаунт зарегистрирован ✓ Личный пароль используется при входе и переключении на этот ник.'; registerError.style.color = '#08D9D6'; }
-        if (registerSaveBtn) { registerSaveBtn.disabled = true; registerSaveBtn.textContent = 'Аккаунт защищён ✓'; }
-        render();
-        if (activeTab === 'profile') renderProfile();
+        if (registerSaveBtn) { registerSaveBtn.disabled = false; registerSaveBtn.textContent = registerButtonText; }
+        hideRegistrationModal();
+        if (authIdentifierInput) authIdentifierInput.value = nickname;
+        if (authPassInput) authPassInput.value = '';
+        showAuthModal('Аккаунт успешно создан ✓ Теперь введи пароль и войди.');
       } catch (error) {
         console.error('Account registration failed', error);
         const code = String(error?.code || '');
@@ -8727,12 +8706,11 @@
           if (resumed) await applyPersonalAccountSession(resumed, true);
         } catch (error) { console.warn('Saved personal session restore failed', error); }
       }
-      if (!accessLevel) showAuthModal('Войди по нику или email. Общий пароль доступен ниже.');
       if (myName && !avatarsMap[myName]) avatarsMap[myName] = myAvatar;
       await loadTierOrders();
       await loadEntries();
       refreshDailyUi();
-      if (!myName) showNameModal('Введите никнейм, чтобы продолжить.');
+      if (accessLevel && !myName) showNameModal('Введите никнейм, чтобы продолжить.');
     })();
   })();
   </script>
@@ -8759,7 +8737,7 @@
       serverTimestamp,
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, deleteUser, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, deleteUser, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -8836,7 +8814,10 @@
         if (createdNow) await deleteUser(credential.user).catch(deleteError => console.warn('Could not roll back incomplete account', deleteError));
         throw error;
       }
-      return credential.user;
+      const registeredUser = { uid: credential.user.uid };
+      await signOut(auth);
+      await signInAnonymously(auth);
+      return registeredUser;
     }
 
     async function loginAccount(email, password, remember = true) {
