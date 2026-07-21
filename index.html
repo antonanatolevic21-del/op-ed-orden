@@ -2073,6 +2073,10 @@
     .oc-account-remember input { width:16px; height:16px; margin:0; accent-color:var(--cyan); }
     .oc-account-submit { min-width:250px; padding:11px 18px; }
     .oc-account-panel .oc-name-modal-error { max-width:980px; margin-top:10px; }
+    .oc-account-success { position:relative; display:flex; flex-direction:column; gap:7px; max-width:980px; margin-top:18px; padding:18px; border:1px solid rgba(74,222,128,.42); border-radius:13px; background:rgba(74,222,128,.08); color:var(--text); }
+    .oc-account-success.hidden { display:none; }
+    .oc-account-success strong { color:var(--green); font:18px 'Archivo Black',sans-serif; }
+    .oc-account-success span { color:var(--muted); font:11px/1.55 'Space Mono',monospace; }
 
     .oc-daily-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
     .oc-daily-head h3 { margin:3px 0 5px; font-family:'Archivo Black',sans-serif; font-size:20px; }
@@ -2357,12 +2361,12 @@
         <div class="oc-account-head">
           <div>
             <div class="oc-section-label">личный аккаунт</div>
-            <h3 class="oc-account-title">Защитить аккаунт паролем</h3>
-            <p class="oc-account-copy">Email используется для входа и восстановления пароля. После регистрации личный пароль вводится при входе или переключении на этот ник; общий пользовательский и админский пароли остаются отдельным входом на сайт.</p>
+            <h3 class="oc-account-title" id="oc-account-title">Защитить аккаунт паролем</h3>
+            <p class="oc-account-copy" id="oc-account-copy">Email используется для входа и восстановления пароля. После регистрации личный пароль вводится при входе или переключении на этот ник; общий пользовательский и админский пароли остаются отдельным входом на сайт.</p>
           </div>
-          <div class="oc-account-status">Работает</div>
+          <div class="oc-account-status" id="oc-account-status">Работает</div>
         </div>
-        <div class="oc-account-form">
+        <div class="oc-account-form" id="oc-account-form">
           <label class="oc-account-field">Никнейм
             <input id="oc-register-name" type="text" placeholder="Например: Пёс кошачий" autocomplete="nickname" />
           </label>
@@ -2376,10 +2380,11 @@
             <input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" />
           </label>
         </div>
-        <div class="oc-account-actions">
+        <div class="oc-account-actions" id="oc-account-actions">
           <label class="oc-account-remember"><input id="oc-register-remember" type="checkbox" checked /> Запомнить вход на этом устройстве</label>
           <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button">Зарегистрировать аккаунт</button>
         </div>
+        <div class="oc-account-success hidden" id="oc-account-success"><strong id="oc-account-success-title">Аккаунт успешно создан ✓</strong><span id="oc-account-success-copy"></span></div>
         <div class="oc-name-modal-error" id="oc-register-error"></div>
       </section>
 
@@ -2743,6 +2748,14 @@
     const registerRememberInput = $('#oc-register-remember');
     const registerSaveBtn = $('#oc-register-save');
     const registerError = $('#oc-register-error');
+    const accountForm = $('#oc-account-form');
+    const accountActions = $('#oc-account-actions');
+    const accountSuccess = $('#oc-account-success');
+    const accountSuccessTitle = $('#oc-account-success-title');
+    const accountSuccessCopy = $('#oc-account-success-copy');
+    const accountTitle = $('#oc-account-title');
+    const accountCopy = $('#oc-account-copy');
+    const accountStatus = $('#oc-account-status');
 
     const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_START_MONTH = { winter: 0, spring: 3, summer: 6, fall: 9 };
@@ -3527,6 +3540,25 @@
     function accountProfile(name) {
       const safe = normalizedAccountName(name);
       return firebaseUserProfiles.find(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === safe) || null;
+    }
+
+    function syncAccountRegistrationPanel() {
+      const nickname = String(registerNameInput?.value || myName || '').trim();
+      const profile = accountProfile(nickname);
+      const registered = Boolean(profile?.authUid);
+      const isCurrentAccount = registered && normalizedAccountName(nickname) === normalizedAccountName(myName);
+      accountForm?.classList.toggle('hidden', registered);
+      accountActions?.classList.toggle('hidden', registered);
+      accountSuccess?.classList.toggle('hidden', !registered);
+      if (accountTitle) accountTitle.textContent = registered ? 'Аккаунт защищён личным паролем' : 'Защитить аккаунт паролем';
+      if (accountCopy) accountCopy.textContent = registered
+        ? 'Форма регистрации больше не нужна. Для входа в этот ник используй привязанный email и личный пароль.'
+        : 'Email используется для входа и восстановления пароля. После регистрации личный пароль вводится при входе или переключении на этот ник; общий пользовательский и админский пароли остаются отдельным входом на сайт.';
+      if (accountStatus) accountStatus.textContent = registered ? 'Создан' : 'Работает';
+      if (accountSuccessTitle) accountSuccessTitle.textContent = isCurrentAccount ? 'Аккаунт успешно создан ✓' : 'Этот аккаунт уже защищён ✓';
+      if (accountSuccessCopy) accountSuccessCopy.textContent = `Ник: ${profile?.nickname || nickname}. Вход по email и личному паролю активен.`;
+      if (registerSaveBtn) registerSaveBtn.disabled = registered;
+      if (registered && registerError) registerError.textContent = '';
     }
 
     function knownLegacyAccount(name) {
@@ -6773,8 +6805,7 @@
       if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
         registerNameInput.value = myName || '';
       }
-      const currentAccountProfile = accountProfile(myName);
-      if (registerSaveBtn) registerSaveBtn.disabled = Boolean(currentAccountProfile?.authUid && normalizedAccountName(registerNameInput?.value) === normalizedAccountName(myName));
+      syncAccountRegistrationPanel();
     }
 
     function setTopMode(mode) {
@@ -8426,6 +8457,8 @@
     if (authSaveBtn) authSaveBtn.addEventListener('click', () => commitAccessPassword(authPassInput.value));
     if (authCloseBtn) authCloseBtn.addEventListener('click', hideAuthModal);
     if (authPassInput) authPassInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitAccessPassword(authPassInput.value); } });
+
+    registerNameInput?.addEventListener('input', syncAccountRegistrationPanel);
 
     if (registerSaveBtn) registerSaveBtn.addEventListener('click', async () => {
       const nickname = String(registerNameInput?.value || myName || '').trim();
