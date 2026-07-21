@@ -2358,9 +2358,9 @@
           <div>
             <div class="oc-section-label">личный аккаунт</div>
             <h3 class="oc-account-title">Защитить аккаунт паролем</h3>
-            <p class="oc-account-copy">Email понадобится только для входа и восстановления пароля. Функция появится после обновления настроек Firebase — сейчас можно посмотреть, как будет выглядеть форма.</p>
+            <p class="oc-account-copy">Email используется для входа и восстановления пароля. После регистрации личный пароль вводится при входе или переключении на этот ник; общий пользовательский и админский пароли остаются отдельным входом на сайт.</p>
           </div>
-          <div class="oc-account-status">Скоро</div>
+          <div class="oc-account-status">Работает</div>
         </div>
         <div class="oc-account-form">
           <label class="oc-account-field">Никнейм
@@ -2586,7 +2586,7 @@
         <button id="oc-auth-close" type="button" aria-label="Закрыть" title="Закрыть окно" style="position:absolute;right:14px;top:12px;border:0;background:transparent;color:#8B8698;font-size:25px;cursor:pointer;">×</button>
         <div class="oc-section-label">вход на сайт</div>
         <h2>Пароль</h2>
-        <p>Обычный пароль открывает сайт. Админ-пароль дополнительно включает добавление, редактирование и удаление OP/ED.</p>
+        <p>Здесь вводится только общий пользовательский или админский пароль сайта. Личный пароль конкретного ника используется позже — в окне входа и переключения аккаунта.</p>
         <div class="oc-auth-row">
           <input id="oc-auth-pass" type="password" placeholder="пароль" autocomplete="current-password" />
           <button class="oc-addbtn" id="oc-auth-save" type="button">Войти</button>
@@ -8443,6 +8443,9 @@
       }
       const existing = accountProfile(nickname);
       if (existing?.authUid) { if (registerError) registerError.textContent = 'Для этого ника личный пароль уже установлен.'; return; }
+      const registerButtonText = registerSaveBtn?.textContent || 'Зарегистрировать аккаунт';
+      if (registerSaveBtn) { registerSaveBtn.disabled = true; registerSaveBtn.textContent = 'Создаём аккаунт…'; }
+      if (registerError) { registerError.textContent = 'Связываемся с Firebase…'; registerError.style.color = '#FFC857'; }
       try {
         if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй через пару секунд.');
         const user = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
@@ -8457,16 +8460,23 @@
         registerEmailInput.value = '';
         registerPassInput.value = '';
         registerPassConfirmInput.value = '';
-        if (registerError) { registerError.textContent = 'Аккаунт зарегистрирован и защищён личным паролем ✓'; registerError.style.color = '#08D9D6'; }
+        if (registerError) { registerError.textContent = 'Аккаунт зарегистрирован ✓ Личный пароль используется при входе и переключении на этот ник.'; registerError.style.color = '#08D9D6'; }
+        if (registerSaveBtn) { registerSaveBtn.disabled = true; registerSaveBtn.textContent = 'Аккаунт защищён ✓'; }
         render();
+        if (activeTab === 'profile') renderProfile();
       } catch (error) {
         console.error('Account registration failed', error);
         const code = String(error?.code || '');
-        const message = code === 'auth/email-already-in-use'
-          ? 'Этот ник уже зарегистрирован. Войди через окно смены аккаунта.'
-          : code === 'auth/operation-not-allowed'
-            ? 'В Firebase ещё не включён способ входа Email/Password.'
-            : (error?.message || 'Не удалось зарегистрировать аккаунт.');
+        const message = code === 'auth/operation-not-allowed'
+          ? 'В Firebase не включён способ входа Email/Password.'
+          : code === 'auth/invalid-credential' || code === 'auth/wrong-password'
+            ? 'Этот email уже существует, но введён неверный пароль. Введи пароль от этого email или восстанови его.'
+            : code === 'auth/email-linked-to-another-nickname'
+              ? (error?.message || 'Этот email уже связан с другим ником.')
+              : code === 'permission-denied' || code === 'firestore/permission-denied'
+                ? 'Firebase не разрешил записать связь с ником. Проверь правила для userProfiles.'
+                : (error?.message || 'Не удалось зарегистрировать аккаунт.');
+        if (registerSaveBtn) { registerSaveBtn.disabled = false; registerSaveBtn.textContent = registerButtonText; }
         if (registerError) { registerError.textContent = message; registerError.style.color = '#FF2E63'; }
       }
     });
@@ -8605,16 +8615,19 @@
       collection,
       doc,
       addDoc,
+      getDocs,
       setDoc,
       updateDoc,
       deleteDoc,
       onSnapshot,
       query,
+      where,
+      limit,
       orderBy,
       serverTimestamp,
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, deleteUser, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -8659,15 +8672,37 @@
       const displayName = String(nickname || '').trim();
       const safeName = normalizeNickname(displayName);
       const cleanEmail = String(email || '').trim().toLowerCase();
-      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, String(password || ''));
-      await setDoc(doc(db, 'userProfiles', safeName), {
-        nickname: displayName,
-        nicknameKey: safeName,
-        authUid: credential.user.uid,
-        authProvider: 'email-password',
-        passwordEnabled: true,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      const cleanPassword = String(password || '');
+      let credential;
+      let createdNow = false;
+      try {
+        credential = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+        createdNow = true;
+      } catch (error) {
+        if (error?.code !== 'auth/email-already-in-use') throw error;
+        credential = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      }
+      try {
+        const linkedProfiles = await getDocs(query(collection(db, 'userProfiles'), where('authUid', '==', credential.user.uid), limit(2)));
+        const conflict = linkedProfiles.docs.find(profileDoc => profileDoc.id !== safeName);
+        if (conflict) {
+          const linkedName = String(conflict.data()?.nickname || conflict.id);
+          const error = new Error(`Этот email уже привязан к аккаунту «${linkedName}».`);
+          error.code = 'auth/email-linked-to-another-nickname';
+          throw error;
+        }
+        await setDoc(doc(db, 'userProfiles', safeName), {
+          nickname: displayName,
+          nicknameKey: safeName,
+          authUid: credential.user.uid,
+          authProvider: 'email-password',
+          passwordEnabled: true,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (error) {
+        if (createdNow) await deleteUser(credential.user).catch(deleteError => console.warn('Could not roll back incomplete account', deleteError));
+        throw error;
+      }
       return credential.user;
     }
 
