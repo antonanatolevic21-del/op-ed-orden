@@ -1412,6 +1412,7 @@
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
+    const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
     const SEASONS = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_LABEL = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
     const STAGE_LABEL = { basket: 'Корзина', first: 'Первый этап', semi: 'Полуфинал', final: 'Финал' };
@@ -1861,15 +1862,15 @@
       if (!isGuest() || !guestSlot) return [];
       const myKey = normalizeNickname(myName);
       if (!myKey) return [];
-      // Гостю показываем все доступные открытые сезоны в стабильном календарном порядке,
-      // а не начиная с текущего сезона: Зима → Весна → Лето → Осень.
+      // В админском гостевом режиме ник в шапке остаётся админским,
+      // а оценка сохраняется от имени участника выбранного слота.
       return SEASONS
         .map(season => getSeasonState(season))
         .filter(state => {
           if (state.closed) return false;
           const nickname = getGuestNicknameForSeason(state);
           const guestKey = normalizeNickname(nickname);
-          return !!guestKey && guestKey === myKey;
+          return !!guestKey && (isAdminGuestPreview() || guestKey === myKey);
         });
     }
 
@@ -1930,10 +1931,13 @@
       return out;
     }
 
-    function isAdmin() { return adminUnlocked && accessLevel === 'admin'; }
+    function isAdminNickname(name = myName) {
+      return ADMIN_NICKNAMES.has(normalizeNickname(name));
+    }
+    function isAdmin() { return adminUnlocked && accessLevel === 'admin' && isAdminNickname(); }
     function isUser() { return accessLevel === 'user'; }
     function isGuest() { return accessLevel === 'guest'; }
-    function isAdminGuestPreview() { return adminUnlocked && accessLevel === 'guest'; }
+    function isAdminGuestPreview() { return adminUnlocked && accessLevel === 'guest' && isAdminNickname(getSavedAdminNickname()); }
     function hasAccess() { return isUser() || accessLevel === 'guest' || isAdmin(); }
     function canAccessMode(mode) {
       return !isGuest() || String(mode || 'rating') === 'rating';
@@ -1970,8 +1974,8 @@
       accessBadge.style.color = isAdmin() ? 'var(--pink)' : isUser() ? 'var(--green)' : isGuest() ? 'var(--cyan)' : 'var(--muted)';
       if (nameInput) {
         nameInput.value = myName;
-        nameInput.disabled = false;
-        nameInput.placeholder = isGuest() ? 'введите свой ник' : 'ваш ник';
+        nameInput.disabled = isAdminPreview;
+        nameInput.placeholder = isAdminPreview ? 'админский аккаунт' : (isGuest() ? 'введите свой ник' : 'ваш ник');
       }
       if (roleSwitch) {
         roleSwitch.classList.toggle('hidden', !adminUnlocked);
@@ -2290,20 +2294,24 @@
       return eventRatings.filter(r => String(r.seasonKey || '') === key && String(r.stage || 'first') === 'first');
     }
 
+    function eventRatingNickname(state) {
+      if (isAdminGuestPreview()) return getGuestNicknameForSeason(state);
+      return myName;
+    }
+
     function getMyEventRating(key, openingId) {
-      const myKey = normalizeNickname(myName);
+      const state = eventSeasonStates.get(String(key)) || null;
+      const myKey = normalizeNickname(eventRatingNickname(state));
       if (!myKey) return null;
       return eventRatings.find(r => String(r.seasonKey || '') === key && String(r.openingId || '') === String(openingId) && String(r.nicknameKey || '') === myKey) || null;
     }
 
     function isAllowedForSeason(state) {
-      const myKey = normalizeNickname(myName);
-      if (!myKey) return false;
-      if (isGuest()) {
-        const guestNick = getGuestNicknameForSeason(state);
-        return !!guestNick && normalizeNickname(guestNick) === myKey && !state.closed;
-      }
-      return false;
+      const guestNick = getGuestNicknameForSeason(state);
+      const guestKey = normalizeNickname(guestNick);
+      if (!guestKey || state.closed || !isGuest()) return false;
+      if (isAdminGuestPreview()) return true;
+      return guestKey === normalizeNickname(myName);
     }
 
     function avgForOpeningInSeason(key, openingId) {
@@ -2372,7 +2380,7 @@
     }
 
     async function maybeCreateSeasonCompletionNotice(state, nicknameKey, ratingRow, wasComplete) {
-      if (LOCAL_EVENTS_MODE || isAdmin() || wasComplete) return;
+      if (LOCAL_EVENTS_MODE || isAdmin() || isAdminGuestPreview() || wasComplete) return;
       const progress = getUserSeasonCompletion(state, nicknameKey, [ratingRow]);
       if (!progress.complete) return;
       const seasonLabel = SEASON_LABEL[state.season] || state.season;
@@ -7901,7 +7909,7 @@
     async function saveEventRating(state, goNext) {
       if (isAdmin()) {
         const errEl = $('#ev-eval-error');
-        if (errEl) errEl.textContent = 'Админ не может оценивать. Переключись в гостевой режим нужного участника.';
+        if (errEl) errEl.textContent = 'Сначала выбери в правом верхнем углу гостевой слот участника.';
         return;
       }
       const openingId = evaluatorQueue[evaluatorIndex];
@@ -7909,7 +7917,8 @@
       const errEl = $('#ev-eval-error');
       const comment = String($('#ev-eval-comment')?.value || '').trim();
       const score = Math.max(1, Math.min(10, Math.round(Number($('#ev-eval-score-num')?.value || $('#ev-eval-score')?.value || 1))));
-      const myKey = normalizeNickname(myName);
+      const ratingNickname = String(eventRatingNickname(state) || '').trim();
+      const myKey = normalizeNickname(ratingNickname);
       if (!opening || !myKey) return;
       if (!comment) {
         if (errEl) errEl.textContent = 'Комментарий обязателен. Хотя бы пару слов.';
@@ -7923,10 +7932,11 @@
         season: state.season,
         openingId: String(openingId),
         openingTitle: opening.title,
-        nickname: myName,
+        nickname: ratingNickname,
         nicknameKey: myKey,
-        createdByRole: isAdmin() ? 'admin' : 'guest',
-        adminCreated: isAdmin(),
+        createdByRole: isAdminGuestPreview() ? 'admin' : 'guest',
+        adminCreated: isAdminGuestPreview(),
+        adminNickname: isAdminGuestPreview() ? myName : '',
         score,
         comment
       };
@@ -8066,6 +8076,10 @@
       const name = String(modalName.value || '').trim();
       if (!name) {
         nameError.textContent = 'Никнейм обязателен.';
+        return;
+      }
+      if (accessLevel === 'admin' && !isAdminNickname(name)) {
+        nameError.textContent = 'Админский вход разрешён только аккаунтам: Пёс кошачий, Toxexex, Egortos и Кофа.';
         return;
       }
       myName = name;
