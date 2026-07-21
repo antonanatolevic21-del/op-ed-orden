@@ -2634,7 +2634,7 @@
     const ADMIN_PASSWORD = '66643524';
     const PRIMARY_NAME_KEY = 'op-ed-primary-account-name';
     const PERSONAL_ACCOUNT_AUTH_ENABLED = true;
-    const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация и вход по email пока временно недоступны. Попробуйте немного позже.';
+    const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация сейчас недоступна. Попробуйте позже.';
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
@@ -2745,15 +2745,6 @@
     const registerRememberInput = $('#oc-register-remember');
     const registerSaveBtn = $('#oc-register-save');
     const registerError = $('#oc-register-error');
-    const accountForm = $('#oc-account-form');
-    const accountActions = $('#oc-account-actions');
-    const accountSuccess = $('#oc-account-success');
-    const accountSuccessTitle = $('#oc-account-success-title');
-    const accountSuccessCopy = $('#oc-account-success-copy');
-    const accountTitle = $('#oc-account-title');
-    const accountCopy = $('#oc-account-copy');
-    const accountStatus = $('#oc-account-status');
-    const accountResetPasswordBtn = $('#oc-account-reset-password');
 
     const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_START_MONTH = { winter: 0, spring: 3, summer: 6, fall: 9 };
@@ -2812,7 +2803,7 @@
 
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
-          reject(new Error('Firebase не загрузился. Проверьте интернет и настройки Firebase в index.html.'));
+          reject(new Error('Не удалось подключиться. Проверьте интернет и попробуйте ещё раз.'));
         }, 10000);
 
         window.addEventListener('oped-db-ready', () => {
@@ -2995,10 +2986,10 @@
         if (activeTab === 'tier') renderTierList();
         if (activeTab === 'stats') renderStatsPage();
       if (activeTab === 'top100') renderGlobalTop100();
-        setStatus(mode === 'personal' ? 'Отметка 1–5 удалена из Firebase ✓' : 'Оценка удалена из Firebase ✓');
+        setStatus(mode === 'personal' ? 'Отметка удалена ✓' : 'Оценка удалена ✓');
       } catch (err) {
         console.error(err);
-        setStatus('Не удалось удалить оценку из Firebase.', true);
+        setStatus('Не удалось удалить оценку.', true);
       }
     }
 
@@ -3093,7 +3084,7 @@
       renderProfile();
       if (activeTab === 'tier') renderTierList();
       if (activeTab === 'top100') renderGlobalTop100();
-      if (errors.length) setStatus('Локально профиль убран, но часть данных в Firebase могла не удалиться. Проверь Rules.', true);
+      if (errors.length) setStatus('Не все данные профиля удалось удалить.', true);
       else setStatus(`Профиль «${target}» удалён полностью ✓`);
     }
 
@@ -3534,7 +3525,7 @@
     async function applyPersonalAccountSession(result, remember = true) {
       const profile = result?.profile;
       const nickname = String(profile?.nickname || profile?.nicknameKey || profile?.id || '').trim();
-      if (!nickname) throw new Error('Firebase подтвердил пароль, но не вернул связанный ник.');
+      if (!nickname) throw new Error('Не удалось определить аккаунт.');
       const index = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(nickname));
       if (index >= 0) firebaseUserProfiles[index] = { ...firebaseUserProfiles[index], ...profile };
       else firebaseUserProfiles.push(profile);
@@ -3558,7 +3549,7 @@
       if (password === ADMIN_PASSWORD || password === USER_PASSWORD) return commitSharedAccountLogin(identifier, password);
       const originalText = authSaveBtn?.textContent || 'Войти в аккаунт';
       if (authSaveBtn) { authSaveBtn.disabled = true; authSaveBtn.textContent = 'Входим…'; }
-      if (authError) authError.textContent = 'Проверяем аккаунт в Firebase…';
+      if (authError) authError.textContent = 'Проверяем данные…';
       try {
         const db = await waitForFirebaseDb();
         const result = await db.loginPersonalAccount(identifier, password, Boolean(authRememberInput?.checked));
@@ -3665,7 +3656,7 @@
           return false;
         }
         try {
-          if (!window.OPED_DB || typeof window.OPED_DB.loginAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй ещё раз через пару секунд.');
+          if (!window.OPED_DB || typeof window.OPED_DB.loginAccount !== 'function') throw new Error('Сервис ещё загружается. Попробуй через пару секунд.');
           const user = await window.OPED_DB.loginAccount(email, password, Boolean(rememberAccountInput?.checked));
           if (profile.authUid && user.uid !== profile.authUid) throw new Error('Пароль относится к другому аккаунту.');
         } catch (error) {
@@ -4617,7 +4608,7 @@
       }
 
       if (!savedRemote) {
-        setStatus('Не удалось сохранить ручной топ в Firebase.', true);
+        setStatus('Не удалось сохранить ручной топ.', true);
         if (errors.length) throw errors[0];
       }
     }
@@ -4657,12 +4648,12 @@
         }, err => {
           console.error('eventBasket watch error', err);
           firebaseEventBasketLoaded = true;
-          setStatus('Не удалось прочитать Firebase-корзину eventBasket. Проверь Rules.', true);
+          setStatus('Не удалось загрузить корзину ивентов.', true);
         });
       } catch (e) {
         console.error('eventBasket watcher setup failed', e);
         firebaseEventBasketLoaded = true;
-        setStatus('Не удалось подключиться к Firebase-корзине eventBasket.', true);
+        setStatus('Не удалось загрузить корзину ивентов.', true);
       }
     }
 
@@ -4761,7 +4752,7 @@
         });
       } catch (e) {
         console.error(e);
-        setStatus('Firebase не подключился. Данные не будут общими для всех.', true);
+        setStatus('Не удалось подключиться. Обновите страницу.', true);
         entries = [];
         populateFilterOptions();
         render();
@@ -5695,8 +5686,8 @@
         return true;
       } catch (e) {
         console.error('eventBasket save failed', e);
-        setStatus('Firebase НЕ сохранил корзину eventBasket. Скорее всего, не разрешены Rules для eventBasket. Локально больше не сохраняю, чтобы не было ложного “В корзине”.', true);
-        alert('Не удалось сохранить в Firebase eventBasket. Проверь Rules для коллекции eventBasket. Подробность в консоли браузера.');
+        setStatus('Не удалось сохранить корзину ивентов.', true);
+        alert('Не удалось сохранить корзину ивентов.');
         return false;
       }
     }
@@ -5741,7 +5732,7 @@
       const savedToFirebase = await saveEventBasketSeasonToFirebase(key, data[key]);
       if (savedToFirebase) {
         saveEventBasket(data);
-        setStatus(`Добавлено в Firebase-корзину ивентов: ${entry.title}`);
+        setStatus(`Добавлено в корзину ивентов: ${entry.title}`);
       }
       renderSeasonViews();
     }
@@ -6070,14 +6061,14 @@
         touchEntryCache(entry);
         markRatingDataChanged();
         if (evaluatorMode === 'daily') await markDailyEntryDone(entry.id);
-        setStatus('Оценка сохранена в Firebase ✓');
+        setStatus('Оценка сохранена ✓');
         render();
         renderSeasonViews();
         seasonQueueIndex += 1;
         renderEvaluator();
       } catch (e) {
         console.error(e);
-        setStatus('Не удалось сохранить оценку в Firebase.', true);
+        setStatus('Не удалось сохранить оценку.', true);
       }
     }
 
@@ -7498,10 +7489,10 @@
         if (activeTab === 'stats') renderStatsPage();
         if (activeTab === 'top100') renderGlobalTop100();
         closeCardModal();
-        setStatus('Оценка сохранена в Firebase ✓');
+        setStatus('Оценка сохранена ✓');
       } catch (err) {
         console.error(err);
-        setStatus('Не удалось сохранить оценку в Firebase.', true);
+        setStatus('Не удалось сохранить оценку.', true);
       }
     }
 
@@ -7609,10 +7600,10 @@
             touchEntryCache(entry);
             markRatingDataChanged();
             render();
-            setStatus('Оценка сохранена в Firebase ✓');
+            setStatus('Оценка сохранена ✓');
           } catch (err) {
             console.error(err);
-            setStatus('Не удалось сохранить оценку в Firebase.', true);
+            setStatus('Не удалось сохранить оценку.', true);
           }
         });
       });
@@ -7719,7 +7710,7 @@
                 setStatus('Изменения сохранены, но старую картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
               }
             } else {
-              setStatus('Изменения сохранены в Firebase ✓');
+              setStatus('Изменения сохранены ✓');
             }
           } catch (err) {
             console.error(err);
@@ -7767,11 +7758,11 @@
                 setStatus('Трек удалён, но резервную картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
               }
             } else {
-              setStatus('Удалено из Firebase ✓');
+              setStatus('Удалено ✓');
             }
           } catch (err) {
             console.error(err);
-            setStatus('Не удалось удалить из Firebase.', true);
+            setStatus('Не удалось удалить.', true);
           }
         });
       });
@@ -8304,11 +8295,11 @@
         if ($('#oc-add-movie')) $('#oc-add-movie').checked = false;
         if ($('#oc-add-shortened')) $('#oc-add-shortened').checked = false;
 
-        setStatus(backupWarning ? 'Трек добавлен ✓ Но запасная картинка не создана: ' + backupWarning : 'Трек добавлен в Firebase ✓', Boolean(backupWarning));
+        setStatus(backupWarning ? 'Трек добавлен ✓ Но запасная картинка не создана: ' + backupWarning : 'Трек добавлен ✓', Boolean(backupWarning));
       } catch (err) {
         console.error(err);
         const message = err && err.message ? err.message : 'неизвестная ошибка';
-        setStatus('Не удалось добавить трек в Firebase: ' + message, true);
+        setStatus('Не удалось добавить трек: ' + message, true);
       }
     });
 
@@ -8550,9 +8541,9 @@
       if (existing?.authUid) { if (registerError) registerError.textContent = 'Для этого ника личный пароль уже установлен.'; return; }
       const registerButtonText = registerSaveBtn?.textContent || 'Зарегистрировать аккаунт';
       if (registerSaveBtn) { registerSaveBtn.disabled = true; registerSaveBtn.textContent = 'Создаём аккаунт…'; }
-      if (registerError) { registerError.textContent = 'Связываемся с Firebase…'; registerError.style.color = '#FFC857'; }
+      if (registerError) { registerError.textContent = 'Создаём аккаунт…'; registerError.style.color = '#FFC857'; }
       try {
-        if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй через пару секунд.');
+        if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Сервис ещё загружается. Попробуй через пару секунд.');
         const user = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
         const patch = { authUid: user.uid, loginEmail: email.toLowerCase(), authProvider: 'password', passwordEnabled: true };
         const row = accountProfile(nickname);
@@ -8571,13 +8562,13 @@
         console.error('Account registration failed', error);
         const code = String(error?.code || '');
         const message = code === 'auth/operation-not-allowed'
-          ? 'В Firebase не включён способ входа Email/Password.'
+          ? 'Регистрация сейчас недоступна.'
           : code === 'auth/invalid-credential' || code === 'auth/wrong-password'
             ? 'Этот email уже существует, но введён неверный пароль. Введи пароль от этого email или восстанови его.'
             : code === 'auth/email-linked-to-another-nickname'
               ? (error?.message || 'Этот email уже связан с другим ником.')
               : code === 'permission-denied' || code === 'firestore/permission-denied'
-                ? 'Firebase не разрешил записать связь с ником. Проверь правила для userProfiles.'
+                ? 'Не удалось сохранить аккаунт.'
                 : (error?.message || 'Не удалось зарегистрировать аккаунт.');
         if (registerSaveBtn) { registerSaveBtn.disabled = false; registerSaveBtn.textContent = registerButtonText; }
         if (registerError) { registerError.textContent = message; registerError.style.color = '#FF2E63'; }
@@ -8686,7 +8677,7 @@
       } catch (err) {
         console.error(err);
         exportWrap.remove();
-        setStatus('Не удалось сделать PNG-скриншот. Проверь, что браузер не блокирует внешние картинки.', true);
+        setStatus('Не удалось создать изображение.', true);
       }
     }
 
