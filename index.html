@@ -2339,6 +2339,7 @@
           <input id="oc-register-email" type="email" placeholder="email для восстановления" autocomplete="email" />
           <input id="oc-register-pass" type="password" placeholder="пароль" autocomplete="new-password" />
           <input id="oc-register-pass-confirm" type="password" placeholder="повтори пароль" autocomplete="new-password" />
+          <label style="display:flex;align-items:center;gap:7px;color:#8B8698;font-size:12px;cursor:pointer;"><input id="oc-register-remember" type="checkbox" checked /> Запомнить вход на этом устройстве</label>
           <button class="oc-addbtn" id="oc-register-save" type="button">Зарегистрировать / защитить</button>
         </div>
         <div class="oc-name-modal-error" id="oc-register-error"></div>
@@ -2510,6 +2511,7 @@
           <input id="oc-modal-name" type="text" placeholder="например: Пёс кошачий" autocomplete="nickname" />
           <input id="oc-modal-account-email" type="email" placeholder="email защищённого аккаунта" autocomplete="email" />
           <input id="oc-modal-account-pass" type="password" placeholder="личный пароль, если установлен" autocomplete="current-password" />
+          <label style="display:flex;align-items:center;gap:7px;color:#8B8698;font-size:12px;cursor:pointer;"><input id="oc-remember-account" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
           <button class="oc-addbtn" id="oc-modal-name-save" type="button">Войти</button>
           <button class="oc-edit-cancel" id="oc-forgot-password" type="button">Забыли пароль?</button>
         </div>
@@ -2694,11 +2696,13 @@
     const modalAccountEmail = $('#oc-modal-account-email');
     const modalAccountPass = $('#oc-modal-account-pass');
     const forgotPasswordBtn = $('#oc-forgot-password');
+    const rememberAccountInput = $('#oc-remember-account');
     const modalNameError = $('#oc-modal-name-error');
     const registerNameInput = $('#oc-register-name');
     const registerEmailInput = $('#oc-register-email');
     const registerPassInput = $('#oc-register-pass');
     const registerPassConfirmInput = $('#oc-register-pass-confirm');
+    const registerRememberInput = $('#oc-register-remember');
     const registerSaveBtn = $('#oc-register-save');
     const registerError = $('#oc-register-error');
 
@@ -3543,7 +3547,7 @@
         }
         try {
           if (!window.OPED_DB || typeof window.OPED_DB.loginAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй ещё раз через пару секунд.');
-          const user = await window.OPED_DB.loginAccount(email, password);
+          const user = await window.OPED_DB.loginAccount(email, password, Boolean(rememberAccountInput?.checked));
           if (profile.authUid && user.uid !== profile.authUid) throw new Error('Пароль относится к другому аккаунту.');
         } catch (error) {
           showNameModal('Не удалось войти: ' + (error?.code === 'auth/invalid-credential' ? 'неверный пароль.' : (error?.message || error)), val);
@@ -8403,7 +8407,7 @@
       if (existing?.authUid) { if (registerError) registerError.textContent = 'Для этого ника личный пароль уже установлен.'; return; }
       try {
         if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй через пару секунд.');
-        const user = await window.OPED_DB.registerAccount(nickname, email, password);
+        const user = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
         const patch = { authUid: user.uid, authProvider: 'password', passwordEnabled: true };
         const row = accountProfile(nickname);
         if (row) Object.assign(row, patch);
@@ -8572,7 +8576,7 @@
       serverTimestamp,
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -8608,7 +8612,12 @@
         .slice(0, 60);
     }
 
-    async function registerAccount(nickname, email, password) {
+    async function setAccountPersistence(remember) {
+      await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+    }
+
+    async function registerAccount(nickname, email, password, remember = true) {
+      await setAccountPersistence(remember);
       const displayName = String(nickname || '').trim();
       const safeName = normalizeNickname(displayName);
       const cleanEmail = String(email || '').trim().toLowerCase();
@@ -8624,7 +8633,8 @@
       return credential.user;
     }
 
-    async function loginAccount(email, password) {
+    async function loginAccount(email, password, remember = true) {
+      await setAccountPersistence(remember);
       const credential = await signInWithEmailAndPassword(auth, String(email || '').trim().toLowerCase(), String(password || ''));
       return credential.user;
     }
