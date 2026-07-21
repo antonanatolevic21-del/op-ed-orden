@@ -2300,7 +2300,7 @@
     }
 
     function getMyEventRating(key, openingId) {
-      const state = eventSeasonStates.get(String(key)) || null;
+      const state = SEASONS.map(season => getSeasonState(season)).find(row => String(row.key) === String(key)) || null;
       const myKey = normalizeNickname(eventRatingNickname(state));
       if (!myKey) return null;
       return eventRatings.find(r => String(r.seasonKey || '') === key && String(r.openingId || '') === String(openingId) && String(r.nicknameKey || '') === myKey) || null;
