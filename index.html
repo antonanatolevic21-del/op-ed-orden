@@ -2384,7 +2384,7 @@
           <label class="oc-account-remember"><input id="oc-register-remember" type="checkbox" checked /> Запомнить вход на этом устройстве</label>
           <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button">Зарегистрировать аккаунт</button>
         </div>
-        <div class="oc-account-success hidden" id="oc-account-success"><strong id="oc-account-success-title">Аккаунт успешно создан ✓</strong><span id="oc-account-success-copy"></span></div>
+        <div class="oc-account-success hidden" id="oc-account-success"><strong id="oc-account-success-title">Аккаунт успешно создан ✓</strong><span id="oc-account-success-copy"></span><button class="oc-edit-cancel" id="oc-account-reset-password" type="button" style="align-self:flex-start;margin-top:6px;">Сбросить пароль</button></div>
         <div class="oc-name-modal-error" id="oc-register-error"></div>
       </section>
 
@@ -2591,22 +2591,14 @@
         <button id="oc-auth-close" type="button" aria-label="Закрыть" title="Закрыть окно" style="position:absolute;right:14px;top:12px;border:0;background:transparent;color:#8B8698;font-size:25px;cursor:pointer;">×</button>
         <div class="oc-section-label">вход в аккаунт</div>
         <h2>Войти на сайт</h2>
-        <p>Введи ник или email и личный пароль. Для старого аккаунта при первом личном входе используй email.</p>
+        <p>Одно поле принимает ник или email. Если у ника ещё нет личного пароля, введи общий пользовательский или админский пароль в обычное поле пароля.</p>
         <div style="display:grid;gap:10px;margin-top:14px;">
           <input id="oc-auth-identifier" type="text" placeholder="ник или email" autocomplete="username" />
-          <input id="oc-auth-pass" type="password" placeholder="личный пароль" autocomplete="current-password" />
+          <input id="oc-auth-pass" type="password" placeholder="пароль" autocomplete="current-password" />
           <label class="oc-account-remember"><input id="oc-auth-remember" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
           <button class="oc-addbtn" id="oc-auth-save" type="button">Войти в аккаунт</button>
           <button class="oc-edit-cancel" id="oc-auth-forgot" type="button">Забыли пароль?</button>
         </div>
-        <details style="margin-top:15px;padding-top:13px;border-top:1px solid var(--border);">
-          <summary style="cursor:pointer;color:var(--muted);font:11px 'Space Mono',monospace;">Войти по общему паролю</summary>
-          <p class="oc-auth-note">Старый пользовательский и админский пароли продолжают работать.</p>
-          <div class="oc-auth-row">
-            <input id="oc-auth-legacy-pass" type="password" placeholder="общий пароль" autocomplete="current-password" />
-            <button class="oc-addbtn" id="oc-auth-legacy-save" type="button">Войти</button>
-          </div>
-        </details>
         <div class="oc-auth-error" id="oc-auth-error"></div>
       </div>
     </div>
@@ -2729,8 +2721,6 @@
     const authRememberInput = $('#oc-auth-remember');
     const authSaveBtn = $('#oc-auth-save');
     const authForgotBtn = $('#oc-auth-forgot');
-    const authLegacyPassInput = $('#oc-auth-legacy-pass');
-    const authLegacySaveBtn = $('#oc-auth-legacy-save');
     const authError = $('#oc-auth-error');
     const authCloseBtn = $('#oc-auth-close');
     const accessBadge = $('#oc-access-badge');
@@ -2771,6 +2761,7 @@
     const accountTitle = $('#oc-account-title');
     const accountCopy = $('#oc-account-copy');
     const accountStatus = $('#oc-account-status');
+    const accountResetPasswordBtn = $('#oc-account-reset-password');
 
     const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_START_MONTH = { winter: 0, spring: 3, summer: 6, fall: 9 };
@@ -3527,7 +3518,6 @@
       if (authModal) authModal.classList.add('hidden');
       if (authError) authError.textContent = '';
       if (authPassInput) authPassInput.value = '';
-      if (authLegacyPassInput) authLegacyPassInput.value = '';
     }
 
     async function applyPersonalAccountSession(result, remember = true) {
@@ -3553,7 +3543,8 @@
     async function commitPersonalLogin() {
       const identifier = String(authIdentifierInput?.value || '').trim();
       const password = String(authPassInput?.value || '');
-      if (!identifier || !password) { showAuthModal('Введи ник или email и личный пароль.'); return false; }
+      if (!identifier || !password) { showAuthModal('Введи ник или email и пароль.'); return false; }
+      if (password === ADMIN_PASSWORD || password === USER_PASSWORD) return commitSharedAccountLogin(identifier, password);
       const originalText = authSaveBtn?.textContent || 'Войти в аккаунт';
       if (authSaveBtn) { authSaveBtn.disabled = true; authSaveBtn.textContent = 'Входим…'; }
       if (authError) authError.textContent = 'Проверяем аккаунт в Firebase…';
@@ -3572,21 +3563,28 @@
       }
     }
 
-    function commitAccessPassword(value) {
+    async function commitSharedAccountLogin(identifier, value) {
+      const nickname = String(identifier || '').trim();
       const pass = String(value || '').trim();
-      if (pass === ADMIN_PASSWORD) accessLevel = 'admin';
-      else if (pass === USER_PASSWORD) accessLevel = 'user';
-      else {
-        showAuthModal('Неверный пароль.');
-        return false;
-      }
+      if (!nickname || nickname.includes('@')) { showAuthModal('Для входа по общему паролю введи ник, а не email.'); return false; }
+      let profile = accountProfile(nickname);
+      try { const db = await waitForFirebaseDb(); profile = await db.getAccountProfile(nickname) || profile; } catch (error) { console.warn('Could not verify protected account before shared login', error); }
+      if (profile?.authUid) { showAuthModal('У этого аккаунта уже есть личный пароль. Введи его или нажми «Забыли пароль?».'); return false; }
+      if (pass === ADMIN_PASSWORD) {
+        if (!isAdminNickname(nickname)) { showAuthModal('Админский пароль работает только для четырёх админских аккаунтов.'); return false; }
+        accessLevel = 'admin';
+      } else if (pass === USER_PASSWORD) accessLevel = 'user';
+      else { showAuthModal('Неверный пароль.'); return false; }
+      await saveName(nickname);
+      localStorage.setItem(PRIMARY_NAME_KEY, nickname);
+      nameInput.value = nickname;
       sessionStorage.setItem(ACCESS_KEY, accessLevel);
       if (authPassInput) authPassInput.value = '';
       hideAuthModal();
       updateAccessUi();
       render();
       if (activeTab === 'profile') renderProfile();
-      setStatus(isAdmin() ? 'Вход выполнен: админ ✓' : 'Вход выполнен ✓');
+      setStatus(isAdmin() ? `Вход выполнен: ${nickname} · админ ✓` : `Вход выполнен: ${nickname} ✓`);
       return true;
     }
 
@@ -8515,11 +8513,9 @@
     });
 
     if (authSaveBtn) authSaveBtn.addEventListener('click', commitPersonalLogin);
-    if (authLegacySaveBtn) authLegacySaveBtn.addEventListener('click', () => commitAccessPassword(authLegacyPassInput?.value));
     if (authCloseBtn) authCloseBtn.addEventListener('click', hideAuthModal);
     if (authIdentifierInput) authIdentifierInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); authPassInput?.focus(); } });
     if (authPassInput) authPassInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitPersonalLogin(); } });
-    if (authLegacyPassInput) authLegacyPassInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitAccessPassword(authLegacyPassInput.value); } });
     if (authForgotBtn) authForgotBtn.addEventListener('click', async () => {
       const identifier = String(authIdentifierInput?.value || '').trim();
       const localProfile = identifier.includes('@') ? null : accountProfile(identifier);
@@ -8534,6 +8530,27 @@
 
     registerNameInput?.addEventListener('input', syncAccountRegistrationPanel);
 
+    accountResetPasswordBtn?.addEventListener('click', async () => {
+      const profile = accountProfile(myName);
+      const email = String(profile?.loginEmail || '').trim();
+      if (!email) {
+        if (accountSuccessCopy) accountSuccessCopy.textContent = 'Для первого сброса сначала войди в аккаунт по email — после этого он будет связан с ником.';
+        return;
+      }
+      accountResetPasswordBtn.disabled = true;
+      const oldText = accountResetPasswordBtn.textContent;
+      accountResetPasswordBtn.textContent = 'Отправляем…';
+      try {
+        const db = await waitForFirebaseDb();
+        await db.resetAccountPassword(email);
+        if (accountSuccessCopy) accountSuccessCopy.textContent = `Письмо для сброса пароля отправлено на ${email} ✓`;
+      } catch (error) {
+        if (accountSuccessCopy) accountSuccessCopy.textContent = 'Не удалось отправить письмо: ' + (error?.message || error);
+      } finally {
+        accountResetPasswordBtn.disabled = false;
+        accountResetPasswordBtn.textContent = oldText;
+      }
+    });
     if (registerSaveBtn) registerSaveBtn.addEventListener('click', async () => {
       const nickname = String(registerNameInput?.value || myName || '').trim();
       const email = String(registerEmailInput?.value || '').trim();
@@ -8556,7 +8573,7 @@
       try {
         if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй через пару секунд.');
         const user = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
-        const patch = { authUid: user.uid, authProvider: 'password', passwordEnabled: true };
+        const patch = { authUid: user.uid, loginEmail: email.toLowerCase(), authProvider: 'password', passwordEnabled: true };
         const row = accountProfile(nickname);
         if (row) Object.assign(row, patch);
         else firebaseUserProfiles.push({ id: normalizedAccountName(nickname), nickname, nicknameKey: normalizedAccountName(nickname), ...patch });
@@ -8834,6 +8851,13 @@
       return profileDoc ? { id: profileDoc.id, ...profileDoc.data() } : null;
     }
 
+    async function getAccountProfile(nickname) {
+      const safeName = normalizeNickname(nickname);
+      if (!safeName) return null;
+      const profileDoc = await getDoc(doc(db, 'userProfiles', safeName));
+      return profileDoc.exists() ? { id: profileDoc.id, ...profileDoc.data() } : null;
+    }
+
     async function loginPersonalAccount(identifier, password, remember = true) {
       await setAccountPersistence(remember);
       const cleanIdentifier = String(identifier || '').trim();
@@ -9042,6 +9066,7 @@
       normalizeNickname,
       registerAccount,
       loginAccount,
+      getAccountProfile,
       loginPersonalAccount,
       resumePersonalAccount,
       resetAccountPassword
