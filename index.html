@@ -2333,9 +2333,10 @@
       <section id="oc-account-registration" class="oc-daily-panel" style="margin-top:14px;">
         <div class="oc-section-label">личный аккаунт</div>
         <h3 style="margin:6px 0 8px;">Установить пароль или зарегистрировать новый ник</h3>
-        <p class="oc-meta" style="margin:0 0 10px;">Пароль хранится в Firebase Authentication и не записывается в код сайта или Firestore. Минимум 6 символов.</p>
+        <p class="oc-meta" style="margin:0 0 10px;">Каркас подготовлен, но регистрация временно отключена до обновления настроек Firebase. Пароль будет храниться в Firebase Authentication, а email использоваться для восстановления.</p>
         <div class="oc-name-modal-row" style="align-items:stretch;flex-wrap:wrap;">
           <input id="oc-register-name" type="text" placeholder="никнейм" autocomplete="nickname" />
+          <input id="oc-register-email" type="email" placeholder="email для восстановления" autocomplete="email" />
           <input id="oc-register-pass" type="password" placeholder="пароль" autocomplete="new-password" />
           <input id="oc-register-pass-confirm" type="password" placeholder="повтори пароль" autocomplete="new-password" />
           <button class="oc-addbtn" id="oc-register-save" type="button">Зарегистрировать / защитить</button>
@@ -2507,8 +2508,10 @@
         <p>Существующие аккаунты пока могут входить по общему паролю сайта. Если для ника установлен личный пароль, введи его здесь.</p>
         <div class="oc-name-modal-row">
           <input id="oc-modal-name" type="text" placeholder="например: Пёс кошачий" autocomplete="nickname" />
+          <input id="oc-modal-account-email" type="email" placeholder="email защищённого аккаунта" autocomplete="email" />
           <input id="oc-modal-account-pass" type="password" placeholder="личный пароль, если установлен" autocomplete="current-password" />
           <button class="oc-addbtn" id="oc-modal-name-save" type="button">Войти</button>
+          <button class="oc-edit-cancel" id="oc-forgot-password" type="button">Забыли пароль?</button>
         </div>
         <div class="oc-name-modal-error" id="oc-modal-name-error"></div>
       </div>
@@ -2594,6 +2597,8 @@
     const USER_PASSWORD = '6664352';
     const ADMIN_PASSWORD = '66643524';
     const PRIMARY_NAME_KEY = 'op-ed-primary-account-name';
+    const PERSONAL_ACCOUNT_AUTH_ENABLED = false;
+    const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация и вход по email пока временно недоступны. Попробуйте немного позже.';
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
@@ -2686,9 +2691,12 @@
     const modalNameInput = $('#oc-modal-name');
     const modalNameSave = $('#oc-modal-name-save');
     const modalNameClose = $('#oc-modal-name-close');
+    const modalAccountEmail = $('#oc-modal-account-email');
     const modalAccountPass = $('#oc-modal-account-pass');
+    const forgotPasswordBtn = $('#oc-forgot-password');
     const modalNameError = $('#oc-modal-name-error');
     const registerNameInput = $('#oc-register-name');
+    const registerEmailInput = $('#oc-register-email');
     const registerPassInput = $('#oc-register-pass');
     const registerPassConfirmInput = $('#oc-register-pass-confirm');
     const registerSaveBtn = $('#oc-register-save');
@@ -3493,6 +3501,7 @@
       if (!nameModal) return;
       modalNameError.textContent = message || '';
       modalNameInput.value = String(candidate || myName || nameInput.value.trim() || '').trim();
+      if (modalAccountEmail) modalAccountEmail.value = '';
       if (modalAccountPass) modalAccountPass.value = '';
       nameModal.classList.remove('hidden');
       setTimeout(() => modalNameInput.focus(), 0);
@@ -3501,6 +3510,7 @@
     function hideNameModal() {
       if (nameModal) nameModal.classList.add('hidden');
       if (modalNameError) modalNameError.textContent = '';
+      if (modalAccountEmail) modalAccountEmail.value = '';
       if (modalAccountPass) modalAccountPass.value = '';
       nameInput.value = myName || localStorage.getItem(PRIMARY_NAME_KEY) || '';
     }
@@ -3517,14 +3527,23 @@
       }
       const profile = accountProfile(val);
       if (profile && profile.authUid) {
+        if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
+          showNameModal(PERSONAL_ACCOUNT_DISABLED_MESSAGE, val);
+          return false;
+        }
+        const email = String(modalAccountEmail?.value || '').trim();
         const password = String(modalAccountPass?.value || '');
+        if (!email) {
+          showNameModal('Введите email, привязанный к этому аккаунту.', val);
+          return false;
+        }
         if (!password) {
           showNameModal('Для этого аккаунта установлен личный пароль.', val);
           return false;
         }
         try {
           if (!window.OPED_DB || typeof window.OPED_DB.loginAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй ещё раз через пару секунд.');
-          const user = await window.OPED_DB.loginAccount(val, password);
+          const user = await window.OPED_DB.loginAccount(email, password);
           if (profile.authUid && user.uid !== profile.authUid) throw new Error('Пароль относится к другому аккаунту.');
         } catch (error) {
           showNameModal('Не удалось войти: ' + (error?.code === 'auth/invalid-credential' ? 'неверный пароль.' : (error?.message || error)), val);
@@ -7752,6 +7771,20 @@
         commitNickname(modalNameInput.value);
       }
     });
+    if (forgotPasswordBtn) forgotPasswordBtn.addEventListener('click', async () => {
+      if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
+        modalNameError.textContent = PERSONAL_ACCOUNT_DISABLED_MESSAGE;
+        return;
+      }
+      const email = String(modalAccountEmail?.value || '').trim();
+      if (!email) { modalNameError.textContent = 'Сначала введи email аккаунта.'; return; }
+      try {
+        await window.OPED_DB.resetAccountPassword(email);
+        modalNameError.textContent = 'Письмо для восстановления отправлено ✓';
+      } catch (error) {
+        modalNameError.textContent = 'Не удалось отправить письмо: ' + (error?.message || error);
+      }
+    });
 
     avatarPicker.innerHTML = AVATAR_OPTIONS.map(em => `<button type="button" data-emoji="${em}">${em}</button>`).join('')
       + `<div class="oc-avatar-custom">
@@ -8354,17 +8387,23 @@
 
     if (registerSaveBtn) registerSaveBtn.addEventListener('click', async () => {
       const nickname = String(registerNameInput?.value || myName || '').trim();
+      const email = String(registerEmailInput?.value || '').trim();
       const password = String(registerPassInput?.value || '');
       const confirmation = String(registerPassConfirmInput?.value || '');
       if (registerError) registerError.textContent = '';
       if (!nickname) { if (registerError) registerError.textContent = 'Введите никнейм.'; return; }
+      if (!/^\S+@\S+\.\S+$/.test(email)) { if (registerError) registerError.textContent = 'Введите корректный email.'; return; }
       if (password.length < 6) { if (registerError) registerError.textContent = 'Пароль должен содержать минимум 6 символов.'; return; }
       if (password !== confirmation) { if (registerError) registerError.textContent = 'Пароли не совпадают.'; return; }
+      if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
+        if (registerError) { registerError.textContent = PERSONAL_ACCOUNT_DISABLED_MESSAGE; registerError.style.color = '#FFC857'; }
+        return;
+      }
       const existing = accountProfile(nickname);
       if (existing?.authUid) { if (registerError) registerError.textContent = 'Для этого ника личный пароль уже установлен.'; return; }
       try {
         if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Firebase ещё загружается. Попробуй через пару секунд.');
-        const user = await window.OPED_DB.registerAccount(nickname, password);
+        const user = await window.OPED_DB.registerAccount(nickname, email, password);
         const patch = { authUid: user.uid, authProvider: 'password', passwordEnabled: true };
         const row = accountProfile(nickname);
         if (row) Object.assign(row, patch);
@@ -8373,6 +8412,7 @@
         localStorage.setItem(PRIMARY_NAME_KEY, nickname);
         nameInput.value = nickname;
         registerNameInput.value = nickname;
+        registerEmailInput.value = '';
         registerPassInput.value = '';
         registerPassConfirmInput.value = '';
         if (registerError) { registerError.textContent = 'Аккаунт зарегистрирован и защищён личным паролем ✓'; registerError.style.color = '#08D9D6'; }
@@ -8532,7 +8572,7 @@
       serverTimestamp,
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -8568,35 +8608,29 @@
         .slice(0, 60);
     }
 
-    async function authEmailForNickname(nickname) {
-      const safeName = normalizeNickname(nickname);
-      if (!safeName) throw new Error('Никнейм обязателен');
-      const bytes = new TextEncoder().encode(safeName);
-      const digest = await crypto.subtle.digest('SHA-256', bytes);
-      const hash = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
-      return hash + '@users.oped-orden.invalid';
-    }
-
-    async function registerAccount(nickname, password) {
+    async function registerAccount(nickname, email, password) {
       const displayName = String(nickname || '').trim();
       const safeName = normalizeNickname(displayName);
-      const email = await authEmailForNickname(displayName);
-      const credential = await createUserWithEmailAndPassword(auth, email, String(password || ''));
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, String(password || ''));
       await setDoc(doc(db, 'userProfiles', safeName), {
         nickname: displayName,
         nicknameKey: safeName,
         authUid: credential.user.uid,
-        authProvider: 'password',
+        authProvider: 'email-password',
         passwordEnabled: true,
         updatedAt: serverTimestamp()
       }, { merge: true });
       return credential.user;
     }
 
-    async function loginAccount(nickname, password) {
-      const email = await authEmailForNickname(nickname);
-      const credential = await signInWithEmailAndPassword(auth, email, String(password || ''));
+    async function loginAccount(email, password) {
+      const credential = await signInWithEmailAndPassword(auth, String(email || '').trim().toLowerCase(), String(password || ''));
       return credential.user;
+    }
+
+    async function resetAccountPassword(email) {
+      return sendPasswordResetEmail(auth, String(email || '').trim().toLowerCase());
     }
 
     function cleanArray(value) {
@@ -8770,7 +8804,8 @@
       deleteRating,
       normalizeNickname,
       registerAccount,
-      loginAccount
+      loginAccount,
+      resetAccountPassword
     };
     window.dispatchEvent(new Event("oped-db-ready"));
   </script>
