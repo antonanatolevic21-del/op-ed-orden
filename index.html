@@ -1759,6 +1759,7 @@
       border-radius: 999px;
       padding: 4px 8px;
       white-space: nowrap;
+      cursor: pointer;
     }
     .oc-access-badge.admin { color: var(--gold); border-color: rgba(255,200,87,0.45); background: rgba(255,200,87,0.08); }
     .oc-franchise-repair-btn {
@@ -2131,7 +2132,7 @@
           <option value="movie-shortened">С фильмами и укороченными</option>
           <option value="all">С китайскими, фильмами и укороченными</option>
         </select>
-        <span id="oc-access-badge" class="oc-access-badge">гость</span>
+        <span id="oc-access-badge" class="oc-access-badge" role="button" tabindex="0" title="Войти или сменить аккаунт">гость</span>
         <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
         <button id="oc-image-migration-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные копии старых изображений">Копии старых картинок</button>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
@@ -8508,6 +8509,13 @@
 
     authRegisterOpenBtn?.addEventListener('click', showRegistrationModal);
     registerCloseBtn?.addEventListener('click', () => { hideRegistrationModal(); showAuthModal('Войди или создай аккаунт.'); });
+    accessBadge?.addEventListener('click', () => showAuthModal(accessLevel ? 'Войди заново или смени аккаунт.' : 'Войди в аккаунт.'));
+    accessBadge?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showAuthModal(accessLevel ? 'Войди заново или смени аккаунт.' : 'Войди в аккаунт.');
+      }
+    });
     if (authSaveBtn) authSaveBtn.addEventListener('click', commitPersonalLogin);
     if (authCloseBtn) authCloseBtn.addEventListener('click', hideAuthModal);
     if (authIdentifierInput) authIdentifierInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); authPassInput?.focus(); } });
@@ -8691,13 +8699,11 @@
       await loadContentFilterMode();
       await loadAvatarsMap();
       await loadManualRanks();
-      if (!accessLevel) {
-        try {
-          const db = await waitForFirebaseDb();
-          const resumed = await db.resumePersonalAccount();
-          if (resumed) await applyPersonalAccountSession(resumed, true);
-        } catch (error) { console.warn('Saved personal session restore failed', error); }
-      }
+      try {
+        const db = await waitForFirebaseDb();
+        const resumed = await db.resumePersonalAccount();
+        if (resumed) await applyPersonalAccountSession(resumed, true);
+      } catch (error) { console.warn('Saved personal session restore failed', error); }
       if (myName && !avatarsMap[myName]) avatarsMap[myName] = myAvatar;
       await loadTierOrders();
       await loadEntries();
