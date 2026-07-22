@@ -8735,7 +8735,7 @@
       serverTimestamp,
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, deleteUser, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, deleteUser, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, updateProfile } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
@@ -8761,6 +8761,7 @@
       db = getFirestore(app);
     }
     const auth = getAuth(app);
+    const ACCOUNT_PROFILE_CACHE_KEY = 'op-ed-auth-profile-v1';
     let initPromise = null;
 
     function normalizeNickname(nickname) {
@@ -8773,6 +8774,24 @@
 
     async function setAccountPersistence(remember) {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+    }
+
+    function cacheAccountProfile(user, profile, remember) {
+      if (!user?.uid || !profile) return;
+      const payload = JSON.stringify({ uid: user.uid, profile });
+      sessionStorage.setItem(ACCOUNT_PROFILE_CACHE_KEY, payload);
+      if (remember) localStorage.setItem(ACCOUNT_PROFILE_CACHE_KEY, payload);
+      else localStorage.removeItem(ACCOUNT_PROFILE_CACHE_KEY);
+    }
+
+    function cachedAccountProfile(uid) {
+      for (const storage of [sessionStorage, localStorage]) {
+        try {
+          const cached = JSON.parse(storage.getItem(ACCOUNT_PROFILE_CACHE_KEY) || 'null');
+          if (cached?.uid === uid && cached.profile) return cached.profile;
+        } catch (error) { storage.removeItem(ACCOUNT_PROFILE_CACHE_KEY); }
+      }
+      return null;
     }
 
     async function registerAccount(nickname, email, password, remember = true) {
@@ -8808,6 +8827,7 @@
           passwordEnabled: true,
           updatedAt: serverTimestamp()
         }, { merge: true });
+        await updateProfile(credential.user, { displayName }).catch(error => console.warn('Could not store nickname in Firebase Auth', error));
       } catch (error) {
         if (createdNow) await deleteUser(credential.user).catch(deleteError => console.warn('Could not roll back incomplete account', deleteError));
         throw error;
@@ -8858,6 +8878,11 @@
         await setDoc(doc(db, 'userProfiles', profile.id), { loginEmail: email, updatedAt: serverTimestamp() }, { merge: true });
         profile.loginEmail = email;
       }
+      if (credential.user.displayName !== String(profile.nickname || profile.nicknameKey || profile.id || '')) {
+        await updateProfile(credential.user, { displayName: String(profile.nickname || profile.nicknameKey || profile.id || '') })
+          .catch(error => console.warn('Could not store nickname in Firebase Auth', error));
+      }
+      cacheAccountProfile(credential.user, profile, remember);
       return { user: credential.user, profile };
     }
 
@@ -8865,8 +8890,15 @@
       if (typeof auth.authStateReady === 'function') await auth.authStateReady();
       const user = auth.currentUser;
       if (!user || user.isAnonymous) return null;
+      const cachedProfile = cachedAccountProfile(user.uid);
+      if (cachedProfile) return { user, profile: cachedProfile };
+      if (user.displayName) {
+        return { user, profile: { nickname: user.displayName, nicknameKey: normalizeNickname(user.displayName), authUid: user.uid } };
+      }
       const profile = await accountProfileByUid(user.uid);
-      return profile ? { user, profile } : null;
+      if (!profile) return null;
+      cacheAccountProfile(user, profile, true);
+      return { user, profile };
     }
 
     async function resetAccountPassword(email) {
