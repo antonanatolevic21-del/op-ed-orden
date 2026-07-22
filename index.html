@@ -2829,6 +2829,7 @@
       const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(firebaseConfig);
       try {
         const auth = authMod.getAuth(app);
+        if (typeof auth.authStateReady === 'function') await auth.authStateReady();
         if (!auth.currentUser) await authMod.signInAnonymously(auth);
       } catch (e) {
         console.warn('anonymous auth for event basket failed', e);
@@ -8902,6 +8903,7 @@
     }
 
     async function init() {
+      if (typeof auth.authStateReady === 'function') await auth.authStateReady();
       if (auth.currentUser) return auth.currentUser;
       if (!initPromise) {
         initPromise = signInAnonymously(auth)
