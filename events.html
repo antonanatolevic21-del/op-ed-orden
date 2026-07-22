@@ -8422,7 +8422,8 @@
       bindShell();
       updateAccessUi();
       try {
-        await signInAnonymously(auth);
+        if (typeof auth.authStateReady === 'function') await auth.authStateReady();
+        if (!auth.currentUser) await signInAnonymously(auth);
       } catch (e) {
         console.error('anonymous auth failed', e);
       }
