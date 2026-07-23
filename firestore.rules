@@ -57,6 +57,11 @@ service cloud.firestore {
         && resource.data.authUid == request.auth.uid;
     }
 
+    function updatesOwnProtectedProfile() {
+      return ownsProtectedProfile()
+        && request.resource.data.authUid == request.auth.uid;
+    }
+
     function createsOwnProfile() {
       return signedIn()
         && request.resource.data.authUid is string
@@ -150,7 +155,7 @@ service cloud.firestore {
     match /userProfiles/{profileId} {
       allow read: if true;
       allow create: if createsOwnProfile() || isAdmin();
-      allow update: if ownsProtectedProfile() || claimsLegacyProfile() || isAdmin();
+      allow update: if updatesOwnProtectedProfile() || claimsLegacyProfile() || isAdmin();
       allow delete: if ownsProtectedProfile() || isAdmin();
     }
 
@@ -190,13 +195,21 @@ service cloud.firestore {
     match /eventRatings/{ratingId} {
       allow read: if signedIn();
       allow create: if isAdmin() || createsOwnUidDocument();
-      allow update, delete: if isAdmin() || ownsExistingUidDocument();
+      allow update: if isAdmin() || (
+        ownsExistingUidDocument()
+        && request.resource.data.ownerUid == request.auth.uid
+      );
+      allow delete: if isAdmin() || ownsExistingUidDocument();
     }
 
     match /eventNotifications/{notificationId} {
       allow read: if signedIn();
       allow create: if isAdmin() || createsOwnUidDocument();
-      allow update, delete: if isAdmin() || ownsExistingUidDocument();
+      allow update: if isAdmin() || (
+        ownsExistingUidDocument()
+        && request.resource.data.ownerUid == request.auth.uid
+      );
+      allow delete: if isAdmin() || ownsExistingUidDocument();
     }
 
     match /eventPredictions/{seasonId} {
@@ -234,11 +247,24 @@ service cloud.firestore {
     match /bestWorstSubmissions/{submissionId} {
       allow read: if signedIn();
 
-      allow create, update: if signedIn()
+      allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.gameId is string
         && request.resource.data.gameId.size() > 0
         && request.resource.data.gameId.size() <= 100
+        && request.resource.data.roundIndex is int
+        && request.resource.data.roundIndex >= 0
+        && request.resource.data.guesserKey is string
+        && request.resource.data.guesserKey.size() > 0
+        && request.resource.data.guesserKey.size() <= 60
+        && request.resource.data.guesserName is string
+        && request.resource.data.guesserName.size() <= 80
+        && request.resource.data.answers is map;
+
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.gameId == resource.data.gameId
         && request.resource.data.roundIndex is int
         && request.resource.data.roundIndex >= 0
         && request.resource.data.guesserKey is string
