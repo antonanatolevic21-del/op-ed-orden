@@ -1795,6 +1795,14 @@
     .oc-auth-dialog { width: min(460px, 100%); background: var(--card); border: 1px solid var(--cyan); border-radius: 16px; box-shadow: 0 22px 70px rgba(0,0,0,0.64); padding: 22px; transform: translateY(0); animation: oc-pop .18s ease-out; }
     .oc-auth-dialog h2 { margin: 0 0 8px; font-family: 'Archivo Black', 'Arial Black', sans-serif; font-size: 28px; }
     .oc-auth-dialog p { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .oc-login-fields { display:grid; gap:12px; margin-top:18px; }
+    .oc-login-field { display:flex; flex-direction:column; gap:7px; color:var(--muted); font:10px 'Space Mono',monospace; text-transform:uppercase; letter-spacing:.07em; }
+    .oc-login-field input { width:100%; border:1px solid var(--border); border-radius:11px; background:linear-gradient(180deg,#100d17,#0d0b13); color:var(--text); padding:13px 14px; font:14px 'Inter',sans-serif; text-transform:none; letter-spacing:0; transition:border-color .16s ease,box-shadow .16s ease,background .16s ease; }
+    .oc-login-field input::placeholder { color:#625d70; }
+    .oc-login-field input:hover { border-color:#40384f; }
+    .oc-login-field input:focus { outline:none; border-color:var(--cyan); background:#120f1a; box-shadow:0 0 0 3px rgba(8,217,214,.11),0 10px 26px rgba(0,0,0,.16); }
+    .oc-login-actions { display:grid; gap:9px; margin-top:2px; }
+    .oc-login-actions .oc-addbtn { width:100%; min-height:44px; }
     .oc-auth-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
     .oc-auth-row input { background: #0F0C16; border: 1px solid var(--border); color: var(--text); padding: 11px 12px; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 14px; }
     .oc-auth-row input:focus { outline: 2px solid var(--cyan); outline-offset: 1px; }
@@ -2564,13 +2572,15 @@
         <div class="oc-section-label">вход в аккаунт</div>
         <h2>Войти на сайт</h2>
         <p>Одно поле принимает ник или email. Если у ника ещё нет личного пароля, введи общий пользовательский или админский пароль в обычное поле пароля.</p>
-        <div style="display:grid;gap:10px;margin-top:14px;">
-          <input id="oc-auth-identifier" type="text" placeholder="ник или email" autocomplete="username" />
-          <input id="oc-auth-pass" type="password" placeholder="пароль" autocomplete="current-password" />
+        <div class="oc-login-fields">
+          <label class="oc-login-field"><span>Логин или email</span><input id="oc-auth-identifier" type="text" placeholder="Например: Пёс кошачий" autocomplete="username" /></label>
+          <label class="oc-login-field"><span>Пароль</span><input id="oc-auth-pass" type="password" placeholder="Введите пароль" autocomplete="current-password" /></label>
           <label class="oc-account-remember"><input id="oc-auth-remember" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
-          <button class="oc-addbtn" id="oc-auth-save" type="button">Войти в аккаунт</button>
-          <button class="oc-edit-cancel" id="oc-auth-forgot" type="button">Забыли пароль?</button>
-          <button class="oc-auth-register-link" id="oc-auth-register-open" type="button">Нет аккаунта? Зарегистрироваться</button>
+          <div class="oc-login-actions">
+            <button class="oc-addbtn" id="oc-auth-save" type="button">Войти в аккаунт</button>
+            <button class="oc-edit-cancel" id="oc-auth-forgot" type="button">Забыли пароль?</button>
+            <button class="oc-auth-register-link" id="oc-auth-register-open" type="button">Нет аккаунта? Зарегистрироваться</button>
+          </div>
         </div>
         <div class="oc-auth-error" id="oc-auth-error"></div>
       </div>
