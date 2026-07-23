@@ -3575,6 +3575,14 @@
         .sort((a, b) => a.value.localeCompare(b.value, 'ru')).map(item => ({ value: item.value, count: item.ids.size }));
     }
 
+    function resetEntityAlbumFilters() {
+      if (entitySearchInput) entitySearchInput.value = '';
+      if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
+      if (entityYearSelect) entityYearSelect.value = '';
+      if (entitySeasonSelect) entitySeasonSelect.value = '';
+      if (entityProgressSelect) entityProgressSelect.value = '';
+    }
+
     function renderEntityAlbums() {
       if (!entityPanel) return;
       const meta = ENTITY_ALBUM_META[activeEntityType] || ENTITY_ALBUM_META.studios;
@@ -3682,9 +3690,14 @@
       const entityTab = tab.startsWith('entity-');
       if (entityPanel) entityPanel.classList.toggle('hidden', !entityTab);
       if (entityTab) {
-        activeEntityType = tab.slice('entity-'.length);
+        const nextEntityType = tab.slice('entity-'.length);
+        if (activeEntityType !== nextEntityType || activeEntityCardId) resetEntityAlbumFilters();
+        activeEntityType = nextEntityType;
         activeEntityCardId = '';
         renderEntityAlbums();
+      } else {
+        activeEntityCardId = '';
+        resetEntityAlbumFilters();
       }
       if (tab === 'season') renderSeasonViews();
       if (tab === 'profile') renderProfile();
@@ -5615,6 +5628,7 @@
     if (entityBackBtn) entityBackBtn.addEventListener('click', () => {
       if (activeEntityCardId) {
         activeEntityCardId = '';
+        resetEntityAlbumFilters();
         renderEntityAlbums();
       } else {
         switchTab('chart');
