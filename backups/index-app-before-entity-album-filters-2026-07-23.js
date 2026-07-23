@@ -128,8 +128,6 @@
     const entityFiltersEl = $('#oc-entity-filters');
     const entitySearchInput = $('#oc-entity-search');
     const entityTrackTypeSelect = $('#oc-entity-track-type');
-    const entityYearSelect = $('#oc-entity-year');
-    const entitySeasonSelect = $('#oc-entity-season');
     const entityProgressSelect = $('#oc-entity-progress');
     const entityRateAllBtn = $('#oc-entity-rate-all');
     const entityGridEl = $('#oc-entity-grid');
@@ -3598,18 +3596,10 @@
         entitySubtitleEl.textContent = progress.rated + ' из ' + progress.related.length + ' оценено';
         const search = normalizedEntityValue(entitySearchInput.value);
         const trackType = entityTrackTypeSelect.value;
-        const year = entityYearSelect.value;
-        const season = entitySeasonSelect.value;
         const progressFilter = entityProgressSelect.value;
-        const years = uniqueSorted(progress.related.map(entry => entry.year ? String(entry.year) : '')).sort((a, b) => Number(b) - Number(a));
-        entityYearSelect.innerHTML = '<option value="">Все годы</option>' + years.map(value =>
-          '<option value="' + escapeHtml(value) + '"' + (value === year ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
-        ).join('');
         const filtered = progress.related.filter(entry => {
-          if (search && !normalizedEntityValue([entry.title, ...(entry.performers || []), ...(entry.directors || []), ...(entry.studios || []), ...(entry.franchises || [])].join(' ')).includes(search)) return false;
+          if (search && !normalizedEntityValue(entry.title).includes(search)) return false;
           if (trackType && entry.type !== trackType) return false;
-          if (year && String(entry.year || '') !== year) return false;
-          if (season && entry.season !== season) return false;
           const rated = entityHasRating(entry);
           return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
         }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
@@ -5604,7 +5594,7 @@
 
     if (entityCreateForm) entityCreateForm.addEventListener('submit', saveEntityAlbum);
     if (entityBackBtn) entityBackBtn.addEventListener('click', () => { activeEntityCardId = ''; renderEntityAlbums(); });
-    [entitySearchInput, entityTrackTypeSelect, entityYearSelect, entitySeasonSelect, entityProgressSelect].forEach(el => {
+    [entitySearchInput, entityTrackTypeSelect, entityProgressSelect].forEach(el => {
       if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', renderEntityAlbums);
     });
     if (entityRateAllBtn) entityRateAllBtn.addEventListener('click', startEntityRating);
