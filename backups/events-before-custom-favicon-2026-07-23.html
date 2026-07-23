@@ -1,5 +1,5 @@
-Warning: truncated output (original token count: 130573)
-Total output lines: 9049
+Warning: truncated output (original token count: 130534)
+Total output lines: 9047
 
 <!doctype html>
 <html lang="ru">
@@ -7,8 +7,6 @@ Total output lines: 9049
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>АБОБА · Ивенты</title>
-  <link rel="icon" type="image/x-icon" href="events-favicon.ico?v=1" />
-  <link rel="shortcut icon" type="image/x-icon" href="events-favicon.ico?v=1" />
   <meta name="description" content="Ивенты по OP/ED-чарту: первый этап, полуфинал и финал." />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap');
@@ -1876,7 +1874,9 @@ Total output lines: 9049
 
     async function removeSelfFromSpectators(mode, room = currentEventRoom(mode)) {
       if (!room?.id) return;
-      const key = even…80573 tokens truncated…'disabled' : ''} /><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`;
+      const key = eventRoomPlayerKey(mode);
+      const spectators = eventRoomSpectators(room).filter(person => person.key !== key);
+      await setDoc(eventRoomRef(mode, room…80534 tokens truncated…'disabled' : ''} /><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`;
                   }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}
                 </div>
                 <span class="ev-guess-note">Никто не отмечен = средняя по всем пользователям. Выбрано: ${selectedUsers.size || 'все'}.</span>
