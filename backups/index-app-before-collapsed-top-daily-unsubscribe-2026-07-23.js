@@ -66,7 +66,6 @@
     let chartPage = 1;
     let profileTopPage = { OP: 1, ED: 1 };
     let allRatingsPage = { OP: 1, ED: 1 };
-    let profileTopExpanded = { OP: false, ED: false };
     let manualEditMode = false;
     let manualDirty = false;
     let manualShowHidden = false;
@@ -3038,27 +3037,6 @@
       refreshDailyUi();
     }
 
-    async function unsubscribeFromDaily() {
-      if (!ensureNickname()) return;
-      const old = normalizeDailySettings(dailyProfileFor(myName)?.dailySettings || {});
-      if (!old.enabled) return;
-      if (!window.confirm('Отписаться от ежедневной оценки? Новые дейлики и уведомления больше не будут появляться.')) return;
-      await saveDailyProfilePatch({
-        dailySettings: {
-          ...old,
-          enabled: false,
-          enabledAt: '',
-          firstRequiredKey: '',
-          optionalKey: ''
-        }
-      });
-      dailyActiveKey = '';
-      if (dailyToast) dailyToast.classList.add('hidden');
-      setStatus('Ежедневная оценка отключена.');
-      renderDailyProfilePanel();
-      refreshDailyUi();
-    }
-
     async function startDailyRating(key = dailyClock().key) {
       if (!ensureNickname()) return;
       const profile = dailyProfileFor(myName);
@@ -3161,12 +3139,10 @@
       const state = own ? dailyCurrentState(myName) : null;
       const todayButton = own && settings.enabled && state.available && !state.done
         ? `<button type="button" class="oc-addbtn" id="oc-daily-start-today">Пройти текущий дейлик (${state.ids.length})</button>` : '';
-      const unsubscribeButton = settings.enabled ? '<button type="button" class="oc-soft-btn" id="oc-daily-unsubscribe">Отписаться от дейлика</button>' : '';
-      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">Что оцениваем<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label><label>Начальный год<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, 'С самого раннего')}</select></label><label>Начальный сезон<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>Конечный год<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, 'По самый поздний')}</select></label><label>Конечный сезон<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>Видимость календаря</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> показывать календарь всем в моём профиле</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? 'Сохранить настройки' : 'Запустить ежедневную оценку'}</button>${todayButton}${unsubscribeButton}</div>` : '';
+      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">Что оцениваем<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label><label>Начальный год<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, 'С самого раннего')}</select></label><label>Начальный сезон<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>Конечный год<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, 'По самый поздний')}</select></label><label>Конечный сезон<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>Видимость календаря</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> показывать календарь всем в моём профиле</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? 'Сохранить настройки' : 'Запустить ежедневную оценку'}</button>${todayButton}</div>` : '';
       dailyPanel.innerHTML = `<div class="oc-daily-head"><div><div class="oc-section-label">ежедневная оценка</div><h3>${own ? 'Твой дейлик' : `Календарь · ${escapeHtml(viewed)}`}</h3><div class="oc-hint">Новый набор появляется ежедневно в 18:00 МСК. В наборе — от 10 до 15 случайных песен.</div></div></div>${settingsHtml}${settings.enabled && maySeeCalendar ? dailyCalendarHtml(viewed, settings, profile) : ''}`;
       $('#oc-daily-save-settings')?.addEventListener('click', () => saveDailySettingsFromPanel().catch(error => { console.error(error); setStatus('Не удалось сохранить настройки дейлика.', true); }));
       $('#oc-daily-start-today')?.addEventListener('click', () => startDailyRating().catch(error => { console.error(error); setStatus('Не удалось открыть дейлик.', true); }));
-      $('#oc-daily-unsubscribe')?.addEventListener('click', () => unsubscribeFromDaily().catch(error => { console.error(error); setStatus('Не удалось отключить дейлик.', true); }));
       dailyPanel.querySelectorAll('[data-daily-month]').forEach(button => button.addEventListener('click', () => { dailyCalendarMonth.setUTCMonth(dailyCalendarMonth.getUTCMonth() + Number(button.dataset.dailyMonth)); renderDailyProfilePanel(); }));
     }
 
@@ -4289,8 +4265,7 @@
       const editable = !!opts.editable;
       const type = opts.type || 'OP';
       const fullOrder = editable ? manualOrderFor(user, type, true) : [];
-      const expanded = Boolean(profileTopExpanded[type]);
-      const visibleList = list.slice(0, expanded ? 100 : 10);
+      const visibleList = list.slice(0, 100);
       const html = visibleList.map((item, idx) => {
         const absoluteIdx = idx;
         const rankClass = absoluteIdx === 0 ? 'gold' : absoluteIdx === 1 ? 'silver' : absoluteIdx === 2 ? 'bronze' : '';
@@ -4326,16 +4301,8 @@
           </div>
         `;
       }).join('');
-      const remaining = Math.max(0, Math.min(100, list.length) - 10);
-      const expandButton = list.length > 10
-        ? `<div style="display:flex;justify-content:center;padding-top:10px;"><button type="button" class="oc-soft-btn" data-action="toggle-profile-top" data-type="${type}">${expanded ? 'Свернуть до 10 мест' : `Показать весь топ · ещё ${remaining}`}</button></div>`
-        : '';
-      container.innerHTML = html + expandButton;
+      container.innerHTML = html;
       container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
-      container.querySelector('[data-action="toggle-profile-top"]')?.addEventListener('click', () => {
-        profileTopExpanded[type] = !profileTopExpanded[type];
-        renderProfile();
-      });
 
       if (editable) {
         container.querySelectorAll('[data-action="set-rank"]').forEach(btn => {
@@ -6084,7 +6051,7 @@
       renderProfile();
     });
     if (profileDeleteBtn) profileDeleteBtn.addEventListener('click', () => deleteProfileFully(profileUser));
-    profileUserSelect.addEventListener('change', () => { manualEditMode = false; manualShowHidden = false; profileTopExpanded = { OP: false, ED: false }; allRatingsPage = { OP: 1, ED: 1 }; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
+    profileUserSelect.addEventListener('change', () => { manualEditMode = false; manualShowHidden = false; allRatingsPage = { OP: 1, ED: 1 }; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
 
     const tierTypeEl = $('#oc-tier-type');
     const tierYearEl = $('#oc-tier-year');
