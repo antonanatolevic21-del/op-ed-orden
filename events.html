@@ -1269,6 +1269,13 @@
     .ev-cn-log-row { border-left: 3px solid var(--border); padding: 6px 9px; background: var(--panel); border-radius: 0 8px 8px 0; color: var(--muted); font-size: 11px; }
     .ev-cn-winner { text-align: center; padding: 26px 12px; }
     .ev-cn-winner strong { display: block; margin-top: 8px; font-family: 'Archivo Black', sans-serif; font-size: clamp(34px,7vw,62px); }
+    .ev-room-browser { display: grid; gap: 16px; }
+    .ev-room-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 12px; }
+    .ev-room-card { display: grid; gap: 12px; min-width: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 16px; }
+    .ev-room-card h3 { margin: 0; overflow-wrap: anywhere; }
+    .ev-room-meta { display: flex; flex-wrap: wrap; gap: 7px; color: var(--muted); font: 700 10px/1.35 'Space Mono',monospace; }
+    .ev-room-status { display: inline-flex; width: max-content; border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px; color: var(--yellow); background: rgba(255,200,87,.08); font: 800 9px/1 'Space Mono',monospace; text-transform: uppercase; }
+    .ev-room-menu-button { margin-bottom: 12px; }
     @media (max-width: 900px) { .ev-cn-board { grid-template-columns: repeat(3, minmax(0,1fr)); } }
     @media (max-width: 640px) {
       .ev-cn-team-grid { grid-template-columns: 1fr; }
@@ -1603,6 +1610,22 @@
     const BW_ROOM_COLLECTION = 'bestWorstRooms';
     const BW_ROOM_ID = 'current';
     const BW_SUBMISSION_COLLECTION = 'bestWorstSubmissions';
+    const EVENT_ROOM_SELECTION_KEY = 'aboba-event-room-selection-v1';
+    let selectedEventRooms = (() => {
+      try {
+        const saved = JSON.parse(localStorage.getItem(EVENT_ROOM_SELECTION_KEY) || '{}');
+        return {
+          bestworst: String(saved.bestworst || ''),
+          codenames: String(saved.codenames || ''),
+          whoami: String(saved.whoami || '')
+        };
+      } catch (_) {
+        return { bestworst:'', codenames:'', whoami:'' };
+      }
+    })();
+    let bestWorstRooms = [];
+    let codenamesRooms = [];
+    let whoAmIRooms = [];
     const bestWorstFilters = {
       mode: 'both',
       typeFilter: 'OP',
@@ -1666,6 +1689,38 @@
     let whoAmIQuestionDraft = '';
     let whoAmIGuessDraft = '';
     let whoAmIPickDraft = '';
+
+    function saveEventRoomSelection() {
+      try { localStorage.setItem(EVENT_ROOM_SELECTION_KEY, JSON.stringify(selectedEventRooms)); } catch (_) {}
+    }
+
+    function eventRoomId(mode) {
+      return String(selectedEventRooms[mode] || '');
+    }
+
+    function setEventRoom(mode, id) {
+      selectedEventRooms[mode] = String(id || '');
+      saveEventRoomSelection();
+      if (mode === 'bestworst') bestWorstRoom = bestWorstRooms.find(room => room.id === selectedEventRooms.bestworst) || null;
+      if (mode === 'codenames') codenamesRoom = codenamesRooms.find(room => room.id === selectedEventRooms.codenames) || null;
+      if (mode === 'whoami') whoAmIRoom = whoAmIRooms.find(room => room.id === selectedEventRooms.whoami) || null;
+    }
+
+    function newEventRoomId(prefix) {
+      return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+    }
+
+    function bwRoomDoc() {
+      const id = eventRoomId('bestworst');
+      if (!id) throw new Error('Сначала выбери лобби.');
+      return doc(db, BW_ROOM_COLLECTION, id);
+    }
+
+    function whoRoomDoc() {
+      const id = eventRoomId('whoami');
+      if (!id) throw new Error('Сначала выбери лобби.');
+      return doc(db, WHO_AM_I_COLLECTION, id);
+    }
     let guessPlaybackTimer = null;
     let guessYouTubePlayer = null;
     let guessYouTubeApiPromise = null;
@@ -3475,7 +3530,9 @@
       const gameId = bestWorstRoom?.status === 'lobby' ? bestWorstRoom.gameId : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       bestWorstStatus = 'Сохраняю лобби…';
       try {
-        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+        await setDoc(bwRoomDoc(), {
+          roomType: 'bestworst',
+          title: bestWorstRoom?.title || `Лобби ${name}`,
           gameId,
           status: 'lobby',
           phase: 'lobby',
@@ -3504,7 +3561,7 @@
       if (!key) { bestWorstStatus = 'Сначала введи никнейм.'; render(); return; }
       const players = bwPlayers(bestWorstRoom);
       if (!players.some(player => player.key === key)) players.push({ key, name, ready: false });
-      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(bwRoomDoc(), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
     }
 
     async function bwLeaveGame() {
@@ -3519,7 +3576,7 @@
           await deleteDoc(submissionRef).catch(() => {});
         }
         if (remaining.length < 2) {
-          await deleteDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID));
+          await deleteDoc(bwRoomDoc());
           bestWorstStatus = 'Игроков стало меньше двух — игра завершена.';
         } else {
           const patch = { players: remaining, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() };
@@ -3549,7 +3606,7 @@
               return;
             }
           }
-          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), patch, { merge: true });
+          await setDoc(bwRoomDoc(), patch, { merge: true });
           bestWorstStatus = 'Ты вышел из игры. Остальные продолжают.';
         }
         bestWorstDraftKey = '';
@@ -3570,12 +3627,12 @@
       const index = players.findIndex(player => player.key === key);
       if (index < 0) players.push({ key, name, ready: true });
       else players[index] = { ...players[index], name, ready: !players[index].ready };
-      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+      await setDoc(bwRoomDoc(), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
     }
 
     async function bwLaunchBestWorst(settings, players, bannedKeys = [], requiredKeys = []) {
       const built = bwBuildRounds(settings, players, { bannedKeys, requiredKeys });
-      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+      await setDoc(bwRoomDoc(), {
         status: 'playing',
         phase: 'answering',
         players,
@@ -3598,7 +3655,7 @@
       if (players.length > settings.rounds) throw new Error(`При бане и антибане раундов должно быть не меньше, чем игроков: сейчас игроков ${players.length}, а раундов ${settings.rounds}.`);
       const { buckets } = bwDraftEligibleBuckets(settings);
       const banChoices = bwDraftChoiceMap(buckets, players);
-      await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+      await setDoc(bwRoomDoc(), {
         status: 'draft',
         phase: 'ban',
         players,
@@ -3631,7 +3688,7 @@
       const selections = { ...(room[selectionsField] || {}), [userKey]: String(groupKey) };
       try {
         if (!players.every(player => selections[player.key])) {
-          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { [selectionsField]: selections, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+          await setDoc(bwRoomDoc(), { [selectionsField]: selections, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
           return;
         }
         const settings = normalizeBestWorstSettings(room.settings);
@@ -3639,7 +3696,7 @@
           const bannedKeys = [...new Set(players.map(player => selections[player.key]).filter(Boolean))];
           const { buckets } = bwDraftEligibleBuckets(settings, bannedKeys);
           const antiBanChoices = bwDraftChoiceMap(buckets, players);
-          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+          await setDoc(bwRoomDoc(), {
             phase: 'antiban',
             banSelections: selections,
             bannedGroupKeys: bannedKeys,
@@ -3711,7 +3768,7 @@
         });
         alreadySubmitted.add(userKey);
         if (players.every(player => alreadySubmitted.has(player.key))) {
-          await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { phase: 'results', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+          await setDoc(bwRoomDoc(), { phase: 'results', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
           bestWorstStatus = '';
         } else {
           bestWorstStatus = 'Ответ сохранён. Его можно изменить, пока не ответили остальные участники.';
@@ -3733,7 +3790,7 @@
       if (!players.every(player => submittedKeys.has(player.key))) return;
       bestWorstRevealPending = true;
       try {
-        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), {
+        await setDoc(bwRoomDoc(), {
           phase: 'results',
           updatedAtLocal: new Date().toISOString(),
           updatedAt: serverTimestamp()
@@ -3752,9 +3809,9 @@
       const next = Number(bestWorstRoom.currentRound || 0) + 1;
       const total = Array.isArray(bestWorstRoom.rounds) ? bestWorstRoom.rounds.length : 0;
       if (next >= total) {
-        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { status: 'finished', phase: 'finished', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(bwRoomDoc(), { status: 'finished', phase: 'finished', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
       } else {
-        await setDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), { currentRound: next, phase: 'answering', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
+        await setDoc(bwRoomDoc(), { currentRound: next, phase: 'answering', updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
       }
       bestWorstDraftKey = '';
       bestWorstRenderedRoundKey = '';
@@ -3764,7 +3821,7 @@
     async function bwResetGame() {
       if (!isAdmin()) return;
       if (!confirm('Удалить текущее лобби/игру? Старые ответы останутся в архивной коллекции, но больше не будут отображаться.')) return;
-      await deleteDoc(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID));
+      await deleteDoc(bwRoomDoc());
       bestWorstRoom = null;
       bestWorstDraftKey = '';
       bestWorstRenderedRoundKey = '';
@@ -4526,7 +4583,11 @@
       const raw = room?.settings || {};
       return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all', ...normalizeSeasonRange(raw) };
     }
-    function cnRoomDoc() { return doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID); }
+    function cnRoomDoc() {
+      const id = eventRoomId('codenames');
+      if (!id) throw new Error('Сначала выбери лобби.');
+      return doc(db, CODENAMES_COLLECTION, id);
+    }
     async function cnPatch(patch) {
       try {
         await setDoc(cnRoomDoc(), { ...patch, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
@@ -4582,7 +4643,8 @@
     }
     async function cnEnsureLobby() {
       if (codenamesRoom) return;
-      await cnPatch({ status:'lobby', players:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      if (!eventRoomId('codenames')) setEventRoom('codenames', newEventRoomId('cn'));
+      await cnPatch({ gameType:'codenames', title:`Лобби ${String(myName || 'Codenames').trim()}`, hostName:String(myName || '').trim(), status:'lobby', players:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
     }
     async function cnJoin(team, role) {
       const key = cnPlayerKey();
@@ -4951,7 +5013,9 @@
       const name = String(myName || nameInput?.value || '').trim();
       if (!name) { whoAmIStatus = 'Сначала укажи никнейм.'; renderWhoAmI(); return; }
       const player = { key: whoPlayerKey(name), name };
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      if (!eventRoomId('whoami')) setEventRoom('whoami', newEventRoomId('who'));
+      await setDoc(whoRoomDoc(), {
+        gameType:'whoami', title:`Лобби ${name}`,
         status:'lobby', hostKey:player.key, hostName:name, players:[player],
         settings:{ type:'', fromYear:null, toYear:null }, assignments:{}, questions:[], guessedKeys:[],
         turnIndex:0, createdAt:serverTimestamp(), updatedAt:serverTimestamp()
@@ -4966,7 +5030,7 @@
       const key = whoPlayerKey(name);
       const players = whoPlayers();
       if (!players.some(player => player.key === key)) players.push({ key, name });
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { players, updatedAt:serverTimestamp() }, { merge:true });
+      await setDoc(whoRoomDoc(), { players, updatedAt:serverTimestamp() }, { merge:true });
     }
 
     async function whoLeaveRoom() {
@@ -4976,7 +5040,7 @@
       if (!oldPlayers.some(player => player.key === key)) return;
       const players = oldPlayers.filter(player => player.key !== key);
       if (players.length < 2) {
-        await deleteDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID));
+        await deleteDoc(whoRoomDoc());
         whoAmIStatus = 'Игроков стало меньше двух — игра завершена.';
         return;
       }
@@ -4992,7 +5056,7 @@
       });
       const oldHostKey = normalizeNickname(whoAmIRoom.hostKey);
       const nextHost = activeKeys.has(oldHostKey) ? players.find(player => player.key === oldHostKey) : players[0];
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      await setDoc(whoRoomDoc(), {
         players, pickerOrder, pickTargets, assignments, guessedKeys, questions,
         hostKey: nextHost.key, hostName: nextHost.name,
         pickerIndex: Math.min(Number(whoAmIRoom.pickerIndex || 0), Math.max(0, pickerOrder.length - 1)),
@@ -5033,7 +5097,7 @@
       }
       const pickTargets = {};
       pickerOrder.forEach((pickerKey,index) => { pickTargets[pickerKey] = targetOrder[index]; });
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      await setDoc(whoRoomDoc(), {
         status:'picking', settings, assignments:{}, pickTargets, pickerOrder, pickerIndex:0,
         questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
       }, { merge:true });
@@ -5071,7 +5135,7 @@
       const assignments = { ...(room.assignments || {}), [targetKey]:opening.id };
       const nextIndex = Number(room.pickerIndex || 0) + 1;
       const complete = nextIndex >= (room.pickerOrder || []).length;
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      await setDoc(whoRoomDoc(), {
         assignments, pickerIndex:nextIndex, status:complete ? 'playing' : 'picking',
         turnIndex:0, updatedAt:serverTimestamp()
       }, { merge:true });
@@ -5097,7 +5161,7 @@
       if (!room || !current || current.key !== whoPlayerKey() || !text) return;
       const questions = Array.isArray(room.questions) ? [...room.questions] : [];
       questions.push({ id:Date.now().toString(36), playerKey:current.key, playerName:current.name, text, answer:'', answeredBy:'' });
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { questions, updatedAt:serverTimestamp() }, { merge:true });
+      await setDoc(whoRoomDoc(), { questions, updatedAt:serverTimestamp() }, { merge:true });
       whoAmIQuestionDraft = '';
     }
 
@@ -5107,7 +5171,7 @@
       const index = questions.map(item => item.answer).lastIndexOf('');
       if (index < 0 || questions[index].playerKey === whoPlayerKey()) return;
       questions[index] = { ...questions[index], answer, answeredBy:String(myName || '') };
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), { questions, updatedAt:serverTimestamp() }, { merge:true });
+      await setDoc(whoRoomDoc(), { questions, updatedAt:serverTimestamp() }, { merge:true });
     }
 
     async function whoGuess() {
@@ -5126,7 +5190,7 @@
       const players = whoPlayers(room);
       const guessedKeys = [...new Set([...(room.guessedKeys || []), current.key])];
       const currentIndex = players.findIndex(player => player.key === current.key);
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      await setDoc(whoRoomDoc(), {
         guessedKeys, turnIndex:(currentIndex + 1) % Math.max(1, players.length), updatedAt:serverTimestamp()
       }, { merge:true });
       whoAmIGuessDraft = '';
@@ -5136,19 +5200,22 @@
     async function whoNextTurn() {
       if (!whoIsHost() || !whoAmIRoom) return;
       const players = whoPlayers();
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      await setDoc(whoRoomDoc(), {
         turnIndex:(Number(whoAmIRoom.turnIndex || 0) + 1) % Math.max(1, players.length), updatedAt:serverTimestamp()
       }, { merge:true });
     }
 
     async function whoResetRoom() {
       if (!whoIsHost() || !whoAmIRoom) return;
-      await setDoc(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), {
+      await setDoc(whoRoomDoc(), {
         status:'lobby', assignments:{}, pickTargets:{}, pickerOrder:[], pickerIndex:0, questions:[], guessedKeys:[], turnIndex:0, updatedAt:serverTimestamp()
       }, { merge:true });
     }
 
     function renderWhoAmI() {
+      queueMicrotask(() => {
+        if (activeMode === 'whoami' && eventRoomId('whoami') && !appEl.querySelector('.ev-room-menu-button')) addEventRoomMenuButton('whoami');
+      });
       const room = whoAmIRoom;
       const ownKey = whoPlayerKey();
       if (!room) {
@@ -5208,6 +5275,53 @@
       appEl.querySelectorAll('[data-who-answer]').forEach(button => button.addEventListener('click', () => whoAnswerQuestion(button.dataset.whoAnswer).catch(error => {whoAmIStatus=error.message;renderWhoAmI();})));
     }
 
+    function eventRoomStatus(room) {
+      if (room?.status === 'lobby') return 'Сбор игроков';
+      if (room?.status === 'finished') return 'Завершено';
+      if (room?.status === 'picking' || room?.status === 'draft') return 'Подготовка';
+      return 'Игра идёт';
+    }
+
+    function renderEventRoomBrowser(mode, title, description, rooms, canCreate) {
+      const cards = rooms.map(room => {
+        const players = Array.isArray(room.players) ? room.players.length : 0;
+        const fallback = `${title} · ${String(room.id || '').slice(-6)}`;
+        return `<article class="ev-room-card"><span class="ev-room-status">${escapeHtml(eventRoomStatus(room))}</span><div><h3>${escapeHtml(room.title || fallback)}</h3><div class="ev-room-meta"><span>Ведущий: ${escapeHtml(room.hostName || 'не указан')}</span><span>Игроков: ${players}</span></div></div><button class="ev-btn-main" type="button" data-event-room="${escapeHtml(room.id)}">Открыть / наблюдать</button></article>`;
+      }).join('');
+      appEl.innerHTML = `<section class="ev-room-browser"><div class="ev-panel-head"><div><div class="ev-section-label">Главное меню ивента</div><h2>${escapeHtml(title)}</h2><div class="ev-hint">${escapeHtml(description)} Можно открыть любую комнату как наблюдатель, а затем при желании присоединиться к игрокам.</div></div>${canCreate ? '<button class="ev-btn-main" id="ev-room-create" type="button">Создать новое лобби</button>' : ''}</div><div class="ev-room-grid">${cards || '<div class="ev-empty">Активных лобби пока нет.</div>'}</div></section>`;
+      appEl.querySelectorAll('[data-event-room]').forEach(button => button.addEventListener('click', () => {
+        setEventRoom(mode, button.dataset.eventRoom);
+        render();
+      }));
+      $('#ev-room-create')?.addEventListener('click', async () => {
+        if (mode === 'bestworst') {
+          setEventRoom(mode, newEventRoomId('bw'));
+          bestWorstRoom = null;
+          render();
+        } else if (mode === 'codenames') {
+          setEventRoom(mode, newEventRoomId('cn'));
+          codenamesRoom = null;
+          await cnEnsureLobby();
+        } else {
+          setEventRoom(mode, newEventRoomId('who'));
+          whoAmIRoom = null;
+          await whoCreateRoom();
+        }
+      });
+    }
+
+    function addEventRoomMenuButton(mode) {
+      if (!eventRoomId(mode) || !appEl.firstElementChild || appEl.querySelector('.ev-room-menu-button')) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'ev-room-menu-button';
+      wrap.innerHTML = '<button class="ev-btn-ghost" type="button">← В главное меню ивента</button>';
+      wrap.querySelector('button').addEventListener('click', () => {
+        setEventRoom(mode, '');
+        render();
+      });
+      appEl.prepend(wrap);
+    }
+
     function saveEventUiPreferences() {
       try {
         localStorage.setItem(EVENT_UI_PREFS_KEY, JSON.stringify({
@@ -5241,7 +5355,12 @@
         return;
       }
       if (activeMode === 'bestworst') {
+        if (!eventRoomId('bestworst')) {
+          renderEventRoomBrowser('bestworst', 'Угадай лучшее / худшее', 'Параллельные игровые комнаты.', bestWorstRooms, isAdmin());
+          return;
+        }
         renderBestWorstEvent();
+        addEventRoomMenuButton('bestworst');
         return;
       }
       if (activeMode === 'predictions') {
@@ -5249,7 +5368,12 @@
         return;
       }
       if (activeMode === 'codenames') {
+        if (!eventRoomId('codenames')) {
+          renderEventRoomBrowser('codenames', 'Codenames по OP/ED', 'Командные игры идут независимо друг от друга.', codenamesRooms, isAdmin());
+          return;
+        }
         renderCodenamesEvent();
+        addEventRoomMenuButton('codenames');
         return;
       }
       if (activeMode === 'blindtier') {
@@ -5257,7 +5381,12 @@
         return;
       }
       if (activeMode === 'whoami') {
+        if (!eventRoomId('whoami')) {
+          renderEventRoomBrowser('whoami', 'Кто я?', 'Выбери комнату, за которой хочешь следить.', whoAmIRooms, true);
+          return;
+        }
         renderWhoAmI();
+        addEventRoomMenuButton('whoami');
         return;
       }
       if (isGuest()) {
@@ -8511,8 +8640,9 @@
         guessCollectionStatus = 'Не удалось загрузить подборки.';
         scheduleFirebaseRender('other');
       });
-      onSnapshot(doc(db, BW_ROOM_COLLECTION, BW_ROOM_ID), snapshot => {
-        bestWorstRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+      onSnapshot(collection(db, BW_ROOM_COLLECTION), snapshot => {
+        bestWorstRooms = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
+        bestWorstRoom = bestWorstRooms.find(room => room.id === eventRoomId('bestworst')) || null;
         if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
         if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
         void bwMaybeAutoReveal();
@@ -8533,22 +8663,23 @@
         bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
         scheduleFirebaseRender('other');
       });
-      onSnapshot(doc(db, WHO_AM_I_COLLECTION, WHO_AM_I_ROOM_ID), snapshot => {
-        whoAmIRoom = snapshot.exists() ? { id:snapshot.id, ...snapshot.data() } : null;
+      onSnapshot(collection(db, CODENAMES_COLLECTION), snapshot => {
+        const rooms = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
+        whoAmIRooms = rooms.filter(room => room.gameType === 'whoami' || room.id === WHO_AM_I_ROOM_ID || room.id.startsWith('whoami-'));
+        codenamesRooms = rooms.filter(room => !whoAmIRooms.some(whoRoom => whoRoom.id === room.id));
+        whoAmIRoom = whoAmIRooms.find(room => room.id === eventRoomId('whoami')) || null;
+        codenamesRoom = codenamesRooms.find(room => room.id === eventRoomId('codenames')) || null;
         if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
-      }, error => {
-        console.error('whoami room snapshot error', error);
-        whoAmIRoom = null;
-        whoAmIStatus = 'Не удалось загрузить комнату «Кто я?».';
-        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
-      });
-      onSnapshot(doc(db, CODENAMES_COLLECTION, CODENAMES_ROOM_ID), snapshot => {
-        codenamesRoom = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
         if (activeMode === 'codenames') scheduleFirebaseRender('other');
       }, error => {
         console.error('eventCodenames snapshot error', error);
+        whoAmIRooms = [];
+        codenamesRooms = [];
+        whoAmIRoom = null;
         codenamesRoom = null;
+        whoAmIStatus = 'Не удалось загрузить комнаты «Кто я?».';
         codenamesStatus = 'Не удалось загрузить игру.';
+        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
         if (activeMode === 'codenames') scheduleFirebaseRender('other');
       });
       onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
