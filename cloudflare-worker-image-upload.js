@@ -4,7 +4,7 @@ const MAX_WEBP_BASE64 = 5 * 1024 * 1024;
 function corsHeaders(request, env) {
   const origin = request.headers.get("Origin") || "";
   const allowed = String(env.ALLOWED_ORIGIN || "").trim();
-  const allowOrigin = allowed && allowed !== "*" ? (origin === allowed ? origin : allowed) : (origin || "*");
+  const allowOrigin = allowed && allowed !== "*" ? (origin === allowed ? origin : "null") : (origin || "*");
   return {
     "Access-Control-Allow-Origin": allowOrigin,
     "Access-Control-Allow-Headers": "Content-Type, X-Upload-Secret",
@@ -12,6 +12,12 @@ function corsHeaders(request, env) {
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin"
   };
+}
+
+function originAllowed(request, env) {
+  const allowed = String(env.ALLOWED_ORIGIN || "").trim();
+  const origin = request.headers.get("Origin") || "";
+  return !allowed || allowed === "*" || origin === allowed;
 }
 
 function json(request, env, payload, status = 200) {
@@ -177,6 +183,7 @@ async function deleteImage(request, env) {
 
 export default {
   async fetch(request, env) {
+    if (!originAllowed(request, env)) return json(request, env, { error: "Недопустимый Origin" }, 403);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/") {

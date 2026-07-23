@@ -23,6 +23,34 @@ service cloud.firestore {
         && roomId.size() <= 100;
     }
 
+    function ownsNickname(nicknameKey) {
+      return signedIn()
+        && nicknameKey is string
+        && nicknameKey.size() > 0
+        && exists(/databases/$(database)/documents/userProfiles/$(nicknameKey))
+        && get(/databases/$(database)/documents/userProfiles/$(nicknameKey)).data.authUid == request.auth.uid;
+    }
+
+    function createsOwnedNicknameDocument() {
+      return request.resource.data.ownerUid == request.auth.uid
+        && ownsNickname(request.resource.data.nicknameKey);
+    }
+
+    function ownsExistingNicknameDocument() {
+      return resource.data.ownerUid == request.auth.uid
+        || ownsNickname(resource.data.nicknameKey);
+    }
+
+    function createsOwnUidDocument() {
+      return signedIn() && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function ownsExistingUidDocument() {
+      return signedIn()
+        && resource.data.ownerUid is string
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
     function ownsProtectedProfile() {
       return signedIn()
         && resource.data.authUid is string
@@ -41,10 +69,38 @@ service cloud.firestore {
         && request.resource.data.authUid == request.auth.uid;
     }
 
-    function updatesUnclaimedLegacyProfile() {
+    function isRoomMember() {
       return signedIn()
-        && (!('authUid' in resource.data) || resource.data.authUid == null || resource.data.authUid == '')
-        && (!('authUid' in request.resource.data) || request.resource.data.authUid == null || request.resource.data.authUid == '');
+        && resource.data.memberUids is list
+        && request.auth.uid in resource.data.memberUids;
+    }
+
+    function createsHostedRoom() {
+      return signedIn()
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.memberUids is list
+        && request.auth.uid in request.resource.data.memberUids;
+    }
+
+    function joinsOrWatchesRoom() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['players', 'memberUids', 'spectators', 'updatedAt', 'updatedAtLocal'])
+        && (
+          request.auth.uid in request.resource.data.memberUids
+          || request.resource.data.spectators is list
+        );
+    }
+
+    function createsRoomRegistry() {
+      return signedIn()
+        && request.resource.data.keys().hasOnly(['roomIds', 'registryUpdatedAt']);
+    }
+
+    function updatesRoomRegistry() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['roomIds', 'registryUpdatedAt']);
     }
 
     // Основной каталог меняют только администраторы.
@@ -56,27 +112,37 @@ service cloud.firestore {
     // Оценки и пользовательские тир-листы сохраняют вошедшие пользователи.
     match /ratings/{ratingId} {
       allow read: if true;
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
     }
 
     match /manualRanks/{rankId} {
       allow read: if true;
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
     }
 
     match /tierOrders/{orderId} {
       allow read: if true;
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
     }
 
     match /tierLabels/{labelId} {
       allow read: if true;
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
     }
 
     match /tierPlacements/{placementId} {
       allow read: if true;
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
     }
 
     // Новый профиль может создать только его Firebase-владелец.
@@ -84,7 +150,7 @@ service cloud.firestore {
     match /userProfiles/{profileId} {
       allow read: if true;
       allow create: if createsOwnProfile() || isAdmin();
-      allow update: if ownsProtectedProfile() || claimsLegacyProfile() || updatesUnclaimedLegacyProfile() || isAdmin();
+      allow update: if ownsProtectedProfile() || claimsLegacyProfile() || isAdmin();
       allow delete: if ownsProtectedProfile() || isAdmin();
     }
 
@@ -117,12 +183,14 @@ service cloud.firestore {
     // Участники могут сохранять свои оценки и уведомления.
     match /eventRatings/{ratingId} {
       allow read: if signedIn();
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnUidDocument();
+      allow update, delete: if isAdmin() || ownsExistingUidDocument();
     }
 
     match /eventNotifications/{notificationId} {
       allow read: if signedIn();
-      allow create, update, delete: if signedIn();
+      allow create: if isAdmin() || createsOwnUidDocument();
+      allow update, delete: if isAdmin() || ownsExistingUidDocument();
     }
 
     match /eventPredictions/{seasonId} {
@@ -132,18 +200,36 @@ service cloud.firestore {
 
     // Параллельные комнаты Codenames и «Кто я».
     match /eventCodenames/{roomId} {
-      allow read, create, update, delete: if signedIn() && validRoomId(roomId);
+      allow read: if signedIn() && validRoomId(roomId);
+      allow create: if (roomId == 'current' || roomId == 'whoami-current')
+        && createsRoomRegistry();
+      allow update: if (roomId == 'current' || roomId == 'whoami-current')
+        && updatesRoomRegistry();
+      allow create: if roomId != 'current' && roomId != 'whoami-current'
+        && validRoomId(roomId) && createsHostedRoom();
+      allow update: if roomId != 'current' && roomId != 'whoami-current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid || isRoomMember() || joinsOrWatchesRoom());
+      allow delete: if roomId != 'current' && roomId != 'whoami-current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid);
     }
 
     // Параллельные комнаты «Лучшее / худшее».
     match /bestWorstRooms/{roomId} {
-      allow read, create, update, delete: if signedIn() && validRoomId(roomId);
+      allow read: if signedIn() && validRoomId(roomId);
+      allow create: if roomId == 'current' && createsRoomRegistry();
+      allow update: if roomId == 'current' && updatesRoomRegistry();
+      allow create: if roomId != 'current' && validRoomId(roomId) && createsHostedRoom();
+      allow update: if roomId != 'current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid || isRoomMember() || joinsOrWatchesRoom());
+      allow delete: if roomId != 'current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid);
     }
 
     match /bestWorstSubmissions/{submissionId} {
       allow read: if signedIn();
 
       allow create, update: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.gameId is string
         && request.resource.data.gameId.size() > 0
         && request.resource.data.gameId.size() <= 100
@@ -156,7 +242,7 @@ service cloud.firestore {
         && request.resource.data.guesserName.size() <= 80
         && request.resource.data.answers is map;
 
-      allow delete: if signedIn();
+      allow delete: if isAdmin() || ownsExistingUidDocument();
     }
 
     match /{document=**} {
