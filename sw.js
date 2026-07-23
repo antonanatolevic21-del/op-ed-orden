@@ -1,4 +1,4 @@
-const CACHE_NAME = 'op-ed-images-v2-20260723-force2';
+const CACHE_NAME = 'op-ed-images-v2-20260723-force3';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
