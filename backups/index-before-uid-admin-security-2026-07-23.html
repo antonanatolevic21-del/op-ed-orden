@@ -2649,12 +2649,6 @@
     const PERSONAL_ACCOUNT_AUTH_ENABLED = true;
     const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация сейчас недоступна. Попробуйте позже.';
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
-    const ADMIN_UIDS = new Set([
-      '5BWpHNMD2JNo3yb76FYa3lxXCh42',
-      'V6TCpSnTCraD42sY67owCrRaVGZ2',
-      'nfM5lNH7PCgl4h9fByPXXPUl8RH3',
-      'JI5oT4J5cVbJ0nrkQfLiKta83qI2'
-    ]);
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
     const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
@@ -2669,7 +2663,6 @@
     let entries = [];
     let myName = '';
     let myAvatar = '🙂';
-    let authenticatedUid = '';
     let avatarsMap = {};
     let ratingScale = 'int'; // 'int', 'half' or personal 'five'
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
@@ -3500,12 +3493,8 @@
       return ADMIN_NICKNAMES.has(normalizedAccountName(name));
     }
 
-    function isAdminUid(uid = authenticatedUid) {
-      return ADMIN_UIDS.has(String(uid || ''));
-    }
-
     function isAdmin() {
-      return accessLevel === 'admin' && isAdminUid();
+      return accessLevel === 'admin' && isAdminNickname();
     }
 
     function updateAccessUi() {
@@ -3552,14 +3541,13 @@
       const profile = result?.profile;
       const nickname = String(profile?.nickname || profile?.nicknameKey || profile?.id || '').trim();
       if (!nickname) throw new Error('Не удалось определить аккаунт.');
-      authenticatedUid = String(result?.user?.uid || profile?.authUid || '');
       const index = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(nickname));
       if (index >= 0) firebaseUserProfiles[index] = { ...firebaseUserProfiles[index], ...profile };
       else firebaseUserProfiles.push(profile);
       await saveName(nickname);
       localStorage.setItem(PRIMARY_NAME_KEY, nickname);
       nameInput.value = nickname;
-      accessLevel = isAdminUid() ? 'admin' : 'user';
+      accessLevel = isAdminNickname(nickname) ? 'admin' : 'user';
       sessionStorage.setItem(ACCESS_KEY, accessLevel);
       hideAuthModal();
       updateAccessUi();
@@ -3573,11 +3561,7 @@
       const identifier = String(authIdentifierInput?.value || '').trim();
       const password = String(authPassInput?.value || '');
       if (!identifier || !password) { showAuthModal('Введи ник или email и пароль.'); return false; }
-      if (password === ADMIN_PASSWORD) {
-        showAuthModal('Админский вход теперь доступен только через личный Firebase-аккаунт.');
-        return false;
-      }
-      if (password === USER_PASSWORD) return commitSharedAccountLogin(identifier, password);
+      if (password === ADMIN_PASSWORD || password === USER_PASSWORD) return commitSharedAccountLogin(identifier, password);
       const originalText = authSaveBtn?.textContent || 'Войти в аккаунт';
       if (authSaveBtn) { authSaveBtn.disabled = true; authSaveBtn.textContent = 'Входим…'; }
       if (authError) authError.textContent = 'Проверяем данные…';
@@ -3604,8 +3588,8 @@
       try { const db = await waitForFirebaseDb(); profile = await db.getAccountProfile(nickname) || profile; } catch (error) { console.warn('Could not verify protected account before shared login', error); }
       if (profile?.authUid) { showAuthModal('У этого аккаунта уже есть личный пароль. Введи его или нажми «Забыли пароль?».'); return false; }
       if (pass === ADMIN_PASSWORD) {
-        showAuthModal('Админский вход теперь доступен только через личный Firebase-аккаунт.');
-        return false;
+        if (!isAdminNickname(nickname)) { showAuthModal('Админский пароль работает только для четырёх админских аккаунтов.'); return false; }
+        accessLevel = 'admin';
       } else if (pass === USER_PASSWORD) accessLevel = 'user';
       else { showAuthModal('Неверный пароль.'); return false; }
       await saveName(nickname);

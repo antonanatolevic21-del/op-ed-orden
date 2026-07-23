@@ -1445,12 +1445,6 @@
     const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация сейчас недоступна. Попробуйте позже.';
     const GUEST_PASSWORD_RE = /^235-64[-\s]?(0[1-9]|1[0-5])$/;
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
-    const ADMIN_UIDS = new Set([
-      '5BWpHNMD2JNo3yb76FYa3lxXCh42',
-      'V6TCpSnTCraD42sY67owCrRaVGZ2',
-      'nfM5lNH7PCgl4h9fByPXXPUl8RH3',
-      'JI5oT4J5cVbJ0nrkQfLiKta83qI2'
-    ]);
     const SEASONS = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_LABEL = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
     const STAGE_LABEL = { basket: 'Корзина', first: 'Первый этап', semi: 'Полуфинал', final: 'Финал' };
@@ -1536,7 +1530,7 @@
 
     let accessLevel = localStorage.getItem(ACCESS_KEY) || '';
     let guestSlot = Math.max(0, Math.min(15, Number(localStorage.getItem(GUEST_SLOT_KEY) || 0) || 0));
-    let adminUnlocked = false;
+    let adminUnlocked = localStorage.getItem(ADMIN_UNLOCKED_KEY) === '1' || accessLevel === 'admin';
     let myName = localStorage.getItem(NAME_KEY) || '';
     let activeMode = String(savedEventUiPreferences.activeMode || 'rating');
     let activeStage = String(savedEventUiPreferences.activeStage || 'basket');
@@ -2156,8 +2150,8 @@
       if (!restoredName || (!authenticated && !['user', 'admin'].includes(mainAccess))) return false;
 
       myName = restoredName;
-      const verifiedPersonalAdmin = authenticated && isAdminUid(firebaseUser.uid);
-      accessLevel = verifiedPersonalAdmin ? 'admin' : 'user';
+      const verifiedPersonalAdmin = authenticated && cachedProfile?.authUid === firebaseUser.uid;
+      accessLevel = isAdminNickname(restoredName) && (verifiedPersonalAdmin || mainAccess === 'admin') ? 'admin' : 'user';
       guestSlot = 0;
       adminUnlocked = accessLevel === 'admin';
       localStorage.setItem(NAME_KEY, myName);
@@ -2273,8 +2267,7 @@
     function isAdminNickname(name = myName) {
       return ADMIN_NICKNAMES.has(normalizeNickname(name));
     }
-    function isAdminUid(uid = auth.currentUser?.uid) { return ADMIN_UIDS.has(String(uid || '')); }
-    function isAdmin() { return adminUnlocked && accessLevel === 'admin' && isAdminUid(); }
+    function isAdmin() { return adminUnlocked && accessLevel === 'admin' && isAdminNickname(); }
     function isUser() { return accessLevel === 'user'; }
     function isGuest() { return accessLevel === 'guest'; }
     function isAdminGuestPreview() { return adminUnlocked && accessLevel === 'guest' && isAdminNickname(getSavedAdminNickname()); }
@@ -8803,8 +8796,10 @@
       const pass = String(authPass.value || '').trim();
       const guestMatch = pass.match(GUEST_PASSWORD_RE);
       if (pass === ADMIN_PASSWORD) {
-        authError.textContent = 'Админский вход теперь выполняется через личный аккаунт на основном сайте.';
-        return;
+        accessLevel = 'admin';
+        guestSlot = 0;
+        adminUnlocked = true;
+        myName = getSavedAdminNickname() || myName || '';
       } else if (pass === USER_PASSWORD) {
         accessLevel = 'user';
         guestSlot = 0;
@@ -8886,7 +8881,7 @@
 
     async function init() {
       if (!['user', 'admin', 'guest'].includes(accessLevel)) accessLevel = '';
-      if (accessLevel === 'admin') accessLevel = '';
+      if (accessLevel === 'admin') adminUnlocked = true;
       if (accessLevel === 'guest' && !guestSlot) accessLevel = '';
       if (accessLevel === 'guest') activeMode = 'rating';
       bindShell();
