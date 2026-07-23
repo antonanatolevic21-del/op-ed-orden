@@ -606,7 +606,7 @@
     .oc-home-test-3 #oc-list-container .oc-card-actions > * { width:auto; }
 
     /* Тест 4: скруглённые постеры — изображение целиком, информация поверх. */
-    .oc-home-test-4 #oc-list-container .oc-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .oc-home-test-4 #oc-list-container .oc-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
     .oc-home-test-4 #oc-list-container .oc-season-op { position:relative; display:block; min-height:400px; padding:0; overflow:hidden; border-radius:22px; background:#08070c; isolation:isolate; }
     .oc-home-test-4 #oc-list-container .oc-image-link { position:absolute; inset:0; z-index:0; border-radius:0; background:#08070c; }
     .oc-home-test-4 #oc-list-container .oc-season-thumb { width:100%; height:100%; border:0; border-radius:0; background:#08070c; }
