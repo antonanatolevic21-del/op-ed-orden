@@ -87,3 +87,7 @@
 .oc-home-collection-card::before{z-index:1}
 .oc-home-collection-card::after{z-index:2}
 .oc-home-collection-card>span,.oc-home-collection-card>i{z-index:3}
+
+
+/* Collection artwork overlay correction */
+.oc-home-collection-card::after{background:linear-gradient(0deg,rgba(8,6,12,.72) 0%,rgba(8,6,12,.10) 72%,rgba(8,6,12,.04) 100%)!important}
