@@ -5792,8 +5792,7 @@
         if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, ...sameSong });
 
         $('#oc-add-title').value = '';
-        $('#oc-add-year').value = '';
-        $('#oc-add-season').value = '';
+        // Год и сезон оставляем последними введёнными, чтобы быстрее добавлять пачку треков одного сезона.
         $('#oc-add-studio').value = '';
         $('#oc-add-director').value = '';
         $('#oc-add-performer').value = '';
