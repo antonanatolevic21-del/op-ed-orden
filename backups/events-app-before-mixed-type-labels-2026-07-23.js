@@ -963,13 +963,6 @@
       return String(opening?.title || opening?.anime || 'Без названия');
     }
 
-    function getMixedOpeningTitle(opening, mixedTypes = false) {
-      const title = getOpeningTitle(opening).trim();
-      const type = String(opening?.type || '').toUpperCase();
-      if (!mixedTypes || !['OP', 'ED'].includes(type) || /\b(?:OP|ED)(?:\s*#?\d+)?\b/iu.test(title)) return title;
-      return `${title} ${type}`;
-    }
-
     function normalizeOpeningAlternativeTitles(value) {
       const raw = Array.isArray(value)
         ? value
@@ -2339,7 +2332,7 @@
     }
 
     function bwOpeningName(id) {
-      return getMixedOpeningTitle(openingsById.get(String(id)) || { title: 'Неизвестный OP/ED' }, normalizeBestWorstSettings(bestWorstRoom?.settings).typeFilter === 'both');
+      return getOpeningTitle(openingsById.get(String(id)) || { title: 'Неизвестный OP/ED' });
     }
 
     function bwRenderMedia(opening) {
@@ -2969,7 +2962,7 @@
             <div class="ev-bw-round-head"><div><h3 style="margin:0 0 5px;font-family:'Archivo Black',sans-serif;">${phaseResults ? 'Результаты раунда' : 'Выбери свои флажки'}</h3><div class="ev-hint">Флажки на карточках — только твои собственные лучшее и худшее. Выборы остальных игроков делаются отдельно в списке ниже.</div></div><div class="ev-bw-pill" id="ev-bw-submitted-count">Ответили: <strong>${submittedKeys.size}/${players.length}</strong></div></div>
             ${concreteGroup ? `<div class="ev-bw-group-banner"><span class="ev-bw-group-kind">${escapeHtml(concreteGroup.kind)}</span><span class="ev-bw-group-value">${escapeHtml(concreteGroup.value)}</span></div>` : ''}
             ${!phaseResults ? `<div class="ev-bw-active-target"><div><div class="ev-guess-label">Флажки принадлежат</div><div class="ev-bw-answer-name" style="margin-top:7px;">${me ? `${escapeHtml(me.name)} · это ты` : 'Ты не участвуешь в этом раунде'}</div></div><div class="ev-hint">Поставить флажки за другого игрока нельзя. Один элемент не может одновременно быть твоим лучшим и худшим.</div></div>` : ''}
-            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(ownAnswer.best || '') === String(id); const isWorst = String(ownAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}" data-bw-opening-card="1" data-opening-id="${escapeHtml(id)}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getMixedOpeningTitle(opening, settings.typeFilter === 'both'))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.type || '—')} · ${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Моё лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Моё худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
+            <div class="ev-bw-opening-grid">${round.openingIds.map((id, index) => { const opening = openingsById.get(String(id)); if (!opening) return ''; const isBest = String(ownAnswer.best || '') === String(id); const isWorst = String(ownAnswer.worst || '') === String(id); const season = SEASON_LABEL[opening.season] || opening.season || '—'; return `<article class="ev-bw-opening ${isBest ? 'active-best' : ''} ${isWorst ? 'active-worst' : ''}" data-bw-opening-card="1" data-opening-id="${escapeHtml(id)}">${bwRenderMedia(opening)}<div class="ev-bw-opening-body"><div class="ev-bw-opening-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-bw-opening-meta">${escapeHtml(opening.type || '—')} · ${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)} · ${escapeHtml((opening.studios || []).join(', ') || 'студия не указана')}</div>${!phaseResults ? `<div class="ev-bw-flags">${bwModeUses(settings,'best') ? `<button type="button" class="ev-bw-flag best ${isBest ? 'active' : ''}" data-bw-flag="best" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>★ Моё лучшее</button>` : ''}${bwModeUses(settings,'worst') ? `<button type="button" class="ev-bw-flag worst ${isWorst ? 'active' : ''}" data-bw-flag="worst" data-opening-id="${escapeHtml(id)}" ${canAnswer ? '' : 'disabled'}>▼ Моё худшее</button>` : ''}</div>` : ''}</div></article>`; }).join('')}</div>
             ${phaseResults ? bwRenderRoundResults(room, round, players, settings) : `<div class="ev-bw-answer-card"><div class="ev-guess-card-head"><div><h3>Твои догадки о других игроках</h3><div class="ev-hint">В списке нет тебя самого: угадывать собственные флажки не нужно.</div></div></div><div class="ev-bw-answer-list">${guessTargets.length ? guessTargets.map(player => { const answer = bestWorstDraft[player.key] || {}; return `<div class="ev-bw-answer-row"><div class="ev-bw-answer-name">${escapeHtml(player.name)}</div>${bwModeUses(settings,'best') ? `<label><span class="ev-guess-label">Его/её лучшее</span><select data-bw-answer="best" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.best, settings.mode === 'both' ? answer.worst : '')}</select></label>` : ''}${bwModeUses(settings,'worst') ? `<label><span class="ev-guess-label">Его/её худшее</span><select data-bw-answer="worst" data-target-key="${escapeHtml(player.key)}" ${canAnswer ? '' : 'disabled'}>${bwAnswerOptions(round, answer.worst, settings.mode === 'both' ? answer.best : '')}</select></label>` : ''}</div>`; }).join('') : '<div class="ev-guess-empty">Других игроков для угадывания нет.</div>'}</div><div class="ev-actions" style="margin-top:12px;justify-content:flex-start;"><button type="button" class="ev-btn-main" id="ev-bw-submit" ${canAnswer ? '' : 'disabled'}>${ownSubmitted ? 'Обновить ответ' : 'Готово'}</button></div><div class="ev-bw-progress-list">${players.map(player => `<span class="ev-bw-progress-user ${submittedKeys.has(player.key) ? 'done' : ''}" data-bw-progress-key="${escapeHtml(player.key)}" data-bw-progress-name="${escapeHtml(player.name)}">${submittedKeys.has(player.key) ? '✓' : '…'} ${escapeHtml(player.name)}</span>`).join('')}</div></div>`}
           </section>
           <div id="ev-bw-status" class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может|поставь/i.test(bestWorstStatus) ? 'bad' : 'ok'}" ${bestWorstStatus ? '' : 'hidden'}>${escapeHtml(bestWorstStatus)}</div>
@@ -3680,7 +3673,7 @@
         ${cnRenderRoster(room)}
         ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
         ${me?.role === 'spymaster' && !winningTeam ? '<div class="ev-cn-focus-wrap"><button type="button" class="ev-cn-focus-btn" id="ev-cn-focus-own">Зажми: только свои оставшиеся</button></div>' : ''}
-        <div class="ev-cn-board" id="ev-cn-board">${board.map((card,index) => { const cardTitle = getMixedOpeningTitle(card, settings.typeFilter === 'all'); return `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)} ${me?.role === 'spymaster' && card.identity === me.team && !card.revealed ? 'cn-own-unrevealed' : ''}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(cardTitle)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(cardTitle)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`; }).join('')}</div>
+        <div class="ev-cn-board" id="ev-cn-board">${board.map((card,index) => `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)} ${me?.role === 'spymaster' && card.identity === me.team && !card.revealed ? 'cn-own-unrevealed' : ''}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(card.title)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(card.title)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`).join('')}</div>
         <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
         ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
       $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
@@ -3854,12 +3847,11 @@
       }
       const finished = state.index >= state.queue.length;
       const current = finished ? null : openingsById.get(String(state.queue[state.index]));
-      const mixedTypes = !state.settings?.type;
       const slots = state.slots.map((id, index) => {
         const opening = id ? openingsById.get(String(id)) : null;
-        return `<button type="button" class="ev-blind-slot ${opening ? 'filled' : 'free'}" data-blind-slot="${index}" ${opening || finished ? 'disabled' : ''}><div class="ev-blind-rank">МЕСТО #${index + 1}</div>${opening ? `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getMixedOpeningTitle(opening, mixedTypes))}</div>` : '<div class="ev-hint">свободно</div>'}</button>`;
+        return `<button type="button" class="ev-blind-slot ${opening ? 'filled' : 'free'}" data-blind-slot="${index}" ${opening || finished ? 'disabled' : ''}><div class="ev-blind-rank">МЕСТО #${index + 1}</div>${opening ? `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getOpeningTitle(opening))}</div>` : '<div class="ev-hint">свободно</div>'}</button>`;
       }).join('');
-      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Слепой тир-лист</div><h2>${finished ? 'Готово!' : `Песня ${state.index + 1} из ${state.queue.length}`}</h2></div><button class="ev-btn-ghost" id="ev-blind-reset" type="button">Новая игра</button></div>${finished ? '<p class="ev-hint">Вот каким получился твой окончательный рейтинг.</p>' : `<div class="ev-blind-current">${openingImageMarkup(current)}<div><div class="ev-tag">${escapeHtml(current?.type || '')} · ${escapeHtml(current?.year || 'год неизвестен')}</div><h2>${escapeHtml(getMixedOpeningTitle(current, mixedTypes))}</h2><p class="ev-hint">Можно вспомнить трек, а затем выбрать свободное место.</p><button class="ev-btn-main" id="ev-blind-preview-toggle" type="button">${blindTierPreviewOpen?'Скрыть просмотр':'Посмотреть / послушать'}</button></div></div>${blindTierPreviewOpen ? blindTierPreviewMarkup(current) : ''}`}</div><div class="ev-blind-slots">${slots}</div></section>`;
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Слепой тир-лист</div><h2>${finished ? 'Готово!' : `Песня ${state.index + 1} из ${state.queue.length}`}</h2></div><button class="ev-btn-ghost" id="ev-blind-reset" type="button">Новая игра</button></div>${finished ? '<p class="ev-hint">Вот каким получился твой окончательный рейтинг.</p>' : `<div class="ev-blind-current">${openingImageMarkup(current)}<div><div class="ev-tag">${escapeHtml(current?.type || '')} · ${escapeHtml(current?.year || 'год неизвестен')}</div><h2>${escapeHtml(getOpeningTitle(current))}</h2><p class="ev-hint">Можно вспомнить трек, а затем выбрать свободное место.</p><button class="ev-btn-main" id="ev-blind-preview-toggle" type="button">${blindTierPreviewOpen?'Скрыть просмотр':'Посмотреть / послушать'}</button></div></div>${blindTierPreviewOpen ? blindTierPreviewMarkup(current) : ''}`}</div><div class="ev-blind-slots">${slots}</div></section>`;
       $('#ev-blind-reset')?.addEventListener('click', resetBlindTier);
       $('#ev-blind-preview-toggle')?.addEventListener('click', () => { blindTierPreviewOpen = !blindTierPreviewOpen; renderBlindTier(); });
       appEl.querySelectorAll('[data-blind-slot]').forEach(button => button.addEventListener('click', () => placeBlindTier(Number(button.dataset.blindSlot))));
@@ -3999,7 +3991,6 @@
       const answer = normalizeGuessAnswer(whoAmIPickDraft);
       const opening = whoAvailablePickOpenings(room).find(row =>
         getOpeningSearchTitles(row).some(title => normalizeGuessAnswer(title) === answer)
-        || normalizeGuessAnswer(getMixedOpeningTitle(row, !room.settings?.type)) === answer
         || normalizeGuessAnswer(row.sameSongTitle) === answer
       );
       if (!opening) {
@@ -4059,8 +4050,7 @@
       const assignedId = String(room.assignments?.[current.key] || '');
       const assigned = openingsById.get(assignedId);
       const guessedOpening = openings.find(opening => getOpeningSearchTitles(opening).some(title => normalizeGuessAnswer(title) === normalizeGuessAnswer(text)));
-      const mixedGuessedOpening = guessedOpening || openings.find(opening => normalizeGuessAnswer(getMixedOpeningTitle(opening, !room.settings?.type)) === normalizeGuessAnswer(text));
-      if (!assigned || !mixedGuessedOpening || sameSongKey(mixedGuessedOpening) !== sameSongKey(assigned)) {
+      if (!assigned || !guessedOpening || sameSongKey(guessedOpening) !== sameSongKey(assigned)) {
         whoAmIStatus = 'Нет, это не тот трек. Можно задавать следующий вопрос.';
         renderWhoAmI();
         return;
@@ -4125,7 +4115,7 @@
         const total = Array.isArray(room.pickerOrder) ? room.pickerOrder.length : players.length;
         const done = Math.min(Number(room.pickerIndex || 0), total);
         const myPick = picker?.key === ownKey;
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Выбор карточек</div><h2>${done + 1} из ${total} · выбирает ${escapeHtml(picker?.name || '')}</h2></div><div class="ev-actions">${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из игры</button>' : ''}${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${player.key===picker?.key?'turn':''}">${escapeHtml(player.name)}</span>`).join('')}</div>${myPick ? `<div class="ev-game-config" style="margin-top:14px"><label style="grid-column:1/-1">Выбери OP/ED для игрока <b>${escapeHtml(target?.name || '')}</b><input class="ev-who-input" id="ev-who-pick-input" list="ev-who-pick-titles" value="${escapeHtml(whoAmIPickDraft)}" placeholder="Начни вводить название"></label><datalist id="ev-who-pick-titles">${available.flatMap(opening => [getMixedOpeningTitle(opening, !room.settings?.type), opening.sameSongTitle].filter(Boolean).map(title => `<option value="${escapeHtml(title)}"></option>`)).join('')}</datalist><button class="ev-btn-main" id="ev-who-pick-submit" type="button">Назначить тайно</button></div><p class="ev-hint">Игрок ${escapeHtml(target?.name || '')} не увидит выбранную ему карточку. Доступно: ${available.length} разных песен.</p>` : `<p class="ev-hint">Сейчас ${escapeHtml(picker?.name || '')} тайно выбирает карточку для другого случайно назначенного игрока.</p>`}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Выбор карточек</div><h2>${done + 1} из ${total} · выбирает ${escapeHtml(picker?.name || '')}</h2></div><div class="ev-actions">${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из игры</button>' : ''}${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${player.key===picker?.key?'turn':''}">${escapeHtml(player.name)}</span>`).join('')}</div>${myPick ? `<div class="ev-game-config" style="margin-top:14px"><label style="grid-column:1/-1">Выбери OP/ED для игрока <b>${escapeHtml(target?.name || '')}</b><input class="ev-who-input" id="ev-who-pick-input" list="ev-who-pick-titles" value="${escapeHtml(whoAmIPickDraft)}" placeholder="Начни вводить название"></label><datalist id="ev-who-pick-titles">${available.flatMap(opening => [getOpeningTitle(opening), opening.sameSongTitle].filter(Boolean).map(title => `<option value="${escapeHtml(title)}"></option>`)).join('')}</datalist><button class="ev-btn-main" id="ev-who-pick-submit" type="button">Назначить тайно</button></div><p class="ev-hint">Игрок ${escapeHtml(target?.name || '')} не увидит выбранную ему карточку. Доступно: ${available.length} разных песен.</p>` : `<p class="ev-hint">Сейчас ${escapeHtml(picker?.name || '')} тайно выбирает карточку для другого случайно назначенного игрока.</p>`}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-pick-input')?.addEventListener('input', event => { whoAmIPickDraft = event.target.value; });
         $('#ev-who-pick-submit')?.addEventListener('click', () => whoSubmitPick().catch(error => { whoAmIStatus=error.message;renderWhoAmI(); }));
         $('#ev-who-reset')?.addEventListener('click', () => whoResetRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
@@ -4138,11 +4128,11 @@
       const cards = players.map(player => {
         const opening = openingsById.get(String(room.assignments?.[player.key] || ''));
         const own = player.key === ownKey && !finished && !guessed.has(player.key);
-        return `<div class="ev-who-card"><div class="ev-blind-rank">${escapeHtml(player.name)}</div>${own ? '<div class="ev-who-secret">?</div><div class="ev-blind-slot-title">Твоя карточка скрыта</div>' : `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getMixedOpeningTitle(opening, !room.settings?.type))}</div>`}</div>`;
+        return `<div class="ev-who-card"><div class="ev-blind-rank">${escapeHtml(player.name)}</div>${own ? '<div class="ev-who-secret">?</div><div class="ev-blind-slot-title">Твоя карточка скрыта</div>' : `${openingImageMarkup(opening)}<div class="ev-blind-slot-title">${escapeHtml(getOpeningTitle(opening))}</div>`}</div>`;
       }).join('');
       const questions = (room.questions || []).map(question => `<div class="ev-who-question"><b>${escapeHtml(question.playerName)}:</b> ${escapeHtml(question.text)} <span class="ev-who-answer">${escapeHtml(question.answer || '…')}</span>${question.answeredBy ? ` <span class="ev-hint">— ${escapeHtml(question.answeredBy)}</span>` : ''}</div>`).join('');
       const myTurn = current?.key === ownKey;
-      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div><div class="ev-actions">${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из игры</button>' : ''}${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" value="${escapeHtml(whoAmIQuestionDraft)}" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" value="${escapeHtml(whoAmIGuessDraft)}" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getMixedOpeningTitle(opening, !room.settings?.type))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+      appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Кто я?</div><h2>${finished ? 'Все угадали!' : `Ход: ${escapeHtml(current?.name || '')}`}</h2></div><div class="ev-actions">${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из игры</button>' : ''}${whoIsHost() ? '<button class="ev-btn-ghost" id="ev-who-next" type="button">Передать ход</button><button class="ev-btn-ghost" id="ev-who-reset" type="button">Вернуть в лобби</button>' : ''}</div></div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player ${current?.key===player.key?'turn':''} ${guessed.has(player.key)?'done':''}">${guessed.has(player.key)?'✓ ':''}${escapeHtml(player.name)}</span>`).join('')}</div></div><div class="ev-who-cards">${cards}</div><div class="ev-game-panel"><h3>Вопросы</h3><div class="ev-who-history">${questions || '<div class="ev-hint">Вопросов пока нет.</div>'}</div>${pending && pending.playerKey !== ownKey ? '<div class="ev-actions"><button class="ev-btn-main" data-who-answer="Да">Да</button><button class="ev-btn-ghost" data-who-answer="Нет">Нет</button><button class="ev-btn-ghost" data-who-answer="Неизвестно">Неизвестно</button></div>' : ''}${myTurn && !finished ? `<div class="ev-game-config" style="margin-top:12px"><label style="grid-column:1/-1">Задать вопрос<input class="ev-who-input" id="ev-who-question-input" value="${escapeHtml(whoAmIQuestionDraft)}" placeholder="Например: это OP?"></label><button class="ev-btn-main" id="ev-who-ask" type="button">Спросить</button><label style="grid-column:1/-1">Попытка угадать<input class="ev-who-input" id="ev-who-guess-input" list="ev-who-titles" value="${escapeHtml(whoAmIGuessDraft)}" placeholder="Название OP/ED"></label><datalist id="ev-who-titles">${openings.map(opening => `<option value="${escapeHtml(getOpeningTitle(opening))}"></option>`).join('')}</datalist><button class="ev-btn-main" id="ev-who-guess" type="button">Угадать</button></div>` : ''}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
       $('#ev-who-question-input')?.addEventListener('input', event => { whoAmIQuestionDraft = event.target.value; });
       $('#ev-who-guess-input')?.addEventListener('input', event => { whoAmIGuessDraft = event.target.value; });
       $('#ev-who-ask')?.addEventListener('click', () => whoAskQuestion().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
@@ -4540,7 +4530,7 @@
         <article class="ev-guess-result ${stateClass}">
           <div class="ev-guess-result-thumb">${image}</div>
           <div>
-            <div class="ev-guess-result-title">${index + 1}. ${escapeHtml(getMixedOpeningTitle(opening, !guessFilters.type))}</div>
+            <div class="ev-guess-result-title">${index + 1}. ${escapeHtml(getOpeningTitle(opening))}</div>
             <div class="ev-guess-result-meta">${escapeHtml(opening.type)} · ${escapeHtml(opening.year ?? '—')} · ${escapeHtml(season)}<br>${escapeHtml(studio)}</div>
             ${status}
           </div>
@@ -4572,7 +4562,7 @@
         ? openings.filter(opening => opening.type === guessFilters.type)
         : openings;
       titleOpenings.forEach(opening => {
-        const title = getMixedOpeningTitle(opening, !guessFilters.type).trim();
+        const title = getOpeningTitle(opening).trim();
         const key = normalizeGuessAnswer(title);
         if (!title || !key || byKey.has(key)) return;
         byKey.set(key, title);
@@ -4586,7 +4576,7 @@
         ? openings.filter(opening => opening.type === guessFilters.type)
         : openings;
       titleOpenings.forEach(opening => {
-        const value = getMixedOpeningTitle(opening, !guessFilters.type).trim();
+        const value = getOpeningTitle(opening).trim();
         const key = normalizeGuessAnswer(value);
         if (!value || !key || byKey.has(key)) return;
         const labels = getOpeningSearchTitles(opening);
@@ -4661,8 +4651,7 @@
         return [...new Set((opening?.franchises || []).map(value => String(value || '').trim()).filter(Boolean))];
       }
       const labels = sameSongMembers(opening).flatMap(member => getOpeningSearchTitles(member));
-      if (!guessFilters.type) labels.unshift(getMixedOpeningTitle(opening, true));
-      if (opening?.sameSongTitle) labels.unshift(getMixedOpeningTitle({ title: opening.sameSongTitle, type: opening.type }, !guessFilters.type));
+      if (opening?.sameSongTitle) labels.unshift(String(opening.sameSongTitle));
       return [...new Set(labels.map(value => String(value || '').trim()).filter(Boolean))];
     }
 
@@ -4670,8 +4659,8 @@
       const labels = openingGuessLabels(opening);
       if (guessFilters.answerTarget === 'franchise') return labels.join(' / ') || 'Франшиза не указана';
       return opening?.sameSongTitle
-        ? `${getMixedOpeningTitle({ title: opening.sameSongTitle, type: opening.type }, !guessFilters.type)} · звучала версия: ${getMixedOpeningTitle(opening, !guessFilters.type)}`
-        : (labels[0] || getMixedOpeningTitle(opening, !guessFilters.type));
+        ? `${opening.sameSongTitle} · звучала версия: ${getOpeningTitle(opening)}`
+        : (labels[0] || getOpeningTitle(opening));
     }
 
     function acceptedGuessAnswers(opening) {
@@ -4687,8 +4676,7 @@
         return { correct: true, exact: true, quality: 'exact' };
       }
       const primary = normalizeGuessAnswer(getOpeningTitle(opening));
-      const displayedPrimary = normalizeGuessAnswer(getMixedOpeningTitle(opening, !guessFilters.type));
-      if (guessFilters.answerTarget === 'song' && (answer === primary || answer === displayedPrimary)) {
+      if (guessFilters.answerTarget === 'song' && answer === primary) {
         return { correct: true, exact: true, quality: 'exact' };
       }
       if (guessFilters.answerTarget === 'song' && normalizedLabels.includes(answer)) {
@@ -5501,7 +5489,7 @@
         return `<div class="ev-guess-collection-row">
           <div class="ev-guess-collection-index">${index + 1}</div>
           <div>
-            <div class="ev-guess-collection-title">${escapeHtml(getMixedOpeningTitle(opening, !guessFilters.type))}</div>
+            <div class="ev-guess-collection-title">${escapeHtml(getOpeningTitle(opening))}</div>
             <div class="ev-guess-collection-kind">${kind}${franchise ? ` · ${escapeHtml(franchise)}` : ''}</div>
           </div>
           <button type="button" class="ev-guess-collection-remove" data-collection-remove="${escapeHtml(id)}">Удалить</button>
@@ -5611,7 +5599,7 @@
       const box = $('#ev-guess-collection-suggestions');
       if (!box) return;
       const matches = collectionCandidateMatches(query);
-      box.innerHTML = matches.map(opening => `<button type="button" class="ev-guess-suggestion" data-collection-add="${escapeHtml(opening.id)}"><strong>${escapeHtml(getMixedOpeningTitle(opening, !guessFilters.type))}</strong><br><span class="ev-guess-note">${escapeHtml((opening.franchises || []).join(', ') || `${opening.type} · ${opening.year || '—'}`)}</span></button>`).join('');
+      box.innerHTML = matches.map(opening => `<button type="button" class="ev-guess-suggestion" data-collection-add="${escapeHtml(opening.id)}"><strong>${escapeHtml(getOpeningTitle(opening))}</strong><br><span class="ev-guess-note">${escapeHtml((opening.franchises || []).join(', ') || `${opening.type} · ${opening.year || '—'}`)}</span></button>`).join('');
       box.classList.toggle('open', matches.length > 0);
       box.querySelectorAll('[data-collection-add]').forEach(button => {
         button.addEventListener('click', () => addManualGuessCollectionOpening(button.dataset.collectionAdd));
