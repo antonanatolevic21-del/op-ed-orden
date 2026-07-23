@@ -164,6 +164,12 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Визуальные альбомы создают и меняют только администраторы.
+    match /entityCards/{cardId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
     // Настройки и корзину ежегодного ивента меняют только администраторы.
     match /eventSeasons/{seasonId} {
       allow read: if signedIn();
