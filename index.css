@@ -79,3 +79,11 @@
 .oc-addbar .oc-hint{margin:14px 2px 0;color:#777080;line-height:1.55}
 @media(max-width:820px){.oc-addbar{padding:20px}.oc-addbar-head{align-items:flex-start;flex-direction:column;gap:8px}.oc-addbar-head p{text-align:left}.oc-addbar .oc-addgrid,.oc-addbar .oc-addgrid2{grid-template-columns:1fr 1fr}}
 @media(max-width:580px){.oc-addbar{padding:17px;border-radius:19px}.oc-addbar .oc-addgrid,.oc-addbar .oc-addgrid2{grid-template-columns:1fr}.oc-addbar .oc-add-extra-row{align-items:stretch;flex-direction:column}.oc-addbar .oc-addbtn{width:100%}}
+
+
+/* Collection artwork layer fix */
+.oc-home-collection-card{background:#111!important}
+.oc-home-collection-card .oc-home-collection-image{z-index:0}
+.oc-home-collection-card::before{z-index:1}
+.oc-home-collection-card::after{z-index:2}
+.oc-home-collection-card>span,.oc-home-collection-card>i{z-index:3}
