@@ -1,0 +1,41 @@
+@import url("./backups/index-before-four-digit-rank-2026-07-23.css");
+
+/* Four-digit positions keep their own grid column and never overlap previews. */
+.oc-rank {
+  white-space: nowrap;
+}
+
+.oc-season-op {
+  grid-template-columns: minmax(46px, max-content) 54px minmax(0, 1fr) max-content max-content;
+}
+
+#oc-main-panel #oc-list-container .oc-season-op {
+  grid-template-columns: minmax(50px, max-content) 124px minmax(0, 1fr) 56px;
+}
+
+/* Archivo Black has no matching Cyrillic glyphs, so mixed titles looked uneven. */
+#oc-main-panel #oc-list-container .oc-name {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 820px) {
+  .oc-season-op {
+    grid-template-columns: minmax(44px, max-content) 48px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .oc-season-op {
+    grid-template-columns: minmax(44px, max-content) 46px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  #oc-main-panel #oc-list-container .oc-season-op {
+    grid-template-columns: minmax(48px, max-content) 92px minmax(0, 1fr) 48px;
+  }
+}
