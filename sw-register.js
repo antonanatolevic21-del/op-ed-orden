@@ -1,10 +1,14 @@
 (() => {
-  const version = '20260723-track-panel-compact7';
+  const version = '20260723-track-panel-compact8';
 
   const albumStylesheet = document.createElement('link');
   albumStylesheet.rel = 'stylesheet';
   albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
   document.head.append(albumStylesheet);
+
+  const entityProgressScript = document.createElement('script');
+  entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
+  document.body.append(entityProgressScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
@@ -21,7 +25,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force8', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force9', {
         updateViaCache: 'none'
       });
       await registration.update();
