@@ -1626,6 +1626,15 @@
     let bestWorstRooms = [];
     let codenamesRooms = [];
     let whoAmIRooms = [];
+    let pendingEventRoomMetadata = null;
+    let eventRoomInviteHandled = false;
+    const spectatorPresenceRegistered = new Set();
+    const unlockedEventRooms = new Set((() => {
+      try {
+        const rows = JSON.parse(localStorage.getItem('aboba-event-unlocked-rooms-v1') || '[]');
+        return Array.isArray(rows) ? rows : [];
+      } catch (_) { return []; }
+    })());
     const bestWorstFilters = {
       mode: 'both',
       typeFilter: 'OP',
@@ -1710,10 +1719,127 @@
       return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
     }
 
+    async function eventRoomCodeHash(value) {
+      const bytes = new TextEncoder().encode(`oped-room:${String(value || '').trim().toLowerCase()}`);
+      const hash = await crypto.subtle.digest('SHA-256', bytes);
+      return [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2,'0')).join('');
+    }
+
+    function saveUnlockedEventRooms() {
+      try { localStorage.setItem('aboba-event-unlocked-rooms-v1', JSON.stringify([...unlockedEventRooms])); } catch (_) {}
+    }
+
+    function eventRoomCollection(mode) {
+      return mode === 'bestworst' ? BW_ROOM_COLLECTION : CODENAMES_COLLECTION;
+    }
+
+    function eventRoomRef(mode, id = eventRoomId(mode)) {
+      if (!id) throw new Error('Сначала выбери лобби.');
+      return doc(db, eventRoomCollection(mode), id);
+    }
+
+    function currentEventRoom(mode) {
+      if (mode === 'bestworst') return bestWorstRoom;
+      if (mode === 'codenames') return codenamesRoom;
+      return whoAmIRoom;
+    }
+
+    function eventRoomPlayerKey(mode) {
+      return mode === 'whoami' ? whoPlayerKey() : normalizeNickname(myName);
+    }
+
+    function eventRoomPlayers(room) {
+      return Array.isArray(room?.players) ? room.players.filter(player => player?.key && player?.name) : [];
+    }
+
+    function eventRoomIsHost(mode, room = currentEventRoom(mode)) {
+      return Boolean(room && (normalizeNickname(room.hostKey) === eventRoomPlayerKey(mode) || (!room.hostKey && isAdmin())));
+    }
+
+    function eventRoomSpectators(room) {
+      const playerKeys = new Set(eventRoomPlayers(room).map(player => player.key));
+      return (Array.isArray(room?.spectators) ? room.spectators : [])
+        .filter(person => person?.key && person?.name && !playerKeys.has(person.key))
+        .filter(person => !person.seenAtLocal || Date.now() - Date.parse(person.seenAtLocal) < 20 * 60 * 1000);
+    }
+
+    async function updateEventRoomSpectator(mode, room, present) {
+      if (!room?.id) return;
+      const key = eventRoomPlayerKey(mode);
+      const name = String(myName || '').trim();
+      if (!key || !name || eventRoomPlayers(room).some(player => player.key === key)) return;
+      const spectators = eventRoomSpectators(room).filter(person => person.key !== key);
+      if (present) spectators.push({ key, name, seenAtLocal:new Date().toISOString() });
+      await setDoc(eventRoomRef(mode, room.id), { spectators, updatedAtLocal:new Date().toISOString(), updatedAt:serverTimestamp() }, { merge:true });
+    }
+
+    async function openEventRoom(mode, room) {
+      if (!room) return;
+      setEventRoom(mode, room.id);
+      await updateEventRoomSpectator(mode, room, true).catch(error => console.warn('spectator register failed', error));
+      spectatorPresenceRegistered.add(`${mode}:${room.id}`);
+      render();
+    }
+
+    async function closeEventRoom(mode) {
+      const room = currentEventRoom(mode);
+      if (room) await updateEventRoomSpectator(mode, room, false).catch(error => console.warn('spectator unregister failed', error));
+      if (room) spectatorPresenceRegistered.delete(`${mode}:${room.id}`);
+      pendingEventRoomMetadata = null;
+      setEventRoom(mode, '');
+      render();
+    }
+
+    async function removeSelfFromSpectators(mode, room = currentEventRoom(mode)) {
+      if (!room?.id) return;
+      const key = eventRoomPlayerKey(mode);
+      const spectators = eventRoomSpectators(room).filter(person => person.key !== key);
+      await setDoc(eventRoomRef(mode, room.id), { spectators, updatedAtLocal:new Date().toISOString(), updatedAt:serverTimestamp() }, { merge:true });
+      spectatorPresenceRegistered.delete(`${mode}:${room.id}`);
+    }
+
+    function restoreEventRoomPresence(mode, room) {
+      if (!room?.id || eventRoomPlayers(room).some(player => player.key === eventRoomPlayerKey(mode))) return;
+      const presenceKey = `${mode}:${room.id}`;
+      if (spectatorPresenceRegistered.has(presenceKey)) return;
+      spectatorPresenceRegistered.add(presenceKey);
+      void updateEventRoomSpectator(mode, room, true).catch(error => {
+        spectatorPresenceRegistered.delete(presenceKey);
+        console.warn('spectator restore failed', error);
+      });
+    }
+
+    async function consumeEventRoomInvite() {
+      if (eventRoomInviteHandled || !location.hash.startsWith('#event-room=')) return;
+      const match = location.hash.match(/^#event-room=([^:]+):([^:]+):(.+)$/);
+      if (!match) return;
+      const mode = decodeURIComponent(match[1]);
+      if (!['bestworst','codenames','whoami'].includes(mode)) return;
+      const id = decodeURIComponent(match[2]);
+      const code = decodeURIComponent(match[3]);
+      const rooms = mode === 'bestworst' ? bestWorstRooms : mode === 'codenames' ? codenamesRooms : whoAmIRooms;
+      const room = rooms.find(row => row.id === id);
+      if (!room) return;
+      eventRoomInviteHandled = true;
+      if (room.isPrivate && room.accessCodeHash !== await eventRoomCodeHash(code)) {
+        alert('Ссылка на закрытую комнату содержит неверный код.');
+        return;
+      }
+      unlockedEventRooms.add(id);
+      saveUnlockedEventRooms();
+      activeMode = mode;
+      history.replaceState(null, '', `${location.pathname}${location.search}`);
+      await openEventRoom(mode, room);
+    }
+
     function bwRoomDoc() {
       const id = eventRoomId('bestworst');
       if (!id) throw new Error('Сначала выбери лобби.');
       return doc(db, BW_ROOM_COLLECTION, id);
+    }
+
+    function bwIsHost(room = bestWorstRoom) {
+      return room ? eventRoomIsHost('bestworst', room) : isAdmin();
     }
 
     function whoRoomDoc() {
@@ -2889,7 +3015,7 @@
     }
 
     function toggleWildcardExclusion(openingId) {
-      if (!isAdmin()) return;
+      if (!bwIsHost()) return;
       const plan = getSemifinalWildcardPlan();
       if (!plan.overflow) return;
       const id = String(openingId);
@@ -3531,8 +3657,9 @@
       bestWorstStatus = 'Сохраняю лобби…';
       try {
         await setDoc(bwRoomDoc(), {
+          ...(pendingEventRoomMetadata || {}),
           roomType: 'bestworst',
-          title: bestWorstRoom?.title || `Лобби ${name}`,
+          title: pendingEventRoomMetadata?.title || bestWorstRoom?.title || `Лобби ${name}`,
           gameId,
           status: 'lobby',
           phase: 'lobby',
@@ -3546,6 +3673,7 @@
           updatedAtLocal: new Date().toISOString(),
           updatedAt: serverTimestamp()
         });
+        pendingEventRoomMetadata = null;
         bestWorstStatus = 'Лобби сохранено. После изменения настроек готовность участников сброшена.';
       } catch (error) {
         console.error('best/worst lobby save failed', error);
@@ -3556,11 +3684,13 @@
 
     async function bwJoinLobby() {
       if (!bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
+      if (bestWorstRoom.joinLocked) { bestWorstStatus = 'Ведущий закрыл вступление в это лобби.'; render(); return; }
       const name = String(myName || '').trim();
       const key = normalizeNickname(name);
       if (!key) { bestWorstStatus = 'Сначала введи никнейм.'; render(); return; }
       const players = bwPlayers(bestWorstRoom);
       if (!players.some(player => player.key === key)) players.push({ key, name, ready: false });
+      await removeSelfFromSpectators('bestworst', bestWorstRoom);
       await setDoc(bwRoomDoc(), { players, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
     }
 
@@ -3569,6 +3699,7 @@
       const room = bestWorstRoom;
       const key = bwCurrentUserKey();
       if (!key || !bwPlayers(room).some(player => player.key === key)) return;
+      if (!confirm('Покинуть состав игроков? Кнопка «В главное меню ивента» позволяет выйти из просмотра, оставаясь в игре.')) return;
       const remaining = bwPlayers(room).filter(player => player.key !== key);
       try {
         if (room.status === 'playing') {
@@ -3718,7 +3849,7 @@
     }
 
     async function bwStartGame() {
-      if (!isAdmin() || !bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
+      if (!bwIsHost() || !bestWorstRoom || bestWorstRoom.status !== 'lobby') return;
       const players = bwReadyPlayers(bestWorstRoom);
       if (players.length < 2) { bestWorstStatus = 'Для запуска должны нажать «Готов» хотя бы два человека.'; render(); return; }
       const settings = normalizeBestWorstSettings(bestWorstRoom.settings);
@@ -3805,7 +3936,7 @@
     }
 
     async function bwNextRound() {
-      if (!isAdmin() || !bestWorstRoom || bestWorstRoom.phase !== 'results') return;
+      if (!bwIsHost() || !bestWorstRoom || bestWorstRoom.phase !== 'results') return;
       const next = Number(bestWorstRoom.currentRound || 0) + 1;
       const total = Array.isArray(bestWorstRoom.rounds) ? bestWorstRoom.rounds.length : 0;
       if (next >= total) {
@@ -3819,7 +3950,7 @@
     }
 
     async function bwResetGame() {
-      if (!isAdmin()) return;
+      if (!bwIsHost()) return;
       if (!confirm('Удалить текущее лобби/игру? Старые ответы останутся в архивной коллекции, но больше не будут отображаться.')) return;
       await deleteDoc(bwRoomDoc());
       bestWorstRoom = null;
@@ -3966,15 +4097,15 @@
       const users = guessUserOptions();
       const selectedUsers = new Set((settings.users || []).map(normalizeNickname).filter(Boolean));
       const candidates = getBestWorstCandidates(settings);
-      const hostDisabled = isAdmin() ? '' : 'disabled';
+      const hostDisabled = bwIsHost() ? '' : 'disabled';
       const sourceDisabled = settings.source !== 'ratings';
       const banDraftIssue = settings.banDraft && settings.grouping === 'none' ? 'Для бана и антибана выбери группировку.' : (settings.banDraft && ready.length > settings.rounds ? `Раундов должно быть не меньше, чем готовых игроков: ${ready.length}.` : '');
-      const canStart = isAdmin() && ready.length >= 2 && !banDraftIssue;
+      const canStart = bwIsHost() && ready.length >= 2 && !banDraftIssue;
       appEl.innerHTML = `
         <div class="ev-bw-shell">
           <section class="ev-panel-head">
             <div><div class="ev-section-label">Сетевой ивент</div><h2>Угадай лучшее / худшее</h2><div class="ev-hint">Каждый готовый участник ставит флажки только себе и угадывает флажки остальных игроков. Себя угадывать не нужно. Запуск доступен минимум с двух готовых игроков.</div></div>
-            ${isAdmin() && room ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить текущую игру</button>' : ''}
+            ${bwIsHost() && room ? '<button type="button" class="ev-btn-danger" id="ev-bw-reset">Удалить текущую игру</button>' : ''}
           </section>
           <div class="ev-bw-lobby-grid">
             <section class="ev-guess-filter-card">
@@ -3984,7 +4115,7 @@
               </div>
               <div class="ev-bw-summary-strip"><span class="ev-bw-pill">Участников: <strong>${players.length}</strong></span><span class="ev-bw-pill">Готовы: <strong>${ready.length}</strong></span><span class="ev-bw-pill">Минимум: <strong>2</strong></span></div>
               <div class="ev-actions" style="margin-top:12px;justify-content:flex-start;">
-                ${room && !me ? '<button type="button" class="ev-btn-secondary" id="ev-bw-join">Присоединиться</button>' : ''}
+                ${room && !me ? `<button type="button" class="ev-btn-secondary" id="ev-bw-join" ${room.joinLocked ? 'disabled' : ''}>${room.joinLocked ? 'Вступление закрыто' : 'Присоединиться'}</button>` : ''}
                 ${room && me ? `<button type="button" class="${me.ready ? 'ev-btn-ghost' : 'ev-btn-secondary'}" id="ev-bw-ready">${me.ready ? 'Отменить готовность' : 'Готов'}</button><button type="button" class="ev-btn-ghost" id="ev-bw-leave">Выйти из лобби</button>` : ''}
                 ${room ? `<button type="button" class="ev-btn-main" id="ev-bw-start" ${canStart ? '' : 'disabled'}>Запустить игру</button>` : ''}
               </div>
@@ -4007,10 +4138,10 @@
                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
                 <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
-                <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
+                <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !bwIsHost() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
               </div>
-              <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> элементов · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · с рабочим источником.</div>${isAdmin() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
+              <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> элементов · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · с рабочим источником.</div>${bwIsHost() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
             </section>
           </div>
           ${bestWorstStatus ? `<div class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может/i.test(bestWorstStatus) ? 'bad' : 'ok'}">${escapeHtml(bestWorstStatus)}</div>` : ''}
@@ -4579,6 +4710,7 @@
     function cnPlayers(room = codenamesRoom) { return Array.isArray(room?.players) ? room.players.filter(p => p?.key && p?.name) : []; }
     function cnMyPlayer(room = codenamesRoom) { const key = cnPlayerKey(); return cnPlayers(room).find(p => p.key === key) || null; }
     function cnIsSpymaster(room = codenamesRoom) { return cnMyPlayer(room)?.role === 'spymaster'; }
+    function cnIsHost(room = codenamesRoom) { return room ? eventRoomIsHost('codenames', room) : isAdmin(); }
     function cnSettings(room = codenamesRoom) {
       const raw = room?.settings || {};
       return { typeFilter: ['OP','ED','all'].includes(raw.typeFilter) ? raw.typeFilter : 'all', ...normalizeSeasonRange(raw) };
@@ -4644,16 +4776,21 @@
     async function cnEnsureLobby() {
       if (codenamesRoom) return;
       if (!eventRoomId('codenames')) setEventRoom('codenames', newEventRoomId('cn'));
-      await cnPatch({ gameType:'codenames', title:`Лобби ${String(myName || 'Codenames').trim()}`, hostName:String(myName || '').trim(), status:'lobby', players:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      const hostName = String(myName || 'Codenames').trim();
+      const hostKey = normalizeNickname(hostName);
+      await cnPatch({ ...(pendingEventRoomMetadata || {}), gameType:'codenames', title:pendingEventRoomMetadata?.title || `Лобби ${hostName}`, hostKey, hostName, status:'lobby', players:[], spectators:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      pendingEventRoomMetadata = null;
     }
     async function cnJoin(team, role) {
       const key = cnPlayerKey();
       if (!key) { codenamesStatus = 'Сначала введи никнейм.'; render(); return; }
       await cnEnsureLobby();
       const room = codenamesRoom || { players:[] };
+      if (room.joinLocked || room.status !== 'lobby') { codenamesStatus = 'Вступление в эту комнату закрыто.'; render(); return; }
       let players = cnPlayers(room).filter(p => p.key !== key);
       if (role === 'spymaster') players = players.map(p => p.team === team && p.role === 'spymaster' ? { ...p, role:'operative' } : p);
       players.push({ key, name: myName.trim(), team, role });
+      await removeSelfFromSpectators('codenames', room);
       await cnPatch({ players });
     }
     async function cnLeave() {
@@ -4662,6 +4799,7 @@
       const currentPlayers = cnPlayers();
       const leaving = currentPlayers.find(player => player.key === key);
       if (!leaving) return;
+      if (!confirm('Покинуть команду? Чтобы просто вернуться к списку комнат, используй кнопку «В главное меню ивента».')) return;
       let players = currentPlayers.filter(player => player.key !== key);
       const playing = codenamesRoom.status === 'playing';
       const hasRed = players.some(player => player.team === 'red');
@@ -4680,14 +4818,14 @@
       codenamesStatus = 'Ты вышел. Игра остальных продолжается.';
     }
     async function cnKickPlayer(key) {
-      if (!isAdmin() || !codenamesRoom || codenamesRoom.status !== 'lobby') return;
+      if (!cnIsHost() || !codenamesRoom || codenamesRoom.status !== 'lobby') return;
       const player = cnPlayers().find(p => p.key === key);
       if (!player) return;
       if (!confirm(`Убрать игрока «${player.name}» из лобби?`)) return;
       await cnPatch({ players: cnPlayers().filter(p => p.key !== key) });
     }
     async function cnDeleteGame() {
-      if (!isAdmin() || !codenamesRoom) return;
+      if (!cnIsHost() || !codenamesRoom) return;
       if (!confirm('Полностью удалить текущую игру Codenames и освободить все места?')) return;
       try {
         await deleteDoc(cnRoomDoc());
@@ -4699,7 +4837,7 @@
       }
     }
     async function cnSetSettings(patch = {}) {
-      if (!isAdmin()) return;
+      if (!cnIsHost()) return;
       await cnEnsureLobby();
       const next = { ...cnSettings(), ...patch };
       Object.assign(next, normalizeSeasonRange(next));
@@ -4707,7 +4845,7 @@
       await cnPatch({ settings: next });
     }
     async function cnStartGame() {
-      if (!isAdmin()) return;
+      if (!cnIsHost()) return;
       const players = cnPlayers();
       if (!players.some(p => p.team === 'red') || !players.some(p => p.team === 'blue')) { codenamesStatus = 'Нужен хотя бы один игрок в каждой команде.'; render(); return; }
       if (!players.some(p => p.team === 'red' && p.role === 'spymaster') || !players.some(p => p.team === 'blue' && p.role === 'spymaster')) { codenamesStatus = 'В каждой команде должен быть капитан.'; render(); return; }
@@ -4758,7 +4896,7 @@
       await cnPatch({ board, turn, clue, guessesLeft, winner, status:winner ? 'finished' : 'playing', log });
     }
     async function cnResetGame() {
-      if (!isAdmin()) return;
+      if (!cnIsHost()) return;
       const players = cnPlayers();
       await cnPatch({ status:'lobby', players, board:[], clue:null, guessesLeft:0, winner:'', log:[], turn:'red', gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
     }
@@ -4767,7 +4905,7 @@
     }
     function cnRenderPlayers(team) {
       const rows = cnPlayers().filter(p => p.team === team);
-      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span class="ev-cn-player-main">${cnTeamBadge(p.team)}<span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></span>${isAdmin() ? `<button type="button" class="ev-cn-player-remove" data-cn-kick="${escapeHtml(p.key)}">Убрать</button>` : ''}</div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
+      return rows.length ? rows.map(p => `<div class="ev-cn-player"><span class="ev-cn-player-main">${cnTeamBadge(p.team)}<span>${escapeHtml(p.name)}${p.key === cnPlayerKey() ? ' · ты' : ''}</span><span class="ev-cn-role">${cnRoleLabel(p.role)}</span></span>${cnIsHost() ? `<button type="button" class="ev-cn-player-remove" data-cn-kick="${escapeHtml(p.key)}">Убрать</button>` : ''}</div>`).join('') : '<div class="ev-hint">Пока никого.</div>';
     }
     function cnRenderRoster(room = codenamesRoom) {
       const rows = cnPlayers(room);
@@ -4782,6 +4920,7 @@
     }
     function renderCodenamesEvent() {
       const room = codenamesRoom;
+      const isAdmin = () => cnIsHost(room);
       if (!room) {
         appEl.innerHTML = `<div class="ev-cn-shell"><section class="ev-panel-head"><div><div class="ev-section-label">Пятый ивент</div><h2>Codenames по OP/ED</h2><div class="ev-hint">Две команды, капитаны, подсказка одним словом и поле из 25 OP/ED.</div></div>${isAdmin() ? '<button class="ev-btn-main" id="ev-cn-create">Создать лобби</button>' : ''}</section><div class="ev-empty">Лобби ещё не создано.</div></div>`;
         $('#ev-cn-create')?.addEventListener('click', cnEnsureLobby);
@@ -5015,21 +5154,25 @@
       const player = { key: whoPlayerKey(name), name };
       if (!eventRoomId('whoami')) setEventRoom('whoami', newEventRoomId('who'));
       await setDoc(whoRoomDoc(), {
-        gameType:'whoami', title:`Лобби ${name}`,
+        ...(pendingEventRoomMetadata || {}),
+        gameType:'whoami', title:pendingEventRoomMetadata?.title || `Лобби ${name}`,
         status:'lobby', hostKey:player.key, hostName:name, players:[player],
         settings:{ type:'', fromYear:null, toYear:null }, assignments:{}, questions:[], guessedKeys:[],
         turnIndex:0, createdAt:serverTimestamp(), updatedAt:serverTimestamp()
       });
+      pendingEventRoomMetadata = null;
       whoAmIStatus = 'Комната создана.';
     }
 
     async function whoJoinRoom() {
       if (!whoAmIRoom) return whoCreateRoom();
+      if (whoAmIRoom.joinLocked || whoAmIRoom.status !== 'lobby') { whoAmIStatus = 'Вступление в эту комнату закрыто.'; renderWhoAmI(); return; }
       const name = String(myName || nameInput?.value || '').trim();
       if (!name) { whoAmIStatus = 'Сначала укажи никнейм.'; renderWhoAmI(); return; }
       const key = whoPlayerKey(name);
       const players = whoPlayers();
       if (!players.some(player => player.key === key)) players.push({ key, name });
+      await removeSelfFromSpectators('whoami', whoAmIRoom);
       await setDoc(whoRoomDoc(), { players, updatedAt:serverTimestamp() }, { merge:true });
     }
 
@@ -5038,6 +5181,7 @@
       const key = whoPlayerKey();
       const oldPlayers = whoPlayers();
       if (!oldPlayers.some(player => player.key === key)) return;
+      if (!confirm('Покинуть состав игроков? Для выхода к списку комнат без выхода из игры используй «В главное меню ивента».')) return;
       const players = oldPlayers.filter(player => player.key !== key);
       if (players.length < 2) {
         await deleteDoc(whoRoomDoc());
@@ -5227,7 +5371,7 @@
       const joined = players.some(player => player.key === ownKey);
       const guessed = new Set(Array.isArray(room.guessedKeys) ? room.guessedKeys : []);
       if (room.status === 'lobby') {
-        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div>${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из лобби</button>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? '<button class="ev-btn-main" id="ev-who-join" type="button">Войти в комнату</button>' : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
+        appEl.innerHTML = `<section class="ev-mini-game"><div class="ev-game-panel"><div class="ev-actions"><div><div class="ev-section-label">Лобби «Кто я?»</div><h2>Игроки: ${players.length}</h2></div>${joined ? '<button class="ev-btn-ghost" id="ev-who-leave" type="button">Выйти из лобби</button>' : ''}</div><div class="ev-who-players">${players.map(player => `<span class="ev-who-player">${escapeHtml(player.name)}${player.key===room.hostKey?' ★':''}</span>`).join('')}</div>${!joined ? `<button class="ev-btn-main" id="ev-who-join" type="button" ${room.joinLocked ? 'disabled' : ''}>${room.joinLocked ? 'Вступление закрыто' : 'Войти в комнату'}</button>` : ''}${whoIsHost() ? `<div class="ev-game-config" style="margin-top:14px"><label>Тип<select id="ev-who-type"><option value="" ${!whoAmISettingsDraft.type?'selected':''}>OP и ED</option><option value="OP" ${whoAmISettingsDraft.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${whoAmISettingsDraft.type==='ED'?'selected':''}>Только ED</option></select></label><label>Год от<input id="ev-who-from" type="number" value="${escapeHtml(whoAmISettingsDraft.fromYear)}"></label><label>Год до<input id="ev-who-to" type="number" value="${escapeHtml(whoAmISettingsDraft.toYear)}"></label><button class="ev-btn-main" id="ev-who-start" type="button">Начать</button></div>` : '<p class="ev-hint">Ждём, пока ведущий начнёт игру.</p>'}<div class="ev-error">${escapeHtml(whoAmIStatus)}</div></div></section>`;
         $('#ev-who-join')?.addEventListener('click', () => whoJoinRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         $('#ev-who-leave')?.addEventListener('click', () => whoLeaveRoom().catch(error => {whoAmIStatus=error.message;renderWhoAmI();}));
         ['type','fromYear','toYear'].forEach(key => {
@@ -5283,39 +5427,99 @@
     }
 
     function renderEventRoomBrowser(mode, title, description, rooms, canCreate) {
-      const cards = rooms.map(room => {
+      const statusOrder = { lobby:0, draft:1, picking:1, playing:1, finished:2 };
+      const visibleRooms = rooms
+        .filter(room => !room.isPrivate || unlockedEventRooms.has(room.id))
+        .filter(room => room.status !== 'finished' || Date.now() - Date.parse(room.updatedAtLocal || 0) < 12 * 60 * 60 * 1000)
+        .sort((a,b) => (statusOrder[a.status] ?? 1) - (statusOrder[b.status] ?? 1) || Date.parse(b.updatedAtLocal || 0) - Date.parse(a.updatedAtLocal || 0));
+      const cards = visibleRooms.map(room => {
         const players = Array.isArray(room.players) ? room.players.length : 0;
+        const spectators = eventRoomSpectators(room).length;
         const fallback = `${title} · ${String(room.id || '').slice(-6)}`;
-        return `<article class="ev-room-card"><span class="ev-room-status">${escapeHtml(eventRoomStatus(room))}</span><div><h3>${escapeHtml(room.title || fallback)}</h3><div class="ev-room-meta"><span>Ведущий: ${escapeHtml(room.hostName || 'не указан')}</span><span>Игроков: ${players}</span></div></div><button class="ev-btn-main" type="button" data-event-room="${escapeHtml(room.id)}">Открыть / наблюдать</button></article>`;
+        return `<article class="ev-room-card"><span class="ev-room-status">${room.isPrivate ? '🔒 ' : ''}${escapeHtml(eventRoomStatus(room))}</span><div><h3>${escapeHtml(room.title || fallback)}</h3><div class="ev-room-meta"><span>Ведущий: ${escapeHtml(room.hostName || 'не указан')}</span><span>Игроков: ${players}</span><span>Зрителей: ${spectators}</span></div></div><button class="ev-btn-main" type="button" data-event-room="${escapeHtml(room.id)}">Открыть / наблюдать</button></article>`;
       }).join('');
-      appEl.innerHTML = `<section class="ev-room-browser"><div class="ev-panel-head"><div><div class="ev-section-label">Главное меню ивента</div><h2>${escapeHtml(title)}</h2><div class="ev-hint">${escapeHtml(description)} Можно открыть любую комнату как наблюдатель, а затем при желании присоединиться к игрокам.</div></div>${canCreate ? '<button class="ev-btn-main" id="ev-room-create" type="button">Создать новое лобби</button>' : ''}</div><div class="ev-room-grid">${cards || '<div class="ev-empty">Активных лобби пока нет.</div>'}</div></section>`;
+      appEl.innerHTML = `<section class="ev-room-browser"><div class="ev-panel-head"><div><div class="ev-section-label">Главное меню ивента</div><h2>${escapeHtml(title)}</h2><div class="ev-hint">${escapeHtml(description)} Можно открыть любую комнату как наблюдатель, а затем присоединиться до начала партии.</div></div>${canCreate ? '<button class="ev-btn-main" id="ev-room-create" type="button">Создать новое лобби</button>' : ''}</div><div class="ev-actions"><input id="ev-room-code" type="password" autocomplete="off" placeholder="Код закрытой комнаты"><button class="ev-btn-ghost" id="ev-room-code-open" type="button">Открыть по коду</button></div><div class="ev-error" id="ev-room-code-error"></div><div class="ev-room-grid">${cards || '<div class="ev-empty">Открытых активных лобби пока нет.</div>'}</div></section>`;
       appEl.querySelectorAll('[data-event-room]').forEach(button => button.addEventListener('click', () => {
-        setEventRoom(mode, button.dataset.eventRoom);
-        render();
+        const room = rooms.find(row => row.id === button.dataset.eventRoom);
+        void openEventRoom(mode, room);
       }));
+      $('#ev-room-code-open')?.addEventListener('click', async () => {
+        const code = String($('#ev-room-code')?.value || '').trim();
+        const errorEl = $('#ev-room-code-error');
+        if (!code) { errorEl.textContent = 'Введи код комнаты.'; return; }
+        const hash = await eventRoomCodeHash(code);
+        const room = rooms.find(row => row.isPrivate && row.accessCodeHash === hash);
+        if (!room) { errorEl.textContent = 'Комната с таким кодом не найдена.'; return; }
+        unlockedEventRooms.add(room.id);
+        saveUnlockedEventRooms();
+        await openEventRoom(mode, room);
+      });
       $('#ev-room-create')?.addEventListener('click', async () => {
+        const defaultTitle = `Лобби ${String(myName || title).trim()}`;
+        const roomTitle = String(prompt('Название нового лобби:', defaultTitle) || '').trim();
+        if (!roomTitle) return;
+        const isPrivate = confirm('Сделать комнату закрытой? Она будет открываться только по коду.');
+        let accessCode = '';
+        if (isPrivate) {
+          accessCode = String(prompt('Придумай код комнаты (минимум 4 символа):', '') || '').trim();
+          if (accessCode.length < 4) { alert('Комната не создана: код должен содержать минимум 4 символа.'); return; }
+        }
+        const roomId = newEventRoomId(mode === 'bestworst' ? 'bw' : mode === 'codenames' ? 'cn' : 'who');
+        if (isPrivate) {
+          unlockedEventRooms.add(roomId);
+          saveUnlockedEventRooms();
+        }
+        pendingEventRoomMetadata = {
+          title:roomTitle,
+          isPrivate,
+          accessCodeHash:isPrivate ? await eventRoomCodeHash(accessCode) : '',
+          joinLocked:false,
+          spectators:[],
+          createdAtLocal:new Date().toISOString()
+        };
         if (mode === 'bestworst') {
-          setEventRoom(mode, newEventRoomId('bw'));
+          setEventRoom(mode, roomId);
           bestWorstRoom = null;
-          render();
+          await bwSaveLobby();
         } else if (mode === 'codenames') {
-          setEventRoom(mode, newEventRoomId('cn'));
+          setEventRoom(mode, roomId);
           codenamesRoom = null;
           await cnEnsureLobby();
         } else {
-          setEventRoom(mode, newEventRoomId('who'));
+          setEventRoom(mode, roomId);
           whoAmIRoom = null;
           await whoCreateRoom();
+        }
+        if (isPrivate) {
+          const link = `${location.origin}${location.pathname}#event-room=${encodeURIComponent(mode)}:${encodeURIComponent(roomId)}:${encodeURIComponent(accessCode)}`;
+          navigator.clipboard?.writeText(link).then(() => alert('Закрытая комната создана. Ссылка-приглашение скопирована.')).catch(() => alert(`Комната создана. Код: ${accessCode}`));
         }
       });
     }
 
     function addEventRoomMenuButton(mode) {
       if (!eventRoomId(mode) || !appEl.firstElementChild || appEl.querySelector('.ev-room-menu-button')) return;
+      const room = currentEventRoom(mode);
+      const spectators = eventRoomSpectators(room);
+      const players = eventRoomPlayers(room);
+      const ownKey = eventRoomPlayerKey(mode);
+      const host = Boolean(room && (normalizeNickname(room.hostKey) === ownKey || (!room.hostKey && isAdmin())));
       const wrap = document.createElement('div');
       wrap.className = 'ev-room-menu-button';
-      wrap.innerHTML = '<button class="ev-btn-ghost" type="button">← В главное меню ивента</button>';
-      wrap.querySelector('button').addEventListener('click', () => {
+      wrap.innerHTML = `<div class="ev-actions"><button class="ev-btn-ghost" id="ev-room-menu-back" type="button">← В главное меню ивента</button><span class="ev-room-status">${room?.isPrivate ? '🔒 Закрытая' : 'Открытая'} · зрителей: ${spectators.length}</span>${room?.status === 'lobby' && host ? `<button class="ev-btn-ghost" id="ev-room-lock" type="button">${room.joinLocked ? 'Открыть вступление' : 'Закрыть вступление'}</button><select id="ev-room-host"><option value="">Передать ведущего…</option>${players.filter(player => player.key !== ownKey).map(player => `<option value="${escapeHtml(player.key)}">${escapeHtml(player.name)}</option>`).join('')}</select><select id="ev-room-kick"><option value="">Удалить игрока…</option>${players.filter(player => player.key !== ownKey).map(player => `<option value="${escapeHtml(player.key)}">${escapeHtml(player.name)}</option>`).join('')}</select>` : ''}${host ? '<button class="ev-btn-danger" id="ev-room-delete" type="button">Удалить комнату</button>' : ''}</div>${spectators.length ? `<div class="ev-hint">Наблюдают: ${spectators.map(person => escapeHtml(person.name)).join(', ')}</div>` : ''}`;
+      wrap.querySelector('#ev-room-menu-back')?.addEventListener('click', () => void closeEventRoom(mode));
+      wrap.querySelector('#ev-room-lock')?.addEventListener('click', () => setDoc(eventRoomRef(mode), { joinLocked:!room.joinLocked, updatedAtLocal:new Date().toISOString(), updatedAt:serverTimestamp() }, { merge:true }));
+      wrap.querySelector('#ev-room-host')?.addEventListener('change', event => {
+        const player = players.find(row => row.key === event.target.value);
+        if (player && confirm(`Передать права ведущего пользователю «${player.name}»?`)) void setDoc(eventRoomRef(mode), { hostKey:player.key, hostName:player.name, updatedAtLocal:new Date().toISOString(), updatedAt:serverTimestamp() }, { merge:true });
+      });
+      wrap.querySelector('#ev-room-kick')?.addEventListener('change', event => {
+        const player = players.find(row => row.key === event.target.value);
+        if (player && confirm(`Удалить игрока «${player.name}» из лобби?`)) void setDoc(eventRoomRef(mode), { players:players.filter(row => row.key !== player.key), updatedAtLocal:new Date().toISOString(), updatedAt:serverTimestamp() }, { merge:true });
+      });
+      wrap.querySelector('#ev-room-delete')?.addEventListener('click', async () => {
+        if (!confirm(`Полностью удалить комнату «${room?.title || 'без названия'}»?`)) return;
+        await deleteDoc(eventRoomRef(mode));
         setEventRoom(mode, '');
         render();
       });
@@ -8643,9 +8847,11 @@
       onSnapshot(collection(db, BW_ROOM_COLLECTION), snapshot => {
         bestWorstRooms = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
         bestWorstRoom = bestWorstRooms.find(room => room.id === eventRoomId('bestworst')) || null;
+        restoreEventRoomPresence('bestworst', bestWorstRoom);
         if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
         if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
         void bwMaybeAutoReveal();
+        void consumeEventRoomInvite();
         scheduleFirebaseRender('other');
       }, error => {
         console.error('bestWorstRooms snapshot error', error);
@@ -8669,6 +8875,9 @@
         codenamesRooms = rooms.filter(room => !whoAmIRooms.some(whoRoom => whoRoom.id === room.id));
         whoAmIRoom = whoAmIRooms.find(room => room.id === eventRoomId('whoami')) || null;
         codenamesRoom = codenamesRooms.find(room => room.id === eventRoomId('codenames')) || null;
+        restoreEventRoomPresence('whoami', whoAmIRoom);
+        restoreEventRoomPresence('codenames', codenamesRoom);
+        void consumeEventRoomInvite();
         if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
         if (activeMode === 'codenames') scheduleFirebaseRender('other');
       }, error => {
@@ -8736,6 +8945,13 @@
           }
         });
       }
+      setInterval(() => {
+        [['bestworst',bestWorstRoom],['codenames',codenamesRoom],['whoami',whoAmIRoom]].forEach(([mode,room]) => {
+          if (room && eventRoomId(mode) === room.id && !eventRoomPlayers(room).some(player => player.key === eventRoomPlayerKey(mode))) {
+            void updateEventRoomSpectator(mode, room, true).catch(() => {});
+          }
+        });
+      }, 10 * 60 * 1000);
       if (!hasAccess()) showAuthModal('Введите пароль для входа.');
       else if (isAdmin() && !myName) showNameModal();
       render();
