@@ -217,7 +217,6 @@
     let filteredCache = { key: '', value: null };
     let sortedCache = { key: '', input: null, value: null };
     let uiRefreshTimer = null;
-    let uiRefreshNeedsFilterOptions = false;
     let lastOpeningsSnapshotKey = '';
 
     function waitForFirebaseDb() {
@@ -327,13 +326,10 @@
     }
 
     function scheduleVisibleRefresh(options = {}) {
-      uiRefreshNeedsFilterOptions = uiRefreshNeedsFilterOptions || Boolean(options.forceFilters);
       clearTimeout(uiRefreshTimer);
       uiRefreshTimer = setTimeout(() => {
         uiRefreshTimer = null;
-        const forceFilters = uiRefreshNeedsFilterOptions;
-        uiRefreshNeedsFilterOptions = false;
-        refreshVisiblePanels({ forceFilters });
+        refreshVisiblePanels(options);
       }, 50);
     }
 
@@ -2246,7 +2242,6 @@
             });
           }
         });
-        populateFilterOptions(true);
       } catch (e) {
         console.error(e);
         setStatus('Не удалось подключиться. Обновите страницу.', true);
