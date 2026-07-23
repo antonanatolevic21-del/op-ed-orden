@@ -3537,6 +3537,7 @@
       directors: { title: 'Режиссёры', one: 'режиссёра', field: 'directors', icon: '🎞️' },
       franchises: { title: 'Франшизы', one: 'франшизу', field: 'franchises', icon: '✨' }
     };
+    const ENTITY_MIN_TRACKS = 3;
 
     function normalizedEntityValue(value) {
       return String(value || '').trim().toLocaleLowerCase('ru');
@@ -3556,7 +3557,7 @@
     function entityCardProgress(card) {
       const related = entriesForEntity(card.type, card.value);
       const rated = related.filter(entityHasRating).length;
-      return { related, rated, complete: related.length >= 4 && rated === related.length };
+      return { related, rated, complete: related.length >= ENTITY_MIN_TRACKS && rated === related.length };
     }
 
     function eligibleEntityValues(type) {
@@ -3570,7 +3571,7 @@
         if (!names.has(key)) names.set(key, { value, ids: new Set() });
         names.get(key).ids.add(String(entry.id));
       }));
-      return Array.from(names.values()).filter(item => item.ids.size >= 4)
+      return Array.from(names.values()).filter(item => item.ids.size >= ENTITY_MIN_TRACKS)
         .sort((a, b) => a.value.localeCompare(b.value, 'ru')).map(item => ({ value: item.value, count: item.ids.size }));
     }
 
@@ -3581,7 +3582,7 @@
         .sort((a, b) => String(a.value || '').localeCompare(String(b.value || ''), 'ru'));
       const eligible = eligibleEntityValues(activeEntityType);
       const existing = new Set(cards.map(card => normalizedEntityValue(card.value)));
-      entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум 4 трека)</option>' +
+      entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум ' + ENTITY_MIN_TRACKS + ' трека)</option>' +
         eligible.filter(item => !existing.has(normalizedEntityValue(item.value)))
           .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' · ' + item.count + '</option>').join('');
       entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId));
@@ -3626,7 +3627,7 @@
       }
 
       entityTitleEl.textContent = meta.title;
-      entitySubtitleEl.textContent = 'Альбомы с треками из каталога. Создать новый можно для объекта, у которого есть минимум 4 трека.';
+      entitySubtitleEl.textContent = 'Альбомы с треками из каталога. Создать новый можно для объекта, у которого есть минимум ' + ENTITY_MIN_TRACKS + ' трека.';
       entityGridEl.innerHTML = cards.length ? cards.map(card => {
         const progress = entityCardProgress(card);
         return '<article class="oc-entity-card' + (progress.complete ? ' complete' : '') + '" data-entity-open="' + escapeHtml(card.id) + '">' +
