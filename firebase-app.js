@@ -319,6 +319,40 @@
       });
     }
 
+    function watchEntityCards(callback) {
+      return onSnapshot(collection(db, "entityCards"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => {
+        console.error("watchEntityCards error", error);
+        callback([]);
+      });
+    }
+
+    function entityCardId(type, value) {
+      const safeType = String(type || "").trim().toLowerCase().replace(/[^a-z]+/g, "");
+      const safeValue = String(value || "").trim().toLowerCase().replace(/[^a-zа-яё0-9]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 120);
+      if (!safeType || !safeValue) throw new Error("Не удалось определить альбом");
+      return safeType + "__" + safeValue;
+    }
+
+    async function saveEntityCard(card) {
+      const type = String(card && card.type || "").trim();
+      const value = String(card && card.value || "").trim();
+      const image = String(card && card.image || "").trim();
+      if (!["studios", "performers", "directors", "franchises"].includes(type)) throw new Error("Неизвестный тип альбома");
+      if (!value || !image) throw new Error("Укажите объект и обложку");
+      const id = entityCardId(type, value);
+      await setDoc(doc(db, "entityCards", id), {
+        type, value, valueKey: normalizeNickname(value), image,
+        updatedBy: requirePersonalUid(), updatedAt: serverTimestamp()
+      }, { merge: true });
+      return id;
+    }
+
+    async function deleteEntityCard(cardId) {
+      const safeId = String(cardId || "").trim();
+      if (!safeId) throw new Error("Не найден альбом");
+      return deleteDoc(doc(db, "entityCards", safeId));
+    }
+
     async function saveUserProfile(nickname, avatar) {
       const displayName = String(nickname || "").trim();
       const safeName = normalizeNickname(displayName);
@@ -381,6 +415,9 @@
       watchRatings,
       watchManualRanks,
       watchUserProfiles,
+      watchEntityCards,
+      saveEntityCard,
+      deleteEntityCard,
       saveManualRanks,
       saveUserProfile,
       addOpening,
