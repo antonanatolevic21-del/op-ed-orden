@@ -147,7 +147,6 @@
     const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_START_MONTH = { winter: 0, spring: 3, summer: 6, fall: 9 };
     let activeTab = 'chart';
-    let homeTestMode = 0;
     let expandedYear = new Date().getFullYear();
     let selectedSeason = null;
     let seasonType = 'OP';
@@ -903,77 +902,7 @@
       return accessLevel === 'admin' && isAdminUid();
     }
 
-    function homeTestFeaturedEntries() {
-      return [...entries]
-        .filter(entry => ratingCount(entry.scores) >= MIN_PUBLIC_VOTES && avg(entry.scores) !== null)
-        .sort((a, b) => (avg(b.scores) || 0) - (avg(a.scores) || 0))
-        .slice(0, 3);
-    }
-
-    function renderHomeTestShowcase() {
-      const showcase = $('#oc-home-test-showcase');
-      const root = $('#opedchart-root');
-      const mode = isAdmin() ? Number(homeTestMode || 0) : 0;
-      root?.classList.remove('oc-home-test-1', 'oc-home-test-2', 'oc-home-test-3');
-      if (mode) root?.classList.add(`oc-home-test-${mode}`);
-      document.querySelectorAll('[data-home-test]').forEach(button => button.classList.toggle('active', Number(button.dataset.homeTest) === mode));
-      document.querySelector('.oc-tab-btn[data-tab="chart"]')?.classList.toggle('active', activeTab === 'chart' && mode === 0);
-      if (!showcase || !mode || activeTab !== 'chart') {
-        showcase?.classList.add('hidden');
-        if (showcase) showcase.innerHTML = '';
-        return;
-      }
-
-      const featured = homeTestFeaturedEntries();
-      const leader = featured[0] || entries[0] || null;
-      const totalRatings = entries.reduce((sum, entry) => sum + Object.keys(entry.scores || {}).length, 0);
-      const ratedByMe = myName ? entries.filter(entry => scoreFor(entry, myName) !== null || personalScoreFor(entry, myName) !== null).length : 0;
-      const imageMarkup = entry => entry?.image
-        ? `<img src="${escapeHtml(entry.image)}" alt="${escapeHtml(entry.title || '')}" loading="lazy" referrerpolicy="no-referrer">`
-        : `<div class="oc-home-test-no-image">${escapeHtml(entry?.type || 'OP/ED')}</div>`;
-
-      if (mode === 1) {
-        showcase.innerHTML = `
-          <div class="oc-home-editorial">
-            <div class="oc-home-editorial-copy">
-              <div class="oc-home-kicker">выбор сообщества · ${entries.length} треков</div>
-              <h2>Опенинги и эндинги,<br><span>которые остаются с нами</span></h2>
-              <p>Смотри общий чарт, находи новое и собирай собственную историю оценок.</p>
-              <div class="oc-home-hero-actions"><button type="button" class="oc-home-primary" data-home-scroll="filters">Открыть чарт</button><button type="button" class="oc-home-secondary" data-home-open-tab="season">Выбрать сезон</button></div>
-              <div class="oc-home-inline-stats"><span><strong>${entries.length}</strong> OP/ED</span><span><strong>${totalRatings}</strong> оценок</span><span><strong>${ratedByMe}</strong> оценено тобой</span></div>
-            </div>
-            ${leader ? `<article class="oc-home-feature-card">${imageMarkup(leader)}<div class="oc-home-feature-shade"></div><div class="oc-home-feature-copy"><span>Лидер общего чарта</span><h3>${escapeHtml(leader.title)}</h3><div>${escapeHtml(leader.type)} · ${escapeHtml(leader.year || 'год не указан')} · ★ ${escapeHtml(formatScore(avg(leader.scores)))}</div></div></article>` : ''}
-          </div>`;
-      } else if (mode === 2) {
-        showcase.innerHTML = `
-          <div class="oc-home-dashboard-head"><div><div class="oc-home-kicker">твоя музыкальная панель</div><h2>Добро пожаловать${myName ? `, ${escapeHtml(myName)}` : ''}</h2><p>Всё важное — оценки, сезоны и личный топ — в одном месте.</p></div><button type="button" class="oc-home-primary" data-home-scroll="filters">Найти OP/ED</button></div>
-          <div class="oc-home-dashboard-grid">
-            <article><span>База</span><strong>${entries.length}</strong><small>опенингов и эндингов</small></article>
-            <article><span>Сообщество</span><strong>${totalRatings}</strong><small>выставленных оценок</small></article>
-            <article><span>Твой прогресс</span><strong>${ratedByMe}</strong><small>треков уже оценено</small></article>
-            <article class="accent"><span>Следующий шаг</span><strong>${Math.max(0, entries.length - ratedByMe)}</strong><small>ещё ждут твоей оценки</small></article>
-          </div>
-          <div class="oc-home-dashboard-links"><button type="button" data-home-open-tab="profile">Мой профиль</button><button type="button" data-home-open-tab="top100">Общий топ-100</button><button type="button" data-home-open-tab="season">Сезоны</button><a href="events.html">Ивенты</a></div>`;
-      } else {
-        showcase.innerHTML = `
-          <div class="oc-home-gallery-head"><div><div class="oc-home-kicker">сейчас в топе</div><h2>Три главных трека чарта</h2></div><button type="button" class="oc-home-secondary" data-home-scroll="filters">Смотреть весь рейтинг ↓</button></div>
-          <div class="oc-home-gallery">${featured.map((entry, index) => `<article class="oc-home-gallery-card rank-${index + 1}">${imageMarkup(entry)}<div class="oc-home-gallery-overlay"></div><div class="oc-home-gallery-rank">0${index + 1}</div><div class="oc-home-gallery-copy"><span>${escapeHtml(entry.type)} · ${escapeHtml(entry.year || '—')}</span><h3>${escapeHtml(entry.title)}</h3><strong>${escapeHtml(formatScore(avg(entry.scores)))}</strong></div></article>`).join('') || '<div class="oc-empty">Тройка появится после первых оценок.</div>'}</div>`;
-      }
-
-      showcase.classList.remove('hidden');
-      showcase.querySelectorAll('[data-home-scroll="filters"]').forEach(button => button.addEventListener('click', () => $('.oc-filterbar')?.scrollIntoView({ behavior:'smooth', block:'start' })));
-      showcase.querySelectorAll('[data-home-open-tab]').forEach(button => button.addEventListener('click', () => switchTab(button.dataset.homeOpenTab)));
-    }
-
-    function setHomeTestMode(mode) {
-      if (!isAdmin()) return;
-      homeTestMode = [1, 2, 3].includes(Number(mode)) ? Number(mode) : 0;
-      switchTab('chart');
-      render();
-    }
-
     function updateAccessUi() {
-      if (!isAdmin()) homeTestMode = 0;
       document.querySelectorAll('.oc-admin-only').forEach(el => el.classList.toggle('oc-locked', !isAdmin()));
       if (accessBadge) {
         accessBadge.textContent = isAdmin() ? 'админ' : (accessLevel ? 'вход' : 'гость');
@@ -3408,7 +3337,6 @@
       if (tab === 'top100') renderGlobalTop100();
       if (tab === 'tier') { populateFilterOptions(); renderTierList(); }
       if (tab === 'stats') renderStatsPage();
-      renderHomeTestShowcase();
     }
 
     function clampScore(value) {
@@ -5026,7 +4954,6 @@
 
     function render() {
       populateProfileUsers();
-      renderHomeTestShowcase();
       const filtered = applyFilters(entries);
       const sorted = applySort(filtered);
       chartPage = clampPage(chartPage, sorted.length);
@@ -5305,15 +5232,8 @@
           showAuthModal('Войди в аккаунт, чтобы открыть этот раздел.');
           return;
         }
-        if (tab) {
-          if (tab === 'chart') homeTestMode = 0;
-          switchTab(tab);
-        }
+        if (tab) switchTab(tab);
       });
-    });
-
-    document.querySelectorAll('[data-home-test]').forEach(button => {
-      button.addEventListener('click', () => setHomeTestMode(button.dataset.homeTest));
     });
 
     seasonYearsEl.addEventListener('click', (e) => {
