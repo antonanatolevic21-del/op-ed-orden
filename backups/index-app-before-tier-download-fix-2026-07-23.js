@@ -6259,13 +6259,10 @@
       if (window._opedHtml2CanvasPromise) return window._opedHtml2CanvasPromise;
       window._opedHtml2CanvasPromise = new Promise((resolve, reject) => {
         const script = document.createElement('script');
-        script.src = 'html2canvas.min.js?v=1.4.1';
+        script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
         script.async = true;
         script.onload = () => window.html2canvas ? resolve(window.html2canvas) : reject(new Error('html2canvas не загрузился'));
-        script.onerror = () => {
-          window._opedHtml2CanvasPromise = null;
-          reject(new Error('Не удалось загрузить html2canvas'));
-        };
+        script.onerror = () => reject(new Error('Не удалось загрузить html2canvas'));
         document.head.appendChild(script);
       });
       return window._opedHtml2CanvasPromise;
@@ -6343,7 +6340,7 @@
           document.body.appendChild(a);
           a.click();
           a.remove();
-          setTimeout(() => URL.revokeObjectURL(pngUrl), 30000);
+          URL.revokeObjectURL(pngUrl);
           setStatus('Тир-лист скачан как PNG-скриншот ✓');
         }, 'image/png');
       } catch (err) {
