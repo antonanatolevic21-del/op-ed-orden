@@ -159,7 +159,6 @@
       count: 50,
       answerMode: 'four',
       answerTarget: 'song',
-      playMode: 'standard',
       clipSeconds: 10,
       listenCount: 3,
       source: 'all',
@@ -5108,10 +5107,6 @@
       stopGuessPlayback();
       guessGameState = {
         ids: cleanIds,
-        playMode: guessFilters.playMode === 'lives' ? 'lives' : 'standard',
-        lives: guessFilters.playMode === 'lives' ? 3 : null,
-        maxLives: 3,
-        breakingLife: null,
         index: 0,
         correct: 0,
         wrong: 0,
@@ -5141,10 +5136,7 @@
 
     function advanceGuessGame() {
       if (!guessGameState) return;
-      if (guessGameState.playMode === 'lives' && guessGameState.lives <= 0) {
-        guessGameState.completed = true;
-        guessGameState.gameOver = true;
-      } else if (guessGameState.index >= guessGameState.ids.length - 1) {
+      if (guessGameState.index >= guessGameState.ids.length - 1) {
         guessGameState.completed = true;
       } else {
         guessGameState.index += 1;
@@ -5153,7 +5145,6 @@
         guessGameState.selectedAnswer = '';
         guessGameState.wasCorrect = false;
         guessGameState.answerQuality = 'wrong';
-        guessGameState.breakingLife = null;
       }
       render();
       renderGuessGame();
@@ -5172,14 +5163,7 @@
       guessGameState.wasCorrect = correct;
       guessGameState.answerQuality = verdict.quality;
       if (correct) guessGameState.correct += 1;
-      else {
-        guessGameState.wrong += 1;
-        if (guessGameState.playMode === 'lives') {
-          const previousLives = guessGameState.lives;
-          guessGameState.lives = Math.max(0, previousLives - 1);
-          guessGameState.breakingLife = previousLives - 1;
-        }
-      }
+      else guessGameState.wrong += 1;
       guessGameState.answers.push({
         openingId: String(opening.id),
         answer,
@@ -5265,20 +5249,13 @@
 
       if (guessGameState.completed) {
         const total = guessGameState.ids.length;
-        const livesMode = guessGameState.playMode === 'lives';
-        const attempted = guessGameState.answers.length;
-        const summaryTitle = guessGameState.gameOver ? 'Жизни закончились' : 'Угадайка завершена';
-        const summaryNote = livesMode
-          ? `${guessGameState.gameOver ? `Пройдено песен: ${attempted} из ${total}. ` : ''}Ошибок: ${guessGameState.wrong}. Осталось HP: ${guessGameState.lives} из ${guessGameState.maxLives}.`
-          : `Ошибок: ${guessGameState.wrong}. Результаты отмечены в списке песен под конструктором.`;
         guessGameEl.innerHTML = `
           <div class="ev-dialog ev-guess-game-dialog">
             <div class="ev-guess-summary">
-              <div class="ev-section-label">${guessGameState.gameOver ? 'Игра окончена' : 'Готово'}</div>
-              <h2 class="ev-guess-game-title">${summaryTitle}</h2>
-              <div class="ev-guess-summary-score">${guessGameState.correct}/${livesMode ? attempted : total}</div>
-              ${livesMode ? `<div class="ev-guess-hearts ev-guess-hearts-summary" aria-label="Осталось жизней: ${guessGameState.lives}">${Array.from({ length: guessGameState.maxLives }, (_, index) => `<span class="ev-guess-heart ${index < guessGameState.lives ? '' : 'empty'}">♥</span>`).join('')}</div>` : ''}
-              <div class="ev-guess-summary-note">${summaryNote}</div>
+              <div class="ev-section-label">Готово</div>
+              <h2 class="ev-guess-game-title">Угадайка завершена</h2>
+              <div class="ev-guess-summary-score">${guessGameState.correct}/${total}</div>
+              <div class="ev-guess-summary-note">Ошибок: ${guessGameState.wrong}. Результаты отмечены в списке песен под конструктором.</div>
               <div class="ev-modal-actions" style="justify-content:center;margin-top:20px;">
                 <button type="button" class="ev-btn-secondary" id="ev-guess-replay">Пройти ещё раз</button>
                 <button type="button" class="ev-btn-main" id="ev-guess-finish">Закрыть</button>
@@ -5303,14 +5280,6 @@
       const correctDisplay = getGuessCorrectDisplay(opening);
       const selectedKey = normalizeGuessAnswer(guessGameState.selectedAnswer);
       const manualPlaceholder = guessFilters.answerTarget === 'franchise' ? 'Начни вводить франшизу…' : 'Начни вводить название песни…';
-      const livesHtml = guessGameState.playMode === 'lives'
-        ? `<div class="ev-guess-hearts" aria-label="Осталось жизней: ${guessGameState.lives}">${Array.from({ length: guessGameState.maxLives }, (_, index) => {
-            if (index === guessGameState.breakingLife) {
-              return '<span class="ev-guess-heart breaking" aria-hidden="true"><span class="ev-guess-heart-half left">♥</span><span class="ev-guess-heart-half right">♥</span><span class="ev-guess-heart-mist"></span></span>';
-            }
-            return `<span class="ev-guess-heart ${index < guessGameState.lives ? '' : 'empty'}" aria-hidden="true">♥</span>`;
-          }).join('')}</div>`
-        : '';
 
       const answerHtml = guessFilters.answerMode === 'manual'
         ? `
@@ -5337,7 +5306,6 @@
         ? `<div class="ev-guess-feedback ${guessGameState.wasCorrect ? 'correct' : 'wrong'}">
             <div class="ev-guess-feedback-icon">${guessGameState.wasCorrect ? '✓' : '×'}</div>
             <div class="ev-guess-feedback-title">${feedbackTitle}</div>
-            ${!guessGameState.wasCorrect && guessGameState.playMode === 'lives' ? livesHtml : ''}
             <div class="ev-guess-feedback-answer">${guessGameState.wasCorrect ? escapeHtml(correctDisplay) : `Правильный ответ: ${escapeHtml(correctDisplay)}`}</div>
           </div>`
         : '';
@@ -5348,7 +5316,6 @@
             <div>
               <div class="ev-progress">Песня ${currentNumber} из ${total} · правильных: ${guessGameState.correct}</div>
               <h2 class="ev-guess-game-title">${guessFilters.answerTarget === 'franchise' ? 'Угадай франшизу' : 'Угадай песню'}</h2>
-              ${livesHtml}
             </div>
             <button type="button" class="ev-close" id="ev-guess-close">Закрыть</button>
           </div>
@@ -5443,7 +5410,6 @@
         guessFilters.count = guessClamp(ids.length || row.count || 1, 1, 200, 1);
         guessFilters.answerMode = row.answerMode === 'manual' ? 'manual' : 'four';
         guessFilters.answerTarget = row.answerTarget === 'franchise' ? 'franchise' : 'song';
-        guessFilters.playMode = row.playMode === 'lives' ? 'lives' : 'standard';
         guessFilters.clipSeconds = guessClamp(row.clipSeconds, 1, 90, 10);
         guessFilters.listenCount = guessClamp(row.listenCount, 1, 10, 3);
         guessCollectionDraft = {
@@ -5564,11 +5530,10 @@
                 const ids = (row.openingIds || []).map(String).filter(id => openingsById.has(id));
                 const target = row.answerTarget === 'franchise' ? 'франшиза' : 'конкретная песня';
                 const mode = row.answerMode === 'manual' ? 'ввести самому' : '4 варианта';
-                const playMode = row.playMode === 'lives' ? '3 HP' : 'обычный режим';
                 const manage = canManageGuessCollection(row);
                 return `<article class="ev-guess-collection-card">
                   <h4>${escapeHtml(row.title || 'Без названия')}</h4>
-                  <div class="ev-guess-collection-meta">Автор: ${escapeHtml(row.author || '—')}<br>${ids.length} песен · ${escapeHtml(playMode)} · ${escapeHtml(mode)} · ответ: ${escapeHtml(target)}<br>${guessClamp(row.clipSeconds,1,90,10)} сек. · ${guessClamp(row.listenCount,1,10,3)} прослуш.</div>
+                  <div class="ev-guess-collection-meta">Автор: ${escapeHtml(row.author || '—')}<br>${ids.length} песен · ${escapeHtml(mode)} · ответ: ${escapeHtml(target)}<br>${guessClamp(row.clipSeconds,1,90,10)} сек. · ${guessClamp(row.listenCount,1,10,3)} прослуш.</div>
                   <div class="ev-guess-collection-actions">
                     <button type="button" class="ev-btn-secondary" data-collection-play="${escapeHtml(row.id)}" ${!ids.length ? 'disabled' : ''}>Играть</button>
                     ${manage ? `<button type="button" class="ev-btn-ghost" data-collection-edit="${escapeHtml(row.id)}">Изменить</button><button type="button" class="ev-btn-danger" data-collection-delete="${escapeHtml(row.id)}">Удалить</button>` : ''}
@@ -5670,7 +5635,6 @@
         count: ids.length,
         answerMode: guessFilters.answerMode === 'manual' ? 'manual' : 'four',
         answerTarget: guessFilters.answerTarget === 'franchise' ? 'franchise' : 'song',
-        playMode: guessFilters.playMode === 'lives' ? 'lives' : 'standard',
         clipSeconds: guessClamp(guessFilters.clipSeconds, 1, 90, 10),
         listenCount: guessClamp(guessFilters.listenCount, 1, 10, 3),
         updatedAt: serverTimestamp(),
@@ -5707,7 +5671,6 @@
       if (!rows.length) return;
       guessFilters.answerMode = row.answerMode === 'manual' ? 'manual' : 'four';
       guessFilters.answerTarget = row.answerTarget === 'franchise' ? 'franchise' : 'song';
-      guessFilters.playMode = row.playMode === 'lives' ? 'lives' : 'standard';
       guessFilters.clipSeconds = guessClamp(row.clipSeconds, 1, 90, 10);
       guessFilters.listenCount = guessClamp(row.listenCount, 1, 10, 3);
       guessFilters.count = guessClamp(rows.length, 1, 200, rows.length);
@@ -5773,15 +5736,6 @@
                   <input id="ev-guess-count-number" type="number" min="1" max="200" step="1" value="${count}" />
                 </div>
               </label>
-
-              <div class="ev-guess-field full">
-                <span class="ev-guess-label">Режим игры</span>
-                <div class="ev-guess-segmented" id="ev-guess-play-mode">
-                  <button type="button" data-play-mode="standard" class="${guessFilters.playMode !== 'lives' ? 'active' : ''}">Обычный</button>
-                  <button type="button" data-play-mode="lives" class="${guessFilters.playMode === 'lives' ? 'active' : ''}">3 HP</button>
-                </div>
-                <span class="ev-guess-note">В режиме 3 HP каждый неправильный ответ отнимает одну жизнь. Игра идёт до конца подборки или пока не закончатся все жизни.</span>
-              </div>
 
               <div class="ev-guess-field full">
                 <span class="ev-guess-label">Формат ответа</span>
@@ -6040,14 +5994,6 @@
         });
       });
 
-      document.querySelectorAll('[data-play-mode]').forEach(button => {
-        button.addEventListener('click', () => {
-          guessFilters.playMode = button.dataset.playMode === 'lives' ? 'lives' : 'standard';
-          document.querySelectorAll('[data-play-mode]').forEach(item => item.classList.toggle('active', item === button));
-          resetGuessGame(false);
-        });
-      });
-
       document.querySelectorAll('[data-answer-target]').forEach(button => {
         button.addEventListener('click', () => {
           guessFilters.answerTarget = button.dataset.answerTarget === 'franchise' ? 'franchise' : 'song';
@@ -6068,7 +6014,7 @@
 
       $('#ev-guess-reset')?.addEventListener('click', () => {
         Object.assign(guessFilters, {
-          search: '', count: 50, answerMode: 'four', answerTarget: 'song', playMode: 'standard', clipSeconds: 10, listenCount: 3,
+          search: '', count: 50, answerMode: 'four', answerTarget: 'song', clipSeconds: 10, listenCount: 3,
           source: 'all', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', studio: '', director: '', performer: '', franchise: '',
           content: 'all', users: [], scoreLogic: 'and',
           scoreOverallCmp: 'gte', scoreOverallValue: '',
