@@ -128,9 +128,7 @@
         if (!image.naturalWidth || !image.naturalHeight || !box?.width || !box?.height) return;
         const sourceRatio = image.naturalWidth / image.naturalHeight;
         const targetRatio = box.width / box.height;
-        const isTooNarrow = sourceRatio < targetRatio;
-        const isTooWideAndFlat = sourceRatio > targetRatio * 1.15;
-        image.classList.toggle('oc-track-image-crop', isTooNarrow || isTooWideAndFlat);
+        image.classList.toggle('oc-track-image-crop', sourceRatio < targetRatio);
       });
       if (image.complete) applyFit();
       else image.addEventListener('load', applyFit, { once: true });
