@@ -147,6 +147,7 @@
     const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'];
     const SEASON_START_MONTH = { winter: 0, spring: 3, summer: 6, fall: 9 };
     let activeTab = 'chart';
+    let homeTestMode = 0;
     let expandedYear = new Date().getFullYear();
     let selectedSeason = null;
     let seasonType = 'OP';
@@ -902,7 +903,29 @@
       return accessLevel === 'admin' && isAdminUid();
     }
 
+    function renderHomeTestShowcase() {
+      const showcase = $('#oc-home-test-showcase');
+      const root = $('#opedchart-root');
+      const mode = isAdmin() ? Number(homeTestMode || 0) : 0;
+      root?.classList.remove('oc-home-test-1', 'oc-home-test-2', 'oc-home-test-3', 'oc-home-test-4');
+      if (mode) root?.classList.add(`oc-home-test-${mode}`);
+      document.querySelectorAll('[data-home-test]').forEach(button => button.classList.toggle('active', Number(button.dataset.homeTest) === mode));
+      document.querySelector('.oc-tab-btn[data-tab="chart"]')?.classList.toggle('active', activeTab === 'chart' && mode === 0);
+      if (showcase) {
+        showcase.classList.add('hidden');
+        showcase.innerHTML = '';
+      }
+    }
+
+    function setHomeTestMode(mode) {
+      if (!isAdmin()) return;
+      homeTestMode = [1, 2, 3, 4].includes(Number(mode)) ? Number(mode) : 0;
+      switchTab('chart');
+      render();
+    }
+
     function updateAccessUi() {
+      if (!isAdmin()) homeTestMode = 0;
       document.querySelectorAll('.oc-admin-only').forEach(el => el.classList.toggle('oc-locked', !isAdmin()));
       if (accessBadge) {
         accessBadge.textContent = isAdmin() ? 'админ' : (accessLevel ? 'вход' : 'гость');
@@ -3337,6 +3360,7 @@
       if (tab === 'top100') renderGlobalTop100();
       if (tab === 'tier') { populateFilterOptions(); renderTierList(); }
       if (tab === 'stats') renderStatsPage();
+      renderHomeTestShowcase();
     }
 
     function clampScore(value) {
@@ -4954,6 +4978,7 @@
 
     function render() {
       populateProfileUsers();
+      renderHomeTestShowcase();
       const filtered = applyFilters(entries);
       const sorted = applySort(filtered);
       chartPage = clampPage(chartPage, sorted.length);
@@ -5012,7 +5037,7 @@
           extraHtml: extraBits.join(''),
           votesHtml: `<div class="oc-votes">${chips}</div>`,
           controlsHtml,
-          className: `main-card ${(myPublicScore !== null || myPersonalScore !== null) ? 'oc-card-rated' : ''}`
+          className: 'main-card'
         });
       }).join('');
 
@@ -5233,9 +5258,14 @@
           return;
         }
         if (tab) {
+          if (tab === 'chart') homeTestMode = 0;
           switchTab(tab);
         }
       });
+    });
+
+    document.querySelectorAll('[data-home-test]').forEach(button => {
+      button.addEventListener('click', () => setHomeTestMode(button.dataset.homeTest));
     });
 
     seasonYearsEl.addEventListener('click', (e) => {
