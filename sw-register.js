@@ -1,3 +1,18 @@
+(() => {
+  const version = '20260723-track-panel1';
+
+  if (document.querySelector('.oc-addbar')) {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = `./track-add-panel.css?v=${version}`;
+    document.head.append(stylesheet);
+
+    const script = document.createElement('script');
+    script.src = `./track-add-panel.js?v=${version}`;
+    document.body.append(script);
+  }
+})();
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
