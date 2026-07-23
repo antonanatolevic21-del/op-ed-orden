@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://www.youtube.com https://www.google.com https://www.recaptcha.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.google.com https://www.recaptcha.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://www.google.com https://www.recaptcha.net https://oped-image-upload.keeperkeeper2003-01e.workers.dev; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <title>АБОБА</title>
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+  <meta name="description" content="АБОБА — общий чарт OP/ED, ручные топ-100, тир-листы сезонов и статистика по опенингам/эндингам." />
+  <meta property="og:title" content="АБОБА — OP/ED chart" />
+  <meta property="og:description" content="Топы опенингов и эндингов, тир-листы, сезоны и профили оценок." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9IjYzMCIgdmlld0JveD0iMCAwIDEyMDAgNjMwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB4Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRkYyRTYzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMDhEOUQ2Ii8+PC9saW5lYXJHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9InIiIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjcwJSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMUQxODI5Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMEIwQTEwIi8+PC9yYWRpYWxHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNjMwIiBmaWxsPSJ1cmwoI3IpIi8+PGNpcmNsZSBjeD0iMTMwIiBjeT0iMTIwIiByPSIxNzAiIGZpbGw9IiNGRjJFNjMiIG9wYWNpdHk9Ii4xOCIvPjxjaXJjbGUgY3g9IjEwNTAiIGN5PSI1MjAiIHI9IjIxMCIgZmlsbD0iIzA4RDlENiIgb3BhY2l0eT0iLjE2Ii8+PHJlY3QgeD0iNjYiIHk9IjY2IiB3aWR0aD0iMTA2OCIgaGVpZ2h0PSI0OTgiIHJ4PSI0MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMkEyNDM1IiBzdHJva2Utd2lkdGg9IjQiLz48dGV4dCB4PSI2MDAiIHk9IjI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIEJsYWNrLCBJbXBhY3QsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTE4IiBmaWxsPSJ1cmwoI2cpIj7QkNCR0J7QkdCQPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iMzYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiNGNUYzRkEiPk9QIC8gRUQgY2hhcnQgwrcg0YLQvtC/0Ysgwrcg0YLQuNGALdC70LjRgdGC0Ysgwrcg0YHQtdC30L7QvdGLPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iNDIwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ibW9ub3NwYWNlIiBmb250LXNpemU9IjI0IiBmaWxsPSIjOEI4Njk4Ij5hbmltZSBvcGVuaW5ncyAmIGVuZGluZ3MgcmFua2luZzwvdGV4dD48L3N2Zz4=" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="АБОБА — OP/ED chart" />
+  <meta name="twitter:description" content="Топы OP/ED, тир-листы и статистика." />
+  <meta name="twitter:image" content="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9IjYzMCIgdmlld0JveD0iMCAwIDEyMDAgNjMwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB4Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRkYyRTYzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMDhEOUQ2Ii8+PC9saW5lYXJHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9InIiIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjcwJSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMUQxODI5Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMEIwQTEwIi8+PC9yYWRpYWxHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNjMwIiBmaWxsPSJ1cmwoI3IpIi8+PGNpcmNsZSBjeD0iMTMwIiBjeT0iMTIwIiByPSIxNzAiIGZpbGw9IiNGRjJFNjMiIG9wYWNpdHk9Ii4xOCIvPjxjaXJjbGUgY3g9IjEwNTAiIGN5PSI1MjAiIHI9IjIxMCIgZmlsbD0iIzA4RDlENiIgb3BhY2l0eT0iLjE2Ii8+PHJlY3QgeD0iNjYiIHk9IjY2IiB3aWR0aD0iMTA2OCIgaGVpZ2h0PSI0OTgiIHJ4PSI0MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMkEyNDM1IiBzdHJva2Utd2lkdGg9IjQiLz48dGV4dCB4PSI2MDAiIHk9IjI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIEJsYWNrLCBJbXBhY3QsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTE4IiBmaWxsPSJ1cmwoI2cpIj7QkNCR0J7QkdCQPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iMzYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiNGNUYzRkEiPk9QIC8gRUQgY2hhcnQgwrcg0YLQvtC/0Ysgwrcg0YLQuNGALdC70LjRgdGC0Ysgwrcg0YHQtdC30L7QvdGLPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iNDIwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ibW9ub3NwYWNlIiBmb250LXNpemU9IjI0IiBmaWxsPSIjOEI4Njk4Ij5hbmltZSBvcGVuaW5ncyAmIGVuZGluZ3MgcmFua2luZzwvdGV4dD48L3N2Zz4=" />
+
+  <link rel="stylesheet" href="index.css?v=20260723-cyrillic-franchise1" />
+</head>
+<body>
+  <div id="opedchart-root">
+    <div class="oc-header">
+      <div>
+        <h1 class="oc-title">АБОБА</h1>
+        <div class="oc-sub">общий рейтинг опенингов и эндингов &middot; оценки 1&ndash;10 / шкала 1&ndash;5</div>
+      </div>
+      <div class="oc-you">
+        ВЫ:
+        <input id="oc-myname" type="text" placeholder="ваше имя" />
+        <select id="oc-scale-select" title="Шкала оценки">
+          <option value="int">шкала 1–10</option>
+          <option value="half">шкала 0.5–10 (шаг 0.5)</option>
+          <option value="five">оценка</option>
+        </select>
+        <select id="oc-content-filter-select" title="Фильтр китайских, фильмов и укороченных OP/ED">
+          <option value="default">Без китайских, фильмов и укороченных</option>
+          <option value="chinese">С китайскими</option>
+          <option value="movie">С фильмами</option>
+          <option value="shortened">С укороченными</option>
+          <option value="chinese-movie">С китайскими и фильмами</option>
+          <option value="chinese-shortened">С китайскими и укороченными</option>
+          <option value="movie-shortened">С фильмами и укороченными</option>
+          <option value="all">С китайскими, фильмами и укороченными</option>
+        </select>
+        <span id="oc-access-badge" class="oc-access-badge" role="button" tabindex="0" title="Войти или сменить аккаунт">гость</span>
+        <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
+        <button id="oc-image-migration-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные копии старых изображений">Копии старых картинок</button>
+        <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
+        <button id="oc-daily-bell" class="oc-daily-bell" type="button" title="Ежедневная оценка" aria-label="Ежедневная оценка">🔔<span id="oc-daily-bell-dot" class="oc-daily-bell-dot hidden"></span></button>
+        <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
+      </div>
+    </div>
+
+    <div class="oc-tabs">
+      <button class="oc-tab-btn active" data-tab="chart">Общий чарт</button>
+      <button class="oc-tab-btn" data-tab="profile">Профиль</button>
+      <button class="oc-tab-btn" data-tab="top100">Общий топ-100</button>
+      <button class="oc-tab-btn" data-tab="season">Сезоны OP/ED</button>
+      <button class="oc-tab-btn" data-tab="tier">Тир-лист</button>
+      <button class="oc-tab-btn" data-tab="stats">Средние</button>
+      <a class="oc-tab-btn" href="events.html" style="text-decoration:none;display:inline-flex;align-items:center;">Ивенты</a>
+    </div>
+
+    <div id="oc-main-panel" class="oc-tab-panel">
+
+    <div class="oc-addbar oc-admin-only oc-locked">
+      <div class="oc-section-label">+ добавить трек</div>
+      <div class="oc-addgrid">
+        <input id="oc-add-title" type="text" autocomplete="off" placeholder="Название (аниме — OP/ED N)" />
+        <select id="oc-add-type">
+          <option value="OP">OP</option>
+          <option value="ED">ED</option>
+        </select>
+        <input id="oc-add-year" type="number" placeholder="Год (напр. 2024)" min="1960" max="2100" />
+        <select id="oc-add-season">
+          <option value="">Сезон —</option>
+          <option value="winter">Зима</option>
+          <option value="spring">Весна</option>
+          <option value="summer">Лето</option>
+          <option value="fall">Осень</option>
+        </select>
+      </div>
+      <div class="oc-addgrid2">
+        <input id="oc-add-studio" type="text" list="oc-dl-studios" autocomplete="off" placeholder="Студии (через запятую)" />
+        <input id="oc-add-director" type="text" list="oc-dl-directors" autocomplete="off" placeholder="Режиссёры опа (через запятую)" />
+        <input id="oc-add-performer" type="text" list="oc-dl-performers" autocomplete="off" placeholder="Исполнители (через запятую)" />
+        <input id="oc-add-same-song" type="text" list="oc-dl-same-songs" autocomplete="off" placeholder="Одинаковая песня — общее название (необязательно)" />
+        <textarea id="oc-add-franchise" class="oc-franchise-area" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Заполняется только вручную"></textarea>
+        <input id="oc-add-image" type="text" placeholder="Основная картинка / постер (URL)" />
+        <input id="oc-add-fallback-image" type="text" placeholder="Запасная картинка (например images/название.webp)" />
+        <input id="oc-add-link" type="text" placeholder="Ссылка (anisongdb.com и т.п.)" />
+      </div>
+      <div class="oc-add-alt-row">
+        <textarea id="oc-add-alt-titles" autocomplete="off" placeholder="Альтернативные названия — каждое с новой строки или через ;. Можно оставить пустым"></textarea>
+      </div>
+      <div class="oc-add-extra-row">
+        <div class="oc-add-flags">
+          <label class="oc-flag-check"><input id="oc-add-chinese" type="checkbox" /> Китайский OP/ED</label>
+          <label class="oc-flag-check"><input id="oc-add-movie" type="checkbox" /> OP/ED фильма</label>
+          <label class="oc-flag-check"><input id="oc-add-shortened" type="checkbox" /> Укороченный OP/ED</label>
+          <label class="oc-flag-check"><input id="oc-add-backup-image" type="checkbox" checked /> Сжать копию в images</label>
+        </div>
+        <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
+      </div>
+      <div class="oc-hint">Студии/режиссёры/исполнители — через запятую. Франшизы — по одной на строку, чтобы названия с запятой не дробились.</div>
+    </div>
+
+    <div class="oc-filterbar">
+      <div class="oc-section-label">фильтр и сортировка</div>
+      <div class="oc-filtergrid oc-main-filtergrid">
+        <div class="oc-filter-primary">
+        <div class="oc-field oc-search-field">
+          <label for="oc-f-search">Поиск</label>
+          <input id="oc-f-search" type="search" autocomplete="off" placeholder="Название, исполнитель, франшиза или URL картинки…" />
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-type">Тип</label>
+          <select id="oc-f-type">
+            <option value="">Все</option>
+            <option value="OP">Только OP</option>
+            <option value="ED">Только ED</option>
+          </select>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-score-cmp">Оценка</label>
+          <div class="oc-score-filter-row">
+            <select id="oc-f-score-cmp">
+              <option value="">любая</option>
+              <option value=">=">≥</option>
+              <option value=">">&gt;</option>
+              <option value="<=">≤</option>
+              <option value="<">&lt;</option>
+              <option value="=">=</option>
+            </select>
+            <input id="oc-f-score-value" type="number" min="0.5" max="10" step="0.5" placeholder="напр. 8" />
+          </div>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-year">Год</label>
+          <select id="oc-f-year"><option value="">Все</option></select>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-season">Сезон</label>
+          <select id="oc-f-season">
+            <option value="">Все</option>
+            <option value="winter">Зима</option>
+            <option value="spring">Весна</option>
+            <option value="summer">Лето</option>
+            <option value="fall">Осень</option>
+          </select>
+        </div>
+        <div class="oc-field oc-check-field">
+          <label class="oc-filter-check"><input id="oc-f-missing" type="checkbox" /> Только с незаполненными полями</label>
+        </div>
+        </div>
+        <div class="oc-filter-divider"><span>Расширенные фильтры</span></div>
+        <div class="oc-filter-advanced">
+        <div class="oc-field">
+          <label for="oc-f-studio">Студии <span>можно несколько</span></label>
+          <div class="oc-filter-suggest"><input type="text" data-filter-suggest="studios" list="oc-dl-studios" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+          <select id="oc-f-studio" multiple></select>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-director">Режиссёры <span>можно несколько</span></label>
+          <div class="oc-filter-suggest"><input type="text" data-filter-suggest="directors" list="oc-dl-directors" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+          <select id="oc-f-director" multiple></select>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-performer">Исполнители <span>можно несколько</span></label>
+          <div class="oc-filter-suggest"><input type="text" data-filter-suggest="performers" list="oc-dl-performers" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+          <select id="oc-f-performer" multiple></select>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-franchise">Франшизы <span>можно несколько</span></label>
+          <div class="oc-filter-suggest"><input type="text" data-filter-suggest="franchises" list="oc-dl-franchises" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+          <select id="oc-f-franchise" multiple></select>
+        </div>
+        </div>
+        <div class="oc-filter-actions">
+        <div class="oc-field">
+          <label for="oc-sort">Сортировка</label>
+          <select id="oc-sort">
+            <option value="added_desc">Последние добавленные</option>
+            <option value="score">По рейтингу (сначала лучшие)</option>
+            <option value="score_asc">По рейтингу (сначала худшие)</option>
+            <option value="year_desc">Год: новые → старые</option>
+            <option value="year_asc">Год: старые → новые</option>
+            <option value="title">По названию (А-Я)</option>
+          </select>
+        </div>
+        <button class="oc-reset-btn" id="oc-reset-filters">Сбросить фильтры</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="oc-resultcount" id="oc-resultcount"></div>
+    <div class="oc-filterstat" id="oc-filterstat"></div>
+    <div id="oc-list-container"><div class="oc-empty">Загрузка списка…</div></div>
+
+    </div>
+
+    <div id="oc-profile-panel" class="oc-tab-panel hidden">
+      <div class="oc-profile-select-wrap">
+        <label for="oc-profile-user">Профиль:</label>
+        <select id="oc-profile-user"></select>
+      </div>
+      <div class="oc-filterbar oc-profile-filterbar">
+        <div class="oc-section-label">фильтры профиля</div>
+        <div class="oc-filtergrid">
+          <div class="oc-field oc-search-field">
+            <label for="oc-p-search">Поиск</label>
+            <input id="oc-p-search" type="search" autocomplete="off" placeholder="Название, исполнитель, франшиза или URL картинки…" />
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-type">Тип</label>
+            <select id="oc-p-type">
+              <option value="">Все</option>
+              <option value="OP">Только OP</option>
+              <option value="ED">Только ED</option>
+            </select>
+          </div>
+        <div class="oc-field">
+          <label for="oc-p-score-cmp">Оценка</label>
+          <div class="oc-score-filter-row">
+            <select id="oc-p-score-cmp">
+              <option value="">любая</option>
+              <option value=">=">≥</option>
+              <option value=">">&gt;</option>
+              <option value="<=">≤</option>
+              <option value="<">&lt;</option>
+              <option value="=">=</option>
+            </select>
+            <input id="oc-p-score-value" type="number" min="0.5" max="10" step="0.5" placeholder="напр. 8" />
+          </div>
+        </div>
+          <div class="oc-field">
+            <label for="oc-p-year">Год</label>
+            <select id="oc-p-year"><option value="">Все</option></select>
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-season">Сезон</label>
+            <select id="oc-p-season">
+              <option value="">Все</option>
+              <option value="winter">Зима</option>
+              <option value="spring">Весна</option>
+              <option value="summer">Лето</option>
+              <option value="fall">Осень</option>
+            </select>
+          </div>
+          <div class="oc-field oc-check-field">
+            <label>&nbsp;</label>
+            <label class="oc-filter-check"><input id="oc-p-missing" type="checkbox" /> Только с незаполненными полями</label>
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-studio">Студии</label>
+            <div class="oc-filter-suggest"><input type="text" data-filter-suggest="studios" list="oc-dl-studios" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+            <select id="oc-p-studio" multiple></select>
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-director">Режиссёры</label>
+            <div class="oc-filter-suggest"><input type="text" data-filter-suggest="directors" list="oc-dl-directors" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+            <select id="oc-p-director" multiple></select>
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-performer">Исполнители</label>
+            <div class="oc-filter-suggest"><input type="text" data-filter-suggest="performers" list="oc-dl-performers" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+            <select id="oc-p-performer" multiple></select>
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-franchise">Франшизы</label>
+            <div class="oc-filter-suggest"><input type="text" data-filter-suggest="franchises" list="oc-dl-franchises" placeholder="вписать и выбрать из вариантов" autocomplete="off" /></div>
+            <select id="oc-p-franchise" multiple></select>
+          </div>
+          <button class="oc-reset-btn" id="oc-p-reset-filters">Сбросить фильтры</button>
+        </div>
+      </div>
+      <div class="oc-profile-stats" id="oc-profile-stats"></div>
+      <section id="oc-daily-panel" class="oc-daily-panel hidden"></section>
+      <div class="oc-topmode-toggle">
+        <button class="oc-topmode-btn" id="oc-topmode-score" data-mode="score" style="display:none">По оценке</button>
+        <button class="oc-topmode-btn active" id="oc-topmode-manual" data-mode="manual">Вручную (свой топ)</button>
+      </div>
+      <div class="oc-topmode-hint" id="oc-topmode-hint"></div>
+      <div class="oc-manual-actions">
+        <button type="button" class="oc-soft-btn" id="oc-manual-edit-btn">Редактировать топ-100</button>
+        <button type="button" class="oc-soft-btn" id="oc-manual-save-btn">Сохранить топ-100</button>
+        <button type="button" class="oc-soft-btn" id="oc-manual-hidden-toggle-btn">Показать скрытые</button>
+        <button type="button" class="oc-soft-btn oc-admin-only oc-locked" id="oc-profile-delete-btn">Удалить профиль</button>
+      </div>
+
+      <div class="oc-profile-columns">
+        <div>
+          <div class="oc-profile-col-title op">Топ-100 · OP <span class="oc-topmode-label" id="oc-topmode-label-op"></span></div>
+          <div class="oc-profile-list" id="oc-profile-op"></div>
+        </div>
+        <div>
+          <div class="oc-profile-col-title ed">Топ-100 · ED <span class="oc-topmode-label" id="oc-topmode-label-ed"></span></div>
+          <div class="oc-profile-list" id="oc-profile-ed"></div>
+        </div>
+      </div>
+
+      <div class="oc-allratings">
+        <div class="oc-allratings-head">
+          <div>
+            <div class="oc-section-label" style="margin-bottom:0;">все оценки</div>
+            <div class="oc-hint-inline">ниже работают те же фильтры, что и на главной/в профиле выше</div>
+          </div>
+          <div class="oc-allratings-controls">
+            <select id="oc-ar-type">
+              <option value="">Все типы</option>
+              <option value="OP">Только OP</option>
+              <option value="ED">Только ED</option>
+            </select>
+            <select id="oc-ar-metric" title="Какую оценку показывать и сортировать">
+              <option value="total">Показывать: общая</option>
+              <option value="song">Показывать: песня</option>
+              <option value="visual">Показывать: визуал</option>
+            </select>
+            <select id="oc-ar-score"><option value="">Любая оценка</option></select>
+            <button class="oc-sort-toggle-btn" id="oc-ar-sort">По убыванию ↓</button>
+          </div>
+        </div>
+        <div class="oc-allratings-columns" id="oc-allratings-columns">
+          <div class="oc-allratings-col" id="oc-allratings-col-op">
+            <div class="oc-profile-col-title op">Все оценки · OP</div>
+            <div class="oc-allratings-list" id="oc-allratings-op"></div>
+          </div>
+          <div class="oc-allratings-col" id="oc-allratings-col-ed">
+            <div class="oc-profile-col-title ed">Все оценки · ED</div>
+            <div class="oc-allratings-list" id="oc-allratings-ed"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <div id="oc-top100-panel" class="oc-tab-panel hidden">
+      <div class="oc-tier-head">
+        <div>
+          <div class="oc-section-label">общий ручной топ-100</div>
+          <h2>Общий топ-100</h2>
+          <div class="oc-tier-hint">Можно переключить режим: по ручным топ-100 пользователей или по публичному среднему баллу. В среднем балле учитываются только треки с минимум 3 оценками, а хвост с равным 100-му местом сохраняется.</div>
+        </div>
+        <div class="oc-globaltop-controls">
+          <button type="button" class="oc-season-type-btn active" data-globaltop-type="OP">OP</button>
+          <button type="button" class="oc-season-type-btn" data-globaltop-type="ED">ED</button>
+          <button type="button" class="oc-season-type-btn active" data-globaltop-mode="manual">По ручным топ-100</button>
+          <button type="button" class="oc-season-type-btn" data-globaltop-mode="score">По среднему баллу</button>
+          <button type="button" class="oc-season-type-btn oc-admin-only oc-locked active" data-globaltop-scope="all">Все пользователи</button>
+          <button type="button" class="oc-season-type-btn oc-admin-only oc-locked" data-globaltop-scope="admins">Только админы</button>
+        </div>
+      </div>
+      <div id="oc-globaltop-summary" class="oc-resultcount"></div>
+      <div id="oc-globaltop-list"><div class="oc-empty">Загрузка общего топа…</div></div>
+    </div>
+
+    <div id="oc-season-panel" class="oc-tab-panel hidden">
+      <div class="oc-season-layout">
+        <div class="oc-season-years" id="oc-season-years">
+          <div class="oc-empty">Загрузка сезонов…</div>
+        </div>
+        <div class="oc-season-content">
+          <div class="oc-season-head">
+            <div>
+              <div class="oc-season-type-toggle">
+                <button type="button" class="oc-season-type-btn active" data-season-type="OP">Опенинги</button>
+                <button type="button" class="oc-season-type-btn" data-season-type="ED">Эндинги</button>
+              </div>
+              <div class="oc-season-title" id="oc-season-title">Выберите год и сезон</div>
+              <div class="oc-season-subtitle" id="oc-season-subtitle">Список лет идёт от актуального года до 1990. Будущие сезоны помечаются как «Скоро будет».</div>
+            </div>
+            <div class="oc-season-head-actions">
+              <button class="oc-secondary-btn" id="oc-season-prev-btn" disabled>← Предыдущий сезон</button>
+              <button class="oc-secondary-btn" id="oc-season-tier-btn" disabled>Тир-лист сезона</button>
+              <button class="oc-secondary-btn oc-season-rate-all-btn" id="oc-season-rate-all-btn" disabled>Оценить все</button>
+              <button class="oc-addbtn" id="oc-season-rate-btn" disabled>Оценить сезон</button>
+            </div>
+          </div>
+          <div id="oc-season-list"><div class="oc-empty">Нажмите на год слева, затем выберите сезон.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="oc-tier-panel" class="oc-tab-panel hidden">
+      <div class="oc-tier-head">
+        <div>
+          <div class="oc-section-label">тир-лист по твоим оценкам</div>
+          <h2>Тир-лист сезона</h2>
+          <div class="oc-tier-hint">Карточки сами попадают в ряд своей оценки. Перетаскивать можно только внутри одного ряда.</div>
+        </div>
+        <div class="oc-tier-controls">
+          <select id="oc-tier-type">
+            <option value="OP">OP</option>
+            <option value="ED">ED</option>
+          </select>
+          <select id="oc-tier-year"></select>
+          <select id="oc-tier-season">
+            <option value="winter">Зима</option>
+            <option value="spring">Весна</option>
+            <option value="summer">Лето</option>
+            <option value="fall">Осень</option>
+          </select>
+          <button type="button" class="oc-download-btn" id="oc-tier-download-btn">Скачать тир-лист</button>
+        </div>
+      </div>
+      <div id="oc-tier-list"><div class="oc-empty">Выберите сезон для тир-листа.</div></div>
+    </div>
+
+    <div id="oc-stats-panel" class="oc-tab-panel hidden">
+      <div class="oc-stats-head">
+        <div>
+          <div class="oc-section-label">средние значения</div>
+          <h2>Исполнители, студии, режиссёры, сезоны и франшизы</h2>
+          <div class="oc-tier-hint">В расчёт попадают только треки, у которых есть минимум 3 оценки. В таблице показываются группы с минимум 3 такими треками.</div>
+        </div>
+        <div class="oc-tier-controls">
+          <select id="oc-stats-type">
+            <option value="">OP + ED</option>
+            <option value="OP">Только OP</option>
+            <option value="ED">Только ED</option>
+          </select>
+        </div>
+      </div>
+      <div class="oc-stats-grid">
+        <div class="oc-stats-box"><div class="oc-profile-col-title">Исполнители</div><div id="oc-stats-performers"></div></div>
+        <div class="oc-stats-box"><div class="oc-profile-col-title">Исполнители по песне</div><div id="oc-stats-song-performers"></div></div>
+        <div class="oc-stats-box"><div class="oc-profile-col-title">Студии</div><div id="oc-stats-studios"></div></div>
+        <div class="oc-stats-box"><div class="oc-profile-col-title">Режиссёры</div><div id="oc-stats-directors"></div></div>
+        <div class="oc-stats-box"><div class="oc-profile-col-title">Сезоны</div><div id="oc-stats-seasons"></div></div>
+        <div class="oc-stats-box"><div class="oc-profile-col-title">Франшизы</div><div id="oc-stats-franchises"></div></div>
+      </div>
+    </div>
+
+    <div id="oc-season-evaluator" class="oc-evaluator hidden"></div>
+    <aside id="oc-daily-toast" class="oc-daily-toast hidden" aria-live="polite"></aside>
+
+    <div id="oc-name-modal" class="oc-name-modal hidden" aria-modal="true" role="dialog">
+      <div class="oc-name-dialog" style="position:relative;">
+        <button id="oc-modal-name-close" type="button" aria-label="Закрыть" title="Вернуться к текущему аккаунту" style="position:absolute;right:14px;top:12px;border:0;background:transparent;color:#8B8698;font-size:25px;cursor:pointer;">×</button>
+        <div class="oc-section-label">аккаунт пользователя</div>
+        <h2>Вход в аккаунт</h2>
+        <p>Для защищённого входа используй email и личный пароль. Ник существующего профиля можно привязать при регистрации.</p>
+        <div class="oc-name-modal-row">
+          <input id="oc-modal-name" type="text" placeholder="например: Пёс кошачий" autocomplete="nickname" />
+          <input id="oc-modal-account-email" type="email" placeholder="email защищённого аккаунта" autocomplete="email" />
+          <input id="oc-modal-account-pass" type="password" placeholder="личный пароль, если установлен" autocomplete="current-password" />
+          <label style="display:flex;align-items:center;gap:7px;color:#8B8698;font-size:12px;cursor:pointer;"><input id="oc-remember-account" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
+          <button class="oc-addbtn" id="oc-modal-name-save" type="button">Войти</button>
+          <button class="oc-edit-cancel" id="oc-forgot-password" type="button">Забыли пароль?</button>
+        </div>
+        <div class="oc-name-modal-error" id="oc-modal-name-error"></div>
+      </div>
+    </div>
+
+
+    <div id="oc-opening-modal" class="oc-modal hidden" aria-modal="true" role="dialog"></div>
+
+    <div id="oc-confirm-modal" class="oc-modal hidden" aria-modal="true" role="dialog"></div>
+
+    <div id="oc-franchise-repair-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Проверка франшиз"></div>
+
+    <div id="oc-image-migration-modal" class="oc-modal hidden" aria-modal="true" role="dialog" aria-label="Копирование старых изображений">
+      <div class="oc-db-import-dialog" style="width:min(760px,100%)">
+        <div class="oc-db-import-head">
+          <div><div class="oc-section-label">резервные изображения</div><h2>Копии старых картинок</h2></div>
+          <button class="oc-edit-cancel" type="button" data-image-migration-close>Закрыть</button>
+        </div>
+        <p class="oc-db-import-muted">Обрабатываются следующие 50 записей, у которых есть основная картинка, но ещё нет fallbackImage. Успешные результаты сразу сохраняются.</p>
+        <div class="oc-db-import-actions">
+          <button id="oc-image-migration-start" class="oc-addbtn" type="button">Обработать следующие 50</button>
+          <button id="oc-image-migration-stop" class="oc-edit-cancel" type="button" disabled>Остановить</button>
+          <button id="oc-image-migration-forget-secret" class="oc-edit-cancel" type="button">Забыть пароль</button>
+        </div>
+        <div id="oc-image-migration-status" class="oc-db-import-status"></div>
+        <div id="oc-image-migration-log" style="max-height:45vh;overflow:auto;font:11px/1.5 'Space Mono',monospace"></div>
+      </div>
+    </div>
+
+    <div id="oc-auth-modal" class="oc-auth-modal hidden" aria-modal="true" role="dialog">
+      <div class="oc-auth-dialog" style="position:relative;">
+        <button id="oc-auth-close" type="button" aria-label="Закрыть" title="Закрыть окно" style="position:absolute;right:14px;top:12px;border:0;background:transparent;color:#8B8698;font-size:25px;cursor:pointer;">×</button>
+        <div class="oc-section-label">вход в аккаунт</div>
+        <h2>Войти на сайт</h2>
+        <p>Вход выполняется через личный Firebase-аккаунт. Email не публикуется в профиле.</p>
+        <div class="oc-login-fields">
+          <label class="oc-login-field"><span>Email</span><input id="oc-auth-identifier" type="email" placeholder="name@example.com" autocomplete="email" /></label>
+          <label class="oc-login-field"><span>Пароль</span><input id="oc-auth-pass" type="password" placeholder="Введите пароль" autocomplete="current-password" /></label>
+          <label class="oc-account-remember"><input id="oc-auth-remember" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
+          <div class="oc-login-actions">
+            <button class="oc-addbtn" id="oc-auth-save" type="button">Войти в аккаунт</button>
+            <button class="oc-edit-cancel" id="oc-auth-forgot" type="button">Забыли пароль?</button>
+            <button class="oc-auth-register-link" id="oc-auth-register-open" type="button">Нет аккаунта? Зарегистрироваться</button>
+            <button class="oc-edit-cancel" id="oc-auth-logout" type="button">Выйти из аккаунта</button>
+          </div>
+        </div>
+        <div class="oc-auth-error" id="oc-auth-error"></div>
+      </div>
+    </div>
+
+    <div id="oc-register-modal" class="oc-auth-modal hidden" aria-modal="true" role="dialog">
+      <div class="oc-auth-dialog" style="position:relative;max-width:720px;">
+        <button id="oc-register-close" type="button" aria-label="Закрыть" title="Закрыть окно" style="position:absolute;right:14px;top:12px;border:0;background:transparent;color:#8B8698;font-size:25px;cursor:pointer;">×</button>
+        <div class="oc-section-label">регистрация</div>
+        <h2>Создать аккаунт</h2>
+        <p>Подтверждение почты пока не требуется. Заполни четыре поля, затем войди в созданный аккаунт.</p>
+        <div class="oc-account-form" style="margin-top:16px;">
+          <label class="oc-account-field">Логин<input id="oc-register-name" type="text" placeholder="Никнейм" autocomplete="nickname" /></label>
+          <label class="oc-account-field">Email<input id="oc-register-email" type="email" placeholder="name@example.com" autocomplete="email" /></label>
+          <label class="oc-account-field">Пароль<input id="oc-register-pass" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" /></label>
+          <label class="oc-account-field">Повторите пароль<input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" /></label>
+        </div>
+        <label class="oc-account-remember" style="margin-top:14px;"><input id="oc-register-remember" type="checkbox" checked /> Запомнить меня после входа</label>
+        <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button" style="margin-top:14px;">Создать аккаунт</button>
+        <div class="oc-name-modal-error" id="oc-register-error"></div>
+      </div>
+    </div>
+    <datalist id="oc-dl-search"></datalist>
+    <datalist id="oc-dl-titles"></datalist>
+    <datalist id="oc-dl-studios"></datalist>
+    <datalist id="oc-dl-directors"></datalist>
+    <datalist id="oc-dl-performers"></datalist>
+    <datalist id="oc-dl-franchises"></datalist>
+    <datalist id="oc-dl-same-songs"></datalist>
+
+    <div class="oc-status" id="oc-status"></div>
+  </div>
+
+  <script type="module" src="index-app.js?v=20260723-tier-download-fix1"></script>
+  <script type="module" src="firebase-app.js?v=20260723-security1"></script>
+  <script src="sw-register.js?v=20260723-security1" defer></script>
+</body>
+</html>
