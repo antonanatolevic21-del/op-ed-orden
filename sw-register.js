@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260723-track-panel-compact1';
+  const version = '20260723-track-panel-compact2';
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
@@ -16,7 +16,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force2', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force3', {
         updateViaCache: 'none'
       });
       await registration.update();
