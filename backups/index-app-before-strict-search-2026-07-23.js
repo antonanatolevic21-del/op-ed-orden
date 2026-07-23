@@ -2462,69 +2462,6 @@
       return (entry.alternativeTitles || []).some(title => titleMatchesFuzzySearch(title, query));
     }
 
-    function normalizedSearchValue(value) {
-      return String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
-    }
-
-    function fuzzySearchPosition(value, query) {
-      const text = normalizedSearchValue(value);
-      const target = normalizedSearchValue(query);
-      if (!target || target.includes(' ') || target.length < 4) return null;
-      const words = [...text.matchAll(/[a-zа-я0-9]+/giu)];
-      let best = null;
-      words.forEach(match => {
-        const word = match[0];
-        if (!word || word[0] !== target[0] || Math.abs(word.length - target.length) > 2) return;
-        const distance = levenshteinDistance(target, word);
-        const allowed = target.length <= 8 ? 1 : 2;
-        const ratio = 1 - distance / Math.max(target.length, word.length);
-        if (distance > allowed || ratio < .78) return;
-        const candidate = { distance, position: match.index || 0 };
-        if (!best || candidate.distance < best.distance || (candidate.distance === best.distance && candidate.position < best.position)) best = candidate;
-      });
-      return best;
-    }
-
-    function entrySearchRelevance(entry, query) {
-      const target = normalizedSearchValue(query);
-      if (!entry || !target) return 0;
-      const title = normalizedSearchValue(entry.title);
-      const titlePosition = title.indexOf(target);
-      if (titlePosition >= 0) return titlePosition;
-
-      let bestAlternative = Infinity;
-      (entry.alternativeTitles || []).forEach(value => {
-        const position = normalizedSearchValue(value).indexOf(target);
-        if (position >= 0) bestAlternative = Math.min(bestAlternative, position);
-      });
-      if (bestAlternative < Infinity) return 100000 + bestAlternative;
-
-      const titleFuzzy = fuzzySearchPosition(entry.title, target);
-      if (titleFuzzy) return 200000 + titleFuzzy.distance * 1000 + titleFuzzy.position;
-
-      const metadata = [
-        entry.type, entry.year, SEASON_LABEL[entry.season], entry.image,
-        entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
-        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
-      ].map(normalizedSearchValue).filter(Boolean);
-      let bestMetadata = Infinity;
-      if (target.length >= 3) {
-        metadata.forEach(value => {
-          const position = value.indexOf(target);
-          if (position >= 0) bestMetadata = Math.min(bestMetadata, position);
-        });
-      }
-      if (bestMetadata < Infinity) return 300000 + bestMetadata;
-
-      let bestFuzzyAlternative = null;
-      (entry.alternativeTitles || []).forEach(value => {
-        const candidate = fuzzySearchPosition(value, target);
-        if (!candidate) return;
-        if (!bestFuzzyAlternative || candidate.distance < bestFuzzyAlternative.distance || (candidate.distance === bestFuzzyAlternative.distance && candidate.position < bestFuzzyAlternative.position)) bestFuzzyAlternative = candidate;
-      });
-      return bestFuzzyAlternative ? 400000 + bestFuzzyAlternative.distance * 1000 + bestFuzzyAlternative.position : Infinity;
-    }
-
     function missingRequiredFields(entry) {
       const missing = [];
       if (!String(entry.title || '').trim()) missing.push('название');
@@ -2545,12 +2482,12 @@
     }
 
     function applyFilters(list) {
-      const q = normalizedSearchValue(filters.search);
+      const q = String(filters.search || '').trim().toLowerCase();
       const cacheKey = list === entries ? filtersCacheKey() : '';
       if (cacheKey && filteredCache.key === cacheKey && Array.isArray(filteredCache.value)) return filteredCache.value;
       const result = list.filter(e => {
         if (q) {
-          if (!Number.isFinite(entrySearchRelevance(e, q))) return false;
+          if (!entrySearchText(e).includes(q) && !titleMatchesAnySearch(e, q)) return false;
         }
         if (filters.type && e.type !== filters.type) return false;
         if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie, filters.hideShortened)) return false;
@@ -2598,10 +2535,8 @@
     function applySort(list) {
       const cacheKey = `${dataVersion}|${sortMode}|${list.length}|${list === filteredCache.value ? filteredCache.key : ''}`;
       if (sortedCache.input === list && sortedCache.key === cacheKey && Array.isArray(sortedCache.value)) return sortedCache.value;
-      const searchQuery = normalizedSearchValue(filters.search);
-      const withScore = list.map((e, idx) => ({ e, score: avg(e.scores), ts: entryTimestamp(e, idx), relevance: searchQuery ? entrySearchRelevance(e, searchQuery) : 0 }));
+      const withScore = list.map((e, idx) => ({ e, score: avg(e.scores), ts: entryTimestamp(e, idx) }));
       withScore.sort((a, b) => {
-        if (searchQuery && a.relevance !== b.relevance) return a.relevance - b.relevance;
         if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || b.e.title.localeCompare(a.e.title, 'ru');
         if (sortMode === 'year_desc') return (b.e.year || 0) - (a.e.year || 0) || (b.ts || 0) - (a.ts || 0);
         if (sortMode === 'year_asc') return (a.e.year || 0) - (b.e.year || 0) || (b.ts || 0) - (a.ts || 0);
