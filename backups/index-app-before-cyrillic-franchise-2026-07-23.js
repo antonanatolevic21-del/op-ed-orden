@@ -5193,7 +5193,7 @@
           rankClass,
           scoreText,
           scoreSub: 'средняя',
-          fields: ['studios', 'directors', 'performers', 'franchises'],
+          fields: ['studios', 'directors', 'performers'],
           notes: true,
           extraHtml: extraBits.join(''),
           votesHtml: `<div class="oc-votes">${chips}</div>`,
