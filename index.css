@@ -133,3 +133,7 @@
 @media(max-width:1180px){.oc-entity-filter-fields{grid-template-columns:repeat(3,minmax(0,1fr))}.oc-entity-search-field{grid-column:span 2}.oc-entity-rate-btn{width:100%}}
 @media(max-width:820px){.oc-entity-create,.oc-entity-filters{padding:18px}.oc-entity-form-head,.oc-entity-filter-head{align-items:flex-start;flex-direction:column;gap:6px}.oc-entity-form-head p,.oc-entity-filter-head p{text-align:left}.oc-entity-form-fields{grid-template-columns:1fr 1fr}.oc-entity-create-btn{grid-column:1/-1;width:100%}}
 @media(max-width:620px){.oc-entity-form-fields,.oc-entity-filter-fields{grid-template-columns:1fr}.oc-entity-search-field{grid-column:auto}.oc-entity-create-btn{grid-column:auto}}
+
+
+/* Entity track cleanup guard */
+.oc-entity-tracks.hidden{display:none!important}

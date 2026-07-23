@@ -3581,6 +3581,7 @@
       if (entityYearSelect) entityYearSelect.value = '';
       if (entitySeasonSelect) entitySeasonSelect.value = '';
       if (entityProgressSelect) entityProgressSelect.value = '';
+      if (entityTracksEl) entityTracksEl.replaceChildren();
     }
 
     function renderEntityAlbums() {
@@ -3599,6 +3600,7 @@
       entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
       entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
       entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
+      if (!activeEntityCardId) entityTracksEl.replaceChildren();
 
       if (activeEntityCardId) {
         const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
