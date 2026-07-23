@@ -73,29 +73,6 @@
 
     const SEASON_LABEL = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
     const $ = (sel) => document.querySelector(sel);
-
-    function fitDisplayedTrackImage(image) {
-      if (!(image instanceof HTMLImageElement)) return;
-      const applyFit = () => requestAnimationFrame(() => {
-        const box = image.parentElement?.getBoundingClientRect();
-        if (!image.naturalWidth || !image.naturalHeight || !box?.width || !box?.height) return;
-        const sourceRatio = image.naturalWidth / image.naturalHeight;
-        const targetRatio = box.width / box.height;
-        image.classList.toggle('oc-track-image-crop', sourceRatio < targetRatio);
-      });
-      if (image.complete) applyFit();
-      else image.addEventListener('load', applyFit, { once: true });
-    }
-
-    document.addEventListener('load', event => {
-      if (event.target?.matches?.('img.oc-track-image')) fitDisplayedTrackImage(event.target);
-    }, true);
-    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
-      if (!(node instanceof Element)) return;
-      if (node.matches('img.oc-track-image')) fitDisplayedTrackImage(node);
-      node.querySelectorAll?.('img.oc-track-image').forEach(fitDisplayedTrackImage);
-    }))).observe(document.documentElement, { childList: true, subtree: true });
-
     const listContainer = $('#oc-list-container');
     const statusEl = $('#oc-status');
     const resultCountEl = $('#oc-resultcount');
@@ -1340,7 +1317,7 @@
 
     function renderOpeningVideoBlock(entry) {
       const imageInner = entry.image
-        ? `<img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${escapeHtml(entry.title)}">`
+        ? `<img loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${escapeHtml(entry.title)}">`
         : escapeHtml(entry.type || 'OP');
       const imageBlock = `<div class="oc-eval-image oc-opening-plain-image">${imageInner}</div>`;
       const href = safeExternalUrl(entry.link);
@@ -1896,39 +1873,6 @@
         confirmModal.addEventListener('click', function onBg(e) {
           if (e.target === confirmModal) { confirmModal.removeEventListener('click', onBg); cleanup(false); }
         });
-      });
-    }
-
-    function showMissingFieldsModal(fields) {
-      const title = 'Не все поля заполнены';
-      const body = `Вы не заполнили следующие поля: ${fields.join(', ')}`;
-      if (!confirmModal) {
-        window.alert(body);
-        return;
-      }
-      confirmModal.innerHTML = `<div class="oc-modal-card oc-confirm-box">
-        <div class="oc-modal-head">
-          <div>
-            <div class="oc-section-label">проверка карточки</div>
-            <div class="oc-modal-title">${escapeHtml(title)}</div>
-          </div>
-        </div>
-        <div class="oc-warning-text">${escapeHtml(body)}</div>
-        <div class="oc-confirm-actions">
-          <button type="button" class="oc-addbtn" data-missing-close>Вернуться к заполнению</button>
-        </div>
-      </div>`;
-      confirmModal.classList.remove('hidden');
-      const close = () => {
-        confirmModal.classList.add('hidden');
-        confirmModal.innerHTML = '';
-      };
-      confirmModal.querySelector('[data-missing-close]').addEventListener('click', close, { once: true });
-      confirmModal.addEventListener('click', function onBg(event) {
-        if (event.target === confirmModal) {
-          confirmModal.removeEventListener('click', onBg);
-          close();
-        }
       });
     }
 
@@ -2596,31 +2540,6 @@
       return missing;
     }
 
-    function missingAddFormFields(entry) {
-      const missing = [];
-      const hasYear = entry.year !== null && entry.year !== undefined && entry.year !== '' && !Number.isNaN(Number(entry.year));
-      const hasSeason = Boolean(String(entry.season || '').trim());
-      if (!String(entry.title || '').trim()) missing.push('название');
-      if (!String(entry.type || '').trim()) missing.push('тип');
-      if (!hasYear) missing.push('год');
-      if (!hasSeason) missing.push('сезон');
-
-      const now = new Date();
-      const currentOpenSeasonPoint = now.getFullYear() * 4 + Math.floor(now.getMonth() / 3);
-      const seasonPoint = hasYear && hasSeason ? Number(entry.year) * 4 + SEASON_ORDER.indexOf(entry.season) : null;
-      if (seasonPoint !== null && seasonPoint > currentOpenSeasonPoint) return missing;
-
-      if (!(entry.studios || []).length) missing.push('студия');
-      if (!(entry.directors || []).length) missing.push('режиссёр');
-      if (!(entry.performers || []).length) missing.push('исполнитель');
-      if (!(entry.franchises || []).length) missing.push('франшиза');
-      if (seasonPoint === null || seasonPoint < currentOpenSeasonPoint) {
-        if (!String(entry.image || '').trim()) missing.push('картинка');
-        if (!String(entry.link || '').trim()) missing.push('ссылка на видео');
-      }
-      return missing;
-    }
-
     function entryHasMissingRequiredFields(entry) {
       return missingRequiredFields(entry).length > 0;
     }
@@ -3208,7 +3127,7 @@
       const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
       const title = escapeHtml(entry && entry.title ? entry.title : 'видео');
       const imageBlock = entry.image
-        ? `<div class="${className}"><img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}"></div>`
+        ? `<div class="${className}"><img loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}"></div>`
         : `<div class="${className}">${fallback}</div>`;
       if (!entry.link) return imageBlock;
       return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
@@ -4678,7 +4597,7 @@
         const items = orderedTierItems(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
         const cards = items.map(e => {
           const title = escapeHtml(e.title);
-          const bg = e.image ? `<img class="oc-track-image" src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" crossorigin="anonymous" referrerpolicy="no-referrer" data-remove-on-error="1">` : `<span>${escapeHtml(e.type)}</span>`;
+          const bg = e.image ? `<img src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" crossorigin="anonymous" referrerpolicy="no-referrer" data-remove-on-error="1">` : `<span>${escapeHtml(e.type)}</span>`;
           return `<div class="oc-tier-card" draggable="true" data-tier-card="1" data-id="${e.id}" data-score="${score}" title="${title}">
             ${bg}<div class="oc-tier-card-controls"><button type="button" class="oc-tier-shift-btn" data-tier-shift="-1" data-id="${e.id}" data-score="${score}" title="Левее">←</button><button type="button" class="oc-tier-shift-btn" data-tier-shift="1" data-id="${e.id}" data-score="${score}" title="Правее">→</button></div><div class="oc-tier-card-title">${title}</div>
           </div>`;
@@ -5151,7 +5070,9 @@
           rankClass,
           scoreText,
           scoreSub: 'средняя',
-          fields: ['studios', 'directors', 'performers'],
+          fields: ['studios', 'directors', 'performers', 'franchises'],
+          showImageLink: true,
+          showTrackLink: true,
           notes: true,
           extraHtml: extraBits.join(''),
           votesHtml: `<div class="oc-votes">${chips}</div>`,
@@ -5828,12 +5749,7 @@
       const isMovie = Boolean($('#oc-add-movie') && $('#oc-add-movie').checked);
       const isShortened = Boolean($('#oc-add-shortened') && $('#oc-add-shortened').checked);
 
-      const addEntry = { title, type, year, season, studios, directors, performers, franchises, image, link };
-      const missingFields = missingAddFormFields(addEntry);
-      if (missingFields.length) {
-        showMissingFieldsModal(missingFields);
-        return;
-      }
+      if (!title) { setStatus('Введите название.', true); return; }
       if (isDuplicateTitle(title, type, null)) { setStatus(`Такой ${type} уже есть. OP и ED проверяются отдельно.`, true); return; }
       if (!(await confirmSimilarTitleIfNeeded(title, type, null))) {
         setStatus('Добавление отменено: похоже на дубль.');

@@ -571,11 +571,11 @@
     #oc-main-panel #oc-list-container .oc-season-op { grid-template-columns:30px 124px minmax(0,1fr) 56px; grid-template-rows:auto auto; align-items:start; gap:12px; padding:14px; border-radius:16px; border-left-width:3px; }
     #oc-main-panel #oc-list-container .oc-season-op:has(.oc-type-tag.OP) { border-left-color:var(--cyan); }
     #oc-main-panel #oc-list-container .oc-season-op:has(.oc-type-tag.ED) { border-left-color:var(--pink); }
-    #oc-main-panel #oc-list-container .oc-season-thumb { width:124px; height:70px; border-radius:10px; }
+    #oc-main-panel #oc-list-container .oc-season-thumb { width:124px; height:92px; border-radius:10px; }
     #oc-main-panel #oc-list-container .oc-name { font:17px/1.18 'Archivo Black',sans-serif; }
     #oc-main-panel #oc-list-container .oc-rank { padding-top:4px; }
     #oc-main-panel #oc-list-container .oc-meta { font-size:10.5px; }
-    #oc-main-panel #oc-list-container .oc-votes { display:none; }
+    #oc-main-panel #oc-list-container .oc-votes, #oc-main-panel #oc-list-container .oc-meta-line:nth-of-type(n+3) { display:none; }
     #oc-main-panel #oc-list-container .oc-card-actions { grid-column:2/-1; width:100%; min-width:0; flex-direction:row; flex-wrap:wrap; justify-content:flex-start; align-items:center; }
     #oc-main-panel #oc-list-container .oc-card-actions > * { width:auto; }
     #oc-main-panel #oc-list-container .oc-card-rated {
@@ -815,13 +815,13 @@
     }
     .oc-season-thumb {
       width: 54px;
-      height: 30px;
+      height: 54px;
       border-radius: 8px;
       font-size: 18px;
     }
     .oc-profile-thumb {
       width: 46px;
-      height: 26px;
+      height: 46px;
       border-radius: 8px;
       font-size: 11px;
       flex-shrink: 0;
@@ -838,8 +838,9 @@
       border-color: var(--cyan);
       box-shadow: 0 0 0 1px rgba(8,217,214,0.18);
     }
-    img.oc-track-image { width:100%; height:100%; object-fit:fill; display:block; }
-    img.oc-track-image.oc-track-image-crop { object-fit:cover; }
+    .oc-season-thumb img,
+    .oc-profile-thumb img,
+    .oc-eval-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .oc-season-score {
       font-family: 'Archivo Black', 'Arial Black', sans-serif;
       font-size: 20px;
@@ -1675,8 +1676,7 @@
       font-family: 'Archivo Black', sans-serif;
     }
     .oc-tier-card:active { cursor: grabbing; }
-    .oc-tier-card img { width: 100%; height: 100%; object-fit: fill; display: block; }
-    .oc-tier-card img.oc-track-image-crop { object-fit: cover; }
+    .oc-tier-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .oc-tier-card-title {
       position: absolute;
       left: 0;
@@ -2127,5 +2127,5 @@
     @media (max-width:760px) {
       #oc-main-panel #oc-list-container .oc-list { grid-template-columns:1fr; }
       #oc-main-panel #oc-list-container .oc-season-op { grid-template-columns:28px 92px minmax(0,1fr) 48px; }
-      #oc-main-panel #oc-list-container .oc-season-thumb { width:92px; height:52px; }
+      #oc-main-panel #oc-list-container .oc-season-thumb { width:92px; height:76px; }
     }

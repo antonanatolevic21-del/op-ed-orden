@@ -120,29 +120,6 @@
     const SCORE_WORDS = { 1:'залупа', 2:'очень слабо', 3:'слабо', 4:'ниже среднего', 5:'средне', 6:'норм', 7:'хорошо', 8:'сильно', 9:'почти пик', 10:'пик' };
 
     const $ = (sel) => document.querySelector(sel);
-
-    function fitDisplayedTrackImage(image) {
-      if (!(image instanceof HTMLImageElement)) return;
-      const applyFit = () => requestAnimationFrame(() => {
-        const box = image.parentElement?.getBoundingClientRect();
-        if (!image.naturalWidth || !image.naturalHeight || !box?.width || !box?.height) return;
-        const sourceRatio = image.naturalWidth / image.naturalHeight;
-        const targetRatio = box.width / box.height;
-        image.classList.toggle('oc-track-image-crop', sourceRatio < targetRatio);
-      });
-      if (image.complete) applyFit();
-      else image.addEventListener('load', applyFit, { once: true });
-    }
-
-    document.addEventListener('load', event => {
-      if (event.target?.matches?.('img.oc-track-image')) fitDisplayedTrackImage(event.target);
-    }, true);
-    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
-      if (!(node instanceof Element)) return;
-      if (node.matches('img.oc-track-image')) fitDisplayedTrackImage(node);
-      node.querySelectorAll?.('img.oc-track-image').forEach(fitDisplayedTrackImage);
-    }))).observe(document.documentElement, { childList: true, subtree: true });
-
     const appEl = $('#ev-app');
     const stageTabs = $('#ev-stage-tabs');
     const nameInput = $('#ev-myname');
@@ -1210,7 +1187,7 @@
     }
 
     function renderVideoBlock(opening) {
-      const img = opening.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" referrerpolicy="no-referrer" />` : 'Нет картинки';
+      const img = opening.image ? `<img src="${escapeHtml(opening.image)}" alt="" referrerpolicy="no-referrer" />` : 'Нет картинки';
       const href = safeUrl(opening.link);
       const directType = getDirectVideoType(href);
       const embed = directType ? '' : getVideoEmbedUrl(href);
@@ -2369,7 +2346,7 @@
       const source = getGuessPlaybackSource(opening);
       if (source?.kind === 'direct') return `<div class="ev-bw-media"><video controls preload="metadata" playsinline src="${escapeHtml(source.url)}"></video></div>`;
       if (source?.kind === 'youtube') return `<div class="ev-bw-media"><iframe loading="lazy" src="https://www.youtube.com/embed/${escapeHtml(source.videoId)}?rel=0" title="${escapeHtml(getOpeningTitle(opening))}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
-      if (opening.image) return `<div class="ev-bw-media"><img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></div>`;
+      if (opening.image) return `<div class="ev-bw-media"><img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" /></div>`;
       return '<div class="ev-bw-media">Видео недоступно</div>';
     }
 
@@ -3703,7 +3680,7 @@
         ${cnRenderRoster(room)}
         ${winningTeam ? `<div class="ev-cn-winner"><span>Победители</span><strong style="color:${winningTeam==='red'?'var(--red)':'var(--cyan)'}">${cnTeamLabel(winningTeam)}</strong></div>` : `<div class="ev-cn-clue"><div><div class="ev-guess-label">Текущая подсказка</div><div class="ev-cn-clue-main">${clue ? `${escapeHtml(clue.word)} · ${escapeHtml(clue.count)}` : 'Ждём капитана'}</div><div class="ev-hint">${clue ? `Осталось попыток: ${Number(room.guessesLeft||0)} (включая одну дополнительную)` : `Подсказку даёт капитан команды «${cnTeamLabel(room.turn)}».`}</div></div>${canClue ? `<div class="ev-cn-clue-form"><label><span class="ev-guess-label">Одно слово</span><input id="ev-cn-clue-word" maxlength="40" placeholder="Например: космос"></label><label><span class="ev-guess-label">Число</span><input id="ev-cn-clue-count" type="number" min="1" max="9" value="1"></label><button class="ev-btn-main" id="ev-cn-clue-send">Дать подсказку</button></div>` : ''}${canGuess ? '<button class="ev-btn-ghost" id="ev-cn-end-turn">Закончить ход</button>' : ''}</div>`}
         ${me?.role === 'spymaster' && !winningTeam ? '<div class="ev-cn-focus-wrap"><button type="button" class="ev-cn-focus-btn" id="ev-cn-focus-own">Зажми: только свои оставшиеся</button></div>' : ''}
-        <div class="ev-cn-board" id="ev-cn-board">${board.map((card,index) => { const cardTitle = getMixedOpeningTitle(card, settings.typeFilter === 'all'); return `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)} ${me?.role === 'spymaster' && card.identity === me.team && !card.revealed ? 'cn-own-unrevealed' : ''}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img class="oc-track-image" src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(cardTitle)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(cardTitle)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`; }).join('')}</div>
+        <div class="ev-cn-board" id="ev-cn-board">${board.map((card,index) => { const cardTitle = getMixedOpeningTitle(card, settings.typeFilter === 'all'); return `<button type="button" class="ev-cn-card ${cnCardClass(card,seeMap)} ${me?.role === 'spymaster' && card.identity === me.team && !card.revealed ? 'cn-own-unrevealed' : ''}" data-cn-card="${index}" ${(canGuess && !card.revealed) ? '' : 'disabled'}>${(seeMap || card.revealed) ? `<span class="ev-cn-card-badge">${cnIdentityLabel(card.identity)}</span>` : ''}<div class="ev-cn-card-image">${safeUrl(card.image) ? `<img src="${escapeHtml(safeUrl(card.image))}" alt="${escapeHtml(cardTitle)}" loading="lazy" referrerpolicy="no-referrer">` : '<span>Нет изображения</span>'}</div><div class="ev-cn-card-body"><div class="ev-cn-card-title">${escapeHtml(cardTitle)}</div><div class="ev-cn-card-meta">${escapeHtml(card.type || 'OP')}</div></div></button>`; }).join('')}</div>
         <div class="ev-cn-log">${(Array.isArray(room.log)?room.log:[]).slice().reverse().map(row => `<div class="ev-cn-log-row">${escapeHtml(row)}</div>`).join('') || '<div class="ev-hint">История ходов пока пуста.</div>'}</div>
         ${codenamesStatus ? `<div class="ev-status-line bad">${escapeHtml(codenamesStatus)}</div>` : ''}</section></div>`;
       $('#ev-cn-reset')?.addEventListener('click', cnResetGame);
@@ -3743,7 +3720,7 @@
       const fallback = safeUrl(opening?.fallbackImage);
       if (!primary && !fallback) return '<div class="ev-who-secret">♪</div>';
       const src = primary || fallback;
-      return `<img class="oc-track-image" src="${escapeHtml(src)}" data-fallback="${escapeHtml(fallback && fallback !== src ? fallback : '')}" alt="${escapeHtml(alt || getOpeningTitle(opening))}">`;
+      return `<img src="${escapeHtml(src)}" data-fallback="${escapeHtml(fallback && fallback !== src ? fallback : '')}" alt="${escapeHtml(alt || getOpeningTitle(opening))}">`;
     }
 
     document.addEventListener('error', event => {
@@ -4550,7 +4527,7 @@
 
     function renderGuessResultCard(opening, index) {
       const image = opening.image
-        ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
+        ? `<img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
         : escapeHtml(opening.type || 'OP');
       const season = SEASON_LABEL[opening.season] || opening.season || 'сезон не указан';
       const studio = (opening.studios || []).slice(0, 2).join(', ') || 'студия не указана';
@@ -6524,7 +6501,7 @@
         const opening = openingsById.get(String(row.id));
         const active = selectedSet.has(String(row.id));
         const selectedIndex = selected.indexOf(String(row.id));
-        const img = opening?.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : 'OP';
+        const img = opening?.image ? `<img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : 'OP';
         const countText = Number(row.count) ? `${row.count} оценок` : 'оценок нет';
         return `
           <button type="button" class="ev-egortos-card ${active ? 'active' : ''}" data-egortos-card="${escapeHtml(row.id)}" title="Выбрать ${escapeHtml(row.title)}">
@@ -6846,7 +6823,7 @@
       const guestView = isGuest();
       const avg = guestView ? null : avgForOpeningInSeason(state.key, openingId);
       const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
-      const img = opening.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : 'OP';
+      const img = opening.image ? `<img src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : 'OP';
       const thumb = opening.link
         ? `<a class="ev-thumb-link" href="${escapeHtml(opening.link)}" target="_blank" rel="noopener noreferrer" title="Открыть видео"><div class="oc-season-thumb">${img}</div></a>`
         : `<div class="oc-season-thumb">${img}</div>`;
