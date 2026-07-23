@@ -907,7 +907,7 @@
       const showcase = $('#oc-home-test-showcase');
       const root = $('#opedchart-root');
       const mode = isAdmin() ? Number(homeTestMode || 0) : 0;
-      root?.classList.remove('oc-home-test-1', 'oc-home-test-2', 'oc-home-test-3', 'oc-home-test-4');
+      root?.classList.remove('oc-home-test-1', 'oc-home-test-2', 'oc-home-test-3');
       if (mode) root?.classList.add(`oc-home-test-${mode}`);
       document.querySelectorAll('[data-home-test]').forEach(button => button.classList.toggle('active', Number(button.dataset.homeTest) === mode));
       document.querySelector('.oc-tab-btn[data-tab="chart"]')?.classList.toggle('active', activeTab === 'chart' && mode === 0);
@@ -919,7 +919,7 @@
 
     function setHomeTestMode(mode) {
       if (!isAdmin()) return;
-      homeTestMode = [1, 2, 3, 4].includes(Number(mode)) ? Number(mode) : 0;
+      homeTestMode = [1, 2, 3].includes(Number(mode)) ? Number(mode) : 0;
       switchTab('chart');
       render();
     }
