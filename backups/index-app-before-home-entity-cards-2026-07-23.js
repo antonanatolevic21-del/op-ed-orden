@@ -3585,8 +3585,7 @@
         eligible.filter(item => !existing.has(normalizedEntityValue(item.value)))
           .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' · ' + item.count + '</option>').join('');
       entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId));
-      entityBackBtn.classList.remove('hidden');
-      entityBackBtn.textContent = activeEntityCardId ? '← Ко всем альбомам' : '← На главную';
+      entityBackBtn.classList.toggle('hidden', !activeEntityCardId);
       entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
       entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
       entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
@@ -5603,22 +5602,8 @@
       });
     });
 
-    document.querySelectorAll('[data-entity-home]').forEach(card => {
-      card.addEventListener('click', () => {
-        if (!requireAccount('Войди в аккаунт, чтобы открыть коллекции.')) return;
-        switchTab('entity-' + card.getAttribute('data-entity-home'));
-      });
-    });
-
     if (entityCreateForm) entityCreateForm.addEventListener('submit', saveEntityAlbum);
-    if (entityBackBtn) entityBackBtn.addEventListener('click', () => {
-      if (activeEntityCardId) {
-        activeEntityCardId = '';
-        renderEntityAlbums();
-      } else {
-        switchTab('chart');
-      }
-    });
+    if (entityBackBtn) entityBackBtn.addEventListener('click', () => { activeEntityCardId = ''; renderEntityAlbums(); });
     [entitySearchInput, entityTrackTypeSelect, entityYearSelect, entitySeasonSelect, entityProgressSelect].forEach(el => {
       if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', renderEntityAlbums);
     });
