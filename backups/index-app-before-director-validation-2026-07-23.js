@@ -2604,23 +2604,21 @@
       if (!String(entry.type || '').trim()) missing.push('тип');
       if (!hasYear) missing.push('год');
       if (!hasSeason) missing.push('сезон');
-      if (!(entry.directors || []).length) missing.push('режиссёр');
 
       const now = new Date();
       const currentOpenSeasonPoint = now.getFullYear() * 4 + Math.floor(now.getMonth() / 3);
       const seasonPoint = hasYear && hasSeason ? Number(entry.year) * 4 + SEASON_ORDER.indexOf(entry.season) : null;
-      if (seasonPoint !== null && seasonPoint > currentOpenSeasonPoint) {
-        return missing.length === 1 && missing[0] === 'режиссёр' ? [] : missing;
-      }
+      if (seasonPoint !== null && seasonPoint > currentOpenSeasonPoint) return missing;
 
       if (!(entry.studios || []).length) missing.push('студия');
+      if (!(entry.directors || []).length) missing.push('режиссёр');
       if (!(entry.performers || []).length) missing.push('исполнитель');
       if (!(entry.franchises || []).length) missing.push('франшиза');
       if (seasonPoint === null || seasonPoint < currentOpenSeasonPoint) {
         if (!String(entry.image || '').trim()) missing.push('картинка');
         if (!String(entry.link || '').trim()) missing.push('ссылка на видео');
       }
-      return missing.length === 1 && missing[0] === 'режиссёр' ? [] : missing;
+      return missing;
     }
 
     function entryHasMissingRequiredFields(entry) {
