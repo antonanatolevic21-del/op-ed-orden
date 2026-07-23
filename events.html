@@ -1388,6 +1388,8 @@
       setDoc,
       deleteDoc,
       onSnapshot,
+      arrayUnion,
+      arrayRemove,
       serverTimestamp
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
     import { getAuth, signInAnonymously, signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
@@ -1626,6 +1628,16 @@
     let bestWorstRooms = [];
     let codenamesRooms = [];
     let whoAmIRooms = [];
+    const eventRoomCache = {
+      bestworst:new Map(),
+      codenames:new Map(),
+      whoami:new Map()
+    };
+    const eventRoomSubscriptions = {
+      bestworst:new Map(),
+      codenames:new Map(),
+      whoami:new Map()
+    };
     let pendingEventRoomMetadata = null;
     let eventRoomInviteHandled = false;
     const spectatorPresenceRegistered = new Set();
@@ -1731,6 +1743,73 @@
 
     function eventRoomCollection(mode) {
       return mode === 'bestworst' ? BW_ROOM_COLLECTION : CODENAMES_COLLECTION;
+    }
+
+    function eventRoomRegistryId(mode) {
+      if (mode === 'bestworst') return BW_ROOM_ID;
+      if (mode === 'whoami') return WHO_AM_I_ROOM_ID;
+      return CODENAMES_ROOM_ID;
+    }
+
+    function eventRoomRegistryRef(mode) {
+      return doc(db, eventRoomCollection(mode), eventRoomRegistryId(mode));
+    }
+
+    async function registerEventRoom(mode, id) {
+      if (!id || id === eventRoomRegistryId(mode)) return;
+      await setDoc(eventRoomRegistryRef(mode), { roomIds:arrayUnion(id), registryUpdatedAt:serverTimestamp() }, { merge:true });
+    }
+
+    async function unregisterEventRoom(mode, id) {
+      if (!id || id === eventRoomRegistryId(mode)) return;
+      await setDoc(eventRoomRegistryRef(mode), { roomIds:arrayRemove(id), registryUpdatedAt:serverTimestamp() }, { merge:true });
+    }
+
+    function refreshEventRoomList(mode) {
+      const rows = [...eventRoomCache[mode].values()];
+      if (mode === 'bestworst') {
+        bestWorstRooms = rows;
+        bestWorstRoom = rows.find(room => room.id === eventRoomId(mode)) || null;
+        restoreEventRoomPresence(mode, bestWorstRoom);
+        if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
+        if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
+        void bwMaybeAutoReveal();
+      } else if (mode === 'codenames') {
+        codenamesRooms = rows;
+        codenamesRoom = rows.find(room => room.id === eventRoomId(mode)) || null;
+        restoreEventRoomPresence(mode, codenamesRoom);
+      } else {
+        whoAmIRooms = rows;
+        whoAmIRoom = rows.find(room => room.id === eventRoomId(mode)) || null;
+        restoreEventRoomPresence(mode, whoAmIRoom);
+      }
+      void consumeEventRoomInvite();
+      if (activeMode === mode) scheduleFirebaseRender(mode === 'whoami' ? 'whoami' : 'other');
+    }
+
+    function syncEventRoomSubscriptions(mode, roomIds = []) {
+      const registryId = eventRoomRegistryId(mode);
+      const desired = new Set(roomIds.map(String).filter(id => id && id !== registryId));
+      eventRoomSubscriptions[mode].forEach((unsubscribe, id) => {
+        if (desired.has(id)) return;
+        unsubscribe();
+        eventRoomSubscriptions[mode].delete(id);
+        eventRoomCache[mode].delete(id);
+      });
+      desired.forEach(id => {
+        if (eventRoomSubscriptions[mode].has(id)) return;
+        const unsubscribe = onSnapshot(eventRoomRef(mode, id), snapshot => {
+          if (snapshot.exists()) eventRoomCache[mode].set(id, { id:snapshot.id, ...snapshot.data() });
+          else eventRoomCache[mode].delete(id);
+          refreshEventRoomList(mode);
+        }, error => {
+          console.error(`${mode} room snapshot error`, id, error);
+          eventRoomCache[mode].delete(id);
+          refreshEventRoomList(mode);
+        });
+        eventRoomSubscriptions[mode].set(id, unsubscribe);
+      });
+      refreshEventRoomList(mode);
     }
 
     function eventRoomRef(mode, id = eventRoomId(mode)) {
@@ -3673,6 +3752,7 @@
           updatedAtLocal: new Date().toISOString(),
           updatedAt: serverTimestamp()
         });
+        await registerEventRoom('bestworst', eventRoomId('bestworst'));
         pendingEventRoomMetadata = null;
         bestWorstStatus = 'Лобби сохранено. После изменения настроек готовность участников сброшена.';
       } catch (error) {
@@ -4724,10 +4804,12 @@
       try {
         await setDoc(cnRoomDoc(), { ...patch, updatedAtLocal: new Date().toISOString(), updatedAt: serverTimestamp() }, { merge: true });
         codenamesStatus = '';
+        return true;
       } catch (error) {
         console.error('eventCodenames save failed', error);
         codenamesStatus = 'Не удалось сохранить игру.';
         render();
+        return false;
       }
     }
     function cnFilteredOpenings(settings = cnSettings()) {
@@ -4778,7 +4860,9 @@
       if (!eventRoomId('codenames')) setEventRoom('codenames', newEventRoomId('cn'));
       const hostName = String(myName || 'Codenames').trim();
       const hostKey = normalizeNickname(hostName);
-      await cnPatch({ ...(pendingEventRoomMetadata || {}), gameType:'codenames', title:pendingEventRoomMetadata?.title || `Лобби ${hostName}`, hostKey, hostName, status:'lobby', players:[], spectators:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      const saved = await cnPatch({ ...(pendingEventRoomMetadata || {}), gameType:'codenames', title:pendingEventRoomMetadata?.title || `Лобби ${hostName}`, hostKey, hostName, status:'lobby', players:[], spectators:[], settings:{ typeFilter:'all', fromYear:'', fromSeason:'winter', toYear:'', toSeason:'fall' }, board:[], clue:null, guessesLeft:0, turn:'red', winner:'', log:[], gameId:`${Date.now()}-${Math.random().toString(36).slice(2,8)}` });
+      if (!saved) return;
+      await registerEventRoom('codenames', eventRoomId('codenames'));
       pendingEventRoomMetadata = null;
     }
     async function cnJoin(team, role) {
@@ -5160,6 +5244,7 @@
         settings:{ type:'', fromYear:null, toYear:null }, assignments:{}, questions:[], guessedKeys:[],
         turnIndex:0, createdAt:serverTimestamp(), updatedAt:serverTimestamp()
       });
+      await registerEventRoom('whoami', eventRoomId('whoami'));
       pendingEventRoomMetadata = null;
       whoAmIStatus = 'Комната создана.';
     }
@@ -5520,6 +5605,7 @@
       wrap.querySelector('#ev-room-delete')?.addEventListener('click', async () => {
         if (!confirm(`Полностью удалить комнату «${room?.title || 'без названия'}»?`)) return;
         await deleteDoc(eventRoomRef(mode));
+        await unregisterEventRoom(mode, room?.id);
         setEventRoom(mode, '');
         render();
       });
@@ -8844,17 +8930,13 @@
         guessCollectionStatus = 'Не удалось загрузить подборки.';
         scheduleFirebaseRender('other');
       });
-      onSnapshot(collection(db, BW_ROOM_COLLECTION), snapshot => {
-        bestWorstRooms = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
-        bestWorstRoom = bestWorstRooms.find(room => room.id === eventRoomId('bestworst')) || null;
-        restoreEventRoomPresence('bestworst', bestWorstRoom);
-        if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
-        if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
-        void bwMaybeAutoReveal();
-        void consumeEventRoomInvite();
-        scheduleFirebaseRender('other');
+      onSnapshot(eventRoomRegistryRef('bestworst'), snapshot => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        if (snapshot.exists() && data.status) eventRoomCache.bestworst.set(BW_ROOM_ID, { id:BW_ROOM_ID, ...data });
+        else eventRoomCache.bestworst.delete(BW_ROOM_ID);
+        syncEventRoomSubscriptions('bestworst', data.roomIds || []);
       }, error => {
-        console.error('bestWorstRooms snapshot error', error);
+        console.error('bestWorstRooms registry snapshot error', error);
         bestWorstRoom = null;
         bestWorstStatus = 'Не удалось загрузить лобби.';
         scheduleFirebaseRender('other');
@@ -8869,27 +8951,29 @@
         bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
         scheduleFirebaseRender('other');
       });
-      onSnapshot(collection(db, CODENAMES_COLLECTION), snapshot => {
-        const rooms = snapshot.docs.map(d => ({ id:d.id, ...d.data() }));
-        whoAmIRooms = rooms.filter(room => room.gameType === 'whoami' || room.id === WHO_AM_I_ROOM_ID || room.id.startsWith('whoami-'));
-        codenamesRooms = rooms.filter(room => !whoAmIRooms.some(whoRoom => whoRoom.id === room.id));
-        whoAmIRoom = whoAmIRooms.find(room => room.id === eventRoomId('whoami')) || null;
-        codenamesRoom = codenamesRooms.find(room => room.id === eventRoomId('codenames')) || null;
-        restoreEventRoomPresence('whoami', whoAmIRoom);
-        restoreEventRoomPresence('codenames', codenamesRoom);
-        void consumeEventRoomInvite();
-        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
-        if (activeMode === 'codenames') scheduleFirebaseRender('other');
+      onSnapshot(eventRoomRegistryRef('codenames'), snapshot => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        if (snapshot.exists() && data.status) eventRoomCache.codenames.set(CODENAMES_ROOM_ID, { id:CODENAMES_ROOM_ID, ...data });
+        else eventRoomCache.codenames.delete(CODENAMES_ROOM_ID);
+        syncEventRoomSubscriptions('codenames', data.roomIds || []);
       }, error => {
-        console.error('eventCodenames snapshot error', error);
-        whoAmIRooms = [];
+        console.error('codenames registry snapshot error', error);
         codenamesRooms = [];
-        whoAmIRoom = null;
         codenamesRoom = null;
-        whoAmIStatus = 'Не удалось загрузить комнаты «Кто я?».';
         codenamesStatus = 'Не удалось загрузить игру.';
-        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
         if (activeMode === 'codenames') scheduleFirebaseRender('other');
+      });
+      onSnapshot(eventRoomRegistryRef('whoami'), snapshot => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        if (snapshot.exists() && data.status) eventRoomCache.whoami.set(WHO_AM_I_ROOM_ID, { id:WHO_AM_I_ROOM_ID, ...data });
+        else eventRoomCache.whoami.delete(WHO_AM_I_ROOM_ID);
+        syncEventRoomSubscriptions('whoami', data.roomIds || []);
+      }, error => {
+        console.error('whoami registry snapshot error', error);
+        whoAmIRooms = [];
+        whoAmIRoom = null;
+        whoAmIStatus = 'Не удалось загрузить комнаты «Кто я?».';
+        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
       });
       onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
         const currentKey = predictionDocKey();
