@@ -1,0 +1,252 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && request.auth.uid in [
+          '5BWpHNMD2JNo3yb76FYa3lxXCh42',
+          'V6TCpSnTCraD42sY67owCrRaVGZ2',
+          'nfM5lNH7PCgl4h9fByPXXPUl8RH3',
+          'JI5oT4J5cVbJ0nrkQfLiKta83qI2'
+        ];
+    }
+
+    function validRoomId(roomId) {
+      return roomId is string
+        && roomId.size() > 0
+        && roomId.size() <= 100;
+    }
+
+    function ownsNickname(nicknameKey) {
+      return signedIn()
+        && nicknameKey is string
+        && nicknameKey.size() > 0
+        && exists(/databases/$(database)/documents/userProfiles/$(nicknameKey))
+        && get(/databases/$(database)/documents/userProfiles/$(nicknameKey)).data.authUid == request.auth.uid;
+    }
+
+    function createsOwnedNicknameDocument() {
+      return request.resource.data.ownerUid == request.auth.uid
+        && ownsNickname(request.resource.data.nicknameKey);
+    }
+
+    function ownsExistingNicknameDocument() {
+      return resource.data.ownerUid == request.auth.uid
+        || ownsNickname(resource.data.nicknameKey);
+    }
+
+    function createsOwnUidDocument() {
+      return signedIn() && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function ownsExistingUidDocument() {
+      return signedIn()
+        && resource.data.ownerUid is string
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    function ownsProtectedProfile() {
+      return signedIn()
+        && resource.data.authUid is string
+        && resource.data.authUid == request.auth.uid;
+    }
+
+    function createsOwnProfile() {
+      return signedIn()
+        && request.resource.data.authUid is string
+        && request.resource.data.authUid == request.auth.uid;
+    }
+
+    function claimsLegacyProfile() {
+      return signedIn()
+        && (!('authUid' in resource.data) || resource.data.authUid == null || resource.data.authUid == '')
+        && request.resource.data.authUid == request.auth.uid;
+    }
+
+    function isRoomMember() {
+      return signedIn()
+        && resource.data.memberUids is list
+        && request.auth.uid in resource.data.memberUids;
+    }
+
+    function createsHostedRoom() {
+      return signedIn()
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.memberUids is list
+        && request.auth.uid in request.resource.data.memberUids;
+    }
+
+    function joinsOrWatchesRoom() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['players', 'memberUids', 'spectators', 'updatedAt', 'updatedAtLocal'])
+        && (
+          request.auth.uid in request.resource.data.memberUids
+          || request.resource.data.spectators is list
+        );
+    }
+
+    function createsRoomRegistry() {
+      return signedIn()
+        && request.resource.data.keys().hasOnly(['roomIds', 'registryUpdatedAt']);
+    }
+
+    function updatesRoomRegistry() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['roomIds', 'registryUpdatedAt']);
+    }
+
+    // Основной каталог меняют только администраторы.
+    match /openings/{openingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Оценки и пользовательские тир-листы сохраняют вошедшие пользователи.
+    match /ratings/{ratingId} {
+      allow read: if true;
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
+    }
+
+    match /manualRanks/{rankId} {
+      allow read: if true;
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
+    }
+
+    match /tierOrders/{orderId} {
+      allow read: if true;
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
+    }
+
+    match /tierLabels/{labelId} {
+      allow read: if true;
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
+    }
+
+    match /tierPlacements/{placementId} {
+      allow read: if true;
+      allow create: if isAdmin() || createsOwnedNicknameDocument();
+      allow update: if isAdmin() || ownsExistingNicknameDocument() || createsOwnedNicknameDocument();
+      allow delete: if isAdmin() || ownsExistingNicknameDocument();
+    }
+
+    // Новый профиль может создать только его Firebase-владелец.
+    // Старый профиль без authUid разрешено один раз привязать к личному аккаунту.
+    match /userProfiles/{profileId} {
+      allow read: if true;
+      allow create: if createsOwnProfile() || isAdmin();
+      allow update: if ownsProtectedProfile() || claimsLegacyProfile() || isAdmin();
+      allow delete: if ownsProtectedProfile() || isAdmin();
+    }
+
+    match /meta/{metaId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /guessCollections/{collectionId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Настройки и корзину ежегодного ивента меняют только администраторы.
+    match /eventSeasons/{seasonId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /eventBasket/{basketId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /eventAltLinks/{linkId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Участники могут сохранять свои оценки и уведомления.
+    match /eventRatings/{ratingId} {
+      allow read: if signedIn();
+      allow create: if isAdmin() || createsOwnUidDocument();
+      allow update, delete: if isAdmin() || ownsExistingUidDocument();
+    }
+
+    match /eventNotifications/{notificationId} {
+      allow read: if signedIn();
+      allow create: if isAdmin() || createsOwnUidDocument();
+      allow update, delete: if isAdmin() || ownsExistingUidDocument();
+    }
+
+    match /eventPredictions/{seasonId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Параллельные комнаты Codenames и «Кто я».
+    match /eventCodenames/{roomId} {
+      allow read: if signedIn() && validRoomId(roomId);
+      allow create: if (roomId == 'current' || roomId == 'whoami-current')
+        && createsRoomRegistry();
+      allow update: if (roomId == 'current' || roomId == 'whoami-current')
+        && updatesRoomRegistry();
+      allow create: if roomId != 'current' && roomId != 'whoami-current'
+        && validRoomId(roomId) && createsHostedRoom();
+      allow update: if roomId != 'current' && roomId != 'whoami-current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid || isRoomMember() || joinsOrWatchesRoom());
+      allow delete: if roomId != 'current' && roomId != 'whoami-current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid);
+    }
+
+    // Параллельные комнаты «Лучшее / худшее».
+    match /bestWorstRooms/{roomId} {
+      allow read: if signedIn() && validRoomId(roomId);
+      allow create: if roomId == 'current' && createsRoomRegistry();
+      allow update: if roomId == 'current' && updatesRoomRegistry();
+      allow create: if roomId != 'current' && validRoomId(roomId) && createsHostedRoom();
+      allow update: if roomId != 'current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid || isRoomMember() || joinsOrWatchesRoom());
+      allow delete: if roomId != 'current' && validRoomId(roomId)
+        && (isAdmin() || resource.data.hostUid == request.auth.uid);
+    }
+
+    match /bestWorstSubmissions/{submissionId} {
+      allow read: if signedIn();
+
+      allow create, update: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.gameId is string
+        && request.resource.data.gameId.size() > 0
+        && request.resource.data.gameId.size() <= 100
+        && request.resource.data.roundIndex is int
+        && request.resource.data.roundIndex >= 0
+        && request.resource.data.guesserKey is string
+        && request.resource.data.guesserKey.size() > 0
+        && request.resource.data.guesserKey.size() <= 60
+        && request.resource.data.guesserName is string
+        && request.resource.data.guesserName.size() <= 80
+        && request.resource.data.answers is map;
+
+      allow delete: if isAdmin() || ownsExistingUidDocument();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
