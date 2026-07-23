@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260723-track-panel-compact5';
+  const version = '20260723-track-panel-compact6';
 
   const albumStylesheet = document.createElement('link');
   albumStylesheet.rel = 'stylesheet';
@@ -21,7 +21,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force6', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force7', {
         updateViaCache: 'none'
       });
       await registration.update();
