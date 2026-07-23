@@ -118,6 +118,20 @@
     const seasonPanel = $('#oc-season-panel');
     const tierPanel = $('#oc-tier-panel');
     const statsPanel = $('#oc-stats-panel');
+    const entityPanel = $('#oc-entity-panel');
+    const entityTitleEl = $('#oc-entity-title');
+    const entitySubtitleEl = $('#oc-entity-subtitle');
+    const entityBackBtn = $('#oc-entity-back');
+    const entityCreateForm = $('#oc-entity-create');
+    const entityValueSelect = $('#oc-entity-value');
+    const entityImageInput = $('#oc-entity-image');
+    const entityFiltersEl = $('#oc-entity-filters');
+    const entitySearchInput = $('#oc-entity-search');
+    const entityTrackTypeSelect = $('#oc-entity-track-type');
+    const entityProgressSelect = $('#oc-entity-progress');
+    const entityRateAllBtn = $('#oc-entity-rate-all');
+    const entityGridEl = $('#oc-entity-grid');
+    const entityTracksEl = $('#oc-entity-tracks');
     const openingModal = $('#oc-opening-modal');
     const confirmModal = $('#oc-confirm-modal');
     const franchiseRepairModal = $('#oc-franchise-repair-modal');
@@ -189,6 +203,11 @@
     let firebaseRatings = [];
     let firebaseManualRanks = [];
     let firebaseUserProfiles = [];
+    let firebaseEntityCards = [];
+    let firebaseUnsubEntityCards = null;
+    let activeEntityType = 'studios';
+    let activeEntityCardId = '';
+    let activeEntityQueueLabel = '';
     let firebaseUnsubOpenings = null;
     let firebaseUnsubRatings = null;
     let firebaseUnsubManualRanks = null;
@@ -426,6 +445,7 @@
         if (activeTab === 'tier') renderTierList();
         if (activeTab === 'stats') renderStatsPage();
       if (activeTab === 'top100') renderGlobalTop100();
+      if (activeTab.startsWith('entity-')) renderEntityAlbums();
         setStatus(mode === 'personal' ? 'Отметка удалена ✓' : 'Оценка удалена ✓');
       } catch (err) {
         console.error(err);
@@ -2162,6 +2182,13 @@
         await db.init();
         await startTierOrderWatcher();
         await startEventBasketWatcher();
+        if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
+        if (typeof db.watchEntityCards === 'function') {
+          firebaseUnsubEntityCards = db.watchEntityCards(rows => {
+            firebaseEntityCards = rows || [];
+            if (activeTab.startsWith('entity-')) renderEntityAlbums();
+          });
+        }
 
         let gotOpenings = false;
         let gotRatings = false;
@@ -3501,6 +3528,135 @@
       }).join('')}</div>`;
     }
 
+
+    const ENTITY_ALBUM_META = {
+      studios: { title: 'Студии', one: 'студию', field: 'studios', icon: '🎬' },
+      performers: { title: 'Исполнители', one: 'исполнителя', field: 'performers', icon: '🎙️' },
+      directors: { title: 'Режиссёры', one: 'режиссёра', field: 'directors', icon: '🎞️' },
+      franchises: { title: 'Франшизы', one: 'франшизу', field: 'franchises', icon: '✨' }
+    };
+
+    function normalizedEntityValue(value) {
+      return String(value || '').trim().toLocaleLowerCase('ru');
+    }
+
+    function entriesForEntity(type, value) {
+      const field = (ENTITY_ALBUM_META[type] || {}).field;
+      const key = normalizedEntityValue(value);
+      if (!field || !key) return [];
+      return entries.filter(entry => (entry[field] || []).some(item => normalizedEntityValue(item) === key));
+    }
+
+    function entityHasRating(entry) {
+      return isPersonalScale() ? hasPersonalRated(entry, myName) : hasRated(entry, myName);
+    }
+
+    function entityCardProgress(card) {
+      const related = entriesForEntity(card.type, card.value);
+      const rated = related.filter(entityHasRating).length;
+      return { related, rated, complete: related.length >= 4 && rated === related.length };
+    }
+
+    function eligibleEntityValues(type) {
+      const field = (ENTITY_ALBUM_META[type] || {}).field;
+      const names = new Map();
+      if (!field) return [];
+      entries.forEach(entry => (entry[field] || []).forEach(raw => {
+        const value = String(raw || '').trim();
+        const key = normalizedEntityValue(value);
+        if (!key) return;
+        if (!names.has(key)) names.set(key, { value, ids: new Set() });
+        names.get(key).ids.add(String(entry.id));
+      }));
+      return Array.from(names.values()).filter(item => item.ids.size >= 4)
+        .sort((a, b) => a.value.localeCompare(b.value, 'ru')).map(item => ({ value: item.value, count: item.ids.size }));
+    }
+
+    function renderEntityAlbums() {
+      if (!entityPanel) return;
+      const meta = ENTITY_ALBUM_META[activeEntityType] || ENTITY_ALBUM_META.studios;
+      const cards = firebaseEntityCards.filter(card => card.type === activeEntityType)
+        .sort((a, b) => String(a.value || '').localeCompare(String(b.value || ''), 'ru'));
+      const eligible = eligibleEntityValues(activeEntityType);
+      const existing = new Set(cards.map(card => normalizedEntityValue(card.value)));
+      entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум 4 трека)</option>' +
+        eligible.filter(item => !existing.has(normalizedEntityValue(item.value)))
+          .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' · ' + item.count + '</option>').join('');
+      entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityBackBtn.classList.toggle('hidden', !activeEntityCardId);
+      entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
+      entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
+
+      if (activeEntityCardId) {
+        const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
+        if (!card) { activeEntityCardId = ''; renderEntityAlbums(); return; }
+        const progress = entityCardProgress(card);
+        entityTitleEl.textContent = card.value;
+        entitySubtitleEl.textContent = progress.rated + ' из ' + progress.related.length + ' оценено';
+        const search = normalizedEntityValue(entitySearchInput.value);
+        const trackType = entityTrackTypeSelect.value;
+        const progressFilter = entityProgressSelect.value;
+        const filtered = progress.related.filter(entry => {
+          if (search && !normalizedEntityValue(entry.title).includes(search)) return false;
+          if (trackType && entry.type !== trackType) return false;
+          const rated = entityHasRating(entry);
+          return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
+        }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+        entityRateAllBtn.disabled = !progress.related.length;
+        entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + filtered.map((entry, index) =>
+          renderUnifiedEntryCard(entry, {
+            rankLabel: index + 1,
+            className: entityHasRating(entry) ? 'oc-entity-track-rated' : '',
+            controlsHtml: '<button class="oc-secondary-btn" type="button" data-entity-rate="' + escapeHtml(entry.id) + '">' + (entityHasRating(entry) ? 'Изменить оценку' : 'Оценить') + '</button>'
+          })
+        ).join('') + '</div>' : '<div class="oc-empty">По этим фильтрам треков нет.</div>';
+        return;
+      }
+
+      entityTitleEl.textContent = meta.title;
+      entitySubtitleEl.textContent = 'Альбомы с треками из каталога. Создать новый можно для объекта, у которого есть минимум 4 трека.';
+      entityGridEl.innerHTML = cards.length ? cards.map(card => {
+        const progress = entityCardProgress(card);
+        return '<article class="oc-entity-card' + (progress.complete ? ' complete' : '') + '" data-entity-open="' + escapeHtml(card.id) + '">' +
+          '<div class="oc-entity-cover">' + (card.image ? '<img src="' + escapeHtml(normalizeUrl(card.image)) + '" alt="" loading="lazy" />' : '<span>' + meta.icon + '</span>') + '</div>' +
+          '<div class="oc-entity-card-body"><h3>' + escapeHtml(card.value) + '</h3><p>' + progress.rated + ' из ' + progress.related.length + ' оценено</p>' +
+          '<div class="oc-entity-progressbar"><i style="width:' + (progress.related.length ? Math.round(progress.rated / progress.related.length * 100) : 0) + '%"></i></div>' +
+          (progress.complete ? '<span class="oc-entity-done">Всё просмотрено ✓</span>' : '') +
+          (isAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
+          '</div></article>';
+      }).join('') : '<div class="oc-empty">Альбомов пока нет.</div>';
+    }
+
+    function startEntityRating() {
+      const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
+      if (!card || !ensureNickname()) return;
+      const related = entriesForEntity(card.type, card.value);
+      const remaining = related.filter(entry => !entityHasRating(entry));
+      evaluatorMode = 'entity';
+      activeEntityQueueLabel = card.value;
+      seasonQueue = (remaining.length ? remaining : related).slice().sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+      seasonQueueIndex = 0;
+      if (!seasonQueue.length) return;
+      renderEvaluator();
+    }
+
+    async function saveEntityAlbum(event) {
+      event.preventDefault();
+      if (!isAdmin()) return;
+      const value = entityValueSelect.value;
+      const image = String(entityImageInput.value || '').trim();
+      if (!value || !image) { setStatus('Выберите объект и добавьте ссылку на обложку.', true); return; }
+      try {
+        await window.OPED_DB.saveEntityCard({ type: activeEntityType, value, image });
+        entityCreateForm.reset();
+        setStatus('Альбом создан ✓');
+      } catch (error) {
+        console.error(error);
+        setStatus('Не удалось создать альбом. Проверьте доступ Firebase.', true);
+      }
+    }
+
     function switchTab(tab) {
       if (tab !== 'chart' && !requireAccount()) return;
       activeTab = tab;
@@ -3511,6 +3667,13 @@
       seasonPanel.classList.toggle('hidden', tab !== 'season');
       if (tierPanel) tierPanel.classList.toggle('hidden', tab !== 'tier');
       if (statsPanel) statsPanel.classList.toggle('hidden', tab !== 'stats');
+      const entityTab = tab.startsWith('entity-');
+      if (entityPanel) entityPanel.classList.toggle('hidden', !entityTab);
+      if (entityTab) {
+        activeEntityType = tab.slice('entity-'.length);
+        activeEntityCardId = '';
+        renderEntityAlbums();
+      }
       if (tab === 'season') renderSeasonViews();
       if (tab === 'profile') renderProfile();
       if (tab === 'top100') renderGlobalTop100();
@@ -3570,13 +3733,16 @@
         const completedDailyKey = dailyActiveKey;
         closeEvaluator();
         renderSeasonViews();
+        if (completedMode === 'entity') renderEntityAlbums();
         if (completedMode === 'daily') {
           finalizeDaily(completedDailyKey).catch(error => { console.error(error); setStatus('Не удалось завершить дейлик.', true); });
           return;
         }
-        setStatus(isPersonalScale()
-          ? (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Оценки сезона проставлены ✓')
-          : (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Сезонная оценка завершена ✓'));
+        setStatus(completedMode === 'entity'
+          ? 'Альбом полностью просмотрен ✓'
+          : isPersonalScale()
+            ? (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Оценки сезона проставлены ✓')
+            : (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Сезонная оценка завершена ✓'));
         return;
       }
       const entry = seasonQueue[seasonQueueIndex];
@@ -3588,7 +3754,9 @@
       const inputMin = ratingMin();
       const inputMax = ratingMax();
       const inputStep = scaleStep();
-      const progressText = evaluatorMode === 'single'
+      const progressText = evaluatorMode === 'entity'
+        ? `${activeEntityQueueLabel} · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
+        : evaluatorMode === 'single'
         ? `Переоценка · ${entry.year || 'год не указан'}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`
         : evaluatorMode === 'daily'
           ? `Ежедневная оценка · ${seasonQueueIndex + 1} из ${seasonQueue.length} оставшихся`
@@ -5422,6 +5590,28 @@
           switchTab(tab);
         }
       });
+    });
+
+    if (entityCreateForm) entityCreateForm.addEventListener('submit', saveEntityAlbum);
+    if (entityBackBtn) entityBackBtn.addEventListener('click', () => { activeEntityCardId = ''; renderEntityAlbums(); });
+    [entitySearchInput, entityTrackTypeSelect, entityProgressSelect].forEach(el => {
+      if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', renderEntityAlbums);
+    });
+    if (entityRateAllBtn) entityRateAllBtn.addEventListener('click', startEntityRating);
+    if (entityPanel) entityPanel.addEventListener('click', async event => {
+      const open = event.target.closest('[data-entity-open]');
+      if (open && !event.target.closest('[data-entity-delete]')) {
+        activeEntityCardId = open.getAttribute('data-entity-open');
+        renderEntityAlbums();
+        return;
+      }
+      const rate = event.target.closest('[data-entity-rate]');
+      if (rate) { startOpeningRating(rate.getAttribute('data-entity-rate')); return; }
+      const remove = event.target.closest('[data-entity-delete]');
+      if (remove && isAdmin() && confirm('Удалить этот альбом?')) {
+        try { await window.OPED_DB.deleteEntityCard(remove.getAttribute('data-entity-delete')); setStatus('Альбом удалён.'); }
+        catch (error) { console.error(error); setStatus('Не удалось удалить альбом.', true); }
+      }
     });
 
     seasonYearsEl.addEventListener('click', (e) => {
