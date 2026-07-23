@@ -2438,6 +2438,8 @@
           <button type="button" class="oc-season-type-btn" data-globaltop-type="ED">ED</button>
           <button type="button" class="oc-season-type-btn active" data-globaltop-mode="manual">По ручным топ-100</button>
           <button type="button" class="oc-season-type-btn" data-globaltop-mode="score">По среднему баллу</button>
+          <button type="button" class="oc-season-type-btn oc-admin-only oc-locked active" data-globaltop-scope="all">Все пользователи</button>
+          <button type="button" class="oc-season-type-btn oc-admin-only oc-locked" data-globaltop-scope="admins">Только админы</button>
         </div>
       </div>
       <div id="oc-globaltop-summary" class="oc-resultcount"></div>
@@ -2676,6 +2678,7 @@
     let profileUser = '';
     let globalTopType = 'OP';
     let globalTopMode = 'manual';
+    let globalTopScope = 'all';
     const PAGE_SIZE = 50;
     let chartPage = 1;
     let profileTopPage = { OP: 1, ED: 1 };
@@ -3746,6 +3749,34 @@
 
     function avgAny(scores) {
       return scoreStats(scores).avgAny;
+    }
+
+    function adminScoreStats(scores) {
+      const values = Object.entries(scores || {})
+        .filter(([nickname]) => isAdminNickname(nickname))
+        .map(([,value]) => normalizePublicScore(value))
+        .filter(value => value !== null);
+      return {
+        count: values.length,
+        avgAny: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
+      };
+    }
+
+    function adminAvg(scores, minVotes = 1) {
+      const stats = adminScoreStats(scores);
+      return stats.count >= minVotes ? stats.avgAny : null;
+    }
+
+    function adminRatingCount(scores) {
+      return adminScoreStats(scores).count;
+    }
+
+    function visibleAverageMarkup(entry, generalScore = avg(entry?.scores)) {
+      const general = formatScore(generalScore);
+      if (!isAdmin()) return general;
+      const adminScore = adminAvg(entry?.scores);
+      const adminCount = adminRatingCount(entry?.scores);
+      return `${general}<span class="oc-season-score-sub">адм. ${formatScore(adminScore)} · ${adminCount}</span>`;
     }
 
     function normalizedPublicScoreRatio(score) {
@@ -5752,7 +5783,7 @@
     function renderUnifiedEntryCard(entry, opts = {}) {
       const rankLabel = opts.rankLabel !== undefined ? opts.rankLabel : '';
       const rankClass = opts.rankClass || '';
-      const scoreText = opts.scoreText !== undefined ? opts.scoreText : formatScore(avg(entry.scores));
+      const scoreText = opts.scoreText !== undefined ? opts.scoreText : visibleAverageMarkup(entry);
       const scoreSub = opts.scoreSub ? `<span class="oc-season-score-sub">${escapeHtml(opts.scoreSub)}</span>` : '';
       const controlsHtml = opts.controlsHtml ? `<div class="oc-card-actions">${opts.controlsHtml}</div>` : '';
       const className = opts.className ? ` ${opts.className}` : '';
@@ -5881,7 +5912,7 @@
         const score = avg(entry.scores);
         const myScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
         const myScoreText = myScore !== null ? (isPersonalScale() ? formatFiveScore(myScore) : formatScore(myScore)) : '';
-        const scoreText = score === null ? '—' : score.toFixed(1);
+        const scoreText = visibleAverageMarkup(entry, score);
         const extraHtml = myScore !== null ? `<div class="oc-rated-mark">твоя оценка: ${escapeHtml(myScoreText)}</div>` : '';
         const basketButton = eventBasketCanAdd() && entry.type === 'OP'
           ? `<button type="button" class="oc-season-re-rate oc-basket-add-btn" data-basket-add="${entry.id}">${eventBasketHas(entry) ? 'В корзине ✓' : 'Добавить в корзину'}</button>`
@@ -6872,13 +6903,14 @@
     }
 
 
-    function usersWithManualTop(type) {
+    function usersWithManualTop(type, scope = 'all') {
       const users = [];
       const seenKeys = new Set();
       Object.keys(manualRanks || {}).forEach(key => {
         const row = manualRanks[key] || {};
         const display = String(row.nickname || row.displayName || row.name || key || '').trim();
         if (!display) return;
+        if (scope === 'admins' && !isAdminNickname(display)) return;
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
         if (seenKeys.has(safe)) return;
         const arr = manualOrderFor(display, type);
@@ -6890,8 +6922,8 @@
       return users.sort((a, b) => a.localeCompare(b, 'ru'));
     }
 
-    function computeGlobalManualTop(type) {
-      const users = usersWithManualTop(type);
+    function computeGlobalManualTop(type, scope = 'all') {
+      const users = usersWithManualTop(type, scope);
       const rows = new Map();
       users.forEach(user => {
         const seen = new Set();
@@ -6921,10 +6953,16 @@
       ).slice(0, 100);
     }
 
-    function computeGlobalScoreTop(type) {
+    function computeGlobalScoreTop(type, scope = 'all') {
+      const minVotes = scope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
       const rows = entries
         .filter(e => e.type === type)
-        .map(e => ({ entry: e, avgScore: avg(e.scores, MIN_PUBLIC_VOTES), count: ratingCount(e.scores), mode: 'score' }))
+        .map(e => ({
+          entry: e,
+          avgScore: scope === 'admins' ? adminAvg(e.scores, minVotes) : avg(e.scores, minVotes),
+          count: scope === 'admins' ? adminRatingCount(e.scores) : ratingCount(e.scores),
+          mode: 'score'
+        }))
         .filter(r => r.avgScore !== null)
         .sort((a, b) => b.avgScore - a.avgScore || b.count - a.count || a.entry.title.localeCompare(b.entry.title, 'ru'));
       if (rows.length <= 100) return rows;
@@ -6936,20 +6974,24 @@
       const listEl = $('#oc-globaltop-list');
       const summaryEl = $('#oc-globaltop-summary');
       if (!listEl) return;
+      if (!isAdmin()) globalTopScope = 'all';
       document.querySelectorAll('[data-globaltop-type]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopType === globalTopType));
       document.querySelectorAll('[data-globaltop-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopMode === globalTopMode));
-      const rows = globalTopMode === 'score' ? computeGlobalScoreTop(globalTopType) : computeGlobalManualTop(globalTopType);
-      const users = usersWithManualTop(globalTopType);
+      document.querySelectorAll('[data-globaltop-scope]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopScope === globalTopScope));
+      const rows = globalTopMode === 'score' ? computeGlobalScoreTop(globalTopType, globalTopScope) : computeGlobalManualTop(globalTopType, globalTopScope);
+      const users = usersWithManualTop(globalTopType, globalTopScope);
+      const scopeLabel = globalTopScope === 'admins' ? 'Только администраторы.' : 'Все пользователи, включая администраторов.';
+      const minVotes = globalTopScope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
       if (summaryEl) summaryEl.textContent = globalTopMode === 'score'
-        ? `Тип: ${globalTopType}. Режим: средний балл. Минимум ${MIN_PUBLIC_VOTES} оценки. Показано: ${rows.length}.`
-        : `Тип: ${globalTopType}. Режим: ручные топ-100. Сначала учитывается количество попаданий в топ, потом среднее место. Пользователей с ручным топом: ${users.length}. Показано: ${rows.length}.`;
+        ? `${scopeLabel} Тип: ${globalTopType}. Режим: средний балл. Минимум ${minVotes} оценки. Показано: ${rows.length}.`
+        : `${scopeLabel} Тип: ${globalTopType}. Режим: ручные топ-100. Сначала учитывается количество попаданий в топ, потом среднее место. Пользователей с ручным топом: ${users.length}. Показано: ${rows.length}.`;
       if (globalTopMode === 'manual' && !users.length) {
         listEl.innerHTML = '<div class="oc-empty">Пока нет сохранённых ручных топ-100 для этого типа.</div>';
         return;
       }
       if (!rows.length) {
         listEl.innerHTML = globalTopMode === 'score'
-          ? '<div class="oc-empty">Пока нет треков с минимум 3 публичными оценками.</div>'
+          ? `<div class="oc-empty">${globalTopScope === 'admins' ? 'Пока нет треков с оценками администраторов.' : 'Пока нет треков с минимум 3 публичными оценками.'}</div>`
           : '<div class="oc-empty">В ручных топах пока нет актуальных треков.</div>';
         return;
       }
@@ -6958,7 +7000,7 @@
         const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
         const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
         const metric = globalTopMode === 'score'
-          ? `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">ср. ${formatScore(row.avgScore)}</span></div><div class="oc-globaltop-metric">оценок ${row.count}</div><div class="oc-globaltop-metric">мин. ${MIN_PUBLIC_VOTES}</div>`
+          ? `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">ср. ${formatScore(row.avgScore)}</span></div><div class="oc-globaltop-metric">оценок ${row.count}</div><div class="oc-globaltop-metric">мин. ${minVotes}</div>`
           : `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">в топе ${row.count}/${row.totalUsers}</span></div><div class="oc-globaltop-metric">ср. место ${formatScore(row.avgPlace)}</div><div class="oc-globaltop-metric">лучшее место ${row.bestPlace}</div>`;
         return `<div class="oc-globaltop-item">
           <div class="oc-profile-rank ${rankClass}">${idx < 3 ? ['①','②','③'][idx] : idx + 1}</div>
@@ -7360,12 +7402,15 @@
       const entry = entriesById.get(String(id));
       if (!entry || !openingModal) return;
       const score = avg(entry.scores);
+      const adminScore = adminAvg(entry.scores);
+      const adminCount = adminRatingCount(entry.scores);
       const avgSong = avgAny(entry.songScores || {});
       const avgVisual = avgAny(entry.visualScores || {});
       const votes = Object.entries(entry.scores || {}).sort((a,b)=> Number(b[1]) - Number(a[1]));
       const arrayValue = (arr) => escapeHtml((arr || []).filter(Boolean).join(', ') || '—');
       const scoreRows = [
-        `<div class="oc-detail-box"><div class="oc-detail-label">средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
+        `<div class="oc-detail-box"><div class="oc-detail-label">общая средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
+        isAdmin() ? `<div class="oc-detail-box"><div class="oc-detail-label">средняя админов</div><div class="oc-detail-value">${formatScore(adminScore)} · ${adminCount} оценок</div></div>` : '',
         avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">песня</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
         avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">визуал</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
       ].filter(Boolean).join('');
@@ -7538,7 +7583,7 @@
         const absoluteIdx = page.start + idx;
         if (entry.id === editingId) return renderEditCard(entry);
         const score = avg(entry.scores);
-        const scoreText = formatScore(score);
+        const scoreText = visibleAverageMarkup(entry, score);
         const showRank = sortMode === 'score';
         const rankClass = showRank && absoluteIdx === 0 ? 'gold' : showRank && absoluteIdx === 1 ? 'silver' : showRank && absoluteIdx === 2 ? 'bronze' : '';
         const rankLabel = showRank ? (absoluteIdx < 3 ? ['①','②','③'][absoluteIdx] : (absoluteIdx + 1)) : (absoluteIdx + 1);
@@ -8513,6 +8558,13 @@
     document.querySelectorAll('[data-globaltop-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
         globalTopMode = btn.dataset.globaltopMode === 'score' ? 'score' : 'manual';
+        renderGlobalTop100();
+      });
+    });
+    document.querySelectorAll('[data-globaltop-scope]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!isAdmin()) return;
+        globalTopScope = btn.dataset.globaltopScope === 'admins' ? 'admins' : 'all';
         renderGlobalTop100();
       });
     });
