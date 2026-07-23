@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260723-track-panel1';
+  const version = '20260723-track-panel-compact1';
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
