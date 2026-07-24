@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-album-progress2';
+  const version = '20260724-album-progress3';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
