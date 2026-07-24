@@ -9,10 +9,6 @@
     element.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  function textValue(root, id) {
-    return String(root.querySelector(`#${id}`)?.value || '').trim();
-  }
-
   function optionText(select, value) {
     const option = [...(select?.options || [])].find(item => item.value === value);
     return String(option?.textContent || value || '').trim();
@@ -165,17 +161,21 @@
     ].filter(Boolean);
     if (!scopes.length) return;
 
-    const renderAll = () => scopes.forEach(renderScope);
     scopes.forEach(scope => {
-      scope.root.addEventListener('input', () => requestAnimationFrame(() => renderScope(scope)));
-      scope.root.addEventListener('change', () => requestAnimationFrame(() => renderScope(scope)));
+      scope.root.addEventListener('input', event => {
+        if (event.target.closest('.oc-filter-chip')) return;
+        requestAnimationFrame(() => renderScope(scope));
+      });
+      scope.root.addEventListener('change', event => {
+        if (event.target.closest('.oc-filter-chip')) return;
+        requestAnimationFrame(() => renderScope(scope));
+      });
       scope.root.addEventListener('click', event => {
         if (event.target.closest('.oc-reset-btn')) window.setTimeout(() => renderScope(scope), 20);
       });
-      new MutationObserver(() => requestAnimationFrame(() => renderScope(scope))).observe(scope.root, { childList: true, subtree: true });
     });
 
-    renderAll();
+    scopes.forEach(renderScope);
     window.__OC_FILTER_CHIPS_READY__ = true;
   }
 
