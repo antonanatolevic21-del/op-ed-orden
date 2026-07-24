@@ -4,6 +4,7 @@
   const VIEWS = new Set(['overview', 'top100', 'ratings', 'daily']);
   const STORAGE_KEY = 'oc-profile-subtab';
   let currentView = 'overview';
+  let statsEnhanceScheduled = false;
 
   function panel() {
     return document.querySelector('#oc-profile-panel');
@@ -50,6 +51,67 @@
     });
   }
 
+  function statTone(card) {
+    const label = String(card.querySelector('.oc-stat-label')?.textContent || '').toLowerCase();
+    if (/(^|[\s·])op($|[\s·])/i.test(label)) return 'op';
+    if (/(^|[\s·])ed($|[\s·])/i.test(label)) return 'ed';
+    if (label.includes('песня')) return 'song';
+    if (label.includes('визуал')) return 'visual';
+    return 'neutral';
+  }
+
+  function overviewHeading(kind, title, subtitle) {
+    const heading = document.createElement('div');
+    heading.className = `oc-profile-overview-heading oc-profile-overview-heading-${kind}`;
+    const copy = document.createElement('div');
+    const kicker = document.createElement('span');
+    kicker.textContent = kind === 'summary' ? 'профиль в цифрах' : 'лучшие категории';
+    const h3 = document.createElement('h3');
+    h3.textContent = title;
+    const p = document.createElement('p');
+    p.textContent = subtitle;
+    copy.append(kicker, h3, p);
+    heading.append(copy);
+    return heading;
+  }
+
+  function enhanceOverviewStats() {
+    statsEnhanceScheduled = false;
+    const root = panel();
+    const stats = root?.querySelector('#oc-profile-stats');
+    if (!stats) return;
+
+    const cards = [...stats.children].filter(element => element.classList.contains('oc-stat-card'));
+    if (!cards.length) return;
+
+    cards.forEach((card, index) => {
+      card.classList.toggle('oc-profile-metric-card', index < 7);
+      card.classList.toggle('oc-profile-leader-card', index >= 7);
+      card.dataset.profileStatTone = statTone(card);
+    });
+
+    let summary = stats.querySelector('.oc-profile-overview-heading-summary');
+    if (!summary) {
+      summary = overviewHeading('summary', 'Ключевые показатели', 'Средние оценки и прогресс по каталогу без лишней россыпи карточек.');
+      stats.insertBefore(summary, cards[0]);
+    }
+
+    const firstLeader = cards[7];
+    if (firstLeader) {
+      let leaders = stats.querySelector('.oc-profile-overview-heading-leaders');
+      if (!leaders) {
+        leaders = overviewHeading('leaders', 'Лидеры', 'Студии, исполнители, режиссёры, франшизы и сезоны — крупными, читаемыми блоками.');
+        stats.insertBefore(leaders, firstLeader);
+      }
+    }
+  }
+
+  function scheduleOverviewStats() {
+    if (statsEnhanceScheduled) return;
+    statsEnhanceScheduled = true;
+    requestAnimationFrame(enhanceOverviewStats);
+  }
+
   function ensureDailyPlaceholder() {
     const root = panel();
     const daily = root?.querySelector('#oc-daily-panel');
@@ -92,6 +154,7 @@
     setVisible('#oc-daily-panel', currentView === 'daily');
     setVisible('.oc-profile-filterbar', currentView === 'top100' || currentView === 'ratings');
     syncDailyPlaceholder();
+    if (currentView === 'overview') scheduleOverviewStats();
 
     if (persist) {
       try { sessionStorage.setItem(STORAGE_KEY, currentView); } catch (_) {}
@@ -107,6 +170,12 @@
     let saved = 'overview';
     try { saved = sessionStorage.getItem(STORAGE_KEY) || 'overview'; } catch (_) {}
     setView(saved, false);
+
+    const stats = root.querySelector('#oc-profile-stats');
+    if (stats) {
+      new MutationObserver(scheduleOverviewStats).observe(stats, { childList: true });
+      scheduleOverviewStats();
+    }
 
     const daily = root.querySelector('#oc-daily-panel');
     if (daily) {
