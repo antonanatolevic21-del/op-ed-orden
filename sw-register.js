@@ -5,6 +5,7 @@
   const profileFiltersVersion = '20260724-profile-filters2';
   const filterChipsVersion = '20260724-filter-chips2';
   const extendedStatsVersion = '20260724-extended-stats2';
+  const deepLinksVersion = '20260724-deep-links1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -69,6 +70,11 @@
   extendedStatsScript.src = `./extended-stats.js?v=${extendedStatsVersion}`;
   extendedStatsScript.defer = true;
   document.body.append(extendedStatsScript);
+
+  const deepLinksScript = document.createElement('script');
+  deepLinksScript.src = `./deep-links.js?v=${deepLinksVersion}`;
+  deepLinksScript.defer = true;
+  document.body.append(deepLinksScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
