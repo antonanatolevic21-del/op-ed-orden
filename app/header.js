@@ -16,6 +16,14 @@ function currentAvatar() {
   return String(document.querySelector('#oc-avatar-btn')?.textContent || localStorage.getItem('my-avatar') || '🙂').trim() || '🙂';
 }
 
+function attachAvatarPicker(header) {
+  const picker = document.querySelector('#oc-avatar-picker');
+  const menu = header.querySelector('.oc-shell-account-menu');
+  if (!picker || !menu || picker.closest('.oc-shell-account-menu')) return;
+  picker.classList.add('oc-shell-avatar-picker');
+  menu.append(picker);
+}
+
 function makeHeader() {
   const root = document.querySelector('#opedchart-root');
   if (!root || document.querySelector('.oc-shell-header')) return null;
@@ -53,6 +61,7 @@ function makeHeader() {
       </button>
       <div class="oc-shell-account-menu" hidden>
         <button type="button" class="oc-shell-account-action" data-shell-account>Аккаунт / вход</button>
+        <button type="button" data-shell-avatar>Сменить аватар</button>
         <label class="oc-shell-menu-field"><span>Шкала оценки</span><select data-shell-scale></select></label>
         <label class="oc-shell-menu-field"><span>Что показывать</span><select data-shell-content></select></label>
         <div class="oc-shell-admin-menu" hidden>
@@ -64,6 +73,7 @@ function makeHeader() {
       </div>
     </div>`;
   root.insertBefore(header, root.firstChild);
+  attachAvatarPicker(header);
   return header;
 }
 
@@ -72,8 +82,7 @@ function syncActive(header) {
   const active = activeLegacy?.dataset.tab || 'chart';
   header.querySelectorAll('[data-shell-tab]').forEach(button => {
     const tab = button.dataset.shellTab;
-    const ratingGroup = ['top100', 'stats', 'tier'].includes(active);
-    const on = tab === active || (button.classList.contains('oc-shell-ratings-toggle') && ratingGroup);
+    const on = tab === active;
     button.classList.toggle('active', on);
     if (on) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
@@ -87,9 +96,9 @@ function syncAccount(header) {
   if (avatar) avatar.textContent = currentAvatar();
   const sourceDot = document.querySelector('#oc-daily-bell-dot');
   header.querySelector('.oc-shell-daily-dot')?.classList.toggle('show', Boolean(sourceDot && !sourceDot.classList.contains('hidden')));
-  const admin = isAdminUnlocked();
   const adminMenu = header.querySelector('.oc-shell-admin-menu');
-  if (adminMenu) adminMenu.hidden = !admin;
+  if (adminMenu) adminMenu.hidden = !isAdminUnlocked();
+  attachAvatarPicker(header);
 }
 
 function closeMenus(header) {
@@ -101,6 +110,14 @@ function closeMenus(header) {
   account?.setAttribute('aria-expanded', 'false');
   if (ratingMenu) ratingMenu.hidden = true;
   ratingToggle?.setAttribute('aria-expanded', 'false');
+  header.querySelector('#oc-avatar-picker')?.classList.add('hidden');
+}
+
+function openAccountMenu(header) {
+  const button = header.querySelector('.oc-shell-account');
+  const menu = header.querySelector('.oc-shell-account-menu');
+  if (menu) menu.hidden = false;
+  button?.setAttribute('aria-expanded', 'true');
 }
 
 function bind(header) {
@@ -137,10 +154,25 @@ function bind(header) {
       button?.setAttribute('aria-expanded', String(willOpen));
       return;
     }
-    if (event.target.closest('[data-shell-account]')) { document.querySelector('#oc-access-badge')?.click(); closeMenus(header); }
-    if (event.target.closest('[data-shell-quality]')) { window.dispatchEvent(new Event('oped-open-quality')); closeMenus(header); }
-    if (event.target.closest('[data-shell-repair]')) { document.querySelector('#oc-franchise-repair-btn')?.click(); closeMenus(header); }
-    if (event.target.closest('[data-shell-images]')) { document.querySelector('#oc-image-migration-btn')?.click(); closeMenus(header); }
+    if (event.target.closest('[data-shell-avatar]')) {
+      openAccountMenu(header);
+      const source = document.querySelector('#oc-avatar-btn');
+      const picker = header.querySelector('#oc-avatar-picker');
+      if (source) source.click();
+      else picker?.classList.toggle('hidden');
+      event.stopPropagation();
+      return;
+    }
+    if (event.target.closest('#oc-avatar-picker')) {
+      openAccountMenu(header);
+      event.stopPropagation();
+      window.setTimeout(() => syncAccount(header), 0);
+      return;
+    }
+    if (event.target.closest('[data-shell-account]')) { document.querySelector('#oc-access-badge')?.click(); closeMenus(header); return; }
+    if (event.target.closest('[data-shell-quality]')) { window.dispatchEvent(new Event('oped-open-quality')); closeMenus(header); return; }
+    if (event.target.closest('[data-shell-repair]')) { document.querySelector('#oc-franchise-repair-btn')?.click(); closeMenus(header); return; }
+    if (event.target.closest('[data-shell-images]')) { document.querySelector('#oc-image-migration-btn')?.click(); closeMenus(header); return; }
     if (event.target.closest('.oc-shell-daily')) document.querySelector('#oc-daily-bell')?.click();
   });
 
