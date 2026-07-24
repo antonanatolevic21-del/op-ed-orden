@@ -1,0 +1,336 @@
+
+===== lines 2161-2174 (hit 2166) =====
+02161: 
+02162:     function bwOpeningMatches(opening, settings, ratingContext) {
+02163:       if (settings.typeFilter !== 'both' && opening.type !== settings.typeFilter) return false;
+02164:       if (!getGuessPlaybackSource(opening)) return false;
+02165:       if (!openingInSeasonRange(opening, settings)) return false;
+02166:       if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
+02167:       if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
+02168:       if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
+02169:       const content = guessContentFlags(settings.content);
+02170:       if (!content.showChinese && opening.isChinese) return false;
+02171:       if (!content.showMovie && opening.isMovie) return false;
+02172:       if (!content.showShortened && opening.isShortened) return false;
+02173:       if (settings.source === 'ratings' && !bwRatingFilterMatches(opening.id, settings, ratingContext)) return false;
+02174:       return true;
+
+===== lines 2162-2175 (hit 2167) =====
+02162:     function bwOpeningMatches(opening, settings, ratingContext) {
+02163:       if (settings.typeFilter !== 'both' && opening.type !== settings.typeFilter) return false;
+02164:       if (!getGuessPlaybackSource(opening)) return false;
+02165:       if (!openingInSeasonRange(opening, settings)) return false;
+02166:       if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
+02167:       if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
+02168:       if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
+02169:       const content = guessContentFlags(settings.content);
+02170:       if (!content.showChinese && opening.isChinese) return false;
+02171:       if (!content.showMovie && opening.isMovie) return false;
+02172:       if (!content.showShortened && opening.isShortened) return false;
+02173:       if (settings.source === 'ratings' && !bwRatingFilterMatches(opening.id, settings, ratingContext)) return false;
+02174:       return true;
+02175:     }
+
+===== lines 2163-2176 (hit 2168) =====
+02163:       if (settings.typeFilter !== 'both' && opening.type !== settings.typeFilter) return false;
+02164:       if (!getGuessPlaybackSource(opening)) return false;
+02165:       if (!openingInSeasonRange(opening, settings)) return false;
+02166:       if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
+02167:       if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
+02168:       if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
+02169:       const content = guessContentFlags(settings.content);
+02170:       if (!content.showChinese && opening.isChinese) return false;
+02171:       if (!content.showMovie && opening.isMovie) return false;
+02172:       if (!content.showShortened && opening.isShortened) return false;
+02173:       if (settings.source === 'ratings' && !bwRatingFilterMatches(opening.id, settings, ratingContext)) return false;
+02174:       return true;
+02175:     }
+02176: 
+
+===== lines 2871-2884 (hit 2876) =====
+02871:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Группировка</span><select id="ev-bw-grouping" ${hostDisabled}><option value="none" ${settings.grouping === 'none' ? 'selected' : ''}>Без группировки</option><option value="year" ${settings.grouping === 'year' ? 'selected' : ''}>По году</option><option value="yearSeason" ${settings.grouping === 'yearSeason' ? 'selected' : ''}>По году и сезону</option><option value="performer" ${settings.grouping === 'performer' ? 'selected' : ''}>По исполнителю</option><option value="director" ${settings.grouping === 'director' ? 'selected' : ''}>По режиссёру</option><option value="studio" ${settings.grouping === 'studio' ? 'selected' : ''}>По студии</option><option value="franchise" ${settings.grouping === 'franchise' ? 'selected' : ''}>По франшизе</option></select></label>
+02872:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Предыгровой выбор</span><span class="ev-guess-user ${settings.banDraft ? 'active' : ''}"><input id="ev-bw-ban-draft" type="checkbox" ${settings.banDraft ? 'checked' : ''} ${hostDisabled}/><span>Включить бан и антибан</span></span><span class="ev-guess-note">Каждый игрок выбирает один бан из трёх карточек, затем один обязательный антибан из трёх новых.</span></label>
+02873:                 <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
+02874:                 <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
+02875:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
+02876:                 <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
+02877:                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
+02878:                 <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
+02879:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
+02880:                 <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !bwIsHost() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
+02881:                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
+02882:               </div>
+02883:               <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> элементов · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · с рабочим источником.</div>${bwIsHost() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
+02884:             </section>
+
+===== lines 2872-2885 (hit 2877) =====
+02872:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Предыгровой выбор</span><span class="ev-guess-user ${settings.banDraft ? 'active' : ''}"><input id="ev-bw-ban-draft" type="checkbox" ${settings.banDraft ? 'checked' : ''} ${hostDisabled}/><span>Включить бан и антибан</span></span><span class="ev-guess-note">Каждый игрок выбирает один бан из трёх карточек, затем один обязательный антибан из трёх новых.</span></label>
+02873:                 <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
+02874:                 <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
+02875:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
+02876:                 <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
+02877:                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
+02878:                 <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
+02879:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
+02880:                 <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !bwIsHost() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
+02881:                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
+02882:               </div>
+02883:               <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> элементов · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · с рабочим источником.</div>${bwIsHost() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
+02884:             </section>
+02885:           </div>
+
+===== lines 2873-2886 (hit 2878) =====
+02873:                 <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
+02874:                 <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
+02875:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
+02876:                 <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
+02877:                 <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
+02878:                 <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
+02879:                 <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
+02880:                 <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !bwIsHost() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
+02881:                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
+02882:               </div>
+02883:               <div class="ev-guess-create-row"><div class="ev-guess-preview">Сейчас под фильтры подходит: <strong>${candidates.length}</strong> элементов · ${escapeHtml(bwTypeLabel(settings.typeFilter))} · с рабочим источником.</div>${bwIsHost() ? `<button type="button" class="ev-btn-main" id="ev-bw-save-lobby">${room ? 'Применить настройки' : 'Создать лобби'}</button>` : ''}</div>
+02884:             </section>
+02885:           </div>
+02886:           ${bestWorstStatus ? `<div class="ev-status-line ${/не удалось|нужно|сначала|не выбрано|не может/i.test(bestWorstStatus) ? 'bad' : 'ok'}">${escapeHtml(bestWorstStatus)}</div>` : ''}
+
+===== lines 2906-2919 (hit 2911) =====
+02906:       bind('#ev-bw-from-year', 'fromYear', value => String(value || ''));
+02907:       bind('#ev-bw-from-season', 'fromSeason');
+02908:       bind('#ev-bw-to-year', 'toYear', value => String(value || ''));
+02909:       bind('#ev-bw-to-season', 'toSeason');
+02910:       bind('#ev-bw-content', 'content');
+02911:       bind('#ev-bw-studio', 'studio');
+02912:       bind('#ev-bw-director', 'director');
+02913:       bind('#ev-bw-performer', 'performer');
+02914:       bind('#ev-bw-source', 'source');
+02915:       bind('#ev-bw-score-overall-cmp', 'scoreOverallCmp');
+02916:       bind('#ev-bw-score-song-cmp', 'scoreSongCmp');
+02917:       bind('#ev-bw-score-visual-cmp', 'scoreVisualCmp');
+02918:       const parseScore = value => { const raw = String(value || '').trim(); const number = Number(raw); return raw && Number.isFinite(number) ? Math.max(.5, Math.min(10, number)) : ''; };
+02919:       bind('#ev-bw-score-overall-value', 'scoreOverallValue', parseScore);
+
+===== lines 2907-2920 (hit 2912) =====
+02907:       bind('#ev-bw-from-season', 'fromSeason');
+02908:       bind('#ev-bw-to-year', 'toYear', value => String(value || ''));
+02909:       bind('#ev-bw-to-season', 'toSeason');
+02910:       bind('#ev-bw-content', 'content');
+02911:       bind('#ev-bw-studio', 'studio');
+02912:       bind('#ev-bw-director', 'director');
+02913:       bind('#ev-bw-performer', 'performer');
+02914:       bind('#ev-bw-source', 'source');
+02915:       bind('#ev-bw-score-overall-cmp', 'scoreOverallCmp');
+02916:       bind('#ev-bw-score-song-cmp', 'scoreSongCmp');
+02917:       bind('#ev-bw-score-visual-cmp', 'scoreVisualCmp');
+02918:       const parseScore = value => { const raw = String(value || '').trim(); const number = Number(raw); return raw && Number.isFinite(number) ? Math.max(.5, Math.min(10, number)) : ''; };
+02919:       bind('#ev-bw-score-overall-value', 'scoreOverallValue', parseScore);
+02920:       bind('#ev-bw-score-song-value', 'scoreSongValue', parseScore);
+
+===== lines 2908-2921 (hit 2913) =====
+02908:       bind('#ev-bw-to-year', 'toYear', value => String(value || ''));
+02909:       bind('#ev-bw-to-season', 'toSeason');
+02910:       bind('#ev-bw-content', 'content');
+02911:       bind('#ev-bw-studio', 'studio');
+02912:       bind('#ev-bw-director', 'director');
+02913:       bind('#ev-bw-performer', 'performer');
+02914:       bind('#ev-bw-source', 'source');
+02915:       bind('#ev-bw-score-overall-cmp', 'scoreOverallCmp');
+02916:       bind('#ev-bw-score-song-cmp', 'scoreSongCmp');
+02917:       bind('#ev-bw-score-visual-cmp', 'scoreVisualCmp');
+02918:       const parseScore = value => { const raw = String(value || '').trim(); const number = Number(raw); return raw && Number.isFinite(number) ? Math.max(.5, Math.min(10, number)) : ''; };
+02919:       bind('#ev-bw-score-overall-value', 'scoreOverallValue', parseScore);
+02920:       bind('#ev-bw-score-song-value', 'scoreSongValue', parseScore);
+02921:       bind('#ev-bw-score-visual-value', 'scoreVisualValue', parseScore);
+
+===== lines 3854-3867 (hit 3859) =====
+03854:           <label class="ev-guess-field"><span class="ev-guess-label">Количество</span><input data-blind-field="count" type="number" min="3" max="20" value="${escapeHtml(blindTierFilters.count)}"></label>
+03855:           <label class="ev-guess-field"><span class="ev-guess-label">Источник</span><select data-blind-field="source"><option value="all" ${blindTierFilters.source==='all'?'selected':''}>Вся база</option><option value="ratings" ${blindTierFilters.source==='ratings'?'selected':''}>Оценки пользователей</option></select></label>
+03856:           <label class="ev-guess-field"><span class="ev-guess-label">Тип</span><select data-blind-field="type"><option value="" ${!blindTierFilters.type?'selected':''}>OP и ED</option><option value="OP" ${blindTierFilters.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${blindTierFilters.type==='ED'?'selected':''}>Только ED</option></select></label>
+03857:           <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select data-blind-field="fromYear">${seasonRangeYearOptions(years,blindTierFilters.fromYear,'С самого раннего')}</select><select data-blind-field="fromSeason">${seasonRangeSeasonOptions(blindTierFilters.fromSeason)}</select></div></div>
+03858:           <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select data-blind-field="toYear">${seasonRangeYearOptions(years,blindTierFilters.toYear,'По самый поздний')}</select><select data-blind-field="toSeason">${seasonRangeSeasonOptions(blindTierFilters.toSeason)}</select></div></div>
+03859:           <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
+03860:           <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
+03861:           <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>
+03862:           <label class="ev-guess-field"><span class="ev-guess-label">Контент</span><select data-blind-field="content"><option value="all" ${blindTierFilters.content==='all'?'selected':''}>Всё</option><option value="default" ${blindTierFilters.content==='default'?'selected':''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${blindTierFilters.content==='chinese'?'selected':''}>С китайскими</option><option value="movie" ${blindTierFilters.content==='movie'?'selected':''}>С фильмами</option><option value="shortened" ${blindTierFilters.content==='shortened'?'selected':''}>С укороченными</option></select></label>
+03863:           <div class="ev-guess-field full"><span class="ev-guess-label">Пользователи</span><div class="ev-guess-users">${users.map(user=>`<label><input type="checkbox" data-blind-user="${escapeHtml(user.key)}" ${selectedUsers.has(user.key)?'checked':''}> ${escapeHtml(user.avatar||'')} ${escapeHtml(user.nickname)}</label>`).join('')||'<span class="ev-hint">Оценок пользователей пока нет.</span>'}</div></div>
+03864:           <div class="ev-guess-field full"><span class="ev-guess-label">Условия оценок</span><div class="ev-guess-segmented"><button type="button" data-blind-score-logic="and" class="${blindTierFilters.scoreLogic!=='or'?'active':''}">И — выполнить все</button><button type="button" data-blind-score-logic="or" class="${blindTierFilters.scoreLogic==='or'?'active':''}">ИЛИ — достаточно одного</button></div>${scoreRows}</div>
+03865:         </div><div class="ev-actions"><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button><div class="ev-hint">Под фильтры подходит: <strong id="ev-blind-count-preview">${candidatesCount}</strong></div></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
+03866:         const updateBlindFilters = () => {
+03867:           appEl.querySelectorAll('[data-blind-field]').forEach(input => {
+
+===== lines 3855-3868 (hit 3860) =====
+03855:           <label class="ev-guess-field"><span class="ev-guess-label">Источник</span><select data-blind-field="source"><option value="all" ${blindTierFilters.source==='all'?'selected':''}>Вся база</option><option value="ratings" ${blindTierFilters.source==='ratings'?'selected':''}>Оценки пользователей</option></select></label>
+03856:           <label class="ev-guess-field"><span class="ev-guess-label">Тип</span><select data-blind-field="type"><option value="" ${!blindTierFilters.type?'selected':''}>OP и ED</option><option value="OP" ${blindTierFilters.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${blindTierFilters.type==='ED'?'selected':''}>Только ED</option></select></label>
+03857:           <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select data-blind-field="fromYear">${seasonRangeYearOptions(years,blindTierFilters.fromYear,'С самого раннего')}</select><select data-blind-field="fromSeason">${seasonRangeSeasonOptions(blindTierFilters.fromSeason)}</select></div></div>
+03858:           <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select data-blind-field="toYear">${seasonRangeYearOptions(years,blindTierFilters.toYear,'По самый поздний')}</select><select data-blind-field="toSeason">${seasonRangeSeasonOptions(blindTierFilters.toSeason)}</select></div></div>
+03859:           <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
+03860:           <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
+03861:           <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>
+03862:           <label class="ev-guess-field"><span class="ev-guess-label">Контент</span><select data-blind-field="content"><option value="all" ${blindTierFilters.content==='all'?'selected':''}>Всё</option><option value="default" ${blindTierFilters.content==='default'?'selected':''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${blindTierFilters.content==='chinese'?'selected':''}>С китайскими</option><option value="movie" ${blindTierFilters.content==='movie'?'selected':''}>С фильмами</option><option value="shortened" ${blindTierFilters.content==='shortened'?'selected':''}>С укороченными</option></select></label>
+03863:           <div class="ev-guess-field full"><span class="ev-guess-label">Пользователи</span><div class="ev-guess-users">${users.map(user=>`<label><input type="checkbox" data-blind-user="${escapeHtml(user.key)}" ${selectedUsers.has(user.key)?'checked':''}> ${escapeHtml(user.avatar||'')} ${escapeHtml(user.nickname)}</label>`).join('')||'<span class="ev-hint">Оценок пользователей пока нет.</span>'}</div></div>
+03864:           <div class="ev-guess-field full"><span class="ev-guess-label">Условия оценок</span><div class="ev-guess-segmented"><button type="button" data-blind-score-logic="and" class="${blindTierFilters.scoreLogic!=='or'?'active':''}">И — выполнить все</button><button type="button" data-blind-score-logic="or" class="${blindTierFilters.scoreLogic==='or'?'active':''}">ИЛИ — достаточно одного</button></div>${scoreRows}</div>
+03865:         </div><div class="ev-actions"><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button><div class="ev-hint">Под фильтры подходит: <strong id="ev-blind-count-preview">${candidatesCount}</strong></div></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
+03866:         const updateBlindFilters = () => {
+03867:           appEl.querySelectorAll('[data-blind-field]').forEach(input => {
+03868:             const key=input.dataset.blindField;
+
+===== lines 3856-3869 (hit 3861) =====
+03856:           <label class="ev-guess-field"><span class="ev-guess-label">Тип</span><select data-blind-field="type"><option value="" ${!blindTierFilters.type?'selected':''}>OP и ED</option><option value="OP" ${blindTierFilters.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${blindTierFilters.type==='ED'?'selected':''}>Только ED</option></select></label>
+03857:           <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select data-blind-field="fromYear">${seasonRangeYearOptions(years,blindTierFilters.fromYear,'С самого раннего')}</select><select data-blind-field="fromSeason">${seasonRangeSeasonOptions(blindTierFilters.fromSeason)}</select></div></div>
+03858:           <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select data-blind-field="toYear">${seasonRangeYearOptions(years,blindTierFilters.toYear,'По самый поздний')}</select><select data-blind-field="toSeason">${seasonRangeSeasonOptions(blindTierFilters.toSeason)}</select></div></div>
+03859:           <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
+03860:           <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
+03861:           <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>
+03862:           <label class="ev-guess-field"><span class="ev-guess-label">Контент</span><select data-blind-field="content"><option value="all" ${blindTierFilters.content==='all'?'selected':''}>Всё</option><option value="default" ${blindTierFilters.content==='default'?'selected':''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${blindTierFilters.content==='chinese'?'selected':''}>С китайскими</option><option value="movie" ${blindTierFilters.content==='movie'?'selected':''}>С фильмами</option><option value="shortened" ${blindTierFilters.content==='shortened'?'selected':''}>С укороченными</option></select></label>
+03863:           <div class="ev-guess-field full"><span class="ev-guess-label">Пользователи</span><div class="ev-guess-users">${users.map(user=>`<label><input type="checkbox" data-blind-user="${escapeHtml(user.key)}" ${selectedUsers.has(user.key)?'checked':''}> ${escapeHtml(user.avatar||'')} ${escapeHtml(user.nickname)}</label>`).join('')||'<span class="ev-hint">Оценок пользователей пока нет.</span>'}</div></div>
+03864:           <div class="ev-guess-field full"><span class="ev-guess-label">Условия оценок</span><div class="ev-guess-segmented"><button type="button" data-blind-score-logic="and" class="${blindTierFilters.scoreLogic!=='or'?'active':''}">И — выполнить все</button><button type="button" data-blind-score-logic="or" class="${blindTierFilters.scoreLogic==='or'?'active':''}">ИЛИ — достаточно одного</button></div>${scoreRows}</div>
+03865:         </div><div class="ev-actions"><button class="ev-btn-main" id="ev-blind-start" type="button">Начать</button><div class="ev-hint">Под фильтры подходит: <strong id="ev-blind-count-preview">${candidatesCount}</strong></div></div><div class="ev-error" id="ev-blind-status"></div></div></section>`;
+03866:         const updateBlindFilters = () => {
+03867:           appEl.querySelectorAll('[data-blind-field]').forEach(input => {
+03868:             const key=input.dataset.blindField;
+03869:             blindTierFilters[key] = key==='count' ? Math.max(3,Math.min(20,Number(input.value||10))) : input.value;
+
+===== lines 4513-4526 (hit 4518) =====
+04513:         ].join(' '));
+04514:         if (!haystack.includes(search)) return false;
+04515:       }
+04516:       if (guessFilters.type && opening.type !== guessFilters.type) return false;
+04517:       if (!openingInSeasonRange(opening, guessFilters)) return false;
+04518:       if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
+04519:       if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
+04520:       if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
+04521:       if (guessFilters.answerTarget === 'franchise' && !(opening.franchises || []).some(value => String(value || '').trim())) return false;
+04522: 
+04523:       const content = guessContentFlags(guessFilters.content);
+04524:       if (!content.showChinese && opening.isChinese) return false;
+04525:       if (!content.showMovie && opening.isMovie) return false;
+04526:       if (!content.showShortened && opening.isShortened) return false;
+
+===== lines 4514-4527 (hit 4519) =====
+04514:         if (!haystack.includes(search)) return false;
+04515:       }
+04516:       if (guessFilters.type && opening.type !== guessFilters.type) return false;
+04517:       if (!openingInSeasonRange(opening, guessFilters)) return false;
+04518:       if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
+04519:       if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
+04520:       if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
+04521:       if (guessFilters.answerTarget === 'franchise' && !(opening.franchises || []).some(value => String(value || '').trim())) return false;
+04522: 
+04523:       const content = guessContentFlags(guessFilters.content);
+04524:       if (!content.showChinese && opening.isChinese) return false;
+04525:       if (!content.showMovie && opening.isMovie) return false;
+04526:       if (!content.showShortened && opening.isShortened) return false;
+04527: 
+
+===== lines 4515-4528 (hit 4520) =====
+04515:       }
+04516:       if (guessFilters.type && opening.type !== guessFilters.type) return false;
+04517:       if (!openingInSeasonRange(opening, guessFilters)) return false;
+04518:       if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
+04519:       if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
+04520:       if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
+04521:       if (guessFilters.answerTarget === 'franchise' && !(opening.franchises || []).some(value => String(value || '').trim())) return false;
+04522: 
+04523:       const content = guessContentFlags(guessFilters.content);
+04524:       if (!content.showChinese && opening.isChinese) return false;
+04525:       if (!content.showMovie && opening.isMovie) return false;
+04526:       if (!content.showShortened && opening.isShortened) return false;
+04527: 
+04528:       if (guessFilters.source === 'ratings') {
+
+===== lines 5892-5905 (hit 5897) =====
+05892:                 </select>
+05893:               </label>
+05894: 
+05895:               <label class="ev-guess-field">
+05896:                 <span class="ev-guess-label">Студия</span>
+05897:                 <select id="ev-guess-studio">${guessSelectOptions(studios, guessFilters.studio)}</select>
+05898:               </label>
+05899: 
+05900:               <label class="ev-guess-field">
+05901:                 <span class="ev-guess-label">Режиссёр</span>
+05902:                 <select id="ev-guess-director">${guessSelectOptions(directors, guessFilters.director)}</select>
+05903:               </label>
+05904: 
+05905:               <label class="ev-guess-field">
+
+===== lines 5897-5910 (hit 5902) =====
+05897:                 <select id="ev-guess-studio">${guessSelectOptions(studios, guessFilters.studio)}</select>
+05898:               </label>
+05899: 
+05900:               <label class="ev-guess-field">
+05901:                 <span class="ev-guess-label">Режиссёр</span>
+05902:                 <select id="ev-guess-director">${guessSelectOptions(directors, guessFilters.director)}</select>
+05903:               </label>
+05904: 
+05905:               <label class="ev-guess-field">
+05906:                 <span class="ev-guess-label">Исполнитель</span>
+05907:                 <select id="ev-guess-performer">${guessSelectOptions(performers, guessFilters.performer)}</select>
+05908:               </label>
+05909: 
+05910: 
+
+===== lines 5902-5915 (hit 5907) =====
+05902:                 <select id="ev-guess-director">${guessSelectOptions(directors, guessFilters.director)}</select>
+05903:               </label>
+05904: 
+05905:               <label class="ev-guess-field">
+05906:                 <span class="ev-guess-label">Исполнитель</span>
+05907:                 <select id="ev-guess-performer">${guessSelectOptions(performers, guessFilters.performer)}</select>
+05908:               </label>
+05909: 
+05910: 
+05911:               <label class="ev-guess-field wide">
+05912:                 <span class="ev-guess-label">Откуда брать песни</span>
+05913:                 <select id="ev-guess-source">
+05914:                   <option value="all" ${guessFilters.source === 'all' ? 'selected' : ''}>Из всей базы</option>
+05915:                   <option value="ratings" ${guessFilters.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option>
+
+===== lines 6010-6023 (hit 6015) =====
+06010:       setAndRender('#ev-guess-from-year', 'fromYear', value => String(value || ''));
+06011:       setAndRender('#ev-guess-from-season', 'fromSeason');
+06012:       setAndRender('#ev-guess-to-year', 'toYear', value => String(value || ''));
+06013:       setAndRender('#ev-guess-to-season', 'toSeason');
+06014:       setAndRender('#ev-guess-content', 'content');
+06015:       setAndRender('#ev-guess-studio', 'studio');
+06016:       setAndRender('#ev-guess-director', 'director');
+06017:       setAndRender('#ev-guess-performer', 'performer');
+06018:       setAndRender('#ev-guess-source', 'source');
+06019:       setAndRender('#ev-guess-score-overall-cmp', 'scoreOverallCmp');
+06020:       setAndRender('#ev-guess-score-song-cmp', 'scoreSongCmp');
+06021:       setAndRender('#ev-guess-score-visual-cmp', 'scoreVisualCmp');
+06022:       const optionalScore = value => {
+06023:         const raw = String(value ?? '').trim();
+
+===== lines 6011-6024 (hit 6016) =====
+06011:       setAndRender('#ev-guess-from-season', 'fromSeason');
+06012:       setAndRender('#ev-guess-to-year', 'toYear', value => String(value || ''));
+06013:       setAndRender('#ev-guess-to-season', 'toSeason');
+06014:       setAndRender('#ev-guess-content', 'content');
+06015:       setAndRender('#ev-guess-studio', 'studio');
+06016:       setAndRender('#ev-guess-director', 'director');
+06017:       setAndRender('#ev-guess-performer', 'performer');
+06018:       setAndRender('#ev-guess-source', 'source');
+06019:       setAndRender('#ev-guess-score-overall-cmp', 'scoreOverallCmp');
+06020:       setAndRender('#ev-guess-score-song-cmp', 'scoreSongCmp');
+06021:       setAndRender('#ev-guess-score-visual-cmp', 'scoreVisualCmp');
+06022:       const optionalScore = value => {
+06023:         const raw = String(value ?? '').trim();
+06024:         if (!raw) return '';
+
+===== lines 6012-6025 (hit 6017) =====
+06012:       setAndRender('#ev-guess-to-year', 'toYear', value => String(value || ''));
+06013:       setAndRender('#ev-guess-to-season', 'toSeason');
+06014:       setAndRender('#ev-guess-content', 'content');
+06015:       setAndRender('#ev-guess-studio', 'studio');
+06016:       setAndRender('#ev-guess-director', 'director');
+06017:       setAndRender('#ev-guess-performer', 'performer');
+06018:       setAndRender('#ev-guess-source', 'source');
+06019:       setAndRender('#ev-guess-score-overall-cmp', 'scoreOverallCmp');
+06020:       setAndRender('#ev-guess-score-song-cmp', 'scoreSongCmp');
+06021:       setAndRender('#ev-guess-score-visual-cmp', 'scoreVisualCmp');
+06022:       const optionalScore = value => {
+06023:         const raw = String(value ?? '').trim();
+06024:         if (!raw) return '';
+06025:         const number = Number(raw);
