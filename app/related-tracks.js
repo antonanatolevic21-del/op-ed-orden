@@ -1,8 +1,9 @@
-import { openingById, productState } from './state.js';
+import { ensureProductData, openingById, productState } from './state.js';
 import { openTrack } from './router.js';
 
 let activeId = '';
 let injecting = false;
+let loading = false;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -44,11 +45,30 @@ function relatedRows(entry) {
     .slice(0, 8);
 }
 
-function render() {
+async function render() {
   if (injecting || !activeId) return;
   const modal = document.querySelector('#oc-opening-modal');
   const dialog = modal?.querySelector('.oc-opening-detail-modal');
   if (!dialog || modal.classList.contains('hidden') || dialog.querySelector('.oc-related-tracks')) return;
+
+  if (!productState.openings.length) {
+    if (loading) return;
+    loading = true;
+    try {
+      await ensureProductData(['openings']);
+    } catch (error) {
+      console.error('Related tracks could not load', error);
+      return;
+    } finally {
+      loading = false;
+    }
+    const currentDialog = document.querySelector('#oc-opening-modal .oc-opening-detail-modal');
+    if (!currentDialog || document.querySelector('#oc-opening-modal')?.classList.contains('hidden')) return;
+  }
+
+  const currentModal = document.querySelector('#oc-opening-modal');
+  const currentDialog = currentModal?.querySelector('.oc-opening-detail-modal');
+  if (!currentDialog || currentModal.classList.contains('hidden') || currentDialog.querySelector('.oc-related-tracks')) return;
   const entry = openingById(activeId);
   if (!entry) return;
   const rows = relatedRows(entry);
@@ -72,7 +92,7 @@ function render() {
           <i>→</i>
         </button>`;
       }).join('')}</div>`;
-    dialog.append(section);
+    currentDialog.append(section);
     section.addEventListener('click', event => {
       const button = event.target.closest('[data-related-track]');
       if (!button) return;
@@ -91,8 +111,8 @@ export function initRelatedTracks() {
   }, true);
   window.addEventListener('oped-track-opened', event => {
     activeId = String(event.detail?.id || activeId);
-    window.setTimeout(render, 30);
+    window.setTimeout(() => { void render(); }, 30);
   });
   const modal = document.querySelector('#oc-opening-modal');
-  if (modal) new MutationObserver(() => window.setTimeout(render, 0)).observe(modal, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  if (modal) new MutationObserver(() => window.setTimeout(() => { void render(); }, 0)).observe(modal, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 }
