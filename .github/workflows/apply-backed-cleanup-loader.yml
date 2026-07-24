@@ -1,0 +1,42 @@
+name: Apply backed cleanup loader
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-backed-cleanup-loader.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and refresh loader
+        shell: bash
+        run: |
+          node --check entity-orphan-cleanup.js
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          updated, count = re.subn(
+              r'sw-register\.js\?v=[^"\']+',
+              'sw-register.js?v=20260724-entity-backup-cleanup2',
+              text,
+              count=1
+          )
+          if count != 1:
+              raise RuntimeError(f'Expected one sw-register reference, got {count}')
+          path.write_text(updated, encoding='utf-8')
+          PY
+          rm .github/workflows/apply-backed-cleanup-loader.yml
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add index.html .github/workflows/apply-backed-cleanup-loader.yml
+          git commit -m "Load backed Firebase cleanup" || exit 0
+          git push
