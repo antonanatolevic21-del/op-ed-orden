@@ -1,0 +1,97 @@
+name: Fix entity cleanup report
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-entity-cleanup-report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch report and rerun id
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('entity-orphan-cleanup.js')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace("const CLEANUP_RUN_ID = 'entity_cleanup_20260724_v1';", "const CLEANUP_RUN_ID = 'entity_cleanup_20260724_v2';")
+
+          calculate = r'''function calculateCleanup\(openingRows, entityCardRows\) \{.*?\n\}'''
+          replacement = '''function calculateCleanup(openingRows, entityCardRows) {
+\tconst liveIds = new Set();
+\tconst liveValues = Object.fromEntries(ENTITY_FIELDS.map(type => [type, new Map()]));
+\topeningRows.forEach(row => {
+\t\tENTITY_FIELDS.forEach(type => {
+\t\t\tcleanArray(row.data?.[type]).forEach(value => {
+\t\t\t\tconst id = entityCardId(type, value);
+\t\t\t\tif (!id) return;
+\t\t\t\tliveIds.add(id);
+\t\t\t\tconst current = liveValues[type].get(id) || { value:String(value || '').trim(), references:0 };
+\t\t\t\tcurrent.references += 1;
+\t\t\t\tliveValues[type].set(id, current);
+\t\t\t});
+\t\t});
+\t});
+
+\tconst summary = Object.fromEntries(ENTITY_FIELDS.map(type => [type, {
+\t\tliveValues:liveValues[type].size,
+\t\treferences:[...liveValues[type].values()].reduce((sum, item) => sum + item.references, 0),
+\t\talbums:0,
+\t\tkept:0,
+\t\tremoved:0
+\t}]));
+\tconst staleRows = [];
+\tconst unrecognizedRows = [];
+\tentityCardRows.forEach(row => {
+\t\tconst idPrefix = String(row.id || '').split('__')[0];
+\t\tconst type = normalizeEntityType(row.data?.type || idPrefix);
+\t\tif (!type || !summary[type]) {
+\t\t\tunrecognizedRows.push(row);
+\t\t\treturn;
+\t\t}
+\t\tsummary[type].albums += 1;
+\t\tconst expectedId = entityCardId(type, row.data?.value);
+\t\tif (liveIds.has(String(row.id)) || (expectedId && liveIds.has(expectedId))) summary[type].kept += 1;
+\t\telse {
+\t\t\tsummary[type].removed += 1;
+\t\t\tstaleRows.push(row);
+\t\t}
+\t});
+\treturn { summary, staleRows, unrecognizedRows };
+}'''
+          text, count = re.subn(calculate, replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'calculateCleanup replacement count: {count}')
+
+          report = r'''function cleanupReportText\(summary = \{\}\) \{.*?\n\}'''
+          report_replacement = '''function cleanupReportText(summary = {}) {
+\treturn ENTITY_FIELDS.map(type => {
+\t\tconst row = summary[type] || { liveValues:0, albums:0, kept:0, removed:0 };
+\t\treturn `${ENTITY_LABELS[type]}: значений в треках ${row.liveValues || 0}, альбомов ${row.albums || 0}, оставлено ${row.kept || 0}, удалено ${row.removed || 0}`;
+\t}).join('<br>');
+}'''
+          text, count = re.subn(report, report_replacement, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'cleanupReportText replacement count: {count}')
+
+          text = text.replace('const { summary, staleRows } = calculateCleanup(openingRows, entityCardRows);', 'const { summary, staleRows, unrecognizedRows } = calculateCleanup(openingRows, entityCardRows);')
+          text = text.replace("staleEntityCardValues:staleRows.map(row => ({ id:row.id, type:normalizeEntityType(row.data?.type), value:String(row.data?.value || '') })),", "staleEntityCardValues:staleRows.map(row => ({ id:row.id, type:normalizeEntityType(row.data?.type || String(row.id || '').split('__')[0]), value:String(row.data?.value || '') })),\n\t\tunrecognizedEntityCardIds:unrecognizedRows.map(row => row.id),")
+
+          path.write_text(text, encoding='utf-8')
+          PY
+          node --check entity-orphan-cleanup.js
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add entity-orphan-cleanup.js
+          git rm .github/workflows/fix-entity-cleanup-report.yml
+          git commit -m 'Fix entity cleanup counts and rerun audit'
+          git push
