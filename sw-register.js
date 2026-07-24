@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-orphan-entities2';
+  const version = '20260724-orphan-background1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -35,7 +35,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force11', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force12', {
         updateViaCache: 'none'
       });
       await registration.update();
