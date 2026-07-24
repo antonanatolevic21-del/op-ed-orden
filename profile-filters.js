@@ -11,7 +11,13 @@
     const grid = bar?.querySelector(':scope > .oc-filtergrid');
     if (!bar || !grid) return;
 
-    const mainIds = ['oc-p-search', 'oc-p-type', 'oc-p-score-cmp', 'oc-p-from-year', 'oc-p-to-year', 'oc-p-missing'];
+    const missing = grid.querySelector('#oc-p-missing');
+    if (missing) {
+      missing.checked = false;
+      missing.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    const mainIds = ['oc-p-search', 'oc-p-type', 'oc-p-score-cmp', 'oc-p-from-year', 'oc-p-to-year'];
     const advancedIds = ['oc-p-studio', 'oc-p-director', 'oc-p-performer', 'oc-p-franchise'];
     const mainFields = mainIds.map(id => fieldFor(id, grid)).filter((field, index, rows) => field && rows.indexOf(field) === index);
     const advancedFields = advancedIds.map(id => fieldFor(id, grid)).filter(Boolean);
