@@ -112,6 +112,22 @@
     requestAnimationFrame(enhanceOverviewStats);
   }
 
+  function syncManualOwnershipControls() {
+    const root = panel();
+    if (!root) return;
+    const editButton = root.querySelector('#oc-manual-edit-btn');
+    const saveButton = root.querySelector('#oc-manual-save-btn');
+    if (!editButton && !saveButton) return;
+
+    const ownProfile = Boolean(editButton && !editButton.disabled);
+    if (editButton) editButton.style.display = ownProfile ? '' : 'none';
+    if (saveButton) saveButton.style.display = ownProfile ? '' : 'none';
+  }
+
+  function scheduleManualOwnershipSync() {
+    requestAnimationFrame(syncManualOwnershipControls);
+  }
+
   function ensureDailyPlaceholder() {
     const root = panel();
     const daily = root?.querySelector('#oc-daily-panel');
@@ -154,6 +170,7 @@
     setVisible('#oc-daily-panel', currentView === 'daily');
     setVisible('.oc-profile-filterbar', currentView === 'top100' || currentView === 'ratings');
     syncDailyPlaceholder();
+    scheduleManualOwnershipSync();
     if (currentView === 'overview') scheduleOverviewStats();
 
     if (persist) {
@@ -176,6 +193,18 @@
       new MutationObserver(scheduleOverviewStats).observe(stats, { childList: true });
       scheduleOverviewStats();
     }
+
+    const editButton = root.querySelector('#oc-manual-edit-btn');
+    if (editButton) {
+      new MutationObserver(scheduleManualOwnershipSync).observe(editButton, {
+        attributes: true,
+        attributeFilter: ['disabled']
+      });
+    }
+    root.querySelector('#oc-profile-user')?.addEventListener('change', () => window.setTimeout(syncManualOwnershipControls, 0));
+    document.querySelector('#oc-myname')?.addEventListener('change', () => window.setTimeout(syncManualOwnershipControls, 0));
+    document.querySelector('#oc-myname')?.addEventListener('input', () => window.setTimeout(syncManualOwnershipControls, 0));
+    scheduleManualOwnershipSync();
 
     const daily = root.querySelector('#oc-daily-panel');
     if (daily) {
