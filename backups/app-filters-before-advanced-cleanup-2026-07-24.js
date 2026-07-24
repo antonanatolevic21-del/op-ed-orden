@@ -30,11 +30,7 @@ function createToggle(container, profile = false) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'oc-advanced-toggle';
-  const label = document.createElement('span');
-  label.textContent = 'Расширенные фильтры';
-  const arrow = document.createElement('strong');
-  arrow.textContent = '⌄';
-  button.append(label, arrow);
+  button.innerHTML = `<span>Расширенные фильтры</span><strong>⌄</strong>`;
   button.setAttribute('aria-expanded', 'false');
   button.addEventListener('click', () => {
     if (profile) profileAdvancedOpen = !profileAdvancedOpen;
@@ -44,12 +40,6 @@ function createToggle(container, profile = false) {
   container.append(button);
 }
 
-function prepareMainAdvanced() {
-  const advanced = document.querySelector('#oc-main-panel .oc-filter-advanced');
-  const missingField = document.querySelector('#oc-f-missing')?.closest('.oc-field');
-  if (advanced && missingField && !advanced.contains(missingField)) advanced.prepend(missingField);
-}
-
 function prepareProfileAdvanced() {
   const filterbar = document.querySelector('.oc-profile-filterbar');
   if (!filterbar || filterbar.querySelector('.oc-profile-advanced-toggle-row')) return;
@@ -57,11 +47,9 @@ function prepareProfileAdvanced() {
   if (!grid) return;
   const selectors = ['#oc-p-missing', '#oc-p-studio', '#oc-p-director', '#oc-p-performer', '#oc-p-franchise'];
   selectors.forEach(selector => document.querySelector(selector)?.closest('.oc-field')?.classList.add('oc-profile-advanced-field'));
-  const firstAdvanced = grid.querySelector('.oc-profile-advanced-field');
-  if (!firstAdvanced) return;
   const row = document.createElement('div');
   row.className = 'oc-profile-advanced-toggle-row';
-  grid.insertBefore(row, firstAdvanced);
+  grid.insertBefore(row, grid.querySelector('.oc-profile-advanced-field'));
   createToggle(row, true);
 }
 
@@ -100,12 +88,7 @@ function chip(label, key, value = '') {
   button.className = 'oc-filter-chip';
   button.dataset.clearFilter = key;
   if (value) button.dataset.filterValue = value;
-  const text = document.createElement('span');
-  text.textContent = label;
-  const close = document.createElement('b');
-  close.setAttribute('aria-hidden', 'true');
-  close.textContent = '×';
-  button.append(text, close);
+  button.innerHTML = `<span>${label}</span><b aria-hidden="true">×</b>`;
   button.setAttribute('aria-label', `Убрать фильтр: ${label}`);
   return button;
 }
@@ -161,26 +144,23 @@ function ensureChipBar() {
 }
 
 function setBoth(base, value, checked = null) {
-  const changed = [];
   ['f','p'].forEach(prefix => {
     const element = document.querySelector(`#oc-${prefix}-${base}`);
     if (!element) return;
     if (checked !== null) element.checked = checked;
     else element.value = value;
-    changed.push(element);
   });
-  changed.forEach(dispatchControl);
+  const primary = document.querySelector(`#oc-f-${base}`) || document.querySelector(`#oc-p-${base}`);
+  dispatchControl(primary);
 }
 
 function clearMulti(key, value) {
-  const changed = [];
   ['f','p'].forEach(prefix => {
     const select = document.querySelector(`#oc-${prefix}-${key}`);
     if (!select) return;
     [...select.options].forEach(option => { if (option.value === value) option.selected = false; });
-    changed.push(select);
   });
-  changed.forEach(dispatchControl);
+  dispatchControl(document.querySelector(`#oc-f-${key}`) || document.querySelector(`#oc-p-${key}`));
 }
 
 function clearFilter(key, value) {
@@ -217,7 +197,6 @@ function update() {
 }
 
 export function initFiltersExperience() {
-  prepareMainAdvanced();
   ensureMainToggle();
   prepareProfileAdvanced();
   mainAdvancedOpen = hasAdvancedValues('f');
