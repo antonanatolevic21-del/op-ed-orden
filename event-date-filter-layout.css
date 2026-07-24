@@ -1,0 +1,30 @@
+/* Date ranges in event filters */
+.ev-date-filter-row{
+	grid-column:1/-1;
+	display:grid;
+	grid-template-columns:repeat(2,minmax(0,1fr));
+	gap:10px;
+	min-width:0;
+}
+.ev-date-filter-row>.ev-guess-field{
+	grid-column:auto!important;
+	min-width:0;
+}
+.ev-guess-grid>.ev-date-layout-half{
+	grid-column:span 2;
+}
+
+@media(max-width:760px){
+	.ev-date-filter-row{
+		grid-template-columns:repeat(2,minmax(0,1fr));
+	}
+	.ev-guess-grid>.ev-date-layout-half{
+		grid-column:span 1;
+	}
+}
+
+@media(max-width:560px){
+	.ev-date-filter-row{
+		grid-template-columns:1fr;
+	}
+}
