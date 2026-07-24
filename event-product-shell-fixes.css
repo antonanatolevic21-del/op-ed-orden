@@ -1,0 +1,5 @@
+.ev-shell-account-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.ev-shell-role{min-width:145px;max-width:220px;min-height:38px;padding:7px 9px;border:1px solid #3b3147;border-radius:10px;background:#15111d;color:#f5f3fa;font:700 10px 'Space Mono',monospace;cursor:pointer}
+.ev-shell-role.hidden{display:none!important}
+.ev-shell-role:focus-visible{outline:2px solid var(--cyan)!important;outline-offset:2px!important}
+@media(max-width:700px){.ev-shell-account-tools{gap:5px}.ev-shell-role{min-width:118px;max-width:155px;font-size:9px}}
