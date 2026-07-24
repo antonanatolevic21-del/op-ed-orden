@@ -23,6 +23,16 @@
     return [...root.querySelectorAll('select[multiple]')].some(select => [...select.selectedOptions].some(option => String(option.value || '').trim()));
   }
 
+  function removeMissingFieldsFilter() {
+    const input = document.querySelector('#oc-f-missing');
+    if (!input) return;
+    if (input.checked) {
+      input.checked = false;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    input.closest('.oc-field')?.remove();
+  }
+
   function mount(scope, divider, advanced) {
     if (!divider || !advanced || divider.dataset.advancedMounted === '1') return;
     divider.dataset.advancedMounted = '1';
@@ -48,6 +58,8 @@
   }
 
   function init(attempt = 0) {
+    removeMissingFieldsFilter();
+
     const mainDivider = document.querySelector('#oc-main-panel .oc-filter-divider');
     const mainAdvanced = document.querySelector('#oc-main-panel .oc-filter-advanced');
     const profileDivider = document.querySelector('#oc-profile-panel .oc-profile-filter-divider');
