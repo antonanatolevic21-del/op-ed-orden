@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://www.youtube.com https://www.google.com https://www.recaptcha.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.google.com https://www.recaptcha.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://www.google.com https://www.recaptcha.net; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <title>АБОБА · Ивенты</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/op-ed-orden/events-favicon-v2.png" />
+  <link rel="shortcut icon" type="image/png" href="/op-ed-orden/events-favicon-v2.png" />
+  <meta name="description" content="Ивенты по OP/ED-чарту: первый этап, полуфинал и финал." />
+  <link rel="stylesheet" href="events.css?v=20260724-exclusion-filter1" />
+  <link rel="stylesheet" href="filter-ui-fixes.css?v=20260724-filter-ui3" />
+  <link rel="stylesheet" href="filter-ui-reset.css?v=20260724-filter-reset1" />
+  <link rel="stylesheet" href="event-date-filter-layout.css?v=20260724-date-row1" />
+  <link rel="stylesheet" href="event-product-shell.css?v=20260724-product-shell1" />
+  <link rel="stylesheet" href="styles/product-shell.css?v=20260724-product-shell1" />
+</head>
+<body>
+  <div class="ev-root">
+    <header class="ev-header"><div><h1 class="ev-title">АБОБА EVENTS</h1><div class="ev-sub">игры, голосования и сезонные события</div><a class="ev-link ev-home-link" id="ev-back-home" href="index.html">← Вернуться в OP/ED</a></div><div class="ev-userbar">ВЫ:<input id="ev-myname" type="text" placeholder="ваш ник" /><span class="ev-access" id="ev-access-badge">вход не выполнен</span><select id="ev-role-switch" class="ev-role-switch hidden" title="Переключить роль"></select></div></header>
+    <nav class="ev-mode-switch" aria-label="Раздел ивентов"><button class="ev-mode-tab active" type="button" data-mode="rating">Оценка опенингов года</button><button class="ev-mode-tab" type="button" data-mode="guess">Угадай опенинг</button><button class="ev-mode-tab" type="button" data-mode="bestworst">Угадай лучшее / худшее</button><button class="ev-mode-tab" type="button" data-mode="predictions">Предикты</button><button class="ev-mode-tab" type="button" data-mode="codenames">Codenames</button><button class="ev-mode-tab" type="button" data-mode="blindtier">Слепой тир-лист</button><button class="ev-mode-tab" type="button" data-mode="whoami">Кто я?</button></nav>
+    <nav class="ev-tabs" id="ev-stage-tabs"><button class="ev-tab active" data-stage="basket">Корзина</button><button class="ev-tab" data-stage="first">Первый этап</button><button class="ev-tab" data-stage="semi">Полуфинал</button><button class="ev-tab" data-stage="final">Финал</button></nav>
+    <main id="ev-app"><div class="ev-empty">Загрузка ивентов…</div></main>
+  </div>
+  <div class="ev-modal hidden" id="ev-evaluator"></div><div class="ev-modal hidden" id="ev-post-modal"></div><div class="ev-modal hidden" id="ev-guess-game"></div>
+  <div class="ev-modal hidden" id="ev-auth-modal"><div class="ev-dialog ev-auth-dialog"><h2>Вход</h2><p>Введите пароль, чтобы открыть страницу.</p><div class="ev-login-fields"><label class="ev-login-field"><span>Пароль</span><input id="ev-auth-pass" type="password" placeholder="Введите пароль" autocomplete="current-password" /></label><div class="ev-login-actions"><button class="ev-btn-main" id="ev-auth-save">Войти</button></div></div><div class="ev-error" id="ev-auth-error"></div></div></div>
+  <div class="ev-modal hidden" id="ev-name-modal"><div class="ev-dialog ev-auth-dialog" style="position:relative;"><button id="ev-name-close" class="ev-close" type="button" title="Вернуться к текущему аккаунту" style="position:absolute;right:14px;top:12px;">×</button><h2>Аккаунт АБОБА</h2><p>Используется тот же аккаунт, что и на основной странице. При сохранённом входе ник подставляется автоматически.</p><div class="ev-login-fields"><label class="ev-login-field"><span>Никнейм</span><input id="ev-modal-name" type="text" placeholder="Например: Kofa" autocomplete="nickname" /></label><label class="ev-login-field"><span>Email</span><input id="ev-modal-account-email" type="email" placeholder="name@example.com" autocomplete="email" /></label><label class="ev-login-field"><span>Личный пароль</span><input id="ev-modal-account-pass" type="password" placeholder="Введите пароль" autocomplete="current-password" /></label><label style="display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;cursor:pointer;"><input id="ev-remember-account" type="checkbox" checked /> Запомнить меня на этом устройстве</label><div class="ev-login-actions"><button class="ev-btn-main" id="ev-name-save">Войти</button></div></div><div class="ev-error" id="ev-name-error"></div></div></div>
+  <script type="module" src="events-app.js?v=20260724-exclusion-filter2"></script><script src="event-exclusion-ui.js?v=20260724-filter-reset1" defer></script><script src="event-date-filter-layout.js?v=20260724-date-row1" defer></script><script type="module" src="event-product-shell.js?v=20260724-product-shell1"></script>
+</body>
+</html>
