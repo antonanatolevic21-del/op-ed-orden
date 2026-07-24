@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-emergency-restore1';
+  const version = '20260724-emergency-restore2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -11,9 +11,20 @@
   albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
   document.head.append(albumStylesheet);
 
-  const entityProgressScript = document.createElement('script');
-  entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
-  document.body.append(entityProgressScript);
+  let entityProgressLoaded = false;
+  const loadEntityProgress = () => {
+    if (entityProgressLoaded) return;
+    entityProgressLoaded = true;
+    const script = document.createElement('script');
+    script.src = `./entity-progress-refresh.js?v=${version}`;
+    document.body.append(script);
+  };
+
+  document.addEventListener('click', event => {
+    if (event.target?.closest?.('[data-entity-home], [data-entity-open]')) loadEntityProgress();
+  }, true);
+
+  if (document.querySelector('#oc-entity-panel:not(.hidden)')) loadEntityProgress();
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
