@@ -1,4 +1,4 @@
-import { openingById, subscribeProductState } from './state.js';
+import { ensureProductData, openingById, subscribeProductState } from './state.js';
 
 const TAB_MAP = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 let applying = false;
@@ -54,8 +54,18 @@ function waitFor(selector, timeout = 3500) {
 
 export async function openTrack(id, options = {}) {
   const key = String(id || '').trim();
-  const opening = openingById(key);
-  if (!key || !opening) return false;
+  if (!key) return false;
+  let opening = openingById(key);
+  if (!opening) {
+    try {
+      await ensureProductData(['openings']);
+      opening = openingById(key);
+    } catch (error) {
+      console.error('Track route data could not load', error);
+      return false;
+    }
+  }
+  if (!opening) return false;
   navigateTab('chart', { push: false });
   const search = document.querySelector('#oc-f-search');
   if (search) {
@@ -87,9 +97,7 @@ async function applySeason(url) {
   const year = url.searchParams.get('year');
   const season = seasonCode(url.searchParams.get('season'));
   const type = String(url.searchParams.get('type') || '').toUpperCase();
-  if (type === 'OP' || type === 'ED') {
-    document.querySelector(`[data-season-type="${type}"]`)?.click();
-  }
+  if (type === 'OP' || type === 'ED') document.querySelector(`[data-season-type="${type}"]`)?.click();
   if (!year || !season) return;
   await new Promise(resolve => setTimeout(resolve, 40));
   document.querySelector(`[data-season-year="${CSS.escape(year)}"]`)?.click();
@@ -108,6 +116,7 @@ async function applyEntity(url, view) {
 }
 
 async function applyUrl() {
+  if (applying) return;
   applying = true;
   try {
     const url = currentUrl();
@@ -163,7 +172,7 @@ function bindUrlUpdates() {
     if (seasonType && !applying) updateUrl({ view: 'season', type: seasonType.dataset.seasonType });
   }, true);
 
-  window.addEventListener('popstate', () => applyUrl());
+  window.addEventListener('popstate', () => { void applyUrl(); });
 }
 
 export function setProfileRoute(profile, replace = false) {
@@ -173,7 +182,7 @@ export function setProfileRoute(profile, replace = false) {
 export function initRouter() {
   bindUrlUpdates();
   subscribeProductState(({ reason }) => {
-    if (reason === 'openings') applyUrl();
+    if (reason === 'openings') void applyUrl();
   });
-  window.setTimeout(applyUrl, 180);
+  window.setTimeout(() => { void applyUrl(); }, 180);
 }
