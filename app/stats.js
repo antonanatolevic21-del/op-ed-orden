@@ -1,4 +1,4 @@
-import { productState, subscribeProductState } from './state.js';
+import { ensureProductData, productState, subscribeProductState } from './state.js';
 import { navigateTab } from './router.js';
 
 const SEASON_LABEL = { winter:'Зима', spring:'Весна', summer:'Лето', fall:'Осень' };
@@ -6,6 +6,8 @@ let metric = 'score';
 let minTracks = 3;
 let scheduled = false;
 let rendering = false;
+let dataReady = false;
+let dataPromise = null;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -89,8 +91,18 @@ function hideLegacySongPerformerBox() {
   }
 }
 
+function showLoading() {
+  const panel = document.querySelector('#oc-stats-panel');
+  if (!panel || panel.classList.contains('hidden')) return;
+  panel.querySelectorAll('.oc-stats-list').forEach(root => {
+    if (!root.children.length || root.querySelector('.oc-empty')) {
+      root.innerHTML = '<div class="oc-empty">Загружаю расширенную статистику…</div>';
+    }
+  });
+}
+
 function render() {
-  if (rendering) return;
+  if (rendering || !dataReady) return;
   const panel = document.querySelector('#oc-stats-panel');
   if (!panel || panel.classList.contains('hidden')) return;
   rendering = true;
@@ -118,6 +130,28 @@ function scheduleRender() {
   });
 }
 
+async function ensureStatsData() {
+  if (dataReady) return true;
+  if (dataPromise) return dataPromise;
+  showLoading();
+  dataPromise = ensureProductData(['openings', 'ratings'])
+    .then(() => {
+      dataReady = true;
+      scheduleRender();
+      return true;
+    })
+    .catch(error => {
+      console.error('Enhanced statistics could not load', error);
+      const panel = document.querySelector('#oc-stats-panel');
+      panel?.querySelectorAll('.oc-stats-list').forEach(root => {
+        root.innerHTML = '<div class="oc-empty">Не удалось загрузить расширенную статистику.</div>';
+      });
+      return false;
+    })
+    .finally(() => { dataPromise = null; });
+  return dataPromise;
+}
+
 function ensureControls() {
   const controls = document.querySelector('#oc-stats-panel .oc-tier-controls');
   if (!controls || controls.querySelector('[data-stats-metric]')) return;
@@ -133,9 +167,9 @@ function ensureControls() {
   minSelect.innerHTML = '<option value="3">Минимум 3 трека</option><option value="5">Минимум 5 треков</option><option value="10">Минимум 10 треков</option><option value="20">Минимум 20 треков</option>';
   controls.prepend(minSelect);
   controls.prepend(metricSelect);
-  metricSelect.addEventListener('change', () => { metric = metricSelect.value; scheduleRender(); });
-  minSelect.addEventListener('change', () => { minTracks = Number(minSelect.value) || 3; scheduleRender(); });
-  document.querySelector('#oc-stats-type')?.addEventListener('change', scheduleRender);
+  metricSelect.addEventListener('change', () => { metric = metricSelect.value; ensureStatsData().then(scheduleRender); });
+  minSelect.addEventListener('change', () => { minTracks = Number(minSelect.value) || 3; ensureStatsData().then(scheduleRender); });
+  document.querySelector('#oc-stats-type')?.addEventListener('change', () => ensureStatsData().then(scheduleRender));
   hideLegacySongPerformerBox();
 }
 
@@ -195,14 +229,18 @@ export function initStatsEnhancements() {
   const grid = document.querySelector('#oc-stats-panel .oc-stats-grid');
   if (grid) {
     new MutationObserver(() => {
-      if (rendering) return;
+      if (rendering || !dataReady) return;
       const legacyRowsPresent = Boolean(grid.querySelector('.oc-stats-row:not(.oc-stats-row-link)'));
       if (legacyRowsPresent) scheduleRender();
       hideLegacySongPerformerBox();
     }).observe(grid, { childList: true, subtree: true });
   }
-  subscribeProductState(() => scheduleRender());
+  subscribeProductState(() => { if (dataReady) scheduleRender(); });
   document.addEventListener('click', event => {
-    if (event.target.closest('[data-shell-tab="stats"],.oc-tab-btn[data-tab="stats"]')) window.setTimeout(scheduleRender, 30);
+    if (event.target.closest('[data-shell-tab="stats"],.oc-tab-btn[data-tab="stats"]')) {
+      window.setTimeout(() => { ensureStatsData().then(scheduleRender); }, 30);
+    }
   });
+  const panel = document.querySelector('#oc-stats-panel');
+  if (panel && !panel.classList.contains('hidden')) ensureStatsData().then(scheduleRender);
 }
