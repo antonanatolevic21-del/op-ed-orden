@@ -4,6 +4,15 @@ import { openTrack } from './router.js';
 let activeId = '';
 let injecting = false;
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function overlap(a = [], b = []) {
   const set = new Set(a.map(value => String(value).toLowerCase()));
   return b.filter(value => set.has(String(value).toLowerCase()));
@@ -53,9 +62,13 @@ function render() {
       <div class="oc-related-grid">${rows.map(row => {
         const opening = row.opening;
         const image = opening.fallbackImage || opening.image || '';
-        return `<button type="button" class="oc-related-card" data-related-track="${opening.id}">
-          <span class="oc-related-thumb">${image ? `<img src="${String(image).replace(/"/g, '&quot;')}" alt="" loading="lazy">` : '<b>OP/ED</b>'}</span>
-          <span class="oc-related-copy"><strong>${opening.title || 'Без названия'}</strong><small>${row.reasons.slice(0, 2).join(' · ')}</small></span>
+        const safeId = escapeHtml(opening.id);
+        const safeImage = escapeHtml(image);
+        const safeTitle = escapeHtml(opening.title || 'Без названия');
+        const safeReasons = escapeHtml(row.reasons.slice(0, 2).join(' · '));
+        return `<button type="button" class="oc-related-card" data-related-track="${safeId}">
+          <span class="oc-related-thumb">${image ? `<img src="${safeImage}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<b>OP/ED</b>'}</span>
+          <span class="oc-related-copy"><strong>${safeTitle}</strong><small>${safeReasons}</small></span>
           <i>→</i>
         </button>`;
       }).join('')}</div>`;
