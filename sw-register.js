@@ -1,34 +1,30 @@
 (() => {
-  const version = '20260724-product-shell2';
+  const version = '20260724-emergency-restore1';
 
-  const styles = [
-    './filter-ui-fixes.css',
-    './entity-album-cards.css',
-    './styles/product-shell.css',
-    './styles/product-shell-fixes.css'
-  ];
-  if (document.querySelector('.oc-addbar')) styles.push('./track-add-panel.css');
-  styles.forEach(href => {
-    const stylesheet = document.createElement('link');
-    stylesheet.rel = 'stylesheet';
-    stylesheet.href = `${href}?v=${version}`;
-    document.head.append(stylesheet);
-  });
+  const filterUiStylesheet = document.createElement('link');
+  filterUiStylesheet.rel = 'stylesheet';
+  filterUiStylesheet.href = `./filter-ui-fixes.css?v=${version}`;
+  document.head.append(filterUiStylesheet);
+
+  const albumStylesheet = document.createElement('link');
+  albumStylesheet.rel = 'stylesheet';
+  albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
+  document.head.append(albumStylesheet);
 
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
 
   if (document.querySelector('.oc-addbar')) {
-    const addPanelScript = document.createElement('script');
-    addPanelScript.src = `./track-add-panel.js?v=${version}`;
-    document.body.append(addPanelScript);
-  }
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = `./track-add-panel.css?v=${version}`;
+    document.head.append(stylesheet);
 
-  const shellScript = document.createElement('script');
-  shellScript.type = 'module';
-  shellScript.src = `./app/app-shell.js?v=${version}`;
-  document.body.append(shellScript);
+    const script = document.createElement('script');
+    script.src = `./track-add-panel.js?v=${version}`;
+    document.body.append(script);
+  }
 })();
 
 if ('serviceWorker' in navigator) {
