@@ -1,0 +1,1 @@
+Stable restore marker. Main was restored to pre-feature commit 0ed5594c9d0b65e0d4f8e646cd3afb384be32f33 on 2026-07-24.
