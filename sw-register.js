@@ -1,5 +1,6 @@
 (() => {
   const version = '20260724-album-dim-frame1';
+  const topbarVersion = '20260724-topbar1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -11,9 +12,19 @@
   albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
   document.head.append(albumStylesheet);
 
+  const topbarStylesheet = document.createElement('link');
+  topbarStylesheet.rel = 'stylesheet';
+  topbarStylesheet.href = `./topbar.css?v=${topbarVersion}`;
+  document.head.append(topbarStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
+
+  const topbarScript = document.createElement('script');
+  topbarScript.src = `./topbar.js?v=${topbarVersion}`;
+  topbarScript.defer = true;
+  document.body.append(topbarScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
