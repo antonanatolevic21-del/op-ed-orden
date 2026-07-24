@@ -9,6 +9,7 @@
   const qualityVersion = '20260724-quality2';
   const hotkeysVersion = '20260724-hotkeys3';
   const uxVersion = '20260724-uxpack5';
+  const seasonFillVersion = '20260725-season-fill1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -62,6 +63,11 @@
     document.head.append(stylesheet);
   });
 
+  const seasonFillStylesheet = document.createElement('link');
+  seasonFillStylesheet.rel = 'stylesheet';
+  seasonFillStylesheet.href = `./season-quality-fill.css?v=${seasonFillVersion}`;
+  document.head.append(seasonFillStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -106,9 +112,9 @@
   hotkeysScript.defer = true;
   document.body.append(hotkeysScript);
 
-  ['catalog-cache.js', 'toast.js', 'account-sync.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'account-sync.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
     const script = document.createElement('script');
-    script.src = `./${file}?v=${uxVersion}`;
+    script.src = file === 'season-quality-fill.js' ? `./${file}?v=${seasonFillVersion}` : `./${file}?v=${uxVersion}`;
     script.async = false;
     document.body.append(script);
   });
@@ -128,7 +134,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force20', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force21', {
         updateViaCache: 'none'
       });
       await registration.update();
