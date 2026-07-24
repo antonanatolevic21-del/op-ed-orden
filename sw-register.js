@@ -1,6 +1,6 @@
 (() => {
   const version = '20260724-album-dim-frame1';
-  const topbarVersion = '20260724-topbar2';
+  const topbarVersion = '20260724-topbar3';
   const profileTabsVersion = '20260724-profile-tabs3';
   const profileFiltersVersion = '20260724-profile-filters2';
   const filterChipsVersion = '20260724-filter-chips2';
