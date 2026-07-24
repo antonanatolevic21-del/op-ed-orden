@@ -30,6 +30,7 @@
   object-fit:contain!important;
   object-position:center!important;
   flex:none;
+  transition:filter .2s ease,opacity .2s ease;
 }
 
 .oc-entity-card-body{
@@ -43,9 +44,7 @@
   background:linear-gradient(0deg,rgba(12,9,17,.98) 0%,rgba(12,9,17,.92) 58%,rgba(12,9,17,0) 100%);
 }
 
-/* A completed album must be recognizable before hover. */
-/* Завершённый альбом — только градиентная рамка */
-/* Завершённый альбом — широкая градиентная рамка + мягкое свечение */
+/* Завершённый альбом — широкая градиентная рамка + мягкое свечение. */
 .oc-entity-card.complete{
   border:7px solid transparent !important;
   background:
@@ -59,7 +58,8 @@
     0 16px 36px rgba(0,0,0,.28) !important;
 }
 
-.oc-entity-card.complete:hover{
+.oc-entity-card.complete:hover,
+.oc-entity-card.complete:focus-within{
   border:7px solid transparent !important;
   background:
     linear-gradient(#14101d,#14101d) padding-box,
@@ -72,12 +72,35 @@
     0 20px 44px rgba(0,0,0,.34) !important;
 }
 
-/* Никаких отдельных плашек/меток */
-.oc-entity-card.complete::before{
-  content:none !important;
+/* Затемняем только содержимое завершённой карточки, чтобы рамка была главным акцентом. */
+.oc-entity-card.complete .oc-entity-cover img{
+  filter:brightness(.58) saturate(.70);
 }
 
 .oc-entity-card.complete .oc-entity-cover::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  z-index:1;
+  background:rgba(8,6,12,.34);
+  opacity:1;
+  pointer-events:none;
+  transition:opacity .2s ease;
+}
+
+/* При наведении или фокусе показываем обложку и информацию в обычном виде. */
+.oc-entity-card.complete:hover .oc-entity-cover img,
+.oc-entity-card.complete:focus-within .oc-entity-cover img{
+  filter:none;
+}
+
+.oc-entity-card.complete:hover .oc-entity-cover::after,
+.oc-entity-card.complete:focus-within .oc-entity-cover::after{
+  opacity:0;
+}
+
+/* Никаких отдельных плашек/меток. */
+.oc-entity-card.complete::before{
   content:none !important;
 }
 
@@ -109,11 +132,11 @@
     pointer-events:auto;
   }
 
-  .oc-entity-card.complete::before{
-    top:8px;
-    left:8px;
-    min-height:25px;
-    padding:5px 8px;
-    font-size:8px;
+  .oc-entity-card.complete:active .oc-entity-cover img{
+    filter:none;
+  }
+
+  .oc-entity-card.complete:active .oc-entity-cover::after{
+    opacity:0;
   }
 }
