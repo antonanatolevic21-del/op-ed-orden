@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-filter-ui3';
+  const version = '20260724-orphan-entities2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -14,6 +14,11 @@
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
+
+  const orphanCleanupScript = document.createElement('script');
+  orphanCleanupScript.type = 'module';
+  orphanCleanupScript.src = `./entity-orphan-cleanup.js?v=${version}`;
+  document.body.append(orphanCleanupScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
@@ -30,7 +35,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force10', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force11', {
         updateViaCache: 'none'
       });
       await registration.update();
