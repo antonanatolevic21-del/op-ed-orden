@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-album-progress3';
+  const version = '20260724-album-dim-hover1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
