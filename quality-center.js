@@ -2,21 +2,26 @@
   if (window.__OC_QUALITY_CENTER_READY__) return;
 
   const SEASON_LABEL = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
+  const ISSUE_LIMIT = 40;
   let modal = null;
   let cachedOpenings = null;
   let loadingPromise = null;
   let triggerButton = null;
+  let currentIssues = new Map();
 
   const normalize = value => String(value || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
-  const cleanList = value => Array.isArray(value) ? value.map(item => String(item || '').trim()).filter(Boolean) : String(value || '').split(',').map(item => item.trim()).filter(Boolean);
+  const cleanList = value => Array.isArray(value) ? value.filter(item => String(item || '').trim()).length : String(value || '').split(',').filter(item => item.trim()).length;
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   }
 
   function isAdminUi() {
-    const badge = document.querySelector('#oc-access-badge');
-    return normalize(badge?.textContent).includes('админ');
+    return normalize(document.querySelector('#oc-access-badge')?.textContent).includes('админ');
+  }
+
+  function yieldToUi() {
+    return new Promise(resolve => requestAnimationFrame(() => window.setTimeout(resolve, 0)));
   }
 
   async function waitForFirebase() {
@@ -54,36 +59,53 @@
   }
 
   function buildIssues(openings) {
-    const duplicateMap = new Map();
-    openings.forEach(opening => {
-      const title = normalize(opening.title || opening.anime);
-      if (!title) return;
-      const key = [title, String(opening.type || ''), String(opening.year || ''), String(opening.season || '')].join('|');
-      if (!duplicateMap.has(key)) duplicateMap.set(key, []);
-      duplicateMap.get(key).push(opening);
-    });
-    const duplicateIds = new Set([...duplicateMap.values()].filter(group => group.length > 1).flat().map(opening => String(opening.id)));
-
-    const rules = [
-      ['title', 'Без названия', opening => !String(opening.title || opening.anime || '').trim()],
-      ['image', 'Без основной картинки', opening => !String(opening.image || '').trim()],
-      ['fallback', 'Без запасной картинки', opening => !String(opening.fallbackImage || opening.imageFallback || '').trim()],
-      ['performer', 'Без исполнителя', opening => cleanList(opening.performers).length === 0],
-      ['studio', 'Без студии', opening => cleanList(opening.studios).length === 0],
-      ['director', 'Без режиссёра', opening => cleanList(opening.directors).length === 0],
-      ['franchise', 'Без франшизы', opening => cleanList(opening.franchises).length === 0],
-      ['link', 'Без ссылки на видео', opening => !String(opening.link || '').trim()],
-      ['same-song', 'Одинаковая песня без группы', opening => Boolean(String(opening.sameSongTitle || opening.songGroupTitle || '').trim()) && !String(opening.sameSongGroupId || opening.songGroupId || '').trim()],
-      ['duplicate', 'Возможные дубликаты', opening => duplicateIds.has(String(opening.id))]
+    const issues = [
+      { id: 'title', label: 'Без названия', rows: [] },
+      { id: 'image', label: 'Без основной картинки', rows: [] },
+      { id: 'fallback', label: 'Без запасной картинки', rows: [] },
+      { id: 'performer', label: 'Без исполнителя', rows: [] },
+      { id: 'studio', label: 'Без студии', rows: [] },
+      { id: 'director', label: 'Без режиссёра', rows: [] },
+      { id: 'franchise', label: 'Без франшизы', rows: [] },
+      { id: 'link', label: 'Без ссылки на видео', rows: [] },
+      { id: 'same-song', label: 'Одинаковая песня без группы', rows: [] },
+      { id: 'duplicate', label: 'Возможные дубликаты', rows: [] }
     ];
+    const byId = new Map(issues.map(issue => [issue.id, issue]));
+    const duplicateMap = new Map();
 
-    return rules.map(([id, label, test]) => ({ id, label, rows: openings.filter(test) }));
+    for (const opening of openings) {
+      const rawTitle = String(opening.title || opening.anime || '').trim();
+      if (!rawTitle) byId.get('title').rows.push(opening);
+      if (!String(opening.image || '').trim()) byId.get('image').rows.push(opening);
+      if (!String(opening.fallbackImage || opening.imageFallback || '').trim()) byId.get('fallback').rows.push(opening);
+      if (!cleanList(opening.performers)) byId.get('performer').rows.push(opening);
+      if (!cleanList(opening.studios)) byId.get('studio').rows.push(opening);
+      if (!cleanList(opening.directors)) byId.get('director').rows.push(opening);
+      if (!cleanList(opening.franchises)) byId.get('franchise').rows.push(opening);
+      if (!String(opening.link || '').trim()) byId.get('link').rows.push(opening);
+      if (String(opening.sameSongTitle || opening.songGroupTitle || '').trim() && !String(opening.sameSongGroupId || opening.songGroupId || '').trim()) byId.get('same-song').rows.push(opening);
+
+      const title = normalize(rawTitle);
+      if (title) {
+        const key = `${title}|${String(opening.type || '')}|${String(opening.year || '')}|${String(opening.season || '')}`;
+        const group = duplicateMap.get(key);
+        if (group) group.push(opening);
+        else duplicateMap.set(key, [opening]);
+      }
+    }
+
+    for (const group of duplicateMap.values()) {
+      if (group.length > 1) byId.get('duplicate').rows.push(...group);
+    }
+    return issues;
   }
 
   function completeness(openings, issues) {
     if (!openings.length) return 100;
     const keyIds = new Set(['image', 'performer', 'studio', 'director', 'franchise', 'link']);
-    const missing = issues.filter(issue => keyIds.has(issue.id)).reduce((sum, issue) => sum + issue.rows.length, 0);
+    let missing = 0;
+    for (const issue of issues) if (keyIds.has(issue.id)) missing += issue.rows.length;
     return Math.max(0, Math.round((1 - missing / (openings.length * keyIds.size)) * 100));
   }
 
@@ -108,6 +130,15 @@
         return;
       }
 
+      const summary = event.target.closest('.oc-quality-issue > summary');
+      if (summary) {
+        const details = summary.parentElement;
+        window.setTimeout(() => {
+          if (details?.open) renderIssueRows(details);
+        }, 0);
+        return;
+      }
+
       const track = event.target.closest('[data-quality-track]');
       if (track) openTrack(String(track.dataset.qualityTrack || ''), String(track.dataset.qualityTitle || ''));
     });
@@ -115,8 +146,29 @@
     return modal;
   }
 
+  function renderIssueRows(details) {
+    if (!details || details.dataset.qualityRendered === '1') return;
+    const issue = currentIssues.get(details.dataset.qualityIssue || '');
+    const list = details.querySelector('.oc-quality-track-list');
+    if (!issue || !list) return;
+
+    details.dataset.qualityRendered = '1';
+    if (!issue.rows.length) {
+      list.innerHTML = '<div class="oc-quality-ok">Проблем не найдено ✓</div>';
+      return;
+    }
+
+    const visibleRows = issue.rows.slice(0, ISSUE_LIMIT);
+    list.innerHTML = visibleRows.map(opening => {
+      const season = opening.season ? `${SEASON_LABEL[opening.season] || opening.season} ${opening.year || ''}`.trim() : String(opening.year || '—');
+      const title = String(opening.title || opening.anime || 'Без названия');
+      return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}</small></button>`;
+    }).join('') + (issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">Показаны первые ${visibleRows.length} из ${issue.rows.length}</div>` : '');
+  }
+
   function renderLoading() {
     const root = ensureModal();
+    currentIssues = new Map();
     root.innerHTML = `
       <div class="oc-quality-dialog">
         <div class="oc-quality-head">
@@ -133,6 +185,7 @@
 
   function renderError(error) {
     const root = ensureModal();
+    currentIssues = new Map();
     root.innerHTML = `
       <div class="oc-quality-dialog">
         <div class="oc-quality-head">
@@ -147,25 +200,20 @@
   function render(openings) {
     const root = ensureModal();
     const issues = buildIssues(openings);
+    currentIssues = new Map(issues.map(issue => [issue.id, issue]));
     const score = completeness(openings, issues);
-    const uniqueProblemIds = new Set(issues.flatMap(issue => issue.rows.map(opening => String(opening.id))));
-    const totalHits = issues.reduce((sum, issue) => sum + issue.rows.length, 0);
+    const uniqueProblemIds = new Set();
+    let totalHits = 0;
+    for (const issue of issues) {
+      totalHits += issue.rows.length;
+      for (const opening of issue.rows) uniqueProblemIds.add(String(opening.id));
+    }
 
-    const issueHtml = issues.map(issue => {
-      const visibleRows = issue.rows.slice(0, 80);
-      return `
-        <details class="oc-quality-issue" ${issue.rows.length > 0 && issue.rows.length <= 8 ? 'open' : ''}>
-          <summary><span>${escapeHtml(issue.label)}</span><strong>${issue.rows.length}</strong></summary>
-          <div class="oc-quality-track-list">
-            ${visibleRows.length ? visibleRows.map(opening => {
-              const season = opening.season ? `${SEASON_LABEL[opening.season] || opening.season} ${opening.year || ''}`.trim() : String(opening.year || '—');
-              const title = String(opening.title || opening.anime || 'Без названия');
-              return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}</small></button>`;
-            }).join('') : '<div class="oc-quality-ok">Проблем не найдено ✓</div>'}
-            ${issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">И ещё ${issue.rows.length - visibleRows.length}…</div>` : ''}
-          </div>
-        </details>`;
-    }).join('');
+    const issueHtml = issues.map(issue => `
+      <details class="oc-quality-issue" data-quality-issue="${issue.id}">
+        <summary><span>${escapeHtml(issue.label)}</span><strong>${issue.rows.length}</strong></summary>
+        <div class="oc-quality-track-list"><div class="oc-quality-more">Список загрузится при открытии раздела</div></div>
+      </details>`).join('');
 
     root.innerHTML = `
       <div class="oc-quality-dialog">
@@ -173,7 +221,7 @@
           <div>
             <div class="oc-quality-kicker">админ · качество базы</div>
             <h2>Центр качества</h2>
-            <p>Пустые поля, одинаковая песня без группы и возможные дубликаты. Доступность картинок и видео по сети здесь не проверяется.</p>
+            <p>Пустые поля, одинаковая песня без группы и возможные дубликаты. Списки треков создаются только когда ты раскрываешь нужный раздел.</p>
           </div>
           <div class="oc-quality-head-actions">
             <button class="oc-quality-refresh" type="button" data-quality-refresh>Обновить</button>
@@ -192,8 +240,7 @@
 
   function fallbackOpenTrack(title) {
     document.querySelector('.oc-tab-btn[data-tab="chart"]')?.click();
-    const reset = document.querySelector('#oc-reset-filters');
-    reset?.click();
+    document.querySelector('#oc-reset-filters')?.click();
     window.setTimeout(() => {
       const search = document.querySelector('#oc-f-search');
       if (!search) return;
@@ -208,10 +255,7 @@
     closeQualityCenter();
     if (window.__OC_DEEP_LINKS_READY__ && id) {
       const url = new URL(window.location.href);
-      url.searchParams.delete('view');
-      url.searchParams.delete('profile');
-      url.searchParams.delete('section');
-      url.searchParams.delete('album');
+      ['view', 'profile', 'section', 'album'].forEach(key => url.searchParams.delete(key));
       url.searchParams.set('track', id);
       history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -226,9 +270,13 @@
     root.classList.remove('hidden');
     document.body.classList.add('oc-quality-open');
     renderLoading();
+
     try {
+      await yieldToUi();
       const openings = await loadOpenings(force);
-      if (!root.classList.contains('hidden')) render(openings);
+      if (root.classList.contains('hidden')) return;
+      await yieldToUi();
+      render(openings);
     } catch (error) {
       console.error('Quality center load failed', error);
       if (!root.classList.contains('hidden')) renderError(error);
