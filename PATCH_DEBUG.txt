@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/tmp/filter_patch.py", line 55, in <module>
+    html = once(html, main_old, main_new, 'main filter html')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/filter_patch.py", line 12, in once
+    raise RuntimeError(f'{label}: expected one match, got {count}')
+RuntimeError: main filter html: expected one match, got 0
+EXIT_CODE=1
