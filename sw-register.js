@@ -2,6 +2,7 @@
   const version = '20260724-album-dim-frame1';
   const topbarVersion = '20260724-topbar2';
   const profileTabsVersion = '20260724-profile-tabs3';
+  const profileFiltersVersion = '20260724-profile-filters1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -23,6 +24,11 @@
   profileTabsStylesheet.href = `./profile-tabs.css?v=${profileTabsVersion}`;
   document.head.append(profileTabsStylesheet);
 
+  const profileFiltersStylesheet = document.createElement('link');
+  profileFiltersStylesheet.rel = 'stylesheet';
+  profileFiltersStylesheet.href = `./profile-filters.css?v=${profileFiltersVersion}`;
+  document.head.append(profileFiltersStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -36,6 +42,11 @@
   profileTabsScript.src = `./profile-tabs.js?v=${profileTabsVersion}`;
   profileTabsScript.defer = true;
   document.body.append(profileTabsScript);
+
+  const profileFiltersScript = document.createElement('script');
+  profileFiltersScript.src = `./profile-filters.js?v=${profileFiltersVersion}`;
+  profileFiltersScript.defer = true;
+  document.body.append(profileFiltersScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
