@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="filter-ui-fixes.css?v=20260724-filter-ui3" />
   <link rel="stylesheet" href="filter-ui-reset.css?v=20260724-filter-reset1" />
   <link rel="stylesheet" href="event-date-filter-layout.css?v=20260724-date-row1" />
+  <link rel="stylesheet" href="event-product-shell.css?v=20260724-product-shell1" />
+  <link rel="stylesheet" href="styles/product-shell.css?v=20260724-product-shell1" />
 </head>
 <body>
   <div class="ev-root">
@@ -69,8 +71,8 @@
   <div class="ev-modal hidden" id="ev-name-modal">
     <div class="ev-dialog ev-auth-dialog" style="position:relative;">
       <button id="ev-name-close" class="ev-close" type="button" title="Вернуться к текущему аккаунту" style="position:absolute;right:14px;top:12px;">×</button>
-      <h2>Вход в аккаунт</h2>
-      <p>Если для ника установлен личный пароль, введи его. Оценивать сезон можно только от имени участника соответствующего слота.</p>
+      <h2>Аккаунт АБОБА</h2>
+      <p>Используется тот же аккаунт, что и на основной странице. При сохранённом входе ник подставляется автоматически.</p>
       <div class="ev-login-fields">
         <label class="ev-login-field"><span>Никнейм</span><input id="ev-modal-name" type="text" placeholder="Например: Kofa" autocomplete="nickname" /></label>
         <label class="ev-login-field"><span>Email</span><input id="ev-modal-account-email" type="email" placeholder="name@example.com" autocomplete="email" /></label>
@@ -85,5 +87,6 @@
   <script type="module" src="events-app.js?v=20260724-exclusion-filter2"></script>
   <script src="event-exclusion-ui.js?v=20260724-filter-reset1" defer></script>
   <script src="event-date-filter-layout.js?v=20260724-date-row1" defer></script>
+  <script type="module" src="event-product-shell.js?v=20260724-product-shell1"></script>
 </body>
 </html>
