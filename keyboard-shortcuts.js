@@ -17,15 +17,12 @@
     help.className = 'oc-hotkeys-help hidden';
     help.innerHTML = `
       <div class="oc-hotkeys-card" role="dialog" aria-modal="true" aria-label="Горячие клавиши">
-        <div class="oc-hotkeys-head"><div><span>управление</span><h2>Горячие клавиши</h2></div><button type="button" data-hotkeys-close aria-label="Закрыть">×</button></div>
+        <div class="oc-hotkeys-head"><div><span>быстрое управление</span><h2>Горячие клавиши</h2></div><button type="button" data-hotkeys-close aria-label="Закрыть">×</button></div>
         <div class="oc-hotkeys-grid">
-          <div><kbd>/</kbd><span>Фокус на поиске</span></div>
-          <div><kbd>1–0</kbd><span>Поставить оценку; 0 = максимум</span></div>
-          <div><kbd>Enter</kbd><span>Сохранить / сохранить и дальше</span></div>
-          <div><kbd>←</kbd><span>Предыдущая страница</span></div>
-          <div><kbd>→</kbd><span>Следующая страница</span></div>
+          <div><kbd>.</kbd><span>Перейти к поиску</span></div>
+          <div><kbd>Пробел</kbd><span>Запустить видео в открытой карточке</span></div>
           <div><kbd>Esc</kbd><span>Закрыть верхнее окно или меню</span></div>
-          <div><kbd>?</kbd><span>Показать эту подсказку</span></div>
+          <div><kbd>?</kbd><span>Снова открыть этот гайд</span></div>
         </div>
       </div>`;
     document.body.append(help);
@@ -74,56 +71,12 @@
     return changed;
   }
 
-  function activeScoreFields() {
-    const opening = visible('#oc-opening-modal');
-    if (opening) {
-      const number = opening.querySelector('#oc-card-score,input[type="number"][data-score],.oc-card-score input[type="number"]');
-      const range = opening.querySelector('#oc-card-range,input[type="range"]');
-      const save = opening.querySelector('[data-card-action="save-rating"],[data-action="save-rating"],[data-action="save"]');
-      if (number || range) return { number, range, save };
-    }
-
-    const evaluator = visible('#oc-season-evaluator');
-    if (evaluator) {
-      const number = evaluator.querySelector('#oc-eval-score,input[type="number"]');
-      const range = evaluator.querySelector('#oc-eval-range,input[type="range"]');
-      const save = evaluator.querySelector('[data-eval-action="save-next"]');
-      if (number || range) return { number, range, save };
-    }
-
-    return null;
-  }
-
-  function numericField(fields) {
-    return fields?.number || fields?.range || null;
-  }
-
-  function setScore(value) {
-    const fields = activeScoreFields();
-    const primary = numericField(fields);
-    if (!primary) return false;
-    const min = Number(primary.min || 1);
-    const max = Number(primary.max || 10);
-    const next = Math.max(min, Math.min(max, value));
-
-    if (fields.number) {
-      fields.number.value = String(next);
-      fields.number.dispatchEvent(new Event('input', { bubbles: true }));
-      fields.number.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (fields.range) {
-      fields.range.value = String(next);
-      fields.range.dispatchEvent(new Event('input', { bubbles: true }));
-      fields.range.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    return true;
-  }
-
   function focusSearch() {
     const profileVisible = !document.querySelector('#oc-profile-panel')?.classList.contains('hidden');
     const mainVisible = !document.querySelector('#oc-main-panel')?.classList.contains('hidden');
-    const search = document.querySelector(profileVisible ? '#oc-p-search' : mainVisible ? '#oc-f-search' : '#oc-f-search');
+    const search = document.querySelector(profileVisible ? '#oc-p-search' : '#oc-f-search');
     if (!search) return false;
+
     if (!mainVisible && !profileVisible) document.querySelector('.oc-tab-btn[data-tab="chart"]')?.click();
     window.setTimeout(() => {
       search.focus();
@@ -132,17 +85,55 @@
     return true;
   }
 
-  function page(direction) {
-    const activePanel = [...document.querySelectorAll('.oc-tab-panel')].find(panel => !panel.classList.contains('hidden') && panel.getClientRects().length);
-    if (!activePanel) return false;
-    const selectors = direction === 'prev'
-      ? ['.oc-pagination [data-page-dir="prev"]:not(:disabled)', '.oc-pagination button:first-child:not(:disabled)']
-      : ['.oc-pagination [data-page-dir="next"]:not(:disabled)', '.oc-pagination button:last-child:not(:disabled)'];
-    const button = selectors.map(selector => activePanel.querySelector(selector)).find(Boolean);
-    if (!button) return false;
-    button.click();
-    button.scrollIntoView({ block: 'nearest' });
-    return true;
+  function handleCardVideo() {
+    const opening = visible('#oc-opening-modal');
+    if (!opening) return false;
+
+    const directVideo = opening.querySelector('.oc-video-frame video');
+    if (directVideo) {
+      if (directVideo.paused) directVideo.play().catch(() => {});
+      else directVideo.pause();
+      return true;
+    }
+
+    const cover = opening.querySelector('.oc-video-cover');
+    if (cover) {
+      cover.click();
+      return true;
+    }
+
+    return false;
+  }
+
+  function currentPersonalUid() {
+    try {
+      return String(window.OPED_DB?.currentUserUid?.() || '');
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function watchLoginModal(modal) {
+    if (!modal) return;
+    let wasOpen = !modal.classList.contains('hidden');
+    let uidWhenOpened = wasOpen ? currentPersonalUid() : '';
+
+    new MutationObserver(() => {
+      const isOpen = !modal.classList.contains('hidden');
+      if (isOpen && !wasOpen) uidWhenOpened = currentPersonalUid();
+      if (!isOpen && wasOpen) {
+        window.setTimeout(() => {
+          const uidAfter = currentPersonalUid();
+          if (uidAfter && uidAfter !== uidWhenOpened) showHelp();
+        }, 120);
+      }
+      wasOpen = isOpen;
+    }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function bindLoginGuide() {
+    watchLoginModal(document.querySelector('#oc-auth-modal'));
+    watchLoginModal(document.querySelector('#oc-name-modal'));
   }
 
   document.addEventListener('keydown', event => {
@@ -151,48 +142,25 @@
       return;
     }
 
-    const scoreFields = activeScoreFields();
-    const editing = isEditable(event.target);
+    if (isEditable(event.target)) return;
 
-    if (event.key === 'Enter' && scoreFields?.save) {
-      const primary = numericField(scoreFields);
-      if (!editing || event.target === primary || event.target === scoreFields.number || event.target === scoreFields.range) {
-        scoreFields.save.click();
-        event.preventDefault();
-        return;
-      }
+    if (event.key === '.' || event.code === 'Period') {
+      if (focusSearch()) event.preventDefault();
+      return;
     }
 
-    if (editing) return;
-
-    if (event.key === '/') {
-      if (focusSearch()) event.preventDefault();
+    if (event.key === ' ' || event.code === 'Space') {
+      if (handleCardVideo()) event.preventDefault();
       return;
     }
 
     if (event.key === '?') {
       showHelp();
       event.preventDefault();
-      return;
-    }
-
-    if (/^[0-9]$/.test(event.key) && scoreFields) {
-      const primary = numericField(scoreFields);
-      const max = Number(primary?.max || 10);
-      const value = event.key === '0' ? max : Number(event.key);
-      if (setScore(value)) event.preventDefault();
-      return;
-    }
-
-    if (!scoreFields && event.key === 'ArrowLeft') {
-      if (page('prev')) event.preventDefault();
-      return;
-    }
-
-    if (!scoreFields && event.key === 'ArrowRight') {
-      if (page('next')) event.preventDefault();
     }
   });
 
   window.__OC_KEYBOARD_SHORTCUTS_READY__ = true;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindLoginGuide, { once: true });
+  else bindLoginGuide();
 })();
