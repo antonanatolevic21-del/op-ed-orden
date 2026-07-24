@@ -1,0 +1,36 @@
+name: Remove entity audit loader
+
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-entity-audit-loader.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove cached audit loader reference
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          old = 'sw-register.js?v=20260724-entity-audit-v2'
+          new = 'sw-register.js?v=20260724-no-entity-audit1'
+          if old not in text:
+              raise SystemExit('Old sw-register reference not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add index.html
+          git rm .github/workflows/remove-entity-audit-loader.yml
+          git commit -m 'Stop loading automatic Firebase entity audits'
+          git push
