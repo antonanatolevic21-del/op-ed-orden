@@ -33,25 +33,40 @@
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 
-  function renderRows(block, rows) {
+  function cardHtml(row, side = false) {
+    const img = String(row.image || row.fallbackImage || '').trim();
+    const meta = [row.type || '', row.year || '', row.season || ''].filter(Boolean).join(' · ');
+    return `<button type="button" class="oc-related-card${side ? ' oc-related-side-card' : ''}" data-related-id="${escapeHtml(row.id)}">
+      <span class="oc-related-thumb">${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async">` : ''}</span>
+      <span class="oc-related-copy"><span class="oc-related-title">${escapeHtml(row.title || 'Без названия')}</span><span class="oc-related-meta">${escapeHtml(meta)}</span></span>
+    </button>`;
+  }
+
+  function renderRows(block, sidePreview, rows) {
     const grid = block.querySelector('.oc-related-grid');
     if (!grid) return;
+
     if (!rows.length) {
       grid.innerHTML = '<div class="oc-related-empty">Похожих треков по франшизе, исполнителю, студии, режиссёру или одинаковой песне не найдено.</div>';
+      sidePreview?.classList.remove('loaded');
       return;
     }
 
-    grid.innerHTML = rows.map(row => {
-      const img = String(row.image || row.fallbackImage || '').trim();
-      const meta = [row.type || '', row.year || '', row.season || ''].filter(Boolean).join(' · ');
-      return `<button type="button" class="oc-related-card" data-related-id="${escapeHtml(row.id)}">
-        <span class="oc-related-thumb">${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async">` : ''}</span>
-        <span><span class="oc-related-title">${escapeHtml(row.title || 'Без названия')}</span><span class="oc-related-meta">${escapeHtml(meta)}</span></span>
-      </button>`;
-    }).join('');
+    grid.innerHTML = rows.map(row => cardHtml(row)).join('');
+
+    if (sidePreview) {
+      const split = Math.ceil(rows.length / 2);
+      const leftRows = rows.slice(0, split);
+      const rightRows = rows.slice(split);
+      const left = sidePreview.querySelector('[data-related-side="left"]');
+      const right = sidePreview.querySelector('[data-related-side="right"]');
+      if (left) left.innerHTML = leftRows.map(row => cardHtml(row, true)).join('');
+      if (right) right.innerHTML = rightRows.map(row => cardHtml(row, true)).join('');
+      sidePreview.classList.add('loaded');
+    }
   }
 
-  async function loadRelated(block, id) {
+  async function loadRelated(block, sidePreview, id) {
     const button = block.querySelector('.oc-related-load');
     if (button) {
       button.disabled = true;
@@ -68,7 +83,7 @@
         .sort((a, b) => b.score - a.score || Number(b.row.year || 0) - Number(a.row.year || 0) || String(a.row.title || '').localeCompare(String(b.row.title || ''), 'ru'))
         .slice(0, 6)
         .map(item => item.row);
-      renderRows(block, related);
+      renderRows(block, sidePreview, related);
       if (button) button.remove();
     } catch (error) {
       console.error('Related tracks load failed', error);
@@ -78,6 +93,7 @@
       }
       const grid = block.querySelector('.oc-related-grid');
       if (grid) grid.innerHTML = '<div class="oc-related-empty">Не удалось загрузить связанные треки.</div>';
+      sidePreview?.classList.remove('loaded');
     }
   }
 
@@ -90,13 +106,33 @@
     if (modal.querySelector('.oc-related-block')) return;
 
     const block = document.createElement('section');
-    block.className = 'oc-related-block';
-    block.innerHTML = '<div class="oc-related-head"><strong>Связанные треки</strong><button type="button" class="oc-related-load">Показать связанные</button></div><div class="oc-related-grid"></div>';
+    block.className = 'oc-related-block oc-related-bottom-preview';
+    block.innerHTML = '<div class="oc-related-head"><div><span class="oc-related-variant">вариант снизу</span><strong>Связанные треки</strong></div><button type="button" class="oc-related-load">Показать связанные</button></div><div class="oc-related-grid"></div>';
     const rate = modal.querySelector('.oc-opening-rate-panel');
     if (rate) rate.before(block);
     else modal.append(block);
 
-    block.querySelector('.oc-related-load')?.addEventListener('click', () => void loadRelated(block, id));
+    const overlay = modal.closest('#oc-opening-modal') || modal.parentElement;
+    let sidePreview = overlay?.querySelector('.oc-related-side-preview') || null;
+    if (overlay && !sidePreview) {
+      sidePreview = document.createElement('div');
+      sidePreview.className = 'oc-related-side-preview';
+      sidePreview.innerHTML = `
+        <aside class="oc-related-side oc-related-side-left">
+          <span class="oc-related-variant">вариант по бокам</span>
+          <div class="oc-related-side-list" data-related-side="left"></div>
+        </aside>
+        <aside class="oc-related-side oc-related-side-right">
+          <div class="oc-related-side-list" data-related-side="right"></div>
+        </aside>`;
+      overlay.append(sidePreview);
+      sidePreview.addEventListener('click', event => {
+        const target = event.target.closest('[data-related-id]');
+        if (target) openTrack(String(target.dataset.relatedId || ''));
+      });
+    }
+
+    block.querySelector('.oc-related-load')?.addEventListener('click', () => void loadRelated(block, sidePreview, id));
     block.addEventListener('click', event => {
       const target = event.target.closest('[data-related-id]');
       if (target) openTrack(String(target.dataset.relatedId || ''));
