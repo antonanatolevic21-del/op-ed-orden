@@ -3,7 +3,6 @@
 
   const PREFS_KEY = 'aboba-events-ui-preferences-v1';
   const CN_MODE_KEY = 'aboba-events-codenames-title-mode-v1';
-  const GAME_MODES = new Set(['guess', 'bestworst', 'codenames', 'blindtier', 'whoami']);
   const TITLE_SELECTORS = [
     '.ev-guess-result-title',
     '.ev-guess-option',
@@ -84,17 +83,31 @@
       .replace(/\bending\b(?=(?:\s*#?\d+)?\s*$)/iu, 'ED');
   }
 
+  function rewriteTextNodes(element) {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let current = walker.nextNode();
+    while (current) {
+      nodes.push(current);
+      current = walker.nextNode();
+    }
+    nodes.forEach(node => {
+      const before = String(node.nodeValue || '');
+      const after = toDisplay(before);
+      if (after !== before) node.nodeValue = after;
+    });
+  }
+
   function rewriteElement(element) {
     if (!(element instanceof Element) || !modeIsMixed()) return;
     const before = String(element.textContent || '');
-    const after = toDisplay(before);
-    if (after !== before) element.textContent = after;
+    rewriteTextNodes(element);
 
     if (element.matches('.ev-guess-suggestion[data-guess-suggestion]')) {
       element.dataset.guessSuggestion = toDisplay(element.dataset.guessSuggestion || '');
     }
     if (element.matches('#ev-who-pick-titles option,#ev-who-titles option')) {
-      element.value = toDisplay(element.value || before);
+      element.value = toDisplay(element.getAttribute('value') || before);
     }
   }
 
