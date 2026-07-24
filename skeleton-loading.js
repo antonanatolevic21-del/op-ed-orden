@@ -15,15 +15,15 @@
     const container = document.querySelector('#oc-list-container');
     if (!container) return;
     const text = String(container.textContent || '').trim().toLowerCase();
-    if (text.includes('загрузка') || !container.children.length) container.innerHTML = skeletonHtml(6);
+    if (text.includes('загрузка списка')) container.innerHTML = skeletonHtml(6);
   }
 
   function showPanelSkeleton(panel) {
     if (!panel || panel.classList.contains('hidden')) return;
     const target = panel.querySelector('#oc-profile-op,#oc-top100-list,#oc-tier-list,.oc-profile-list,.oc-allratings-list');
     if (!target) return;
-    const text = String(target.textContent || '').trim();
-    if (!target.children.length || /загруз|пусто/i.test(text)) target.innerHTML = skeletonHtml(3);
+    const text = String(target.textContent || '').trim().toLowerCase();
+    if (text.includes('загрузка')) target.innerHTML = skeletonHtml(3);
   }
 
   document.addEventListener('click', event => {
