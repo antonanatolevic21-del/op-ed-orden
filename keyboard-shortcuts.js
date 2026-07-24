@@ -21,7 +21,7 @@
         <div class="oc-hotkeys-grid">
           <div><kbd>.</kbd><span>Перейти к поиску</span></div>
           <div><kbd>Пробел</kbd><span>Запустить видео в открытой карточке</span></div>
-          <div><kbd>Esc</kbd><span>Закрыть верхнее окно или меню</span></div>
+          <div><kbd>Esc</kbd><span>Закрыть карточку или отменить её редактирование</span></div>
           <div><kbd>?</kbd><span>Снова открыть этот гайд</span></div>
         </div>
       </div>`;
@@ -53,6 +53,15 @@
     const close = modal.querySelector('[data-quality-close],[data-modal-close],[data-eval-action="close"],#oc-auth-close,#oc-register-close,#oc-modal-name-close,[data-image-migration-close],[data-action="close"],[data-action="close-modal"],.oc-modal-close,.oc-edit-cancel,button[aria-label="Закрыть"]');
     if (close) close.click();
     else modal.classList.add('hidden');
+    return true;
+  }
+
+  function cancelTrackEdit() {
+    const editCard = visible('.oc-editcard');
+    if (!editCard) return false;
+    const cancel = editCard.querySelector('[data-action="cancel-edit"]');
+    if (!cancel) return false;
+    cancel.click();
     return true;
   }
 
@@ -138,7 +147,7 @@
 
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
-      if (closeTopModal() || closeMenus()) event.preventDefault();
+      if (closeTopModal() || cancelTrackEdit() || closeMenus()) event.preventDefault();
       return;
     }
 
