@@ -27,6 +27,7 @@
     const avatarBtn = document.querySelector('#oc-avatar-btn');
     const dailyBtn = document.querySelector('#oc-daily-bell');
     const avatarPicker = document.querySelector('#oc-avatar-picker');
+    const mobileMedia = window.matchMedia('(max-width: 900px)');
 
     const header = document.createElement('header');
     header.className = 'oc-topbar';
@@ -63,6 +64,30 @@
     nav.append(ratings);
     if (tierBtn) nav.append(tierBtn);
     nav.append(seasonBtn, eventsLink);
+
+    const mobileRatingsMenu = document.createElement('div');
+    mobileRatingsMenu.className = 'oc-topbar-mobile-ratings-menu';
+    mobileRatingsMenu.hidden = true;
+    mobileRatingsMenu.setAttribute('role', 'menu');
+    mobileRatingsMenu.setAttribute('aria-label', 'Рейтинги');
+
+    function addMobileRatingButton(label, sourceButton) {
+      if (!sourceButton) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'oc-topbar-mobile-rating-option';
+      button.textContent = label;
+      button.setAttribute('role', 'menuitem');
+      button.addEventListener('click', () => {
+        closeMobileRatings();
+        sourceButton.click();
+      });
+      mobileRatingsMenu.append(button);
+    }
+
+    addMobileRatingButton('Общий топ-100', topBtn);
+    addMobileRatingButton('Средние', statsBtn);
+    document.body.append(mobileRatingsMenu);
 
     const right = document.createElement('div');
     right.className = 'oc-topbar-right';
@@ -143,8 +168,28 @@
       ratings.classList.toggle('active', [topBtn, statsBtn].some(button => button?.classList.contains('active')));
     }
 
+    function positionMobileRatings() {
+      if (mobileRatingsMenu.hidden) return;
+      const rect = header.getBoundingClientRect();
+      mobileRatingsMenu.style.top = `${Math.max(8, Math.round(rect.bottom + 8))}px`;
+    }
+
+    function openMobileRatings() {
+      ratings.open = false;
+      account.open = false;
+      mobileRatingsMenu.hidden = false;
+      positionMobileRatings();
+      ratingsSummary.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMobileRatings() {
+      mobileRatingsMenu.hidden = true;
+      ratingsSummary.setAttribute('aria-expanded', 'false');
+    }
+
     syncAccount();
     syncRatingsActive();
+    ratingsSummary.setAttribute('aria-expanded', 'false');
     nameInput?.addEventListener('input', syncAccount);
     nameInput?.addEventListener('change', syncAccount);
     if (avatarBtn) new MutationObserver(syncAccount).observe(avatarBtn, { childList: true, characterData: true, subtree: true });
@@ -152,24 +197,44 @@
       new MutationObserver(syncRatingsActive).observe(button, { attributes: true, attributeFilter: ['class'] });
       button.addEventListener('click', () => {
         ratings.open = false;
+        closeMobileRatings();
         account.open = false;
         window.setTimeout(() => { syncAccount(); syncRatingsActive(); }, 0);
       });
     });
 
+    ratingsSummary.addEventListener('click', event => {
+      if (!mobileMedia.matches) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (mobileRatingsMenu.hidden) openMobileRatings();
+      else closeMobileRatings();
+    });
+
     account.addEventListener('toggle', () => {
       if (account.open) {
         ratings.open = false;
+        closeMobileRatings();
         syncAccount();
       }
     });
     ratings.addEventListener('toggle', () => {
-      if (ratings.open) account.open = false;
+      if (mobileMedia.matches && ratings.open) ratings.open = false;
+      if (ratings.open) {
+        closeMobileRatings();
+        account.open = false;
+      }
     });
     document.addEventListener('click', event => {
       if (account.open && !account.contains(event.target)) account.open = false;
       if (ratings.open && !ratings.contains(event.target)) ratings.open = false;
+      if (!mobileRatingsMenu.hidden && !mobileRatingsMenu.contains(event.target) && !ratings.contains(event.target)) closeMobileRatings();
     });
+    window.addEventListener('resize', () => {
+      if (!mobileMedia.matches) closeMobileRatings();
+      else positionMobileRatings();
+    }, { passive: true });
+    window.addEventListener('scroll', positionMobileRatings, { passive: true });
 
     window.setInterval(syncAccount, 1200);
     window.__OC_TOPBAR_READY__ = true;
