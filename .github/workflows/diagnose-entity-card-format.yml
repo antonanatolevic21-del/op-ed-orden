@@ -1,0 +1,32 @@
+name: Diagnose entity card format
+
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-entity-card-format.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect entity card code
+        shell: bash
+        run: |
+          {
+            echo '=== entityCards references ==='
+            grep -RIn --exclude='ENTITY_CARD_DIAGNOSTIC.txt' --exclude-dir='.git' -E 'entityCards|firebaseEntityCards|saveEntityCard|activeEntityType|entityCard' . || true
+            echo
+            echo '=== entity type literals ==='
+            grep -RIn --exclude='ENTITY_CARD_DIAGNOSTIC.txt' --exclude-dir='.git' -E "studios|performers|directors|franchises" index-app.js firebase-app.js entity-*.js 2>/dev/null || true
+          } > ENTITY_CARD_DIAGNOSTIC.txt
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add ENTITY_CARD_DIAGNOSTIC.txt
+          git rm .github/workflows/diagnose-entity-card-format.yml
+          git commit -m 'Add entity card format diagnostic'
+          git push
