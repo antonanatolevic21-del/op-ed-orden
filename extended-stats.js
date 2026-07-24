@@ -287,7 +287,10 @@
 
     const legacySong = document.querySelector('#oc-stats-song-performers')?.closest('.oc-stats-box');
     legacySong?.classList.add('oc-extended-stats-legacy-song');
-    type.addEventListener('change', () => window.setTimeout(render, 0));
+    if (!type.dataset.extendedStatsBound) {
+      type.dataset.extendedStatsBound = '1';
+      type.addEventListener('change', () => window.setTimeout(render, 0));
+    }
   }
 
   function findOption(select, wanted) {
