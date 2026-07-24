@@ -1,0 +1,160 @@
+/* Main filter range layout */
+#oc-main-panel .oc-filter-primary{
+	display:grid!important;
+	grid-template-columns:minmax(300px,2fr) minmax(150px,.72fr) minmax(230px,.95fr) minmax(255px,1fr) minmax(255px,1fr)!important;
+	gap:12px!important;
+	align-items:end!important;
+}
+#oc-main-panel .oc-filter-primary>.oc-field{min-width:0}
+#oc-main-panel .oc-season-range-pair{
+	display:grid!important;
+	grid-template-columns:minmax(0,1fr) 92px!important;
+	gap:8px!important;
+	min-width:0;
+}
+#oc-main-panel .oc-season-range-pair select{width:100%!important;min-width:0!important}
+#oc-main-panel .oc-filter-primary>.oc-check-field{
+	grid-column:1/-1!important;
+	display:flex!important;
+	align-items:center!important;
+	min-height:0!important;
+	padding-top:0!important;
+}
+#oc-main-panel .oc-filter-check{
+	display:inline-flex!important;
+	align-items:center!important;
+	gap:9px!important;
+	width:auto!important;
+	min-height:38px;
+	padding:8px 12px;
+	border:1px solid #30283d;
+	border-radius:10px;
+	background:#110e18;
+	color:#aaa2b5;
+	line-height:1.25;
+	cursor:pointer;
+}
+#oc-main-panel .oc-filter-check input{
+	flex:0 0 auto;
+	width:16px!important;
+	height:16px!important;
+	margin:0!important;
+	accent-color:#ff2e63;
+}
+
+/* Searchable game exclusion picker */
+.ev-exclusion-native{display:none!important}
+.ev-exclusion-enhanced{min-width:0}
+.ev-exclusion-picker{
+	border:1px solid var(--border);
+	border-radius:13px;
+	padding:11px;
+	background:rgba(11,9,16,.58);
+	min-width:0;
+}
+.ev-exclusion-tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:11px}
+.ev-exclusion-tab{
+	display:inline-flex;
+	align-items:center;
+	gap:7px;
+	min-height:36px;
+	padding:8px 11px;
+	border:1px solid var(--border);
+	border-radius:9px;
+	background:var(--panel);
+	color:var(--muted);
+	font-family:'Space Mono',monospace;
+	font-size:10px;
+	font-weight:800;
+	cursor:pointer;
+}
+.ev-exclusion-tab:hover:not(:disabled){border-color:var(--cyan);color:var(--cyan)}
+.ev-exclusion-tab.active{
+	border-color:var(--pink);
+	background:rgba(255,46,99,.13);
+	color:var(--text);
+	box-shadow:0 0 0 2px rgba(255,46,99,.07);
+}
+.ev-exclusion-tab-count{
+	display:inline-grid;
+	place-items:center;
+	min-width:19px;
+	height:19px;
+	padding:0 5px;
+	border-radius:999px;
+	background:rgba(255,255,255,.07);
+	color:var(--cyan);
+	font-size:9px;
+}
+.ev-exclusion-panel{display:none}
+.ev-exclusion-panel.active{display:block}
+.ev-exclusion-search{
+	width:100%;
+	min-height:42px;
+	margin:0 0 9px;
+	padding:10px 12px;
+	border:1px solid var(--border);
+	border-radius:9px;
+	background:var(--panel);
+	color:var(--text);
+}
+.ev-exclusion-search:focus{outline:2px solid var(--pink);outline-offset:1px}
+.ev-exclusion-list{
+	display:grid;
+	align-content:start;
+	gap:5px;
+	max-height:270px;
+	overflow:auto;
+	scrollbar-gutter:stable;
+	padding:6px;
+	border:1px solid var(--border);
+	border-radius:10px;
+	background:#0b0910;
+	overscroll-behavior:contain;
+}
+.ev-exclusion-item{
+	display:grid;
+	grid-template-columns:18px minmax(0,1fr);
+	align-items:center;
+	gap:8px;
+	min-height:35px;
+	padding:7px 9px;
+	border:1px solid transparent;
+	border-radius:8px;
+	color:var(--text);
+	font-size:12px;
+	line-height:1.25;
+	cursor:pointer;
+	user-select:none;
+}
+.ev-exclusion-item:hover{border-color:#393147;background:rgba(255,255,255,.035)}
+.ev-exclusion-item:has(input:checked){border-color:rgba(8,217,214,.42);background:rgba(8,217,214,.08)}
+.ev-exclusion-item input{width:15px;height:15px;margin:0;accent-color:var(--cyan)}
+.ev-exclusion-empty{
+	padding:16px 10px;
+	color:var(--muted);
+	font-family:'Space Mono',monospace;
+	font-size:10px;
+	text-align:center;
+}
+
+@media(max-width:1450px){
+	#oc-main-panel .oc-filter-primary{
+		grid-template-columns:minmax(280px,2fr) minmax(145px,.75fr) minmax(220px,1fr)!important;
+	}
+}
+@media(max-width:1050px){
+	#oc-main-panel .oc-filter-primary{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+	#oc-main-panel .oc-filter-primary>.oc-search-field,
+	#oc-main-panel .oc-filter-primary>.oc-check-field{grid-column:1/-1!important}
+}
+@media(max-width:680px){
+	#oc-main-panel .oc-filter-primary{grid-template-columns:1fr!important}
+	#oc-main-panel .oc-filter-primary>.oc-search-field,
+	#oc-main-panel .oc-filter-primary>.oc-check-field{grid-column:auto!important}
+	#oc-main-panel .oc-season-range-pair{grid-template-columns:minmax(0,1fr) 96px!important}
+	#oc-main-panel .oc-filter-check{width:100%!important}
+	.ev-exclusion-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+	.ev-exclusion-tab{justify-content:space-between}
+	.ev-exclusion-list{max-height:230px}
+}
