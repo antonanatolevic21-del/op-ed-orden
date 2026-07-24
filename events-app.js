@@ -119,13 +119,7 @@
 
     function normalizeGameExclusions(raw = {}) {
       const current = Array.isArray(raw.excludedEntities) ? raw.excludedEntities : [];
-      const legacy = [
-        ['studio', raw.studio],
-        ['director', raw.director],
-        ['performer', raw.performer],
-        ['franchise', raw.franchise]
-      ].filter(([, value]) => String(value || '').trim()).map(([kind, value]) => `${kind}::${String(value).trim()}`);
-      return [...new Set([...current, ...legacy].map(String).filter(value => value.includes('::')))];
+      return [...new Set(current.map(String).filter(value => value.includes('::')))];
     }
 
     const SCORE_WORDS = { 1:'залупа', 2:'очень слабо', 3:'слабо', 4:'ниже среднего', 5:'средне', 6:'норм', 7:'хорошо', 8:'сильно', 9:'почти пик', 10:'пик' };
