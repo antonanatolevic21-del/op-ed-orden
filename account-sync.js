@@ -21,7 +21,8 @@
   function mirrorAccess() {
     const main = clean(sessionStorage.getItem(MAIN_ACCESS_KEY));
     const event = clean(localStorage.getItem(EVENT_ACCESS_KEY));
-    if (['user', 'admin'].includes(main) && !['user', 'admin'].includes(event)) localStorage.setItem(EVENT_ACCESS_KEY, main);
+    if (event === 'guest') return;
+    if (['user', 'admin'].includes(main) && !event) localStorage.setItem(EVENT_ACCESS_KEY, main);
     if (['user', 'admin'].includes(event) && !['user', 'admin'].includes(main)) sessionStorage.setItem(MAIN_ACCESS_KEY, event);
   }
 
