@@ -10,6 +10,9 @@
 .ev-userbar input,.ev-role-switch{height:36px;width:150px;padding:0 10px;border-color:transparent;border-radius:999px;background:#0f0c16}
 .ev-access{display:inline-flex;align-items:center;min-height:34px;padding:0 10px;border-color:transparent;background:transparent;white-space:nowrap}
 
+/* Все всплывающие окна Events должны быть выше липкой шапки. */
+.ev-modal{z-index:1000}
+
 .ev-mode-switch{display:flex;align-items:center;gap:5px;width:100%;overflow-x:auto;margin:0 0 14px;padding:5px;border:1px solid #2f2738;border-radius:14px;background:#100d16;scrollbar-width:none}
 .ev-mode-switch::-webkit-scrollbar{display:none}
 .ev-mode-tab{flex:0 0 auto;min-height:39px;padding:8px 12px;border-radius:11px;font-size:11px;white-space:nowrap}
