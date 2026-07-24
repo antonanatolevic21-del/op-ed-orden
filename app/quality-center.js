@@ -1,7 +1,8 @@
-import { productState, subscribeProductState } from './state.js';
+import { ensureProductData, productState, subscribeProductState } from './state.js';
 import { openTrack } from './router.js';
 
 let modal = null;
+let loading = false;
 const SEASON_LABEL = { winter:'Зима', spring:'Весна', summer:'Лето', fall:'Осень' };
 
 function escapeHtml(value) {
@@ -68,6 +69,28 @@ function ensureModal() {
   return modal;
 }
 
+function renderLoading() {
+  const root = ensureModal();
+  root.innerHTML = `<div class="oc-quality-dialog">
+    <div class="oc-quality-head">
+      <div><div class="oc-section-label">админ · качество базы</div><h2>Проверка каталога</h2><p>Загружаю каталог для проверки…</p></div>
+      <button type="button" class="oc-quality-close" data-quality-close aria-label="Закрыть">×</button>
+    </div>
+    <div class="oc-quality-issues"><div class="oc-empty">Проверяю данные…</div></div>
+  </div>`;
+}
+
+function renderError() {
+  const root = ensureModal();
+  root.innerHTML = `<div class="oc-quality-dialog">
+    <div class="oc-quality-head">
+      <div><div class="oc-section-label">админ · качество базы</div><h2>Проверка каталога</h2><p>Не удалось получить данные.</p></div>
+      <button type="button" class="oc-quality-close" data-quality-close aria-label="Закрыть">×</button>
+    </div>
+    <div class="oc-quality-issues"><div class="oc-empty">Обнови страницу или попробуй открыть центр ещё раз.</div></div>
+  </div>`;
+}
+
 function render() {
   const root = ensureModal();
   const issues = buildIssues();
@@ -100,12 +123,23 @@ function render() {
   </div>`;
 }
 
-export function openQualityCenter() {
+export async function openQualityCenter() {
   const root = ensureModal();
-  render();
   root.classList.remove('hidden');
   document.body.classList.add('oc-modal-open');
+  renderLoading();
   root.querySelector('[data-quality-close]')?.focus();
+  if (loading) return;
+  loading = true;
+  try {
+    await ensureProductData(['openings']);
+    if (!root.classList.contains('hidden')) render();
+  } catch (error) {
+    console.error('Quality center could not load', error);
+    if (!root.classList.contains('hidden')) renderError();
+  } finally {
+    loading = false;
+  }
 }
 
 export function closeQualityCenter() {
@@ -116,8 +150,8 @@ export function closeQualityCenter() {
 
 export function initQualityCenter() {
   ensureModal();
-  window.addEventListener('oped-open-quality', openQualityCenter);
+  window.addEventListener('oped-open-quality', () => { void openQualityCenter(); });
   subscribeProductState(() => {
-    if (modal && !modal.classList.contains('hidden')) render();
+    if (modal && !modal.classList.contains('hidden') && productState.openings.length) render();
   });
 }
