@@ -43,6 +43,22 @@
     fireChange(select);
   }
 
+  function cleanOldLiteUi(root) {
+    document.querySelectorAll('#oc-stats-lite-min, #oc-stats-lite-limit, #oc-stats-lite-status').forEach(element => element.remove());
+    root.querySelectorAll('.oc-stats-lite-hidden').forEach(element => element.classList.remove('oc-stats-lite-hidden'));
+    root.querySelectorAll('.oc-stats-lite-empty').forEach(element => element.classList.remove('oc-stats-lite-empty'));
+
+    const hint = root.querySelector('.oc-stats-head .oc-tier-hint');
+    if (hint) hint.textContent = 'В расчёт попадают только треки, у которых есть минимум 3 оценки. В таблице показываются группы с минимум 3 такими треками.';
+
+    if (!document.querySelector('#oc-stats-lite-cleanup-style')) {
+      const style = document.createElement('style');
+      style.id = 'oc-stats-lite-cleanup-style';
+      style.textContent = '#oc-stats-lite-min,#oc-stats-lite-limit,#oc-stats-lite-status{display:none!important}';
+      document.head.append(style);
+    }
+  }
+
   function openCatalog(kind, value) {
     const type = document.querySelector('#oc-stats-type')?.value || '';
     document.querySelector('.oc-tab-btn[data-tab="chart"]')?.click();
@@ -77,6 +93,7 @@
     const root = document.querySelector('#oc-stats-panel');
     if (!root) return;
 
+    cleanOldLiteUi(root);
     root.classList.add('oc-stats-lite-ready');
     root.addEventListener('click', event => {
       const row = event.target.closest('.oc-stats-row');
