@@ -8,6 +8,7 @@
   const statsLiteVersion = '20260724-stats-lite3';
   const qualityVersion = '20260724-quality2';
   const hotkeysVersion = '20260724-hotkeys3';
+  const uxVersion = '20260724-uxpack1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -54,6 +55,13 @@
   hotkeysStylesheet.href = `./keyboard-shortcuts.css?v=${hotkeysVersion}`;
   document.head.append(hotkeysStylesheet);
 
+  ['advanced-filters.css', 'skeleton-loading.css', 'toast.css', 'related-tracks.css', 'accessibility.css'].forEach(file => {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = `./${file}?v=${uxVersion}`;
+    document.head.append(stylesheet);
+  });
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -98,6 +106,13 @@
   hotkeysScript.defer = true;
   document.body.append(hotkeysScript);
 
+  ['catalog-cache.js', 'toast.js', 'account-sync.js', 'skeleton-loading.js', 'advanced-filters.js', 'related-tracks.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+    const script = document.createElement('script');
+    script.src = `./${file}?v=${uxVersion}`;
+    script.async = false;
+    document.body.append(script);
+  });
+
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
     stylesheet.rel = 'stylesheet';
@@ -113,7 +128,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force15', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force16', {
         updateViaCache: 'none'
       });
       await registration.update();
