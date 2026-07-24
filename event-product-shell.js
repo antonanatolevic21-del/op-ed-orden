@@ -33,24 +33,70 @@ function syncPersistentAccount() {
   }
 }
 
+function openAccountModal() {
+  const modal = document.querySelector('#ev-name-modal');
+  const nameField = document.querySelector('#ev-modal-name');
+  const badge = document.querySelector('#ev-access-badge');
+  badge?.click();
+  window.setTimeout(() => {
+    if (!modal) return;
+    if (modal.classList.contains('hidden')) modal.classList.remove('hidden');
+    if (nameField && !nameField.value) nameField.value = accountName() === 'гость' ? '' : accountName();
+    const email = document.querySelector('#ev-modal-account-email');
+    (email || nameField)?.focus();
+  }, 50);
+}
+
+function syncRoleProxy(proxy) {
+  const source = document.querySelector('#ev-role-switch');
+  if (!source || !proxy) return;
+  const sourceOptions = [...source.options].map(option => `${option.value}\u0000${option.textContent}`).join('\u0001');
+  if (proxy.dataset.optionsKey !== sourceOptions) {
+    proxy.innerHTML = [...source.options].map(option => `<option value="${String(option.value).replace(/"/g, '&quot;')}">${option.textContent}</option>`).join('');
+    proxy.dataset.optionsKey = sourceOptions;
+  }
+  proxy.value = source.value;
+  const shouldShow = !source.classList.contains('hidden') && source.options.length > 0;
+  proxy.classList.toggle('hidden', !shouldShow);
+  proxy.disabled = source.disabled;
+}
+
 function buildAccountChip() {
   const header = document.querySelector('.ev-header');
   const old = document.querySelector('.ev-userbar');
-  if (!header || header.querySelector('.ev-shell-account')) return;
+  if (!header || header.querySelector('.ev-shell-account-tools')) return;
   old?.classList.add('ev-shell-legacy-userbar');
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'ev-shell-account';
-  button.innerHTML = `<span class="ev-shell-account-avatar">🙂</span><span class="ev-shell-account-name"></span><span>⌄</span>`;
-  header.append(button);
-  const sync = () => { const name = button.querySelector('.ev-shell-account-name'); if (name) name.textContent = accountName(); };
-  button.addEventListener('click', () => {
-    const badge = document.querySelector('#ev-access-badge');
-    if (badge) badge.click();
-    else document.querySelector('#ev-name-modal')?.classList.remove('hidden');
+
+  const tools = document.createElement('div');
+  tools.className = 'ev-shell-account-tools';
+  tools.innerHTML = `
+    <select class="ev-shell-role hidden" aria-label="Переключить роль" title="Переключить роль"></select>
+    <button type="button" class="ev-shell-account" aria-label="Аккаунт и вход">
+      <span class="ev-shell-account-avatar">🙂</span><span class="ev-shell-account-name"></span><span>⌄</span>
+    </button>`;
+  header.append(tools);
+
+  const button = tools.querySelector('.ev-shell-account');
+  const roleProxy = tools.querySelector('.ev-shell-role');
+  const sync = () => {
+    const name = button.querySelector('.ev-shell-account-name');
+    if (name) name.textContent = accountName();
+    syncRoleProxy(roleProxy);
+  };
+
+  button.addEventListener('click', openAccountModal);
+  roleProxy.addEventListener('change', () => {
+    const source = document.querySelector('#ev-role-switch');
+    if (!source) return;
+    source.value = roleProxy.value;
+    source.dispatchEvent(new Event('change', { bubbles: true }));
+    window.setTimeout(sync, 0);
   });
+
+  const sourceRole = document.querySelector('#ev-role-switch');
+  if (sourceRole) new MutationObserver(sync).observe(sourceRole, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'disabled'] });
   sync();
-  window.setInterval(sync, 900);
+  window.setInterval(sync, 700);
 }
 
 function updateRoute(patch = {}, replace = false) {
