@@ -12,21 +12,32 @@ import { initAccessibility } from './accessibility.js';
 import { initSkeletons } from './skeletons.js';
 import { initUndo } from './undo.js';
 
-async function init() {
-  initToasts();
-  initHeader();
-  initRouter();
-  initProfileTabs();
-  initFiltersExperience();
-  initQualityCenter();
-  initRelatedTracks();
-  initKeyboardShortcuts();
-  initAccessibility();
-  initSkeletons();
-  initStatsEnhancements();
-  await startProductState();
-  await initUndo();
+function safeInit(name, initializer) {
+  try {
+    const result = initializer();
+    if (result && typeof result.then === 'function') {
+      result.catch(error => console.error(`Optional feature failed: ${name}`, error));
+    }
+  } catch (error) {
+    console.error(`Optional feature failed: ${name}`, error);
+  }
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init().catch(console.error), { once: true });
-else init().catch(console.error);
+function init() {
+  safeInit('toasts', initToasts);
+  safeInit('header', initHeader);
+  safeInit('router', initRouter);
+  safeInit('profile tabs', initProfileTabs);
+  safeInit('filters', initFiltersExperience);
+  safeInit('quality center', initQualityCenter);
+  safeInit('related tracks', initRelatedTracks);
+  safeInit('keyboard shortcuts', initKeyboardShortcuts);
+  safeInit('accessibility', initAccessibility);
+  safeInit('skeletons', initSkeletons);
+  safeInit('statistics', initStatsEnhancements);
+  safeInit('feature state', startProductState);
+  safeInit('undo', initUndo);
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+else init();
