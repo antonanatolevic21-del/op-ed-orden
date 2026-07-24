@@ -37,6 +37,14 @@ function isAdminUser(user = auth.currentUser) {
 	return Boolean(user && !user.isAnonymous && adminUids.includes(String(user.uid || '')));
 }
 
+function runCleanupInBackground(task, errorMessage) {
+	setTimeout(() => {
+		void Promise.resolve()
+			.then(task)
+			.catch(error => console.warn(errorMessage, error));
+	}, 0);
+}
+
 async function deleteEntityCards(ids) {
 	if (!isAdminUser()) return [];
 	const uniqueIds = [...new Set((ids || []).map(String).filter(Boolean))];
@@ -103,7 +111,12 @@ function wrapDatabaseApi() {
 			const previousReferences = openingEntityReferences(previous);
 			const nextReferences = openingEntityReferences(opening || {});
 			const removed = [...previousReferences.values()].filter(reference => !nextReferences.has(reference.id));
-			if (removed.length) await removeOrphanEntityCards(removed).catch(error => console.warn('Orphan entity cleanup after update failed', error));
+			if (removed.length) {
+				runCleanupInBackground(
+					() => removeOrphanEntityCards(removed),
+					'Orphan entity cleanup after update failed'
+				);
+			}
 			return result;
 		};
 	}
@@ -122,7 +135,12 @@ function wrapDatabaseApi() {
 			}
 
 			const result = await originalDeleteOpening(openingId);
-			if (references.length) await removeOrphanEntityCards(references).catch(error => console.warn('Orphan entity cleanup after delete failed', error));
+			if (references.length) {
+				runCleanupInBackground(
+					() => removeOrphanEntityCards(references),
+					'Orphan entity cleanup after delete failed'
+				);
+			}
 			return result;
 		};
 	}
@@ -138,5 +156,8 @@ if (!wrapDatabaseApi()) {
 
 onAuthStateChanged(auth, user => {
 	if (!isAdminUser(user)) return;
-	void pruneOrphanEntityCards().catch(error => console.warn('Initial orphan entity cleanup failed', error));
+	runCleanupInBackground(
+		pruneOrphanEntityCards,
+		'Initial orphan entity cleanup failed'
+	);
 });
