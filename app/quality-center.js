@@ -2,6 +2,16 @@ import { productState, subscribeProductState } from './state.js';
 import { openTrack } from './router.js';
 
 let modal = null;
+const SEASON_LABEL = { winter:'Зима', spring:'Весна', summer:'Лето', fall:'Осень' };
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function normalize(value) {
   return String(value || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
@@ -65,9 +75,12 @@ function render() {
   const issueHtml = issues.map(issue => {
     const rows = issue.rows.slice(0, 60);
     return `<details class="oc-quality-issue" ${issue.rows.length && issue.rows.length <= 8 ? 'open' : ''}>
-      <summary><span>${issue.label}</span><strong>${issue.rows.length}</strong></summary>
+      <summary><span>${escapeHtml(issue.label)}</span><strong>${issue.rows.length}</strong></summary>
       <div class="oc-quality-track-list">
-        ${rows.length ? rows.map(opening => `<button type="button" data-quality-track="${opening.id}"><span>${opening.title || 'Без названия'}</span><small>${opening.type || '—'} · ${opening.year || '—'}${opening.season ? ` · ${opening.season}` : ''}</small></button>`).join('') : '<div class="oc-quality-ok">Проблем не найдено ✓</div>'}
+        ${rows.length ? rows.map(opening => {
+          const season = opening.season ? ` · ${SEASON_LABEL[opening.season] || opening.season}` : '';
+          return `<button type="button" data-quality-track="${escapeHtml(opening.id)}"><span>${escapeHtml(opening.title || 'Без названия')}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(opening.year || '—')}${escapeHtml(season)}</small></button>`;
+        }).join('') : '<div class="oc-quality-ok">Проблем не найдено ✓</div>'}
         ${issue.rows.length > rows.length ? `<div class="oc-quality-more">И ещё ${issue.rows.length - rows.length}…</div>` : ''}
       </div>
     </details>`;
