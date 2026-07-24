@@ -1,6 +1,6 @@
 (() => {
   const version = '20260724-album-dim-frame1';
-  const topbarVersion = '20260724-topbar1';
+  const topbarVersion = '20260724-topbar2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
