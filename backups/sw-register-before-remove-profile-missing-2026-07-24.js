@@ -1,0 +1,74 @@
+(() => {
+  const version = '20260724-album-dim-frame1';
+  const topbarVersion = '20260724-topbar2';
+  const profileTabsVersion = '20260724-profile-tabs3';
+  const profileFiltersVersion = '20260724-profile-filters1';
+
+  const filterUiStylesheet = document.createElement('link');
+  filterUiStylesheet.rel = 'stylesheet';
+  filterUiStylesheet.href = `./filter-ui-fixes.css?v=${version}`;
+  document.head.append(filterUiStylesheet);
+
+  const albumStylesheet = document.createElement('link');
+  albumStylesheet.rel = 'stylesheet';
+  albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
+  document.head.append(albumStylesheet);
+
+  const topbarStylesheet = document.createElement('link');
+  topbarStylesheet.rel = 'stylesheet';
+  topbarStylesheet.href = `./topbar.css?v=${topbarVersion}`;
+  document.head.append(topbarStylesheet);
+
+  const profileTabsStylesheet = document.createElement('link');
+  profileTabsStylesheet.rel = 'stylesheet';
+  profileTabsStylesheet.href = `./profile-tabs.css?v=${profileTabsVersion}`;
+  document.head.append(profileTabsStylesheet);
+
+  const profileFiltersStylesheet = document.createElement('link');
+  profileFiltersStylesheet.rel = 'stylesheet';
+  profileFiltersStylesheet.href = `./profile-filters.css?v=${profileFiltersVersion}`;
+  document.head.append(profileFiltersStylesheet);
+
+  const entityProgressScript = document.createElement('script');
+  entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
+  document.body.append(entityProgressScript);
+
+  const topbarScript = document.createElement('script');
+  topbarScript.src = `./topbar.js?v=${topbarVersion}`;
+  topbarScript.defer = true;
+  document.body.append(topbarScript);
+
+  const profileTabsScript = document.createElement('script');
+  profileTabsScript.src = `./profile-tabs.js?v=${profileTabsVersion}`;
+  profileTabsScript.defer = true;
+  document.body.append(profileTabsScript);
+
+  const profileFiltersScript = document.createElement('script');
+  profileFiltersScript.src = `./profile-filters.js?v=${profileFiltersVersion}`;
+  profileFiltersScript.defer = true;
+  document.body.append(profileFiltersScript);
+
+  if (document.querySelector('.oc-addbar')) {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = `./track-add-panel.css?v=${version}`;
+    document.head.append(stylesheet);
+
+    const script = document.createElement('script');
+    script.src = `./track-add-panel.js?v=${version}`;
+    document.body.append(script);
+  }
+})();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force10', {
+        updateViaCache: 'none'
+      });
+      await registration.update();
+    } catch (error) {
+      console.warn('Image cache service worker registration failed', error);
+    }
+  });
+}
