@@ -50,9 +50,16 @@
 		return grouped;
 	}
 
+	function selectOptionSignature(select) {
+		return Array.from(select.options)
+			.map(option => String(option.value || ''))
+			.join('\u001f');
+	}
+
 	function enhance(select) {
 		if (!select || select.dataset.exclusionEnhanced === '1') return;
 		select.dataset.exclusionEnhanced = '1';
+		select.dataset.exclusionOptionSignature = selectOptionSignature(select);
 		select.classList.add('ev-exclusion-native');
 
 		const state = stateFor(select.id);
@@ -250,8 +257,21 @@
 		});
 	}
 
+	function refreshEnhancedSelect(select) {
+		if (!select) return;
+		const signature = selectOptionSignature(select);
+		if (select.dataset.exclusionEnhanced === '1' && select.dataset.exclusionOptionSignature !== signature) {
+			const field = select.closest('.ev-exclusion-field') || select.parentElement;
+			field?.querySelector(`.ev-exclusion-picker[data-exclusion-for="${select.id}"]`)?.remove();
+			select.classList.remove('ev-exclusion-native');
+			delete select.dataset.exclusionEnhanced;
+			delete select.dataset.exclusionOptionSignature;
+		}
+		enhance(select);
+	}
+
 	function enhanceAll() {
-		SELECT_IDS.forEach(id => enhance(document.getElementById(id)));
+		SELECT_IDS.forEach(id => refreshEnhancedSelect(document.getElementById(id)));
 	}
 
 	function scheduleEnhance() {
