@@ -4,6 +4,7 @@
   const MODES = new Set(['rating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
   const STAGES = new Set(['basket', 'first', 'semi', 'final']);
   const SEASONS = new Set(['winter', 'spring', 'summer', 'fall']);
+  const SEASON_LABEL = { winter: 'зима', spring: 'весна', summer: 'лето', fall: 'осень' };
   let applying = false;
   let seasonTimer = 0;
 
@@ -24,6 +25,19 @@
     return String(element?.dataset.roomId || element?.dataset.eventRoom || '').trim();
   }
 
+  function seasonFromButton(button) {
+    const direct = String(button?.dataset?.season || button?.dataset?.eventSeason || '').toLowerCase();
+    if (SEASONS.has(direct)) return direct;
+    const text = String(button?.textContent || '').toLowerCase();
+    return [...SEASONS].find(season => text.includes(SEASON_LABEL[season])) || '';
+  }
+
+  function yearFromButton(button) {
+    const direct = String(button?.dataset?.year || button?.dataset?.eventYear || '');
+    if (/^\d{4}$/.test(direct)) return direct;
+    return String(button?.textContent || '').match(/\b(19|20)\d{2}\b/)?.[0] || '';
+  }
+
   function writeUrl({ mode, stage, year, season, room }, replace = false) {
     const url = currentUrl();
     const params = url.searchParams;
@@ -42,9 +56,9 @@
     if (room) params.set('room', room);
     else if (!['bestworst', 'codenames', 'whoami'].includes(nextMode)) params.delete('room');
 
-    const next = `${url.pathname}?${params.toString()}${url.hash}`;
-    const method = replace ? 'replaceState' : 'pushState';
-    history[method]({ eventsDeepLink: true }, '', next);
+    const query = params.toString();
+    const next = `${url.pathname}${query ? `?${query}` : ''}${url.hash}`;
+    history[replace ? 'replaceState' : 'pushState']({ eventsDeepLink: true }, '', next);
   }
 
   function syncFromUi(replace = false, extras = {}) {
@@ -62,10 +76,10 @@
     window.clearTimeout(seasonTimer);
     if (!SEASONS.has(season) || activeMode() !== 'rating') return;
 
-    const buttons = [...document.querySelectorAll('.ev-season-btn[data-season], [data-event-season]')];
+    const buttons = [...document.querySelectorAll('.ev-season-btn, [data-event-season]')];
     const match = buttons.find(button => {
-      const buttonSeason = String(button.dataset.season || button.dataset.eventSeason || '');
-      const buttonYear = String(button.dataset.year || button.dataset.eventYear || '');
+      const buttonSeason = seasonFromButton(button);
+      const buttonYear = yearFromButton(button);
       return buttonSeason === season && (!year || !buttonYear || buttonYear === String(year));
     });
 
@@ -105,11 +119,7 @@
     window.setTimeout(() => {
       applying = false;
       if (params.has('mode') || params.has('stage') || params.has('season') || params.has('room')) {
-        syncFromUi(true, {
-          year: requestedYear,
-          season: requestedSeason,
-          room: requestedRoom
-        });
+        syncFromUi(true, { year: requestedYear, season: requestedSeason, room: requestedRoom });
       }
     }, 50);
   }
@@ -132,10 +142,10 @@
         return;
       }
 
-      const seasonButton = event.target.closest('.ev-season-btn[data-season], [data-event-season]');
+      const seasonButton = event.target.closest('.ev-season-btn, [data-event-season]');
       if (seasonButton && activeMode() === 'rating') {
-        const season = String(seasonButton.dataset.season || seasonButton.dataset.eventSeason || '');
-        const year = String(seasonButton.dataset.year || seasonButton.dataset.eventYear || '');
+        const season = seasonFromButton(seasonButton);
+        const year = yearFromButton(seasonButton);
         if (SEASONS.has(season)) window.setTimeout(() => writeUrl({ mode: 'rating', stage: activeStage(), season, year }), 0);
         return;
       }
