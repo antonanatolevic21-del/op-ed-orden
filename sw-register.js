@@ -4,7 +4,7 @@
   const profileTabsVersion = '20260724-profile-tabs3';
   const profileFiltersVersion = '20260724-profile-filters2';
   const filterChipsVersion = '20260724-filter-chips2';
-  const extendedStatsVersion = '20260724-extended-stats1';
+  const extendedStatsVersion = '20260724-extended-stats2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
