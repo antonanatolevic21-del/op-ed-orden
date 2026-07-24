@@ -1,5 +1,5 @@
 import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+import { collection, deleteDoc, doc, getDoc, getDocs, getFirestore, serverTimestamp, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import { firebaseConfig, adminUids } from './firebase-config.js';
 
@@ -81,32 +81,51 @@ async function runPool(items, worker, concurrency = 8) {
 	return results;
 }
 
-function estimateBytes(value) {
-	const json = JSON.stringify(value, (_, item) => {
-		if (item && typeof item.toDate === 'function') {
-			try { return { __timestamp:item.toDate().toISOString() }; } catch (_) {}
-		}
-		if (item && typeof item.latitude === 'number' && typeof item.longitude === 'number') {
-			return { __geopoint:[item.latitude, item.longitude] };
-		}
-		if (item && typeof item.path === 'string' && item.firestore) return { __reference:item.path };
-		return item;
-	});
-	return new TextEncoder().encode(json || '').length;
+function serializeBackupValue(value) {
+	if (value && typeof value.toDate === 'function') {
+		try { return { __firestoreType:'timestamp', value:value.toDate().toISOString() }; } catch (_) {}
+	}
+	if (value && typeof value.latitude === 'number' && typeof value.longitude === 'number') {
+		return { __firestoreType:'geopoint', latitude:value.latitude, longitude:value.longitude };
+	}
+	if (value && typeof value.path === 'string' && value.firestore) {
+		return { __firestoreType:'reference', path:value.path };
+	}
+	if (Array.isArray(value)) return value.map(serializeBackupValue);
+	if (value && typeof value === 'object') {
+		return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, serializeBackupValue(item)]));
+	}
+	return value;
+}
+
+function deserializeBackupValue(value) {
+	if (Array.isArray(value)) return value.map(deserializeBackupValue);
+	if (value && typeof value === 'object') {
+		if (value.__firestoreType === 'timestamp' && value.value) return Timestamp.fromDate(new Date(value.value));
+		if (value.__firestoreType === 'reference' && value.path) return doc(db, String(value.path));
+		if (value.__firestoreType === 'geopoint') return { latitude:Number(value.latitude), longitude:Number(value.longitude) };
+		return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, deserializeBackupValue(item)]));
+	}
+	return value;
+}
+
+function backupRowJson(row) {
+	return JSON.stringify(serializeBackupValue(row));
 }
 
 function splitBackupRows(rows) {
 	const chunks = [];
 	let current = [];
-	let currentSize = 0;
+	let currentSize = 2;
 	(rows || []).forEach(row => {
-		const rowSize = estimateBytes(row) + 32;
+		const encoded = backupRowJson(row);
+		const rowSize = new TextEncoder().encode(encoded).length + 2;
 		if (current.length && currentSize + rowSize > BACKUP_CHUNK_LIMIT) {
 			chunks.push(current);
 			current = [];
-			currentSize = 0;
+			currentSize = 2;
 		}
-		current.push(row);
+		current.push(encoded);
 		currentSize += rowSize;
 	});
 	if (current.length || !chunks.length) chunks.push(current);
@@ -123,16 +142,20 @@ function snapshotRows(snapshot) {
 async function writeBackupCollection(runId, sourceCollection, rows) {
 	const chunks = splitBackupRows(rows);
 	const chunkIds = chunks.map((_, index) => `${runId}__${sourceCollection}__${String(index + 1).padStart(3, '0')}`);
-	await runPool(chunks, (chunk, index) => setDoc(doc(db, 'meta', chunkIds[index]), {
-		kind:'entity-cleanup-backup-chunk',
-		runId,
-		sourceCollection,
-		chunkIndex:index,
-		chunkCount:chunks.length,
-		rowCount:chunk.length,
-		rows:chunk,
-		createdAt:serverTimestamp()
-	}), 4);
+	await runPool(chunks, (encodedRows, index) => {
+		const payload = `[${encodedRows.join(',')}]`;
+		return setDoc(doc(db, 'meta', chunkIds[index]), {
+			kind:'entity-cleanup-backup-chunk',
+			runId,
+			sourceCollection,
+			chunkIndex:index,
+			chunkCount:chunks.length,
+			rowCount:encodedRows.length,
+			payload,
+			payloadBytes:new TextEncoder().encode(payload).length,
+			createdAt:serverTimestamp()
+		});
+	}, 4);
 	return chunkIds;
 }
 
@@ -192,7 +215,7 @@ function calculateCleanup(openingRows, entityCardRows) {
 			staleRows.push(row);
 		}
 	});
-	return { summary, staleRows, liveIds };
+	return { summary, staleRows };
 }
 
 async function removeOrphanEntityCards(candidates = []) {
@@ -300,7 +323,12 @@ async function runBackedUpOrphanCleanup() {
 
 async function readBackupRows(chunkIds = []) {
 	const snapshots = await runPool(chunkIds, id => getDoc(doc(db, 'meta', id)), 8);
-	return snapshots.flatMap(snapshot => snapshot.exists() && Array.isArray(snapshot.data()?.rows) ? snapshot.data().rows : []);
+	return snapshots.flatMap(snapshot => {
+		if (!snapshot.exists()) return [];
+		const payload = String(snapshot.data()?.payload || '[]');
+		const parsed = JSON.parse(payload);
+		return Array.isArray(parsed) ? parsed.map(deserializeBackupValue) : [];
+	});
 }
 
 async function restoreCleanupBackup() {
@@ -311,8 +339,11 @@ async function restoreCleanupBackup() {
 	const manifest = manifestSnapshot.data();
 	const entityCardRows = await readBackupRows(manifest.entityCardChunkIds || []);
 	await runPool(entityCardRows, row => setDoc(doc(db, 'entityCards', String(row.id)), row.data || {}), 10);
-	const restored = { ...manifest, status:'restored', restoredCount:entityCardRows.length, restoredAt:serverTimestamp() };
-	await setDoc(manifestRef, restored, { merge:true });
+	await setDoc(manifestRef, {
+		status:'restored',
+		restoredCount:entityCardRows.length,
+		restoredAt:serverTimestamp()
+	}, { merge:true });
 	showCleanupPanel({ ...manifest, status:'restored' });
 	return entityCardRows.length;
 }
