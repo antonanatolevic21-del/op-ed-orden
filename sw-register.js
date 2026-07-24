@@ -3,6 +3,7 @@
   const topbarVersion = '20260724-topbar2';
   const profileTabsVersion = '20260724-profile-tabs3';
   const profileFiltersVersion = '20260724-profile-filters2';
+  const filterChipsVersion = '20260724-filter-chips1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -29,6 +30,11 @@
   profileFiltersStylesheet.href = `./profile-filters.css?v=${profileFiltersVersion}`;
   document.head.append(profileFiltersStylesheet);
 
+  const filterChipsStylesheet = document.createElement('link');
+  filterChipsStylesheet.rel = 'stylesheet';
+  filterChipsStylesheet.href = `./active-filter-chips.css?v=${filterChipsVersion}`;
+  document.head.append(filterChipsStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -47,6 +53,11 @@
   profileFiltersScript.src = `./profile-filters.js?v=${profileFiltersVersion}`;
   profileFiltersScript.defer = true;
   document.body.append(profileFiltersScript);
+
+  const filterChipsScript = document.createElement('script');
+  filterChipsScript.src = `./active-filter-chips.js?v=${filterChipsVersion}`;
+  filterChipsScript.defer = true;
+  document.body.append(filterChipsScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
