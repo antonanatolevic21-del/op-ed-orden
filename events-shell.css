@@ -4,7 +4,7 @@
 .ev-header>div:first-child{display:flex;align-items:center;gap:12px;min-width:0}
 .ev-title{font-size:25px;line-height:1;letter-spacing:-.8px;white-space:nowrap;background:linear-gradient(90deg,#ff2e63,#8b5cf6,#00e5ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .ev-sub{display:none}
-.ev-home-link{display:inline-flex!important;align-items:center;justify-content:center;width:auto;margin:0;min-height:39px;padding:8px 12px;border:1px solid transparent;border-radius:11px;background:transparent;color:#aaa2b4;font:700 11px 'Space Mono',monospace;white-space:nowrap}
+.ev-home-link{display:inline-flex;align-items:center;justify-content:center;width:auto;margin:0;min-height:39px;padding:8px 12px;border:1px solid transparent;border-radius:11px;background:transparent;color:#aaa2b4;font:700 11px 'Space Mono',monospace;white-space:nowrap}
 .ev-home-link:hover{border-color:#433650;background:#18131f;color:#fff}
 .ev-userbar{flex-wrap:nowrap;min-width:0;padding:4px;border:1px solid #332a3e;border-radius:999px;background:#15111d;color:#827a8e}
 .ev-userbar input,.ev-role-switch{height:36px;width:150px;padding:0 10px;border-color:transparent;border-radius:999px;background:#0f0c16}
