@@ -1,5 +1,10 @@
 (() => {
-  const version = '20260723-track-panel-compact8';
+  const version = '20260724-filter-ui3';
+
+  const filterUiStylesheet = document.createElement('link');
+  filterUiStylesheet.rel = 'stylesheet';
+  filterUiStylesheet.href = `./filter-ui-fixes.css?v=${version}`;
+  document.head.append(filterUiStylesheet);
 
   const albumStylesheet = document.createElement('link');
   albumStylesheet.rel = 'stylesheet';
@@ -25,7 +30,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260723-force9', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force10', {
         updateViaCache: 'none'
       });
       await registration.update();
