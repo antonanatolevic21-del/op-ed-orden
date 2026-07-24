@@ -3,7 +3,7 @@
   const topbarVersion = '20260724-topbar2';
   const profileTabsVersion = '20260724-profile-tabs3';
   const profileFiltersVersion = '20260724-profile-filters2';
-  const filterChipsVersion = '20260724-filter-chips1';
+  const filterChipsVersion = '20260724-filter-chips2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
