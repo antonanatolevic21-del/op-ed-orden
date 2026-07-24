@@ -8,7 +8,17 @@ export const productState = {
 };
 
 const listeners = new Set();
+const loaded = new Set();
+const pending = new Map();
 let started = false;
+let firebaseModulesPromise = null;
+
+const DATASETS = {
+  openings: { collectionName: 'openings', stateKey: 'openings' },
+  ratings: { collectionName: 'ratings', stateKey: 'ratings' },
+  profiles: { collectionName: 'userProfiles', stateKey: 'profiles' },
+  entityCards: { collectionName: 'entityCards', stateKey: 'entityCards' }
+};
 
 function emit(reason = 'update') {
   const detail = { state: productState, reason };
@@ -36,32 +46,58 @@ export function waitForDb() {
   });
 }
 
+async function firestoreTools() {
+  if (!firebaseModulesPromise) {
+    firebaseModulesPromise = Promise.all([
+      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js')
+    ]).then(([appMod, fsMod]) => ({ appMod, fsMod }));
+  }
+  const { appMod, fsMod } = await firebaseModulesPromise;
+  if (!appMod.getApps().length) throw new Error('Firebase app is not ready');
+  return {
+    db: fsMod.getFirestore(appMod.getApp()),
+    collection: fsMod.collection,
+    getDocs: fsMod.getDocs
+  };
+}
+
+async function loadDataset(name, force = false) {
+  const spec = DATASETS[name];
+  if (!spec) return [];
+  if (!force && loaded.has(name)) return productState[spec.stateKey];
+  if (!force && pending.has(name)) return pending.get(name);
+
+  const promise = (async () => {
+    await waitForDb();
+    const { db, collection, getDocs } = await firestoreTools();
+    const snapshot = await getDocs(collection(db, spec.collectionName));
+    const rows = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
+    productState[spec.stateKey] = rows;
+    loaded.add(name);
+    if (name === 'openings') productState.ready = true;
+    emit(name);
+    return rows;
+  })().finally(() => pending.delete(name));
+
+  pending.set(name, promise);
+  return promise;
+}
+
+export async function ensureProductData(parts = ['openings'], options = {}) {
+  const names = Array.from(new Set(Array.isArray(parts) ? parts : [parts])).filter(name => DATASETS[name]);
+  await Promise.all(names.map(name => loadDataset(name, Boolean(options.force))));
+  return productState;
+}
+
 export async function startProductState() {
   if (started) return productState;
   started = true;
   try {
-    const db = await waitForDb();
-    productState.db = db;
-    if (typeof db.watchOpenings === 'function') db.watchOpenings(rows => {
-      productState.openings = Array.isArray(rows) ? rows : [];
-      productState.ready = true;
-      emit('openings');
-    });
-    if (typeof db.watchRatings === 'function') db.watchRatings(rows => {
-      productState.ratings = Array.isArray(rows) ? rows : [];
-      emit('ratings');
-    });
-    if (typeof db.watchUserProfiles === 'function') db.watchUserProfiles(rows => {
-      productState.profiles = Array.isArray(rows) ? rows : [];
-      emit('profiles');
-    });
-    if (typeof db.watchEntityCards === 'function') db.watchEntityCards(rows => {
-      productState.entityCards = Array.isArray(rows) ? rows : [];
-      emit('entityCards');
-    });
+    productState.db = await waitForDb();
     emit('ready');
   } catch (error) {
-    console.error('Product state could not start', error);
+    console.error('Product feature state could not start', error);
     emit('error');
   }
   return productState;
