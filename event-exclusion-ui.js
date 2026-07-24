@@ -83,10 +83,14 @@
 			tab.disabled = select.disabled;
 			tab.innerHTML = `<span>${group.label}</span><span class="ev-exclusion-tab-count">${selectedCount}</span>`;
 			tabs.append(tab);
+			const tabCount = tab.querySelector('.ev-exclusion-tab-count');
 
 			const panel = document.createElement('div');
 			panel.className = `ev-exclusion-panel${state.active === group.kind ? ' active' : ''}`;
 			panel.dataset.exclusionPanel = group.kind;
+
+			const tools = document.createElement('div');
+			tools.className = 'ev-exclusion-tools';
 
 			const search = document.createElement('input');
 			search.type = 'search';
@@ -95,12 +99,27 @@
 			search.autocomplete = 'off';
 			search.value = state.search[group.kind] || '';
 			search.disabled = select.disabled;
-			panel.append(search);
+
+			const reset = document.createElement('button');
+			reset.type = 'button';
+			reset.className = 'ev-exclusion-reset';
+			reset.textContent = 'Сбросить';
+			reset.title = `Сбросить выбранные исключения: ${group.label.toLocaleLowerCase('ru')}`;
+			reset.disabled = select.disabled || selectedCount === 0;
+
+			tools.append(search, reset);
+			panel.append(tools);
 
 			const list = document.createElement('div');
 			list.className = 'ev-exclusion-list';
 			list.dataset.exclusionList = group.kind;
 			panel.append(list);
+
+			const updateGroupMeta = () => {
+				const count = entries.filter(entry => entry.option.selected).length;
+				if (tabCount) tabCount.textContent = String(count);
+				reset.disabled = select.disabled || count === 0;
+			};
 
 			entries.forEach(entry => {
 				const item = document.createElement('div');
@@ -122,6 +141,7 @@
 					entry.option.selected = checked;
 					state.scroll[group.kind] = list.scrollTop;
 					state.restoreY = window.scrollY;
+					updateGroupMeta();
 					select.dispatchEvent(new Event('change', { bubbles: true }));
 				};
 
@@ -168,6 +188,21 @@
 
 			search.addEventListener('click', event => event.stopPropagation());
 			search.addEventListener('input', applySearch);
+			reset.addEventListener('click', event => {
+				event.preventDefault();
+				event.stopPropagation();
+				if (select.disabled || reset.disabled) return;
+				state.scroll[group.kind] = list.scrollTop;
+				state.restoreY = window.scrollY;
+				entries.forEach(entry => {
+					entry.option.selected = false;
+				});
+				list.querySelectorAll('input[data-exclusion-token]').forEach(checkbox => {
+					checkbox.checked = false;
+				});
+				updateGroupMeta();
+				select.dispatchEvent(new Event('change', { bubbles: true }));
+			});
 			list.addEventListener('scroll', () => {
 				state.scroll[group.kind] = list.scrollTop;
 			}, { passive: true });
