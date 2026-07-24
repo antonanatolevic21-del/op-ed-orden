@@ -1,4 +1,5 @@
 /* Lightweight visual shell for Events: mirrors the main site's top bar and panels without touching event logic. */
+html{color-scheme:dark}
 .ev-root{max-width:1680px;margin:0 auto;padding:28px 20px 60px}
 .ev-header{position:sticky;top:0;z-index:120;display:flex;align-items:center;justify-content:space-between;gap:16px;margin:-28px -20px 18px;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.08);background:rgba(11,10,16,.92);backdrop-filter:blur(18px) saturate(1.2);box-shadow:0 12px 30px rgba(0,0,0,.16)}
 .ev-header>div:first-child{display:flex;align-items:center;gap:12px;min-width:0}
@@ -12,6 +13,43 @@
 
 /* Все всплывающие окна Events должны быть выше липкой шапки. */
 .ev-modal{z-index:1000}
+
+/* Единый тёмный вид для всех обычных полей Events, включая динамически созданные поля игр и лобби. */
+body .ev-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not([type="hidden"]),
+body .ev-root select,
+body .ev-root textarea,
+body .ev-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not([type="hidden"]),
+body .ev-modal select,
+body .ev-modal textarea{
+  color-scheme:dark;
+  min-height:40px;
+  border:1px solid #393043;
+  border-radius:10px;
+  background:linear-gradient(180deg,#121019,#0f0c16);
+  color:#f5f3fa;
+  padding:9px 11px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 1px 0 rgba(0,0,0,.2);
+  outline:none;
+  transition:border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+body .ev-root textarea,body .ev-modal textarea{min-height:88px;line-height:1.45;resize:vertical}
+body .ev-root input::placeholder,body .ev-root textarea::placeholder,body .ev-modal input::placeholder,body .ev-modal textarea::placeholder{color:#625d70;opacity:1}
+body .ev-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not([type="hidden"]):hover,
+body .ev-root select:hover,
+body .ev-root textarea:hover,
+body .ev-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not([type="hidden"]):hover,
+body .ev-modal select:hover,
+body .ev-modal textarea:hover{border-color:#4a3e58;background:#15111d}
+body .ev-root input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not([type="hidden"]):focus,
+body .ev-root select:focus,
+body .ev-root textarea:focus,
+body .ev-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]):not([type="hidden"]):focus,
+body .ev-modal select:focus,
+body .ev-modal textarea:focus{border-color:#08d9d6;background:#120f1a;box-shadow:0 0 0 3px rgba(8,217,214,.11),inset 0 1px 0 rgba(255,255,255,.03)}
+body .ev-root input:disabled,body .ev-root select:disabled,body .ev-root textarea:disabled,body .ev-modal input:disabled,body .ev-modal select:disabled,body .ev-modal textarea:disabled{opacity:.52;cursor:not-allowed;background:#0d0b12}
+body .ev-root select option,body .ev-root select optgroup,body .ev-modal select option,body .ev-modal select optgroup{background:#15111d;color:#f5f3fa}
+body .ev-root input[type="checkbox"],body .ev-root input[type="radio"],body .ev-modal input[type="checkbox"],body .ev-modal input[type="radio"]{accent-color:#ff2e63}
+body .ev-root input:-webkit-autofill,body .ev-root input:-webkit-autofill:hover,body .ev-root input:-webkit-autofill:focus,body .ev-modal input:-webkit-autofill,body .ev-modal input:-webkit-autofill:hover,body .ev-modal input:-webkit-autofill:focus{-webkit-text-fill-color:#f5f3fa;-webkit-box-shadow:0 0 0 1000px #0f0c16 inset;caret-color:#f5f3fa}
 
 .ev-mode-switch{display:flex;align-items:center;gap:5px;width:100%;overflow-x:auto;margin:0 0 14px;padding:5px;border:1px solid #2f2738;border-radius:14px;background:#100d16;scrollbar-width:none}
 .ev-mode-switch::-webkit-scrollbar{display:none}
