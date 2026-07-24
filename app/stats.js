@@ -7,6 +7,15 @@ let minTracks = 3;
 let scheduled = false;
 let rendering = false;
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function average(values) {
   const nums = values.map(Number).filter(Number.isFinite);
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : null;
@@ -36,7 +45,7 @@ function groupRows(openings, getter) {
   openings.forEach(opening => {
     const value = trackMetric(opening, ratingMap);
     if (value === null) return;
-    const keys = getter(opening).map(String).map(value => value.trim()).filter(Boolean);
+    const keys = getter(opening).map(String).map(item => item.trim()).filter(Boolean);
     keys.forEach(key => {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(value);
@@ -56,18 +65,28 @@ function renderTable(selector, rows, kind) {
     root.innerHTML = `<div class="oc-empty">Нет групп с минимум ${minTracks} треками для выбранной метрики.</div>`;
     return;
   }
-  root.innerHTML = rows.map((row, index) => `
-    <button type="button" class="oc-stats-row oc-stats-row-link" data-stat-kind="${kind}" data-stat-value="${String(row.key).replace(/"/g, '&quot;')}">
+  root.innerHTML = rows.map((row, index) => {
+    const key = escapeHtml(row.key);
+    return `<button type="button" class="oc-stats-row oc-stats-row-link" data-stat-kind="${escapeHtml(kind)}" data-stat-value="${key}">
       <span class="oc-stats-rank">${index + 1}</span>
-      <span class="oc-stats-name" title="${String(row.key).replace(/"/g, '&quot;')}">${row.key}</span>
+      <span class="oc-stats-name" title="${key}">${key}</span>
       <span class="oc-stats-score">${row.mean.toFixed(2)}</span>
       <span class="oc-stats-count">${row.count} трек.</span>
       <span class="oc-stats-open">→</span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
 }
 
 function currentType() {
   return document.querySelector('#oc-stats-type')?.value || '';
+}
+
+function hideLegacySongPerformerBox() {
+  const box = document.querySelector('#oc-stats-song-performers')?.closest('.oc-stats-box');
+  if (box) {
+    box.hidden = true;
+    box.classList.add('oc-stats-box-legacy-hidden');
+  }
 }
 
 function render() {
@@ -76,10 +95,10 @@ function render() {
   if (!panel || panel.classList.contains('hidden')) return;
   rendering = true;
   try {
+    hideLegacySongPerformerBox();
     const type = currentType();
     const base = productState.openings.filter(opening => !type || opening.type === type);
     renderTable('#oc-stats-performers', groupRows(base, opening => opening.performers || []), 'performer');
-    renderTable('#oc-stats-song-performers', groupRows(base, opening => opening.performers || []), 'performer');
     renderTable('#oc-stats-studios', groupRows(base, opening => opening.studios || []), 'studio');
     renderTable('#oc-stats-directors', groupRows(base, opening => opening.directors || []), 'director');
     renderTable('#oc-stats-seasons', groupRows(base, opening => opening.year && opening.season ? [`${SEASON_LABEL[opening.season]} ${opening.year}`] : []), 'season');
@@ -105,16 +124,19 @@ function ensureControls() {
   const metricSelect = document.createElement('select');
   metricSelect.dataset.statsMetric = '1';
   metricSelect.title = 'Какую оценку усреднять';
-  metricSelect.innerHTML = '<option value="score">Общая</option><option value="songScore">Песня</option><option value="visualScore">Визуал</option>';
+  metricSelect.setAttribute('aria-label', 'Метрика статистики');
+  metricSelect.innerHTML = '<option value="score">Метрика: общая</option><option value="songScore">Метрика: песня</option><option value="visualScore">Метрика: визуал</option>';
   const minSelect = document.createElement('select');
   minSelect.dataset.statsMin = '1';
   minSelect.title = 'Минимум треков в группе';
+  minSelect.setAttribute('aria-label', 'Минимум треков в статистике');
   minSelect.innerHTML = '<option value="3">Минимум 3 трека</option><option value="5">Минимум 5 треков</option><option value="10">Минимум 10 треков</option><option value="20">Минимум 20 треков</option>';
   controls.prepend(minSelect);
   controls.prepend(metricSelect);
   metricSelect.addEventListener('change', () => { metric = metricSelect.value; scheduleRender(); });
   minSelect.addEventListener('change', () => { minTracks = Number(minSelect.value) || 3; scheduleRender(); });
   document.querySelector('#oc-stats-type')?.addEventListener('change', scheduleRender);
+  hideLegacySongPerformerBox();
 }
 
 function setMultiFilter(id, value) {
@@ -129,13 +151,16 @@ function clearMainFilters() {
 }
 
 function filterCatalog(kind, value) {
+  const type = currentType();
   navigateTab('chart');
   clearMainFilters();
   window.setTimeout(() => {
-    const type = currentType();
     if (type) {
       const typeSelect = document.querySelector('#oc-f-type');
-      if (typeSelect) { typeSelect.value = type; typeSelect.dispatchEvent(new Event('change', { bubbles: true })); }
+      if (typeSelect) {
+        typeSelect.value = type;
+        typeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     }
     if (kind === 'performer') setMultiFilter('#oc-f-performer', value);
     if (kind === 'studio') setMultiFilter('#oc-f-studio', value);
@@ -168,7 +193,16 @@ export function initStatsEnhancements() {
     if (row) filterCatalog(row.dataset.statKind, row.dataset.statValue || '');
   });
   const grid = document.querySelector('#oc-stats-panel .oc-stats-grid');
-  if (grid) new MutationObserver(() => { if (!rendering) scheduleRender(); }).observe(grid, { childList: true, subtree: true });
+  if (grid) {
+    new MutationObserver(() => {
+      if (rendering) return;
+      const legacyRowsPresent = Boolean(grid.querySelector('.oc-stats-row:not(.oc-stats-row-link)'));
+      if (legacyRowsPresent) scheduleRender();
+      hideLegacySongPerformerBox();
+    }).observe(grid, { childList: true, subtree: true });
+  }
   subscribeProductState(() => scheduleRender());
-  document.addEventListener('click', event => { if (event.target.closest('[data-shell-tab="stats"],.oc-tab-btn[data-tab="stats"]')) window.setTimeout(scheduleRender, 30); });
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-shell-tab="stats"],.oc-tab-btn[data-tab="stats"]')) window.setTimeout(scheduleRender, 30);
+  });
 }
