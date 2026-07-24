@@ -117,6 +117,17 @@
       return SEASONS.map(season => `<option value="${season}" ${selected === season ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('');
     }
 
+    function normalizeGameExclusions(raw = {}) {
+      const current = Array.isArray(raw.excludedEntities) ? raw.excludedEntities : [];
+      const legacy = [
+        ['studio', raw.studio],
+        ['director', raw.director],
+        ['performer', raw.performer],
+        ['franchise', raw.franchise]
+      ].filter(([, value]) => String(value || '').trim()).map(([kind, value]) => `${kind}::${String(value).trim()}`);
+      return [...new Set([...current, ...legacy].map(String).filter(value => value.includes('::')))];
+    }
+
     const SCORE_WORDS = { 1:'залупа', 2:'очень слабо', 3:'слабо', 4:'ниже среднего', 5:'средне', 6:'норм', 7:'хорошо', 8:'сильно', 9:'почти пик', 10:'пик' };
 
     const $ = (sel) => document.querySelector(sel);
@@ -193,10 +204,7 @@
       fromSeason: 'winter',
       toYear: '',
       toSeason: 'fall',
-      studio: '',
-      director: '',
-      performer: '',
-      franchise: '',
+      excludedEntities: [],
       content: 'all',
       users: [],
       scoreLogic: 'and',
@@ -210,6 +218,8 @@
     if (savedEventUiPreferences.guessFilters && typeof savedEventUiPreferences.guessFilters === 'object') {
       Object.assign(guessFilters, savedEventUiPreferences.guessFilters);
     }
+    guessFilters.excludedEntities = normalizeGameExclusions(guessFilters);
+    delete guessFilters.studio; delete guessFilters.director; delete guessFilters.performer; delete guessFilters.franchise;
     const blindTierFilters = {
       search: '',
       count: 10,
@@ -219,10 +229,7 @@
       fromSeason: 'winter',
       toYear: '',
       toSeason: 'fall',
-      studio: '',
-      director: '',
-      performer: '',
-      franchise: '',
+      excludedEntities: [],
       content: 'all',
       users: [],
       scoreLogic: 'and',
@@ -237,6 +244,8 @@
     if (savedEventUiPreferences.blindTierFilters && typeof savedEventUiPreferences.blindTierFilters === 'object') {
       Object.assign(blindTierFilters, savedEventUiPreferences.blindTierFilters);
     }
+    blindTierFilters.excludedEntities = normalizeGameExclusions(blindTierFilters);
+    delete blindTierFilters.studio; delete blindTierFilters.director; delete blindTierFilters.performer; delete blindTierFilters.franchise;
     let guessResultIds = [];
     let guessMessage = '';
     let guessGameState = null;
@@ -300,9 +309,7 @@
       fromSeason: 'winter',
       toYear: '',
       toSeason: 'fall',
-      studio: '',
-      director: '',
-      performer: '',
+      excludedEntities: [],
       content: 'all',
       source: 'ratings',
       users: [],
@@ -317,6 +324,8 @@
     if (savedEventUiPreferences.bestWorstFilters && typeof savedEventUiPreferences.bestWorstFilters === 'object') {
       Object.assign(bestWorstFilters, savedEventUiPreferences.bestWorstFilters);
     }
+    bestWorstFilters.excludedEntities = normalizeGameExclusions(bestWorstFilters);
+    delete bestWorstFilters.studio; delete bestWorstFilters.director; delete bestWorstFilters.performer; delete bestWorstFilters.franchise;
     let bestWorstRoom = null;
     let bestWorstSubmissions = [];
     let bestWorstStatus = '';
@@ -1944,9 +1953,7 @@
         grouping,
         banDraft: Boolean(raw.banDraft),
         ...range,
-        studio: String(raw.studio || ''),
-        director: String(raw.director || ''),
-        performer: String(raw.performer || ''),
+        excludedEntities: normalizeGameExclusions(raw),
         content,
         source: raw.source === 'all' ? 'all' : 'ratings',
         users: Array.isArray(raw.users) ? [...new Set(raw.users.map(normalizeNickname).filter(Boolean))] : [],
@@ -2163,9 +2170,7 @@
       if (settings.typeFilter !== 'both' && opening.type !== settings.typeFilter) return false;
       if (!getGuessPlaybackSource(opening)) return false;
       if (!openingInSeasonRange(opening, settings)) return false;
-      if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
-      if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
-      if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;
+      if (openingHasExcludedEntity(opening, settings.excludedEntities)) return false;
       const content = guessContentFlags(settings.content);
       if (!content.showChinese && opening.isChinese) return false;
       if (!content.showMovie && opening.isMovie) return false;
@@ -2873,9 +2878,7 @@
                 <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-from-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.fromYear, 'С самого раннего года')}</select><select id="ev-bw-from-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.fromSeason)}</select></div></div>
                 <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select id="ev-bw-to-year" ${hostDisabled}>${seasonRangeYearOptions(years, settings.toYear, 'По самый поздний год')}</select><select id="ev-bw-to-season" ${hostDisabled}>${seasonRangeSeasonOptions(settings.toSeason)}</select></div><span class="ev-guess-note">Обе границы включаются в выборку.</span></div>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Китайские, фильмы и укороченные</span><select id="ev-bw-content" ${hostDisabled}><option value="all" ${settings.content === 'all' ? 'selected' : ''}>Все</option><option value="default" ${settings.content === 'default' ? 'selected' : ''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${settings.content === 'chinese' ? 'selected' : ''}>С китайскими</option><option value="movie" ${settings.content === 'movie' ? 'selected' : ''}>С фильмами</option><option value="shortened" ${settings.content === 'shortened' ? 'selected' : ''}>С укороченными</option><option value="chinese-movie" ${settings.content === 'chinese-movie' ? 'selected' : ''}>С китайскими и фильмами</option><option value="chinese-shortened" ${settings.content === 'chinese-shortened' ? 'selected' : ''}>С китайскими и укороченными</option><option value="movie-shortened" ${settings.content === 'movie-shortened' ? 'selected' : ''}>С фильмами и укороченными</option></select></label>
-                <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
-                <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
-                <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>
+                <label class="ev-guess-field full ev-exclusion-field"><span class="ev-guess-label">Кого НЕ будет в игре</span><select id="ev-bw-excluded" class="ev-exclusion-select" multiple size="8" ${hostDisabled}>${gameExcludedEntityOptions(settings.excludedEntities)}</select><span class="ev-guess-note">Можно исключить сразу несколько студий, режиссёров, исполнителей и франшиз. Все связанные с ними OP/ED не попадут в игру.</span></label>
                 <label class="ev-guess-field wide"><span class="ev-guess-label">Откуда брать OP/ED</span><select id="ev-bw-source" ${hostDisabled}><option value="all" ${settings.source === 'all' ? 'selected' : ''}>Из всей базы</option><option value="ratings" ${settings.source === 'ratings' ? 'selected' : ''}>По оценкам пользователей</option></select></label>
                 <div class="ev-guess-field wide" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Пользователи для фильтра оценок</span><div class="ev-guess-users" id="ev-bw-users">${users.length ? users.map(user => { const active = selectedUsers.has(user.key); return `<label class="ev-guess-user ${active ? 'active' : ''}"><input type="checkbox" value="${escapeHtml(user.key)}" ${active ? 'checked' : ''} ${sourceDisabled || !bwIsHost() ? 'disabled' : ''}/><span>${escapeHtml(user.avatar ? `${user.avatar} ` : '')}${escapeHtml(user.nickname)}</span></label>`; }).join('') : '<span class="ev-guess-note">Пользователи ещё не загрузились.</span>'}</div><span class="ev-guess-note">Это только фильтр выборки OP/ED по оценкам выбранных пользователей. Сами правильные ответы игроки задают своими флажками в раунде.</span></div>
                 <div class="ev-guess-field full" style="${sourceDisabled ? 'opacity:.58;' : ''}"><span class="ev-guess-label">Фильтры по оценкам</span><div class="ev-guess-segmented"><button type="button" data-bw-score-logic="and" class="${settings.scoreLogic !== 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>И — выполнить все</button><button type="button" data-bw-score-logic="or" class="${settings.scoreLogic === 'or' ? 'active' : ''}" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}>ИЛИ — достаточно одного</button></div>${[['overall','Общая оценка',settings.scoreOverallCmp,settings.scoreOverallValue],['song','Оценка песни',settings.scoreSongCmp,settings.scoreSongValue],['visual','Оценка визуала',settings.scoreVisualCmp,settings.scoreVisualValue]].map(([key,label,cmp,value]) => `<div class="ev-guess-rating-row"><div class="ev-guess-rating-name">${escapeHtml(label)}</div><select id="ev-bw-score-${key}-cmp" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}><option value="gte" ${cmp === 'gte' ? 'selected' : ''}>Больше или равно</option><option value="gt" ${cmp === 'gt' ? 'selected' : ''}>Больше</option><option value="eq" ${cmp === 'eq' ? 'selected' : ''}>Равно</option><option value="lte" ${cmp === 'lte' ? 'selected' : ''}>Меньше или равно</option><option value="lt" ${cmp === 'lt' ? 'selected' : ''}>Меньше</option></select><input id="ev-bw-score-${key}-value" type="number" min="0.5" max="10" step="0.5" value="${escapeHtml(value ?? '')}" placeholder="не учитывать" ${sourceDisabled || !isAdmin() ? 'disabled' : ''}/></div>`).join('')}</div>
@@ -2908,9 +2911,7 @@
       bind('#ev-bw-to-year', 'toYear', value => String(value || ''));
       bind('#ev-bw-to-season', 'toSeason');
       bind('#ev-bw-content', 'content');
-      bind('#ev-bw-studio', 'studio');
-      bind('#ev-bw-director', 'director');
-      bind('#ev-bw-performer', 'performer');
+      bindGameExclusionSelect('#ev-bw-excluded', values => { bestWorstFilters.excludedEntities = values; render(); });
       bind('#ev-bw-source', 'source');
       bind('#ev-bw-score-overall-cmp', 'scoreOverallCmp');
       bind('#ev-bw-score-song-cmp', 'scoreSongCmp');
@@ -3797,7 +3798,7 @@
     function startBlindTier() {
       const count = Math.max(3, Math.min(20, Number(blindTierFilters.count || 10)));
       blindTierFilters.count = count;
-      const settings = { ...blindTierFilters, users:[...(blindTierFilters.users || [])], count };
+      const settings = { ...blindTierFilters, users:[...(blindTierFilters.users || [])], excludedEntities:[...(blindTierFilters.excludedEntities || [])], count };
       const candidates = gameShuffle(blindTierCandidates(settings));
       if (candidates.length < count) {
         appEl.querySelector('#ev-blind-status').textContent = `Под фильтры попало только ${candidates.length}. Нужно минимум ${count}.`;
@@ -3856,9 +3857,7 @@
           <label class="ev-guess-field"><span class="ev-guess-label">Тип</span><select data-blind-field="type"><option value="" ${!blindTierFilters.type?'selected':''}>OP и ED</option><option value="OP" ${blindTierFilters.type==='OP'?'selected':''}>Только OP</option><option value="ED" ${blindTierFilters.type==='ED'?'selected':''}>Только ED</option></select></label>
           <div class="ev-guess-field wide"><span class="ev-guess-label">Начало диапазона</span><div class="ev-season-range-pair"><select data-blind-field="fromYear">${seasonRangeYearOptions(years,blindTierFilters.fromYear,'С самого раннего')}</select><select data-blind-field="fromSeason">${seasonRangeSeasonOptions(blindTierFilters.fromSeason)}</select></div></div>
           <div class="ev-guess-field wide"><span class="ev-guess-label">Конец диапазона</span><div class="ev-season-range-pair"><select data-blind-field="toYear">${seasonRangeYearOptions(years,blindTierFilters.toYear,'По самый поздний')}</select><select data-blind-field="toSeason">${seasonRangeSeasonOptions(blindTierFilters.toSeason)}</select></div></div>
-          <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
-          <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
-          <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>
+          <label class="ev-guess-field full ev-exclusion-field"><span class="ev-guess-label">Кого НЕ будет в игре</span><select id="ev-blind-excluded" class="ev-exclusion-select" multiple size="8">${gameExcludedEntityOptions(blindTierFilters.excludedEntities)}</select><span class="ev-guess-note">Можно исключить несколько студий, режиссёров, исполнителей и франшиз одновременно.</span></label>
           <label class="ev-guess-field"><span class="ev-guess-label">Контент</span><select data-blind-field="content"><option value="all" ${blindTierFilters.content==='all'?'selected':''}>Всё</option><option value="default" ${blindTierFilters.content==='default'?'selected':''}>Без китайских, фильмов и укороченных</option><option value="chinese" ${blindTierFilters.content==='chinese'?'selected':''}>С китайскими</option><option value="movie" ${blindTierFilters.content==='movie'?'selected':''}>С фильмами</option><option value="shortened" ${blindTierFilters.content==='shortened'?'selected':''}>С укороченными</option></select></label>
           <div class="ev-guess-field full"><span class="ev-guess-label">Пользователи</span><div class="ev-guess-users">${users.map(user=>`<label><input type="checkbox" data-blind-user="${escapeHtml(user.key)}" ${selectedUsers.has(user.key)?'checked':''}> ${escapeHtml(user.avatar||'')} ${escapeHtml(user.nickname)}</label>`).join('')||'<span class="ev-hint">Оценок пользователей пока нет.</span>'}</div></div>
           <div class="ev-guess-field full"><span class="ev-guess-label">Условия оценок</span><div class="ev-guess-segmented"><button type="button" data-blind-score-logic="and" class="${blindTierFilters.scoreLogic!=='or'?'active':''}">И — выполнить все</button><button type="button" data-blind-score-logic="or" class="${blindTierFilters.scoreLogic==='or'?'active':''}">ИЛИ — достаточно одного</button></div>${scoreRows}</div>
@@ -3869,10 +3868,12 @@
             blindTierFilters[key] = key==='count' ? Math.max(3,Math.min(20,Number(input.value||10))) : input.value;
           });
           blindTierFilters.users=[...appEl.querySelectorAll('[data-blind-user]:checked')].map(input=>input.dataset.blindUser);
+          blindTierFilters.excludedEntities=[...appEl.querySelectorAll('#ev-blind-excluded option:checked')].map(option=>option.value);
           saveEventUiPreferences();
           const preview=$('#ev-blind-count-preview'); if(preview) preview.textContent=String(blindTierCandidates(blindTierFilters).length);
         };
         appEl.querySelectorAll('[data-blind-field],[data-blind-user]').forEach(input=>{input.addEventListener('change',updateBlindFilters);input.addEventListener('input',updateBlindFilters);});
+        bindGameExclusionSelect('#ev-blind-excluded', values=>{blindTierFilters.excludedEntities=values;updateBlindFilters();}, appEl);
         appEl.querySelectorAll('[data-blind-score-logic]').forEach(button=>button.addEventListener('click',()=>{blindTierFilters.scoreLogic=button.dataset.blindScoreLogic==='or'?'or':'and';saveEventUiPreferences();renderBlindTier();}));
         $('#ev-blind-start')?.addEventListener('click',()=>{updateBlindFilters();startBlindTier();});
         return;
@@ -4411,6 +4412,47 @@
       return `<option value="">${escapeHtml(allLabel)}</option>${values.map(value => `<option value="${escapeHtml(value)}" ${String(selected) === String(value) ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}`;
     }
 
+
+
+    const GAME_ENTITY_GROUPS = [
+      { kind:'studio', field:'studios', label:'Студия' },
+      { kind:'director', field:'directors', label:'Режиссёр' },
+      { kind:'performer', field:'performers', label:'Исполнитель' },
+      { kind:'franchise', field:'franchises', label:'Франшиза' }
+    ];
+
+    function gameExcludedEntityOptions(selected = []) {
+      const selectedSet = new Set(normalizeGameExclusions({ excludedEntities:selected }));
+      return GAME_ENTITY_GROUPS.map(group => {
+        const values = guessUniqueValues(group.field);
+        if (!values.length) return '';
+        return `<optgroup label="${escapeHtml(group.label)}">${values.map(value => {
+          const token = `${group.kind}::${value}`;
+          return `<option value="${escapeHtml(token)}" ${selectedSet.has(token) ? 'selected' : ''}>${escapeHtml(group.label)} · ${escapeHtml(value)}</option>`;
+        }).join('')}</optgroup>`;
+      }).join('');
+    }
+
+    function openingHasExcludedEntity(opening, selected = []) {
+      const exclusions = new Set(normalizeGameExclusions({ excludedEntities:selected }));
+      if (!exclusions.size) return false;
+      return GAME_ENTITY_GROUPS.some(group => (opening?.[group.field] || []).some(value => exclusions.has(`${group.kind}::${value}`)));
+    }
+
+    function bindGameExclusionSelect(selector, onChange, root = document) {
+      const select = root.querySelector(selector);
+      if (!select) return;
+      const commit = () => onChange([...select.selectedOptions].map(option => option.value));
+      select.addEventListener('mousedown', event => {
+        const option = event.target?.closest?.('option');
+        if (!option || option.disabled || select.disabled) return;
+        event.preventDefault();
+        option.selected = !option.selected;
+        commit();
+      });
+      select.addEventListener('change', commit);
+    }
+
     function guessContentFlags(mode) {
       const normalized = ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(mode) ? mode : 'all';
       return {
@@ -4515,9 +4557,7 @@
       }
       if (guessFilters.type && opening.type !== guessFilters.type) return false;
       if (!openingInSeasonRange(opening, guessFilters)) return false;
-      if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
-      if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
-      if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;
+      if (openingHasExcludedEntity(opening, guessFilters.excludedEntities)) return false;
       if (guessFilters.answerTarget === 'franchise' && !(opening.franchises || []).some(value => String(value || '').trim())) return false;
 
       const content = guessContentFlags(guessFilters.content);
@@ -5892,19 +5932,10 @@
                 </select>
               </label>
 
-              <label class="ev-guess-field">
-                <span class="ev-guess-label">Студия</span>
-                <select id="ev-guess-studio">${guessSelectOptions(studios, guessFilters.studio)}</select>
-              </label>
-
-              <label class="ev-guess-field">
-                <span class="ev-guess-label">Режиссёр</span>
-                <select id="ev-guess-director">${guessSelectOptions(directors, guessFilters.director)}</select>
-              </label>
-
-              <label class="ev-guess-field">
-                <span class="ev-guess-label">Исполнитель</span>
-                <select id="ev-guess-performer">${guessSelectOptions(performers, guessFilters.performer)}</select>
+              <label class="ev-guess-field full ev-exclusion-field">
+                <span class="ev-guess-label">Кого НЕ будет в игре</span>
+                <select id="ev-guess-excluded" class="ev-exclusion-select" multiple size="8">${gameExcludedEntityOptions(guessFilters.excludedEntities)}</select>
+                <span class="ev-guess-note">Выбранные студии, режиссёры, исполнители и франшизы полностью исключаются из подборки.</span>
               </label>
 
 
@@ -6012,9 +6043,7 @@
       setAndRender('#ev-guess-to-year', 'toYear', value => String(value || ''));
       setAndRender('#ev-guess-to-season', 'toSeason');
       setAndRender('#ev-guess-content', 'content');
-      setAndRender('#ev-guess-studio', 'studio');
-      setAndRender('#ev-guess-director', 'director');
-      setAndRender('#ev-guess-performer', 'performer');
+      bindGameExclusionSelect('#ev-guess-excluded', values => { guessFilters.excludedEntities = values; clearSelectionAndRender(); });
       setAndRender('#ev-guess-source', 'source');
       setAndRender('#ev-guess-score-overall-cmp', 'scoreOverallCmp');
       setAndRender('#ev-guess-score-song-cmp', 'scoreSongCmp');

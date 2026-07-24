@@ -49,7 +49,7 @@
     let avatarsMap = {};
     let ratingScale = 'int'; // 'int', 'half' or personal 'five'
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
-    const filters = { search: '', type: '', year: '', season: '', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
+    const filters = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
     let sortMode = 'added_desc';
     let editingId = null;
     let manualRanks = {};
@@ -2317,8 +2317,10 @@
         syncFilterControls();
         return;
       }
-      fillYearSelect('#oc-f-year', groups.years);
-      fillYearSelect('#oc-p-year', groups.years);
+      fillRangeYearSelect('#oc-f-from-year', groups.years, 'fromYear', 'С самого раннего');
+      fillRangeYearSelect('#oc-f-to-year', groups.years, 'toYear', 'По самый поздний');
+      fillRangeYearSelect('#oc-p-from-year', groups.years, 'fromYear', 'С самого раннего');
+      fillRangeYearSelect('#oc-p-to-year', groups.years, 'toYear', 'По самый поздний');
       fillTierYearSelect(groups.years);
 
       fillMultiSelect('#oc-f-studio', groups.studios, filters.studios);
@@ -2334,12 +2336,13 @@
       syncFilterControls();
     }
 
-    function fillYearSelect(selector, years) {
+    function fillRangeYearSelect(selector, years, filterKey, emptyLabel) {
       const yearSel = $(selector);
       if (!yearSel) return;
-      const prevYear = yearSel.value || filters.year;
-      yearSel.innerHTML = '<option value="">Все</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+      const prevYear = String(filters[filterKey] || yearSel.value || '');
+      yearSel.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>` + years.map(y => `<option value="${y}">${y}</option>`).join('');
       yearSel.value = years.includes(prevYear) ? prevYear : '';
+      if (prevYear && !years.includes(prevYear)) filters[filterKey] = '';
     }
 
     function fillTierYearSelect(years) {
@@ -2356,8 +2359,10 @@
       const pairs = [
         ['#oc-f-search', filters.search], ['#oc-p-search', filters.search],
         ['#oc-f-type', filters.type], ['#oc-p-type', filters.type],
-        ['#oc-f-year', filters.year], ['#oc-p-year', filters.year],
-        ['#oc-f-season', filters.season], ['#oc-p-season', filters.season],
+        ['#oc-f-from-year', filters.fromYear], ['#oc-p-from-year', filters.fromYear],
+        ['#oc-f-from-season', filters.fromSeason], ['#oc-p-from-season', filters.fromSeason],
+        ['#oc-f-to-year', filters.toYear], ['#oc-p-to-year', filters.toYear],
+        ['#oc-f-to-season', filters.toSeason], ['#oc-p-to-season', filters.toSeason],
         ['#oc-f-score-cmp', filters.scoreCmp], ['#oc-p-score-cmp', filters.scoreCmp],
         ['#oc-f-score-value', filters.scoreValue], ['#oc-p-score-value', filters.scoreValue]
       ];
@@ -2477,10 +2482,21 @@
 
     function filtersCacheKey() {
       return [
-        dataVersion, filters.search, filters.type, filters.year, filters.season,
+        dataVersion, filters.search, filters.type, filters.fromYear, filters.fromSeason, filters.toYear, filters.toSeason,
         filters.scoreCmp, filters.scoreValue, filters.missingOnly ? 'missing' : 'allfields', filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie', filters.hideShortened ? 'hideShort' : 'showShort',
         filters.studios.join('¦'), filters.directors.join('¦'), filters.performers.join('¦'), filters.franchises.join('¦')
       ].join('|');
+    }
+
+    function entryInMainFilterSeasonRange(entry) {
+      const year = Number(entry?.year);
+      const seasonIndex = SEASON_ORDER.indexOf(String(entry?.season || ''));
+      if (!Number.isFinite(year) || seasonIndex < 0) return !filters.fromYear && !filters.toYear;
+      const point = year * 4 + seasonIndex;
+      let start = filters.fromYear ? Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason) : null;
+      let end = filters.toYear ? Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason) : null;
+      if (start !== null && end !== null && start > end) [start, end] = [end, start];
+      return (start === null || point >= start) && (end === null || point <= end);
     }
 
     function addFilterValueFromInput(input) {
@@ -2675,8 +2691,7 @@
         if (filters.type && e.type !== filters.type) return false;
         if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie, filters.hideShortened)) return false;
         if (filters.missingOnly && !entryHasMissingRequiredFields(e)) return false;
-        if (filters.year && String(e.year) !== filters.year) return false;
-        if (filters.season && e.season !== filters.season) return false;
+        if (!entryInMainFilterSeasonRange(e)) return false;
         if (filters.scoreCmp && String(filters.scoreValue || '').trim() !== '') {
           const score = avgAny(e.scores);
           const target = Number(String(filters.scoreValue).replace(',', '.'));
@@ -2780,7 +2795,7 @@
 
     function renderFilterStat(filteredList) {
       if (!filterStatEl) return;
-      const filterActive = filters.search || filters.type || filters.year || filters.season || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
+      const filterActive = filters.search || filters.type || filters.fromYear || filters.toYear || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
       if (!filterActive) {
         filterStatEl.classList.remove('show');
         filterStatEl.textContent = '';
@@ -6173,7 +6188,17 @@
       }
     });
 
+    function normalizeMainFilterRange() {
+      if (!filters.fromYear || !filters.toYear) return;
+      const start = Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason);
+      const end = Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason);
+      if (start <= end) return;
+      [filters.fromYear, filters.toYear] = [filters.toYear, filters.fromYear];
+      [filters.fromSeason, filters.toSeason] = [filters.toSeason, filters.fromSeason];
+    }
+
     function applyFilterChange() {
+      normalizeMainFilterRange();
       chartPage = 1;
       profileTopPage = { OP: 1, ED: 1 };
       allRatingsPage = { OP: 1, ED: 1 };
@@ -6198,10 +6223,14 @@
     bindSimpleFilter('#oc-p-search', 'search', 'input');
     bindSimpleFilter('#oc-f-type', 'type');
     bindSimpleFilter('#oc-p-type', 'type');
-    bindSimpleFilter('#oc-f-year', 'year');
-    bindSimpleFilter('#oc-p-year', 'year');
-    bindSimpleFilter('#oc-f-season', 'season');
-    bindSimpleFilter('#oc-p-season', 'season');
+    bindSimpleFilter('#oc-f-from-year', 'fromYear');
+    bindSimpleFilter('#oc-p-from-year', 'fromYear');
+    bindSimpleFilter('#oc-f-from-season', 'fromSeason');
+    bindSimpleFilter('#oc-p-from-season', 'fromSeason');
+    bindSimpleFilter('#oc-f-to-year', 'toYear');
+    bindSimpleFilter('#oc-p-to-year', 'toYear');
+    bindSimpleFilter('#oc-f-to-season', 'toSeason');
+    bindSimpleFilter('#oc-p-to-season', 'toSeason');
     bindSimpleFilter('#oc-f-score-cmp', 'scoreCmp');
     bindSimpleFilter('#oc-p-score-cmp', 'scoreCmp');
     bindSimpleFilter('#oc-f-score-value', 'scoreValue', 'input');
@@ -6257,7 +6286,7 @@
     });
 
     function resetAllFilters() {
-      filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = ''; filters.missingOnly = false;
+      filters.search = ''; filters.type = ''; filters.fromYear = ''; filters.fromSeason = 'winter'; filters.toYear = ''; filters.toSeason = 'fall'; filters.scoreCmp = ''; filters.scoreValue = ''; filters.missingOnly = false;
       // Режим показа китайских / фильмов / укороченных не считаем обычным фильтром.
       // Он сохраняется отдельно и не должен сбрасываться кнопкой «Сбросить фильтры».
       filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];

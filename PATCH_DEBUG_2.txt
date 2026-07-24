@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/filter_patch.py", line 220, in <module>
-    events = once(events, '''      studio: '',
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/tmp/filter_patch.py", line 12, in once
-    raise RuntimeError(f'{label}: expected one match, got {count}')
-RuntimeError: guess exclusion state: expected one match, got 2
-EXIT_CODE=1

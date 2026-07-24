@@ -137,3 +137,9 @@
 
 /* Entity album and track cleanup guard */
 .oc-entity-grid.hidden,.oc-entity-tracks.hidden{display:none!important}
+
+
+/* Main filter season range */
+.oc-season-range-pair{display:grid;grid-template-columns:minmax(120px,1fr) minmax(110px,.9fr);gap:8px;width:100%}
+.oc-season-range-pair select{min-width:0;width:100%}
+@media(max-width:560px){.oc-season-range-pair{grid-template-columns:1fr}}
