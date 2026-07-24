@@ -1,15 +1,19 @@
 (() => {
-  const version = '20260724-emergency-restore2';
+  const version = '20260724-features-no-refactor1';
 
-  const filterUiStylesheet = document.createElement('link');
-  filterUiStylesheet.rel = 'stylesheet';
-  filterUiStylesheet.href = `./filter-ui-fixes.css?v=${version}`;
-  document.head.append(filterUiStylesheet);
-
-  const albumStylesheet = document.createElement('link');
-  albumStylesheet.rel = 'stylesheet';
-  albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
-  document.head.append(albumStylesheet);
+  const styles = [
+    './filter-ui-fixes.css',
+    './entity-album-cards.css',
+    './styles/product-shell.css',
+    './styles/product-shell-fixes.css'
+  ];
+  if (document.querySelector('.oc-addbar')) styles.push('./track-add-panel.css');
+  styles.forEach(href => {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = `${href}?v=${version}`;
+    document.head.append(stylesheet);
+  });
 
   let entityProgressLoaded = false;
   const loadEntityProgress = () => {
@@ -23,19 +27,18 @@
   document.addEventListener('click', event => {
     if (event.target?.closest?.('[data-entity-home], [data-entity-open]')) loadEntityProgress();
   }, true);
-
   if (document.querySelector('#oc-entity-panel:not(.hidden)')) loadEntityProgress();
 
   if (document.querySelector('.oc-addbar')) {
-    const stylesheet = document.createElement('link');
-    stylesheet.rel = 'stylesheet';
-    stylesheet.href = `./track-add-panel.css?v=${version}`;
-    document.head.append(stylesheet);
-
     const script = document.createElement('script');
     script.src = `./track-add-panel.js?v=${version}`;
     document.body.append(script);
   }
+
+  const featureScript = document.createElement('script');
+  featureScript.type = 'module';
+  featureScript.src = `./app/app-shell.js?v=${version}`;
+  document.body.append(featureScript);
 })();
 
 if ('serviceWorker' in navigator) {
