@@ -10,6 +10,7 @@
   let openings = [];
   let ratings = [];
   let entityCards = [];
+  let lastEntityType = '';
   let refreshTimer = null;
   let identitySignature = '';
   let unsubscribeOpenings = null;
@@ -91,8 +92,11 @@
   function activeEntityType() {
     const activeTab = document.querySelector('.oc-tab-btn.active[data-tab^="entity-"]');
     if (activeTab) return String(activeTab.dataset.tab || '').replace(/^entity-/, '');
+    if (lastEntityType) return lastEntityType;
 
     const title = normalizeValue(document.querySelector('#oc-entity-title')?.textContent);
+    const matchingCard = entityCards.find(card => normalizeValue(card.value) === title);
+    if (matchingCard?.type) return String(matchingCard.type);
     if (title.includes('исполнител')) return 'performers';
     if (title.includes('режисс')) return 'directors';
     if (title.includes('франш')) return 'franchises';
@@ -216,13 +220,25 @@
     }).observe(panel, { childList: true, subtree: true });
   }
 
+  document.addEventListener('click', event => {
+    const launcher = event.target?.closest?.('[data-entity-home]');
+    if (launcher) lastEntityType = String(launcher.getAttribute('data-entity-home') || '');
+
+    const album = event.target?.closest?.('.oc-entity-card[data-entity-open]');
+    if (album) {
+      const cardId = String(album.getAttribute('data-entity-open') || '');
+      const stored = entityCards.find(card => String(card.id || '') === cardId);
+      if (stored?.type) lastEntityType = String(stored.type);
+    }
+  }, true);
+
   document.addEventListener('change', event => {
     if (event.target?.matches?.('#oc-myname, #oc-scale-select')) queueProgressRefresh(0);
   });
   document.addEventListener('input', event => {
     if (event.target?.matches?.('#oc-myname')) queueProgressRefresh(80);
   });
-  window.addEventListener('storage', queueProgressRefresh);
+  window.addEventListener('storage', () => queueProgressRefresh(0));
 
   const identityTimer = setInterval(() => {
     const identity = currentIdentity();
