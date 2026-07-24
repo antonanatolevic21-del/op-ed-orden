@@ -45,7 +45,7 @@ export function setView(view, push = false) {
   setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns', currentView === 'top100');
   setVisible('.oc-allratings', currentView === 'ratings');
   setVisible('#oc-daily-panel', currentView === 'daily');
-  setVisible('.oc-profile-filterbar', currentView === 'top100' || currentView === 'ratings');
+  setVisible('.oc-profile-filterbar', currentView !== 'daily');
 
   let dailyPlaceholder = root.querySelector('.oc-profile-daily-placeholder');
   if (currentView === 'daily') {
