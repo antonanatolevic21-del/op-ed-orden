@@ -1,10 +1,11 @@
 (() => {
-  const version = '20260724-product-shell1';
+  const version = '20260724-product-shell2';
 
   const styles = [
     './filter-ui-fixes.css',
     './entity-album-cards.css',
-    './styles/product-shell.css'
+    './styles/product-shell.css',
+    './styles/product-shell-fixes.css'
   ];
   if (document.querySelector('.oc-addbar')) styles.push('./track-add-panel.css');
   styles.forEach(href => {
