@@ -19,25 +19,16 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('events-app.js')
           text = path.read_text(encoding='utf-8')
-          old = '''    function normalizeGameExclusions(raw = {}) {
-      const current = Array.isArray(raw.excludedEntities) ? raw.excludedEntities : [];
-      const legacy = [
-        ['studio', raw.studio],
-        ['director', raw.director],
-        ['performer', raw.performer],
-        ['franchise', raw.franchise]
-      ].filter(([, value]) => String(value || '').trim()).map(([kind, value]) => `${kind}::${String(value).trim()}`);
-      return [...new Set([...current, ...legacy].map(String).filter(value => value.includes('::')))];
-    }'''
-          new = '''    function normalizeGameExclusions(raw = {}) {
-      const current = Array.isArray(raw.excludedEntities) ? raw.excludedEntities : [];
-      return [...new Set(current.map(String).filter(value => value.includes('::')))];
-    }'''
-          if text.count(old) != 1:
-              raise RuntimeError(f'exclusion migration block matches: {text.count(old)}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          pattern = r"    function normalizeGameExclusions\(raw = \{\}\) \{\n(?:.*\n){1,12}?    \}"
+          replacement = "    function normalizeGameExclusions(raw = {}) {\n      const current = Array.isArray(raw.excludedEntities) ? raw.excludedEntities : [];\n      return [...new Set(current.map(String).filter(value => value.includes('::')))];\n    }"
+          text, count = re.subn(pattern, replacement, text, count=1)
+          if count != 1:
+              raise RuntimeError(f'exclusion migration block matches: {count}')
+          path.write_text(text, encoding='utf-8')
 
           html_path = Path('events.html')
           html = html_path.read_text(encoding='utf-8')
