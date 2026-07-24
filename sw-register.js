@@ -2,7 +2,7 @@
   const version = '20260724-album-dim-frame1';
   const topbarVersion = '20260724-topbar2';
   const profileTabsVersion = '20260724-profile-tabs3';
-  const profileFiltersVersion = '20260724-profile-filters1';
+  const profileFiltersVersion = '20260724-profile-filters2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
