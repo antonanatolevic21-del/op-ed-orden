@@ -1,0 +1,435 @@
+name: Apply filter upgrade
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-filter-upgrade.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch main and game filters
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def load(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def save(path, text):
+              Path(path).write_text(text, encoding='utf-8')
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected one match, got {count}')
+              return text.replace(old, new, 1)
+
+          # ---------- Main page: season range ----------
+          html = load('index.html')
+          main_old = '''        <div class="oc-field">
+          <label for="oc-f-year">Год</label>
+          <select id="oc-f-year"><option value="">Все</option></select>
+        </div>
+        <div class="oc-field">
+          <label for="oc-f-season">Сезон</label>
+          <select id="oc-f-season">
+            <option value="">Все</option>
+            <option value="winter">Зима</option>
+            <option value="spring">Весна</option>
+            <option value="summer">Лето</option>
+            <option value="fall">Осень</option>
+          </select>
+        </div>'''
+          main_new = '''        <div class="oc-field oc-season-range-field">
+          <label>От</label>
+          <div class="oc-season-range-pair">
+            <select id="oc-f-from-year"><option value="">С самого раннего</option></select>
+            <select id="oc-f-from-season">
+              <option value="winter">Зима</option>
+              <option value="spring">Весна</option>
+              <option value="summer">Лето</option>
+              <option value="fall">Осень</option>
+            </select>
+          </div>
+        </div>
+        <div class="oc-field oc-season-range-field">
+          <label>До</label>
+          <div class="oc-season-range-pair">
+            <select id="oc-f-to-year"><option value="">По самый поздний</option></select>
+            <select id="oc-f-to-season">
+              <option value="winter">Зима</option>
+              <option value="spring">Весна</option>
+              <option value="summer">Лето</option>
+              <option value="fall">Осень</option>
+            </select>
+          </div>
+        </div>'''
+          html = once(html, main_old, main_new, 'main filter html')
+
+          profile_old = '''          <div class="oc-field">
+            <label for="oc-p-year">Год</label>
+            <select id="oc-p-year"><option value="">Все</option></select>
+          </div>
+          <div class="oc-field">
+            <label for="oc-p-season">Сезон</label>
+            <select id="oc-p-season">
+              <option value="">Все</option>
+              <option value="winter">Зима</option>
+              <option value="spring">Весна</option>
+              <option value="summer">Лето</option>
+              <option value="fall">Осень</option>
+            </select>
+          </div>'''
+          profile_new = '''          <div class="oc-field oc-season-range-field">
+            <label>От</label>
+            <div class="oc-season-range-pair">
+              <select id="oc-p-from-year"><option value="">С самого раннего</option></select>
+              <select id="oc-p-from-season">
+                <option value="winter">Зима</option>
+                <option value="spring">Весна</option>
+                <option value="summer">Лето</option>
+                <option value="fall">Осень</option>
+              </select>
+            </div>
+          </div>
+          <div class="oc-field oc-season-range-field">
+            <label>До</label>
+            <div class="oc-season-range-pair">
+              <select id="oc-p-to-year"><option value="">По самый поздний</option></select>
+              <select id="oc-p-to-season">
+                <option value="winter">Зима</option>
+                <option value="spring">Весна</option>
+                <option value="summer">Лето</option>
+                <option value="fall">Осень</option>
+              </select>
+            </div>
+          </div>'''
+          html = once(html, profile_old, profile_new, 'profile filter html')
+          html = html.replace('index.css?v=20260723-entity-clear1', 'index.css?v=20260724-filter-range1')
+          html = html.replace('index-app.js?v=20260723-entity-clear1', 'index-app.js?v=20260724-filter-range1')
+          html = html.replace('sw-register.js?v=20260723-force2', 'sw-register.js?v=20260724-filter-range1')
+          save('index.html', html)
+
+          app = load('index-app.js')
+          app = once(app,
+              "    const filters = { search: '', type: '', year: '', season: '', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };",
+              "    const filters = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };",
+              'filter state')
+
+          app = once(app, '''      fillYearSelect('#oc-f-year', groups.years);
+      fillYearSelect('#oc-p-year', groups.years);
+      fillTierYearSelect(groups.years);''', '''      fillRangeYearSelect('#oc-f-from-year', groups.years, 'fromYear', 'С самого раннего');
+      fillRangeYearSelect('#oc-f-to-year', groups.years, 'toYear', 'По самый поздний');
+      fillRangeYearSelect('#oc-p-from-year', groups.years, 'fromYear', 'С самого раннего');
+      fillRangeYearSelect('#oc-p-to-year', groups.years, 'toYear', 'По самый поздний');
+      fillTierYearSelect(groups.years);''', 'year option population')
+
+          app = once(app, '''    function fillYearSelect(selector, years) {
+      const yearSel = $(selector);
+      if (!yearSel) return;
+      const prevYear = yearSel.value || filters.year;
+      yearSel.innerHTML = '<option value="">Все</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+      yearSel.value = years.includes(prevYear) ? prevYear : '';
+    }''', '''    function fillRangeYearSelect(selector, years, filterKey, emptyLabel) {
+      const yearSel = $(selector);
+      if (!yearSel) return;
+      const prevYear = String(filters[filterKey] || yearSel.value || '');
+      yearSel.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>` + years.map(y => `<option value="${y}">${y}</option>`).join('');
+      yearSel.value = years.includes(prevYear) ? prevYear : '';
+      if (prevYear && !years.includes(prevYear)) filters[filterKey] = '';
+    }''', 'range year helper')
+
+          app = once(app, '''        ['#oc-f-year', filters.year], ['#oc-p-year', filters.year],
+        ['#oc-f-season', filters.season], ['#oc-p-season', filters.season],''', '''        ['#oc-f-from-year', filters.fromYear], ['#oc-p-from-year', filters.fromYear],
+        ['#oc-f-from-season', filters.fromSeason], ['#oc-p-from-season', filters.fromSeason],
+        ['#oc-f-to-year', filters.toYear], ['#oc-p-to-year', filters.toYear],
+        ['#oc-f-to-season', filters.toSeason], ['#oc-p-to-season', filters.toSeason],''', 'sync range controls')
+
+          app = once(app, '''        dataVersion, filters.search, filters.type, filters.year, filters.season,
+        filters.scoreCmp, filters.scoreValue,''', '''        dataVersion, filters.search, filters.type, filters.fromYear, filters.fromSeason, filters.toYear, filters.toSeason,
+        filters.scoreCmp, filters.scoreValue,''', 'filter cache key')
+
+          range_helper = '''    function entryInMainFilterSeasonRange(entry) {
+      const year = Number(entry?.year);
+      const seasonIndex = SEASON_ORDER.indexOf(String(entry?.season || ''));
+      if (!Number.isFinite(year) || seasonIndex < 0) return !filters.fromYear && !filters.toYear;
+      const point = year * 4 + seasonIndex;
+      let start = filters.fromYear ? Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason) : null;
+      let end = filters.toYear ? Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason) : null;
+      if (start !== null && end !== null && start > end) [start, end] = [end, start];
+      return (start === null || point >= start) && (end === null || point <= end);
+    }
+
+'''
+          app = once(app, '    function addFilterValueFromInput(input) {', range_helper + '    function addFilterValueFromInput(input) {', 'range comparison helper')
+
+          app = once(app, '''        if (filters.year && String(e.year) !== filters.year) return false;
+        if (filters.season && e.season !== filters.season) return false;''', '''        if (!entryInMainFilterSeasonRange(e)) return false;''', 'range application')
+
+          app = once(app, '''      const filterActive = filters.search || filters.type || filters.year || filters.season || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;''', '''      const filterActive = filters.search || filters.type || filters.fromYear || filters.toYear || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;''', 'filter active check')
+
+          normalize_range = '''    function normalizeMainFilterRange() {
+      if (!filters.fromYear || !filters.toYear) return;
+      const start = Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason);
+      const end = Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason);
+      if (start <= end) return;
+      [filters.fromYear, filters.toYear] = [filters.toYear, filters.fromYear];
+      [filters.fromSeason, filters.toSeason] = [filters.toSeason, filters.fromSeason];
+    }
+
+'''
+          app = once(app, '''    function applyFilterChange() {
+      chartPage = 1;''', normalize_range + '''    function applyFilterChange() {
+      normalizeMainFilterRange();
+      chartPage = 1;''', 'range normalization')
+
+          app = once(app, '''    bindSimpleFilter('#oc-f-year', 'year');
+    bindSimpleFilter('#oc-p-year', 'year');
+    bindSimpleFilter('#oc-f-season', 'season');
+    bindSimpleFilter('#oc-p-season', 'season');''', '''    bindSimpleFilter('#oc-f-from-year', 'fromYear');
+    bindSimpleFilter('#oc-p-from-year', 'fromYear');
+    bindSimpleFilter('#oc-f-from-season', 'fromSeason');
+    bindSimpleFilter('#oc-p-from-season', 'fromSeason');
+    bindSimpleFilter('#oc-f-to-year', 'toYear');
+    bindSimpleFilter('#oc-p-to-year', 'toYear');
+    bindSimpleFilter('#oc-f-to-season', 'toSeason');
+    bindSimpleFilter('#oc-p-to-season', 'toSeason');''', 'range bindings')
+
+          app = once(app, "      filters.search = ''; filters.type = ''; filters.year = ''; filters.season = ''; filters.scoreCmp = ''; filters.scoreValue = ''; filters.missingOnly = false;", "      filters.search = ''; filters.type = ''; filters.fromYear = ''; filters.fromSeason = 'winter'; filters.toYear = ''; filters.toSeason = 'fall'; filters.scoreCmp = ''; filters.scoreValue = ''; filters.missingOnly = false;", 'range reset')
+
+          for stale in ['filters.year', 'filters.season', "'#oc-f-year'", "'#oc-p-year'", "'#oc-f-season'", "'#oc-p-season'"]:
+              if stale in app:
+                  raise RuntimeError(f'stale main filter reference remains: {stale}')
+          save('index-app.js', app)
+
+          css = load('index.css')
+          marker = '/* Main filter season range */'
+          if marker not in css:
+              css += '''\n\n/* Main filter season range */
+.oc-season-range-pair{display:grid;grid-template-columns:minmax(120px,1fr) minmax(110px,.9fr);gap:8px;width:100%}
+.oc-season-range-pair select{min-width:0;width:100%}
+@media(max-width:560px){.oc-season-range-pair{grid-template-columns:1fr}}
+'''
+          save('index.css', css)
+
+          # ---------- Events: one multi-select with exclusions ----------
+          events = load('events-app.js')
+
+          migration_helper = '''
+    function normalizeGameExclusions(raw = {}) {
+      const current = Array.isArray(raw.excludedEntities) ? raw.excludedEntities : [];
+      const legacy = [
+        ['studio', raw.studio],
+        ['director', raw.director],
+        ['performer', raw.performer],
+        ['franchise', raw.franchise]
+      ].filter(([, value]) => String(value || '').trim()).map(([kind, value]) => `${kind}::${String(value).trim()}`);
+      return [...new Set([...current, ...legacy].map(String).filter(value => value.includes('::')))];
+    }
+'''
+          events = once(events, "\n    const SCORE_WORDS =", migration_helper + "\n    const SCORE_WORDS =", 'game exclusion migration helper')
+
+          events = once(events, '''      studio: '',
+      director: '',
+      performer: '',
+      franchise: '',
+      content: 'all',''', '''      excludedEntities: [],
+      content: 'all',''', 'guess exclusion state')
+          events = once(events, '''    if (savedEventUiPreferences.guessFilters && typeof savedEventUiPreferences.guessFilters === 'object') {
+      Object.assign(guessFilters, savedEventUiPreferences.guessFilters);
+    }''', '''    if (savedEventUiPreferences.guessFilters && typeof savedEventUiPreferences.guessFilters === 'object') {
+      Object.assign(guessFilters, savedEventUiPreferences.guessFilters);
+    }
+    guessFilters.excludedEntities = normalizeGameExclusions(guessFilters);
+    delete guessFilters.studio; delete guessFilters.director; delete guessFilters.performer; delete guessFilters.franchise;''', 'guess preference migration')
+
+          events = once(events, '''      studio: '',
+      director: '',
+      performer: '',
+      franchise: '',
+      content: 'all',''', '''      excludedEntities: [],
+      content: 'all',''', 'blind exclusion state')
+          events = once(events, '''    if (savedEventUiPreferences.blindTierFilters && typeof savedEventUiPreferences.blindTierFilters === 'object') {
+      Object.assign(blindTierFilters, savedEventUiPreferences.blindTierFilters);
+    }''', '''    if (savedEventUiPreferences.blindTierFilters && typeof savedEventUiPreferences.blindTierFilters === 'object') {
+      Object.assign(blindTierFilters, savedEventUiPreferences.blindTierFilters);
+    }
+    blindTierFilters.excludedEntities = normalizeGameExclusions(blindTierFilters);
+    delete blindTierFilters.studio; delete blindTierFilters.director; delete blindTierFilters.performer; delete blindTierFilters.franchise;''', 'blind preference migration')
+
+          events = once(events, '''      studio: '',
+      director: '',
+      performer: '',
+      content: 'all',''', '''      excludedEntities: [],
+      content: 'all',''', 'best worst exclusion state')
+          events = once(events, '''    if (savedEventUiPreferences.bestWorstFilters && typeof savedEventUiPreferences.bestWorstFilters === 'object') {
+      Object.assign(bestWorstFilters, savedEventUiPreferences.bestWorstFilters);
+    }''', '''    if (savedEventUiPreferences.bestWorstFilters && typeof savedEventUiPreferences.bestWorstFilters === 'object') {
+      Object.assign(bestWorstFilters, savedEventUiPreferences.bestWorstFilters);
+    }
+    bestWorstFilters.excludedEntities = normalizeGameExclusions(bestWorstFilters);
+    delete bestWorstFilters.studio; delete bestWorstFilters.director; delete bestWorstFilters.performer; delete bestWorstFilters.franchise;''', 'best worst preference migration')
+
+          ui_helpers = '''
+
+    const GAME_ENTITY_GROUPS = [
+      { kind:'studio', field:'studios', label:'Студия' },
+      { kind:'director', field:'directors', label:'Режиссёр' },
+      { kind:'performer', field:'performers', label:'Исполнитель' },
+      { kind:'franchise', field:'franchises', label:'Франшиза' }
+    ];
+
+    function gameExcludedEntityOptions(selected = []) {
+      const selectedSet = new Set(normalizeGameExclusions({ excludedEntities:selected }));
+      return GAME_ENTITY_GROUPS.map(group => {
+        const values = guessUniqueValues(group.field);
+        if (!values.length) return '';
+        return `<optgroup label="${escapeHtml(group.label)}">${values.map(value => {
+          const token = `${group.kind}::${value}`;
+          return `<option value="${escapeHtml(token)}" ${selectedSet.has(token) ? 'selected' : ''}>${escapeHtml(group.label)} · ${escapeHtml(value)}</option>`;
+        }).join('')}</optgroup>`;
+      }).join('');
+    }
+
+    function openingHasExcludedEntity(opening, selected = []) {
+      const exclusions = new Set(normalizeGameExclusions({ excludedEntities:selected }));
+      if (!exclusions.size) return false;
+      return GAME_ENTITY_GROUPS.some(group => (opening?.[group.field] || []).some(value => exclusions.has(`${group.kind}::${value}`)));
+    }
+
+    function bindGameExclusionSelect(selector, onChange, root = document) {
+      const select = root.querySelector(selector);
+      if (!select) return;
+      const commit = () => onChange([...select.selectedOptions].map(option => option.value));
+      select.addEventListener('mousedown', event => {
+        const option = event.target?.closest?.('option');
+        if (!option || option.disabled || select.disabled) return;
+        event.preventDefault();
+        option.selected = !option.selected;
+        commit();
+      });
+      select.addEventListener('change', commit);
+    }
+'''
+          events = once(events, '''    function guessContentFlags(mode) {''', ui_helpers + '''
+    function guessContentFlags(mode) {''', 'game exclusion ui helpers')
+
+          events = once(events, '''        studio: String(raw.studio || ''),
+        director: String(raw.director || ''),
+        performer: String(raw.performer || ''),
+        content,''', '''        excludedEntities: normalizeGameExclusions(raw),
+        content,''', 'best worst normalization')
+
+          events = once(events, '''      if (settings.studio && !(opening.studios || []).includes(settings.studio)) return false;
+      if (settings.director && !(opening.directors || []).includes(settings.director)) return false;
+      if (settings.performer && !(opening.performers || []).includes(settings.performer)) return false;''', '''      if (openingHasExcludedEntity(opening, settings.excludedEntities)) return false;''', 'best worst exclusion matching')
+
+          events = once(events, '''      if (guessFilters.studio && !(opening.studios || []).includes(guessFilters.studio)) return false;
+      if (guessFilters.director && !(opening.directors || []).includes(guessFilters.director)) return false;
+      if (guessFilters.performer && !(opening.performers || []).includes(guessFilters.performer)) return false;''', '''      if (openingHasExcludedEntity(opening, guessFilters.excludedEntities)) return false;''', 'guess exclusion matching')
+
+          bw_ui_old = '''                <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select id="ev-bw-studio" ${hostDisabled}>${guessSelectOptions(studios, settings.studio)}</select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select id="ev-bw-director" ${hostDisabled}>${guessSelectOptions(directors, settings.director)}</select></label>
+                <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select id="ev-bw-performer" ${hostDisabled}>${guessSelectOptions(performers, settings.performer)}</select></label>'''
+          bw_ui_new = '''                <label class="ev-guess-field full ev-exclusion-field"><span class="ev-guess-label">Кого НЕ будет в игре</span><select id="ev-bw-excluded" class="ev-exclusion-select" multiple size="8" ${hostDisabled}>${gameExcludedEntityOptions(settings.excludedEntities)}</select><span class="ev-guess-note">Можно исключить сразу несколько студий, режиссёров, исполнителей и франшиз. Все связанные с ними OP/ED не попадут в игру.</span></label>'''
+          events = once(events, bw_ui_old, bw_ui_new, 'best worst exclusion ui')
+
+          events = once(events, '''      bind('#ev-bw-studio', 'studio');
+      bind('#ev-bw-director', 'director');
+      bind('#ev-bw-performer', 'performer');''', '''      bindGameExclusionSelect('#ev-bw-excluded', values => { bestWorstFilters.excludedEntities = values; render(); });''', 'best worst exclusion binding')
+
+          guess_ui_old = '''              <label class="ev-guess-field">
+                <span class="ev-guess-label">Студия</span>
+                <select id="ev-guess-studio">${guessSelectOptions(studios, guessFilters.studio)}</select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Режиссёр</span>
+                <select id="ev-guess-director">${guessSelectOptions(directors, guessFilters.director)}</select>
+              </label>
+
+              <label class="ev-guess-field">
+                <span class="ev-guess-label">Исполнитель</span>
+                <select id="ev-guess-performer">${guessSelectOptions(performers, guessFilters.performer)}</select>
+              </label>
+
+'''
+          guess_ui_new = '''              <label class="ev-guess-field full ev-exclusion-field">
+                <span class="ev-guess-label">Кого НЕ будет в игре</span>
+                <select id="ev-guess-excluded" class="ev-exclusion-select" multiple size="8">${gameExcludedEntityOptions(guessFilters.excludedEntities)}</select>
+                <span class="ev-guess-note">Выбранные студии, режиссёры, исполнители и франшизы полностью исключаются из подборки.</span>
+              </label>
+
+'''
+          events = once(events, guess_ui_old, guess_ui_new, 'guess exclusion ui')
+          events = once(events, '''      setAndRender('#ev-guess-studio', 'studio');
+      setAndRender('#ev-guess-director', 'director');
+      setAndRender('#ev-guess-performer', 'performer');''', '''      bindGameExclusionSelect('#ev-guess-excluded', values => { guessFilters.excludedEntities = values; clearSelectionAndRender(); });''', 'guess exclusion binding')
+
+          blind_ui_old = '''          <label class="ev-guess-field"><span class="ev-guess-label">Студия</span><select data-blind-field="studio">${guessSelectOptions(guessUniqueValues('studios'),blindTierFilters.studio)}</select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Режиссёр</span><select data-blind-field="director">${guessSelectOptions(guessUniqueValues('directors'),blindTierFilters.director)}</select></label>
+          <label class="ev-guess-field"><span class="ev-guess-label">Исполнитель</span><select data-blind-field="performer">${guessSelectOptions(guessUniqueValues('performers'),blindTierFilters.performer)}</select></label>'''
+          blind_ui_new = '''          <label class="ev-guess-field full ev-exclusion-field"><span class="ev-guess-label">Кого НЕ будет в игре</span><select id="ev-blind-excluded" class="ev-exclusion-select" multiple size="8">${gameExcludedEntityOptions(blindTierFilters.excludedEntities)}</select><span class="ev-guess-note">Можно исключить несколько студий, режиссёров, исполнителей и франшиз одновременно.</span></label>'''
+          events = once(events, blind_ui_old, blind_ui_new, 'blind tier exclusion ui')
+
+          events = once(events, '''          blindTierFilters.users=[...appEl.querySelectorAll('[data-blind-user]:checked')].map(input=>input.dataset.blindUser);
+          saveEventUiPreferences();''', '''          blindTierFilters.users=[...appEl.querySelectorAll('[data-blind-user]:checked')].map(input=>input.dataset.blindUser);
+          blindTierFilters.excludedEntities=[...appEl.querySelectorAll('#ev-blind-excluded option:checked')].map(option=>option.value);
+          saveEventUiPreferences();''', 'blind tier exclusion state update')
+          events = once(events, '''        appEl.querySelectorAll('[data-blind-field],[data-blind-user]').forEach(input=>{input.addEventListener('change',updateBlindFilters);input.addEventListener('input',updateBlindFilters);});''', '''        appEl.querySelectorAll('[data-blind-field],[data-blind-user]').forEach(input=>{input.addEventListener('change',updateBlindFilters);input.addEventListener('input',updateBlindFilters);});
+        bindGameExclusionSelect('#ev-blind-excluded', values=>{blindTierFilters.excludedEntities=values;updateBlindFilters();}, appEl);''', 'blind tier exclusion binding')
+
+          events = once(events, '''      const settings = { ...blindTierFilters, users:[...(blindTierFilters.users || [])], count };''', '''      const settings = { ...blindTierFilters, users:[...(blindTierFilters.users || [])], excludedEntities:[...(blindTierFilters.excludedEntities || [])], count };''', 'blind tier settings clone')
+
+          stale_refs = ['guessFilters.studio', 'guessFilters.director', 'guessFilters.performer', 'blindTierFilters.studio', 'blindTierFilters.director', 'blindTierFilters.performer', 'settings.studio', 'settings.director', 'settings.performer', "#ev-guess-studio", "#ev-guess-director", "#ev-guess-performer", "#ev-bw-studio", "#ev-bw-director", "#ev-bw-performer"]
+          for stale in stale_refs:
+              if stale in events:
+                  raise RuntimeError(f'stale positive game filter remains: {stale}')
+          save('events-app.js', events)
+
+          event_html = load('events.html')
+          event_html = event_html.replace('events.css?v=20260723-unified-images1', 'events.css?v=20260724-exclusion-filter1')
+          event_html = event_html.replace('events-app.js?v=20260723-wide-image-crop1', 'events-app.js?v=20260724-exclusion-filter1')
+          save('events.html', event_html)
+
+          event_css = load('events.css')
+          event_marker = '/* Game entity exclusion multi-select */'
+          if event_marker not in event_css:
+              event_css += '''\n\n/* Game entity exclusion multi-select */
+.ev-exclusion-field{grid-column:1/-1}
+.ev-exclusion-select{width:100%;min-height:190px;padding:6px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--text);overflow:auto}
+.ev-exclusion-select optgroup{padding:5px 0;color:var(--cyan);font-family:'Space Mono',monospace;font-size:11px}
+.ev-exclusion-select option{padding:7px 9px;margin:2px 4px;border-radius:7px;color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:13px}
+.ev-exclusion-select option:checked{background:linear-gradient(135deg,rgba(255,46,99,.65),rgba(8,217,214,.35));color:#fff}
+.ev-exclusion-select:focus{outline:2px solid var(--pink);outline-offset:1px}
+'''
+          save('events.css', event_css)
+          PY
+
+          node --check index-app.js
+          node --check events-app.js
+          grep -q 'id="oc-f-from-year"' index.html
+          grep -q 'id="oc-f-to-season"' index.html
+          grep -q 'id="ev-guess-excluded"' events-app.js
+          grep -q 'id="ev-bw-excluded"' events-app.js
+          grep -q 'id="ev-blind-excluded"' events-app.js
+
+      - name: Commit upgrade
+        shell: bash
+        run: |
+          rm -f FILTER_DIAGNOSTIC.txt
+          rm -f .github/workflows/filter-diagnostic.yml
+          rm -f .github/workflows/apply-filter-upgrade.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add season ranges and game exclusion filters'
+          git push
