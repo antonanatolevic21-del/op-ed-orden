@@ -21,7 +21,7 @@ function activeScoreFields() {
   const opening = visible('#oc-opening-modal');
   if (opening) return { number: opening.querySelector('#oc-card-score'), range: opening.querySelector('#oc-card-range'), save: opening.querySelector('[data-card-action="save-rating"]') };
   const evaluator = visible('#oc-season-evaluator');
-  if (evaluator) return { number: evaluator.querySelector('#oc-eval-score'), range: evaluator.querySelector('#oc-eval-range'), save: evaluator.querySelector('[data-eval-action="save"]') };
+  if (evaluator) return { number: evaluator.querySelector('#oc-eval-score'), range: evaluator.querySelector('#oc-eval-range'), save: evaluator.querySelector('[data-eval-action="save-next"]') };
   return null;
 }
 
@@ -66,7 +66,16 @@ export function initKeyboardShortcuts() {
       return;
     }
 
-    if (isEditable(event.target)) return;
+    const scoreFields = activeScoreFields();
+    const editing = isEditable(event.target);
+
+    if (event.key === 'Enter' && scoreFields?.save && (event.target === scoreFields.number || event.target === scoreFields.range || !editing)) {
+      scoreFields.save.click();
+      event.preventDefault();
+      return;
+    }
+
+    if (editing) return;
 
     if (event.key === '/') {
       if (focusSearch()) event.preventDefault();
@@ -78,22 +87,16 @@ export function initKeyboardShortcuts() {
       return;
     }
 
-    if (/^[0-9]$/.test(event.key) && activeScoreFields()) {
+    if (/^[0-9]$/.test(event.key) && scoreFields) {
       if (setScore(event.key === '0' ? 10 : Number(event.key))) event.preventDefault();
       return;
     }
 
-    if (event.key === 'Enter') {
-      const fields = activeScoreFields();
-      if (fields?.save) { fields.save.click(); event.preventDefault(); }
-      return;
-    }
-
-    if (!activeScoreFields() && event.key === 'ArrowLeft') {
+    if (!scoreFields && event.key === 'ArrowLeft') {
       if (page('prev')) event.preventDefault();
       return;
     }
-    if (!activeScoreFields() && event.key === 'ArrowRight') {
+    if (!scoreFields && event.key === 'ArrowRight') {
       if (page('next')) event.preventDefault();
     }
   });
