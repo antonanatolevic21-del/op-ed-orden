@@ -1,0 +1,10 @@
+.oc-profile-subtabs{display:flex;gap:6px;margin:12px 0 18px;padding:5px;border:1px solid #30283b;border-radius:14px;background:#100d16;overflow-x:auto;scrollbar-width:none}
+.oc-profile-subtabs::-webkit-scrollbar{display:none}
+.oc-profile-subtabs button{flex:0 0 auto;min-height:40px;padding:8px 13px;border:1px solid transparent;border-radius:10px;background:transparent;color:#91899f;font:700 11px 'Space Mono',monospace;white-space:nowrap;cursor:pointer}
+.oc-profile-subtabs button:hover{border-color:#433650;background:#18131f;color:#fff}
+.oc-profile-subtabs button.active{border-color:rgba(139,92,246,.5);background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(255,46,99,.11));color:#fff}
+.oc-profile-subtabs button:focus-visible{outline:2px solid #00e5ff;outline-offset:2px}
+.oc-profile-section-hidden{display:none!important}
+.oc-profile-daily-placeholder{margin-top:12px}
+.oc-profile-daily-placeholder[hidden]{display:none!important}
+@media(max-width:620px){.oc-profile-subtabs{margin:10px -2px 15px;padding:4px}.oc-profile-subtabs button{min-height:37px;padding:7px 10px;font-size:10px}}
