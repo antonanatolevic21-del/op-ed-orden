@@ -5,7 +5,7 @@
   const profileFiltersVersion = '20260724-profile-filters2';
   const filterChipsVersion = '20260724-filter-chips2';
   const deepLinksVersion = '20260724-deep-links1';
-  const statsLiteVersion = '20260724-stats-lite1';
+  const statsLiteVersion = '20260724-stats-lite2';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
