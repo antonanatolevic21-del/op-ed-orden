@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-features-no-refactor1';
+  const version = '20260724-features-no-refactor2';
 
   const styles = [
     './filter-ui-fixes.css',
