@@ -44,6 +44,7 @@
 
     chartBtn.textContent = 'Каталог';
     profileBtn.textContent = 'Профиль';
+    if (tierBtn) tierBtn.textContent = 'Тир-лист';
     seasonBtn.textContent = 'Сезоны';
     eventsLink.textContent = 'Ивенты';
     eventsLink.classList.add('oc-topbar-events');
@@ -57,10 +58,11 @@
     const ratingsMenu = document.createElement('div');
     ratingsMenu.className = 'oc-topbar-ratings-menu';
     if (topBtn) { topBtn.textContent = 'Общий топ-100'; ratingsMenu.append(topBtn); }
-    if (tierBtn) { tierBtn.textContent = 'Тир-лист'; ratingsMenu.append(tierBtn); }
     if (statsBtn) { statsBtn.textContent = 'Средние'; ratingsMenu.append(statsBtn); }
     ratings.append(ratingsSummary, ratingsMenu);
-    nav.append(ratings, seasonBtn, eventsLink);
+    nav.append(ratings);
+    if (tierBtn) nav.append(tierBtn);
+    nav.append(seasonBtn, eventsLink);
 
     const right = document.createElement('div');
     right.className = 'oc-topbar-right';
@@ -138,7 +140,7 @@
     }
 
     function syncRatingsActive() {
-      ratings.classList.toggle('active', [topBtn, tierBtn, statsBtn].some(button => button?.classList.contains('active')));
+      ratings.classList.toggle('active', [topBtn, statsBtn].some(button => button?.classList.contains('active')));
     }
 
     syncAccount();
