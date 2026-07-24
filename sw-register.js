@@ -6,7 +6,7 @@
   const filterChipsVersion = '20260724-filter-chips2';
   const deepLinksVersion = '20260724-deep-links1';
   const statsLiteVersion = '20260724-stats-lite3';
-  const qualityVersion = '20260724-quality1';
+  const qualityVersion = '20260724-quality2';
   const hotkeysVersion = '20260724-hotkeys1';
 
   const filterUiStylesheet = document.createElement('link');
@@ -113,7 +113,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force12', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force13', {
         updateViaCache: 'none'
       });
       await registration.update();
