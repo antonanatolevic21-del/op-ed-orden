@@ -5,6 +5,7 @@
   const profileFiltersVersion = '20260724-profile-filters2';
   const filterChipsVersion = '20260724-filter-chips2';
   const deepLinksVersion = '20260724-deep-links1';
+  const statsLiteVersion = '20260724-stats-lite1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -36,6 +37,11 @@
   filterChipsStylesheet.href = `./active-filter-chips.css?v=${filterChipsVersion}`;
   document.head.append(filterChipsStylesheet);
 
+  const statsLiteStylesheet = document.createElement('link');
+  statsLiteStylesheet.rel = 'stylesheet';
+  statsLiteStylesheet.href = `./stats-lite.css?v=${statsLiteVersion}`;
+  document.head.append(statsLiteStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -64,6 +70,11 @@
   deepLinksScript.src = `./deep-links.js?v=${deepLinksVersion}`;
   deepLinksScript.defer = true;
   document.body.append(deepLinksScript);
+
+  const statsLiteScript = document.createElement('script');
+  statsLiteScript.src = `./stats-lite.js?v=${statsLiteVersion}`;
+  statsLiteScript.defer = true;
+  document.body.append(statsLiteScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
