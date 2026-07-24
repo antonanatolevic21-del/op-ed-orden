@@ -6,6 +6,8 @@
   const filterChipsVersion = '20260724-filter-chips2';
   const deepLinksVersion = '20260724-deep-links1';
   const statsLiteVersion = '20260724-stats-lite3';
+  const qualityVersion = '20260724-quality1';
+  const hotkeysVersion = '20260724-hotkeys1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -42,6 +44,16 @@
   statsLiteStylesheet.href = `./stats-lite.css?v=${statsLiteVersion}`;
   document.head.append(statsLiteStylesheet);
 
+  const qualityStylesheet = document.createElement('link');
+  qualityStylesheet.rel = 'stylesheet';
+  qualityStylesheet.href = `./quality-center.css?v=${qualityVersion}`;
+  document.head.append(qualityStylesheet);
+
+  const hotkeysStylesheet = document.createElement('link');
+  hotkeysStylesheet.rel = 'stylesheet';
+  hotkeysStylesheet.href = `./keyboard-shortcuts.css?v=${hotkeysVersion}`;
+  document.head.append(hotkeysStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -76,6 +88,16 @@
   statsLiteScript.defer = true;
   document.body.append(statsLiteScript);
 
+  const qualityScript = document.createElement('script');
+  qualityScript.src = `./quality-center.js?v=${qualityVersion}`;
+  qualityScript.defer = true;
+  document.body.append(qualityScript);
+
+  const hotkeysScript = document.createElement('script');
+  hotkeysScript.src = `./keyboard-shortcuts.js?v=${hotkeysVersion}`;
+  hotkeysScript.defer = true;
+  document.body.append(hotkeysScript);
+
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
     stylesheet.rel = 'stylesheet';
@@ -91,7 +113,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force11', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force12', {
         updateViaCache: 'none'
       });
       await registration.update();
