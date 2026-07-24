@@ -1,0 +1,36 @@
+name: Finalize entity audit v2
+
+on:
+  push:
+    paths:
+      - '.github/workflows/finalize-entity-audit-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Finalize corrected audit
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          old = 'sw-register.js?v=20260724-entity-backup-cleanup2'
+          new = 'sw-register.js?v=20260724-entity-audit-v2'
+          if old not in text and new not in text:
+              raise SystemExit('sw-register cache marker not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          node --check entity-cleanup-audit-v2.js
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add index.html entity-cleanup-audit-v2.js sw-register.js
+          git rm -f ENTITY_CARD_DIAGNOSTIC.txt .github/workflows/fix-entity-cleanup-report.yml .github/workflows/finalize-entity-audit-v2.yml
+          git commit -m 'Finalize corrected Firebase entity audit v2'
+          git push
