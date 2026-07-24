@@ -1,5 +1,5 @@
 (() => {
-  const version = '20260724-entity-audit-v2';
+  const version = '20260724-no-entity-audit1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -14,11 +14,6 @@
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
-
-  const entityAuditScript = document.createElement('script');
-  entityAuditScript.type = 'module';
-  entityAuditScript.src = `./entity-cleanup-audit-v2.js?v=${version}`;
-  document.body.append(entityAuditScript);
 
   if (document.querySelector('.oc-addbar')) {
     const stylesheet = document.createElement('link');
@@ -35,7 +30,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force15', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260724-force16', {
         updateViaCache: 'none'
       });
       await registration.update();
