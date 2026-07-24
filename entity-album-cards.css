@@ -60,7 +60,7 @@
 }
 
 .oc-entity-card.complete:hover{
-  border:10px solid transparent !important;
+  border:3px solid transparent !important;
   background:
     linear-gradient(#14101d,#14101d) padding-box,
     linear-gradient(135deg,#00e5ff,#8b5cf6,#ff2e63) border-box !important;
