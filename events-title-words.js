@@ -3,6 +3,7 @@
 
   const PREFS_KEY = 'aboba-events-ui-preferences-v1';
   const CN_MODE_KEY = 'aboba-events-codenames-title-mode-v1';
+  const displayToInternal = new Map();
   const TITLE_SELECTORS = [
     '.ev-guess-result-title',
     '.ev-guess-option',
@@ -71,16 +72,44 @@
     return false;
   }
 
+  function hasRussianWord(value, word) {
+    const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^А-Яа-яЁё])${escaped}(?=$|[^А-Яа-яЁё])`, 'iu').test(String(value || ''));
+  }
+
+  function replaceTypeToken(value, token, russianWord) {
+    const source = String(value || '');
+    const tokenRe = new RegExp(`\\b${token}\\b(?=(?:\\s*#?\\d+)?\\s*(?:[»”"'’\\)\\]}]|·|\\/|$))`, 'giu');
+    return source.replace(tokenRe, (match, offset) => {
+      const prefix = source.slice(0, offset);
+      return hasRussianWord(prefix, russianWord) ? '' : russianWord;
+    });
+  }
+
   function toDisplay(value) {
-    return String(value || '')
-      .replace(/\bOP\b(?=(?:\s*#?\d+)?\s*(?:[»”"'’\)\]}]|·|\/|$))/giu, 'opening')
-      .replace(/\bED\b(?=(?:\s*#?\d+)?\s*(?:[»”"'’\)\]}]|·|\/|$))/giu, 'ending');
+    return replaceTypeToken(replaceTypeToken(value, 'OP', 'опенинг'), 'ED', 'эндинг')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\s+([»”"'’\)\]}])/g, '$1');
+  }
+
+  function lookupKey(value) {
+    return String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
+  }
+
+  function rememberMapping(displayValue, internalValue) {
+    const display = String(displayValue || '').trim();
+    const internal = String(internalValue || '').trim();
+    const key = lookupKey(display);
+    if (key && internal && !displayToInternal.has(key)) displayToInternal.set(key, internal);
   }
 
   function toInternal(value) {
-    return String(value || '')
-      .replace(/\bopening\b(?=(?:\s*#?\d+)?\s*$)/iu, 'OP')
-      .replace(/\bending\b(?=(?:\s*#?\d+)?\s*$)/iu, 'ED');
+    const source = String(value || '');
+    const mapped = displayToInternal.get(lookupKey(source));
+    if (mapped) return mapped;
+    return source
+      .replace(/(^|[^А-Яа-яЁё])опенинг(?=(?:\s*#?\d+)?\s*$)/iu, '$1OP')
+      .replace(/(^|[^А-Яа-яЁё])эндинг(?=(?:\s*#?\d+)?\s*$)/iu, '$1ED');
   }
 
   function rewriteTextNodes(element) {
@@ -101,13 +130,21 @@
   function rewriteElement(element) {
     if (!(element instanceof Element) || !modeIsMixed()) return;
     const before = String(element.textContent || '');
+    const after = toDisplay(before);
+    rememberMapping(after, before);
     rewriteTextNodes(element);
 
     if (element.matches('.ev-guess-suggestion[data-guess-suggestion]')) {
-      element.dataset.guessSuggestion = toDisplay(element.dataset.guessSuggestion || '');
+      const original = String(element.dataset.guessSuggestion || '');
+      const display = toDisplay(original);
+      rememberMapping(display, original);
+      element.dataset.guessSuggestion = display;
     }
     if (element.matches('#ev-who-pick-titles option,#ev-who-titles option')) {
-      element.value = toDisplay(element.getAttribute('value') || before);
+      const original = String(element.getAttribute('value') || before);
+      const display = toDisplay(original);
+      rememberMapping(display, original);
+      element.value = display;
     }
   }
 
