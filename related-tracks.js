@@ -5,6 +5,7 @@
 
   const norm = value => String(value || '').trim().toLowerCase().replace(/ё/g, 'е');
   const list = value => Array.isArray(value) ? value.map(norm).filter(Boolean) : [];
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   const intersects = (a, b) => {
     const set = new Set(list(a));
     return list(b).filter(item => set.has(item)).length;
@@ -32,7 +33,7 @@
     window.dispatchEvent(new PopStateEvent('popstate'));
   }
 
-  function renderRows(block, base, rows) {
+  function renderRows(block, rows) {
     const grid = block.querySelector('.oc-related-grid');
     if (!grid) return;
     if (!rows.length) {
@@ -43,9 +44,9 @@
     grid.innerHTML = rows.map(row => {
       const img = String(row.image || row.fallbackImage || '').trim();
       const meta = [row.type || '', row.year || '', row.season || ''].filter(Boolean).join(' · ');
-      return `<button type="button" class="oc-related-card" data-related-id="${String(row.id).replace(/"/g, '&quot;')}">
-        <span class="oc-related-thumb">${img ? `<img src="${img.replace(/"/g, '&quot;')}" alt="" loading="lazy" decoding="async">` : ''}</span>
-        <span><span class="oc-related-title">${String(row.title || 'Без названия').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span><span class="oc-related-meta">${meta}</span></span>
+      return `<button type="button" class="oc-related-card" data-related-id="${escapeHtml(row.id)}">
+        <span class="oc-related-thumb">${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" decoding="async">` : ''}</span>
+        <span><span class="oc-related-title">${escapeHtml(row.title || 'Без названия')}</span><span class="oc-related-meta">${escapeHtml(meta)}</span></span>
       </button>`;
     }).join('');
   }
@@ -67,7 +68,7 @@
         .sort((a, b) => b.score - a.score || Number(b.row.year || 0) - Number(a.row.year || 0) || String(a.row.title || '').localeCompare(String(b.row.title || ''), 'ru'))
         .slice(0, 6)
         .map(item => item.row);
-      renderRows(block, base, related);
+      renderRows(block, related);
       if (button) button.remove();
     } catch (error) {
       console.error('Related tracks load failed', error);
