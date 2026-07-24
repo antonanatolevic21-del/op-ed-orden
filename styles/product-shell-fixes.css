@@ -1,0 +1,24 @@
+/* Integration fixes kept separate from the main product shell so legacy widgets can be reused safely. */
+.oc-shell-account-menu .oc-avatar-picker,
+.oc-shell-account-menu .oc-shell-avatar-picker{
+  position:static!important;
+  top:auto!important;
+  right:auto!important;
+  z-index:auto!important;
+  width:100%;
+  margin-top:8px;
+  padding:9px;
+  border:1px solid #342b40;
+  border-radius:11px;
+  background:#100d16;
+  box-shadow:none;
+}
+.oc-shell-account-menu .oc-avatar-picker.hidden{display:none!important}
+.oc-shell-account-menu .oc-avatar-picker button{min-width:0;width:auto;padding:6px;border-radius:7px;text-align:center}
+.oc-shell-account-menu .oc-avatar-custom{margin-top:7px;padding-top:8px}
+.oc-shell-account-menu .oc-avatar-custom input{width:0;min-width:0}
+.oc-stats-box-legacy-hidden,[hidden].oc-stats-box-legacy-hidden{display:none!important}
+
+@media(max-width:620px){
+  .oc-shell-account-menu .oc-avatar-picker{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
