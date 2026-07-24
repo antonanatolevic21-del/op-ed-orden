@@ -44,81 +44,49 @@
 }
 
 /* A completed album must be recognizable before hover. */
+/* Завершённый альбом — только градиентная рамка */
 .oc-entity-card.complete{
-  border:2px solid #43f0b1!important;
-  background:#101a18!important;
+  border:2px solid transparent !important;
+  background:
+    linear-gradient(#14101d,#14101d) padding-box,
+    linear-gradient(135deg,#00e5ff,#8b5cf6,#ff2e63) border-box !important;
   box-shadow:
-    0 0 0 3px rgba(67,240,177,.19),
-    0 15px 38px rgba(21,184,126,.30),
-    inset 0 0 28px rgba(67,240,177,.09)!important;
-}
-
-.oc-entity-card.complete::before{
-  content:'✓ АЛЬБОМ ЗАКРЫТ';
-  position:absolute;
-  z-index:4;
-  top:11px;
-  left:11px;
-  display:inline-flex;
-  align-items:center;
-  min-height:29px;
-  padding:6px 10px;
-  border:1px solid rgba(181,255,226,.72);
-  border-radius:999px;
-  background:rgba(9,58,43,.94);
-  color:#bfffe3;
-  box-shadow:0 5px 18px rgba(0,0,0,.38),0 0 18px rgba(67,240,177,.24);
-  font-family:'Space Mono',monospace;
-  font-size:10px;
-  font-weight:800;
-  line-height:1;
-  letter-spacing:.045em;
-  text-shadow:0 1px 3px #000;
-  pointer-events:none;
-}
-
-.oc-entity-card.complete .oc-entity-cover::after{
-  content:'';
-  position:absolute;
-  inset:0;
-  z-index:1;
-  border:1px solid rgba(120,255,202,.34);
-  background:linear-gradient(145deg,rgba(31,255,171,.11),transparent 44%,rgba(15,110,82,.17));
-  box-shadow:inset 0 0 44px rgba(43,219,153,.16);
-  pointer-events:none;
+    0 0 0 2px rgba(139,92,246,.12),
+    0 12px 30px rgba(139,92,246,.16) !important;
 }
 
 .oc-entity-card.complete:hover{
-  border-color:#8bffd1!important;
+  border:2px solid transparent !important;
+  background:
+    linear-gradient(#14101d,#14101d) padding-box,
+    linear-gradient(135deg,#00e5ff,#8b5cf6,#ff2e63) border-box !important;
   box-shadow:
-    0 0 0 4px rgba(67,240,177,.24),
-    0 19px 46px rgba(21,184,126,.39),
-    inset 0 0 32px rgba(67,240,177,.12)!important;
+    0 0 0 3px rgba(139,92,246,.18),
+    0 16px 38px rgba(139,92,246,.22) !important;
+}
+
+/* Убираем все прошлые специальные отметки завершённости */
+.oc-entity-card.complete::before{
+  content:none !important;
+}
+
+.oc-entity-card.complete .oc-entity-cover::after{
+  content:none !important;
 }
 
 .oc-entity-card.complete .oc-entity-progressbar{
-  height:7px;
-  background:rgba(67,240,177,.18);
-  box-shadow:0 0 0 1px rgba(67,240,177,.26);
+  height:5px;
+  background:#272130;
+  box-shadow:none;
 }
 
 .oc-entity-card.complete .oc-entity-progressbar i{
-  background:linear-gradient(90deg,#2ee89f,#a8ffd8)!important;
-  box-shadow:0 0 12px rgba(67,240,177,.65);
+  background:linear-gradient(90deg,#00e5ff,#ff2e63) !important;
+  box-shadow:none;
 }
 
 .oc-entity-card.complete .oc-entity-done{
-  display:inline-flex;
-  align-items:center;
-  margin-top:10px;
-  padding:6px 9px;
-  border:1px solid rgba(67,240,177,.40);
-  border-radius:8px;
-  background:rgba(36,188,130,.14);
-  color:#98ffd0!important;
-  font-size:11px;
-  font-weight:800;
-  letter-spacing:.02em;
+  display:none !important;
 }
 
 @media(min-width:761px){
