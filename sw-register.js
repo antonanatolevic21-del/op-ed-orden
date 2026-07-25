@@ -13,6 +13,8 @@
   const top100DragVersion = '20260725-top100-drag1';
   const modalReadabilityVersion = '20260726-modal-readability1';
   const registeredUsersVersion = '20260726-registered-users2';
+  const sitePolicyVersion = '20260726-site-policy1';
+  const manualTopExplicitVersion = '20260726-manual-top-explicit1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -80,6 +82,7 @@
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
   void addScriptsOrdered([
+    ['site-policy.js', sitePolicyVersion],
     ['entity-progress-refresh.js', primaryVersion],
     ['topbar.js', primaryVersion],
     ['profile-tabs.js', primaryVersion],
@@ -125,6 +128,7 @@
       ['catalog-cache.js', primaryVersion],
       ['profile-top-single.js', top100SuiteVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion],
+      ['manual-top-explicit.js', manualTopExplicitVersion],
       ['top100-suite.js', top100SuiteVersion],
       ['top100-suite-view-fix.js', top100SuiteVersion],
       ['manual-top-insert-fix.js', manualTopInsertFixVersion],
