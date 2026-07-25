@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell3';
+  const primaryVersion = '20260725-primary-shell4';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
@@ -191,7 +191,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force45', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force46', {
         updateViaCache: 'none'
       });
       await registration.update();
