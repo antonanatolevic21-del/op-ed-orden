@@ -29,13 +29,13 @@
     return `
       <div class="oc-stats-design-switch" role="group" aria-label="Дизайн обзора статистики">
         <div class="oc-stats-design-switch-copy">
-          <span>Дизайн обзора</span>
-          <strong>Выбери вариант</strong>
+          <span>Три разных подхода</span>
+          <strong>Переключай прямо здесь</strong>
         </div>
         <div class="oc-stats-design-options">
-          <button type="button" data-stats-design-choice="dashboard"><b>1</b><span><strong>Дашборд</strong><small>карточки и сетка</small></span></button>
-          <button type="button" data-stats-design-choice="analytic"><b>2</b><span><strong>Аналитика</strong><small>плотно и по строкам</small></span></button>
-          <button type="button" data-stats-design-choice="showcase"><b>3</b><span><strong>Витрина</strong><small>крупные акценты</small></span></button>
+          <button type="button" data-stats-design-choice="dashboard"><b>1</b><span><strong>Пульт</strong><small>асимметричный командный центр</small></span></button>
+          <button type="button" data-stats-design-choice="analytic"><b>2</b><span><strong>Терминал</strong><small>никаких карточек, только данные</small></span></button>
+          <button type="button" data-stats-design-choice="showcase"><b>3</b><span><strong>Постер</strong><small>гигантская типографика и цвет</small></span></button>
         </div>
       </div>`;
   }
