@@ -139,12 +139,36 @@
     };
   }
 
+  function normalizedUserKey(user) {
+    try {
+      return window.OPED_DB?.normalizeNickname?.(user) || clean(user).toLowerCase().replace(/[^a-zа-яё0-9_-]+/gi, '_').slice(0, 60);
+    } catch (_) {
+      return clean(user).toLowerCase().replace(/[^a-zа-яё0-9_-]+/gi, '_').slice(0, 60);
+    }
+  }
+
+  function sameOrder(left, right) {
+    const a = Array.isArray(left) ? left.map(String) : [];
+    const b = Array.isArray(right) ? right.map(String) : [];
+    return a.length === b.length && a.every((id, index) => id === b[index]);
+  }
+
   function persistLocalMirror(user, payload) {
     try {
       const raw = JSON.parse(localStorage.getItem('manual-ranks') || '{}');
-      const safe = window.OPED_DB?.normalizeNickname?.(user) || clean(user).toLowerCase();
+      const safe = normalizedUserKey(user);
       const existing = raw[user] || raw[safe] || {};
-      const row = { ...existing, nickname: user, nicknameKey: safe, OP: payload.OP, ED: payload.ED, manualOP: payload.OP, manualED: payload.ED };
+      const row = {
+        ...existing,
+        nickname: user,
+        nicknameKey: safe,
+        OP: payload.OP,
+        ED: payload.ED,
+        manualOP: payload.OP,
+        manualED: payload.ED,
+        excludedOP: payload.excludedOP || [],
+        excludedED: payload.excludedED || []
+      };
       raw[user] = row;
       if (safe && safe !== user) raw[safe] = row;
       localStorage.setItem('manual-ranks', JSON.stringify(raw));
@@ -153,18 +177,112 @@
     }
   }
 
+  async function firebaseTools() {
+    const [{ getApp, getApps }, firestoreModule, { getAuth }] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js'),
+      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js')
+    ]);
+    if (!getApps().length) throw new Error('Firebase ещё не готов. Попробуй ещё раз через секунду.');
+    const app = getApp();
+    return {
+      app,
+      auth: getAuth(app),
+      db: firestoreModule.getFirestore(app),
+      ...firestoreModule
+    };
+  }
+
+  async function ratedIdsByType(user, safe, tools) {
+    const snapshots = [];
+    try {
+      snapshots.push(await tools.getDocs(tools.query(tools.collection(tools.db, 'ratings'), tools.where('nicknameKey', '==', safe))));
+    } catch (error) {
+      console.warn('Could not load ratings by nicknameKey while saving top', error);
+    }
+    if (!snapshots.some(snapshot => snapshot.size)) {
+      try {
+        snapshots.push(await tools.getDocs(tools.query(tools.collection(tools.db, 'ratings'), tools.where('nickname', '==', user))));
+      } catch (error) {
+        console.warn('Could not load ratings by nickname while saving top', error);
+      }
+    }
+
+    const ratingIds = new Set();
+    snapshots.forEach(snapshot => snapshot.docs.forEach(item => {
+      const data = item.data() || {};
+      const id = clean(data.openingId);
+      const hasAnyScore = [data.score, data.personalScore, data.songScore, data.visualScore]
+        .some(value => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)));
+      if (id && hasAnyScore) ratingIds.add(id);
+    }));
+
+    const catalog = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
+    const typeById = new Map((catalog || []).map(entry => [String(entry.id), entry.type === 'ED' ? 'ED' : 'OP']));
+    const result = { OP: [], ED: [] };
+    ratingIds.forEach(id => {
+      const type = typeById.get(String(id));
+      if (type === 'OP' || type === 'ED') result[type].push(String(id));
+    });
+    return result;
+  }
+
   async function saveLocalOrder() {
     const user = viewedUser();
     if (!user) throw new Error('Не удалось определить пользователя.');
+
     const payload = {
       OP: cardsFor('OP').map(cardId).filter(Boolean).slice(0, 100),
       ED: cardsFor('ED').map(cardId).filter(Boolean).slice(0, 100)
     };
-    if (!window.OPED_DB?.saveManualRanks) throw new Error('Сохранение топа сейчас недоступно.');
-    await window.OPED_DB.saveManualRanks(user, payload);
-    persistLocalMirror(user, payload);
+    const safe = normalizedUserKey(user);
+    if (!safe) throw new Error('Не удалось определить ключ пользователя.');
+
+    const tools = await firebaseTools();
+    const authUser = tools.auth.currentUser;
+    if (!authUser || authUser.isAnonymous) throw new Error('Для сохранения топа нужно войти в личный аккаунт.');
+
+    const rated = await ratedIdsByType(user, safe, tools);
+    const opSet = new Set(payload.OP.map(String));
+    const edSet = new Set(payload.ED.map(String));
+    const excludedOP = rated.OP.filter(id => !opSet.has(String(id)));
+    const excludedED = rated.ED.filter(id => !edSet.has(String(id)));
+
+    const remotePayload = {
+      nickname: user,
+      nicknameKey: safe,
+      ownerUid: String(authUser.uid),
+      OP: payload.OP,
+      ED: payload.ED,
+      manualOP: payload.OP,
+      manualED: payload.ED,
+      excludedOP,
+      excludedED,
+      updatedAt: tools.serverTimestamp()
+    };
+
+    const manualRef = tools.doc(tools.db, 'manualRanks', safe);
+    await tools.setDoc(manualRef, remotePayload, { merge: true });
+
+    const profileRef = tools.doc(tools.db, 'userProfiles', safe);
+    try {
+      await tools.setDoc(profileRef, remotePayload, { merge: true });
+    } catch (error) {
+      console.warn('Manual top profile mirror save failed', error);
+    }
+
+    const verified = await tools.getDoc(manualRef);
+    if (!verified.exists()) throw new Error('Firebase не подтвердил сохранение топа.');
+    const saved = verified.data() || {};
+    if (!sameOrder(saved.OP, payload.OP) || !sameOrder(saved.ED, payload.ED)) {
+      throw new Error('Firebase вернул другой порядок. Сохранение не подтверждено.');
+    }
+
+    const localPayload = { ...payload, excludedOP, excludedED };
+    persistLocalMirror(user, localPayload);
     localDirty = false;
     document.querySelector('#oc-manual-save-btn')?.classList.remove('active');
+    return localPayload;
   }
 
   function ensureExpanded() {
@@ -273,11 +391,12 @@
     event.stopImmediatePropagation();
     button.disabled = true;
     const oldText = button.textContent;
-    button.textContent = 'Сохраняю…';
+    button.textContent = 'Сохраняю и проверяю…';
     try {
       await saveLocalOrder();
-      showMessage('Топ-100 сохранён.', 'success');
+      showMessage('Топ-100 сохранён и проверен в Firebase ✓', 'success');
     } catch (error) {
+      console.error('Manual top explicit save failed', error);
       showMessage(error?.message || 'Не удалось сохранить топ-100.', 'error');
     } finally {
       button.disabled = false;
