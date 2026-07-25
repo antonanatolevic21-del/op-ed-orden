@@ -21,6 +21,10 @@
       handle.setAttribute('aria-label', 'Перетащить трек на другое место');
       handle.title = 'Зажми и перетащи выше или ниже';
       handle.innerHTML = '<span aria-hidden="true">⋮⋮</span>';
+      handle.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
       card.append(handle);
     });
   }
