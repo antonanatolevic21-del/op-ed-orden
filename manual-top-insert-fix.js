@@ -82,38 +82,32 @@
     if (status) status.textContent = message;
   }
 
-  function resetOriginalState() {
+  function closeOriginalPanel() {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  }
-
-  function removeOverlay(overlay) {
-    overlay?.remove();
     document.querySelectorAll('.oc-manual-insert-zone.active').forEach(zone => zone.classList.remove('active'));
-    resetOriginalState();
   }
 
-  function floatPanel(panel) {
-    const overlay = document.createElement('div');
-    overlay.className = 'oc-manual-insert-operation-overlay';
-    overlay.setAttribute('role', 'dialog');
-    overlay.setAttribute('aria-modal', 'true');
-    overlay.setAttribute('aria-label', 'Изменение места в топ-100');
-    panel.classList.add('oc-manual-insert-panel-operation');
-    let status = panel.querySelector('.oc-manual-insert-operation-status');
-    if (!status) {
-      status = document.createElement('div');
-      status.className = 'oc-manual-insert-operation-status';
-      status.setAttribute('aria-live', 'polite');
-      panel.querySelector('.oc-manual-insert-note')?.before(status);
-    }
-    overlay.append(panel);
-    document.body.append(overlay);
-    return { overlay, status };
+  function createProgressNotice(title, target) {
+    document.querySelector('.oc-manual-insert-progress')?.remove();
+    const notice = document.createElement('div');
+    notice.className = 'oc-manual-insert-progress';
+    notice.setAttribute('role', 'status');
+    notice.setAttribute('aria-live', 'polite');
+    notice.innerHTML = `<div class="oc-manual-insert-progress-title">${clean(title) || 'Изменение топа'} · место ${target}</div><div class="oc-manual-insert-progress-text">Начинаю изменение…</div>`;
+    document.body.append(notice);
+    return notice;
   }
 
-  function setProgress(status, text, error = false) {
-    status.textContent = text || '';
-    status.classList.toggle('error', error);
+  function setProgress(notice, text, error = false) {
+    if (!notice) return;
+    const line = notice.querySelector('.oc-manual-insert-progress-text');
+    if (line) line.textContent = text || '';
+    notice.classList.toggle('error', error);
+  }
+
+  function removeProgress(notice, delay = 0) {
+    if (!notice) return;
+    window.setTimeout(() => notice.remove(), delay);
   }
 
   async function prepareCandidate(id, title, type) {
@@ -147,11 +141,10 @@
   async function moveByRankButton(rankButton, id, type, target) {
     let promptCalled = false;
     const originalPrompt = window.prompt;
-    const replacementPrompt = () => {
+    window.prompt = () => {
       promptCalled = true;
       return String(target);
     };
-    window.prompt = replacementPrompt;
     try {
       rankButton.click();
     } finally {
@@ -167,11 +160,13 @@
     if (!changed) throw new Error('Место трека не изменилось.');
   }
 
-  async function performMove({ id, title, type, target, status }) {
+  async function performMove({ id, title, type, target, notice }) {
     const filters = captureFilters();
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
     let successful = false;
     try {
-      setProgress(status, 'Подготавливаю выбранный трек…');
+      setProgress(notice, 'Подготавливаю выбранный трек…');
       let controls = await prepareCandidate(id, title, type);
       let rankButton = controls.rank;
       let current = rankFromButton(rankButton);
@@ -181,7 +176,7 @@
       }
 
       if (!rankButton) {
-        setProgress(status, 'Добавляю трек в ручной список…');
+        setProgress(notice, 'Добавляю трек в ручной список…');
         controls.add.click();
         rankButton = await waitFor(() => actionButton('all-set-rank', id), 6000);
         current = rankFromButton(rankButton);
@@ -189,13 +184,14 @@
       }
 
       if (current !== target) {
-        setProgress(status, `Перемещаю на ${target}-е место…`);
+        setProgress(notice, `Перемещаю на ${target}-е место…`);
         await moveByRankButton(rankButton, id, type, target);
       }
       successful = true;
     } finally {
-      setProgress(status, successful ? 'Восстанавливаю прежние фильтры…' : 'Возвращаю прежние фильтры…');
+      setProgress(notice, successful ? 'Восстанавливаю прежний вид…' : 'Возвращаю прежний вид…');
       await restoreFilters(filters);
+      requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
     }
 
     const confirmed = await waitFor(() => visibleRank(type, id) === target || rankFromButton(actionButton('all-set-rank', id)) === target, 4000);
@@ -218,29 +214,22 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     busy = true;
-    confirmButton.disabled = true;
-    const { overlay, status } = floatPanel(panel);
-    setProgress(status, 'Начинаю изменение…');
+    const notice = createProgressNotice(title, target);
+    closeOriginalPanel();
 
     try {
-      await performMove({ id, title, type, target, status });
-      removeOverlay(overlay);
+      await performMove({ id, title, type, target, notice });
+      setProgress(notice, 'Готово. Осталось сохранить топ-100.');
+      removeProgress(notice, 1800);
       showToast(`${title}: теперь ${target}-е место. Нажми «Сохранить топ-100».`, 'success');
     } catch (error) {
-      confirmButton.disabled = false;
-      setProgress(status, error?.message || 'Не удалось изменить топ.', true);
-      showToast(error?.message || 'Не удалось изменить топ.', 'error');
+      const message = error?.message || 'Не удалось изменить топ.';
+      setProgress(notice, message, true);
+      removeProgress(notice, 5000);
+      showToast(message, 'error');
     } finally {
       busy = false;
     }
-  }, true);
-
-  document.addEventListener('click', event => {
-    const close = event.target.closest?.('.oc-manual-insert-operation-overlay .oc-manual-insert-close');
-    if (!close || busy) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    removeOverlay(close.closest('.oc-manual-insert-operation-overlay'));
   }, true);
 
   window.__OC_MANUAL_TOP_INSERT_FIX_READY__ = true;
