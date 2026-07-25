@@ -7,6 +7,7 @@ const SEASON_LABEL = { winter:'Зима', spring:'Весна', summer:'Лето'
 let profilesLoadedAt = 0;
 let profilesByKey = new Map();
 let enhancing = false;
+let enhanceTimer = 0;
 
 function normalizeNickname(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-zа-яё0-9_-]+/gi, '_').slice(0, 60);
@@ -67,6 +68,22 @@ function toolsMarkup(profile, reviewable) {
   </div>`;
 }
 
+function enhancementSignature(grid) {
+  return [...grid.querySelectorAll('.ev-participant-slot')].map(slot => {
+    const input = slot.querySelector('.ev-participant-input');
+    const key = normalizeNickname(input?.value);
+    const profile = profilesByKey.get(key);
+    const progress = String(slot.querySelector('.ev-participant-progress')?.textContent || '').trim();
+    const reviewable = Boolean(slot.querySelector('[data-participant-review]'));
+    return `${key}:${profile?.authUid || ''}:${progress}:${reviewable ? 1 : 0}`;
+  }).join('|');
+}
+
+function scheduleEnhance(delay = 40) {
+  window.clearTimeout(enhanceTimer);
+  enhanceTimer = window.setTimeout(() => void enhance(), delay);
+}
+
 async function enhance() {
   if (enhancing || !isAdminUi()) return;
   const grid = document.querySelector('.ev-participant-grid');
@@ -74,6 +91,9 @@ async function enhance() {
   enhancing = true;
   try {
     await loadProfiles();
+    const signature = enhancementSignature(grid);
+    if (grid.dataset.accountEnhanceSignature === signature) return;
+
     let linkedCount = 0;
     [...grid.querySelectorAll('.ev-participant-slot')].forEach(slot => {
       const input = slot.querySelector('.ev-participant-input');
@@ -98,6 +118,7 @@ async function enhance() {
       }
       summary.textContent = `Аккаунты: ${linkedCount}/15`;
     }
+    grid.dataset.accountEnhanceSignature = signature;
   } finally {
     enhancing = false;
   }
@@ -126,7 +147,8 @@ async function syncBindings() {
       participantBindingsUpdatedAtLocal: new Date().toISOString(),
       participantBindingsUpdatedAt: serverTimestamp()
     }, { merge:true });
-    window.setTimeout(() => void enhance(), 80);
+    delete grid.dataset.accountEnhanceSignature;
+    scheduleEnhance(80);
   } catch (error) {
     console.error('Participant binding save failed', error);
   }
@@ -189,6 +211,13 @@ document.addEventListener('click', event => {
   if (event.target.closest?.('#ev-save-participants')) window.setTimeout(() => void syncBindings(), 250);
 }, true);
 
-const observer = new MutationObserver(() => window.setTimeout(() => void enhance(), 0));
+document.addEventListener('input', event => {
+  if (!event.target?.matches?.('.ev-participant-input')) return;
+  const grid = event.target.closest('.ev-participant-grid');
+  if (grid) delete grid.dataset.accountEnhanceSignature;
+  scheduleEnhance(80);
+}, true);
+
+const observer = new MutationObserver(() => scheduleEnhance());
 observer.observe(document.body, { childList:true, subtree:true, characterData:true });
-window.setInterval(() => { if (isAdminUi()) void enhance(); }, 2500);
+window.setInterval(() => { if (isAdminUi()) scheduleEnhance(0); }, 2500);
