@@ -3,8 +3,8 @@
   window.__OC_REGISTERED_USERS_ONLY_READY__ = true;
 
   const PROFILE_LIST_ID = 'oc-profile-user';
-  const EVENT_DATALIST_ID = 'ev-registered-participants';
-  let registeredByKey = new Map();
+  const EVENT_DATALIST_ID = 'ev-known-participants';
+  let knownByKey = new Map();
   let profilesLoaded = false;
   let syncQueued = false;
   let unsubscribe = null;
@@ -16,12 +16,12 @@
     return clean(row?.nickname || row?.displayName || row?.name || row?.nicknameKey || row?.id);
   }
 
-  function registeredRows(rows) {
+  function knownRows(rows) {
     const next = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
       const name = profileName(row);
       const key = normalize(row?.nicknameKey || name || row?.id);
-      if (!name || !key || !clean(row?.authUid)) return;
+      if (!name || !key) return;
       const existing = next.get(key);
       if (!existing || (!clean(existing.avatar) && clean(row?.avatar))) next.set(key, { ...row, nickname: name, nicknameKey: key });
     });
@@ -29,8 +29,8 @@
   }
 
   function setProfiles(rows) {
-    const profiles = registeredRows(rows);
-    registeredByKey = new Map(profiles.map(row => [normalize(row.nicknameKey || profileName(row)), row]));
+    const profiles = knownRows(rows);
+    knownByKey = new Map(profiles.map(row => [normalize(row.nicknameKey || profileName(row)), row]));
     profilesLoaded = true;
     scheduleSync();
   }
@@ -50,13 +50,13 @@
 
   function syncMainProfileSelect() {
     const select = document.getElementById(PROFILE_LIST_ID);
-    if (!select || !profilesLoaded || !registeredByKey.size) return;
+    if (!select || !profilesLoaded || !knownByKey.size) return;
 
-    const profiles = [...registeredByKey.values()].sort((a, b) => profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' }));
+    const profiles = [...knownByKey.values()].sort((a, b) => profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' }));
     const previous = clean(select.value);
     const previousKey = normalize(previous);
     const accountKey = normalize(currentAccountName());
-    const selectedRow = registeredByKey.get(previousKey) || registeredByKey.get(accountKey) || profiles[0];
+    const selectedRow = knownByKey.get(previousKey) || knownByKey.get(accountKey) || profiles[0];
     const selectedName = profileName(selectedRow);
 
     const expected = profiles.map(row => {
@@ -80,15 +80,14 @@
   }
 
   function ensureEventDatalist() {
-    if (!profilesLoaded || !registeredByKey.size) return null;
+    if (!profilesLoaded || !knownByKey.size) return null;
     let datalist = document.getElementById(EVENT_DATALIST_ID);
     if (!datalist) {
       datalist = document.createElement('datalist');
       datalist.id = EVENT_DATALIST_ID;
       document.body.append(datalist);
     }
-    const profiles = [...registeredByKey.values()].sort((a, b) => profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' }));
-    const expected = profiles.map(profileName);
+    const expected = [...knownByKey.values()].map(profileName).sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
     const current = [...datalist.options].map(option => option.value);
     if (current.join('\u0001') !== expected.join('\u0001')) {
       datalist.replaceChildren(...expected.map(name => {
@@ -101,50 +100,14 @@
   }
 
   function syncEventParticipantInputs() {
-    if (!profilesLoaded || !registeredByKey.size) return;
     ensureEventDatalist();
     document.querySelectorAll('.ev-participant-input').forEach(input => {
       const name = clean(input.value);
-      const key = normalize(name);
-      const profile = key ? registeredByKey.get(key) : null;
-      if (name && !profile) input.value = '';
-      else if (profile && name !== profileName(profile)) input.value = profileName(profile);
-      if (!input.disabled) input.setAttribute('list', EVENT_DATALIST_ID);
-      input.dataset.registeredOnly = '1';
-      input.title = input.disabled ? input.title : 'Выберите зарегистрированный аккаунт из базы';
-    });
-  }
-
-  function userChoiceContainers() {
-    return document.querySelectorAll([
-      '#ev-guess-users',
-      '#ev-app [id*="users" i]',
-      '#ev-app [class*="users" i]',
-      '#ev-app [data-users]'
-    ].join(','));
-  }
-
-  function syncRegisteredUserChoices() {
-    if (!profilesLoaded || !registeredByKey.size) return;
-
-    userChoiceContainers().forEach(container => {
-      const staleInputs = [...container.querySelectorAll('label input[type="checkbox"], label input[type="radio"]')]
-        .filter(input => {
-          const key = normalize(input.value);
-          return key && !registeredByKey.has(key);
-        });
-      const selectedStaleInput = staleInputs.find(input => input.checked);
-      staleInputs.forEach(input => { input.checked = false; });
-      if (selectedStaleInput) selectedStaleInput.dispatchEvent(new Event('change', { bubbles: true }));
-      staleInputs.forEach(input => input.closest('label')?.remove());
-
-      const staleOptions = [...container.querySelectorAll('option')].filter(option => {
-        const key = normalize(option.value);
-        return key && !registeredByKey.has(key);
-      });
-      const selectedStaleOption = staleOptions.find(option => option.selected);
-      staleOptions.forEach(option => option.remove());
-      if (selectedStaleOption) container.closest('select')?.dispatchEvent(new Event('change', { bubbles: true }));
+      const profile = knownByKey.get(normalize(name));
+      if (profile && name !== profileName(profile)) input.value = profileName(profile);
+      if (!input.disabled && knownByKey.size) input.setAttribute('list', EVENT_DATALIST_ID);
+      input.removeAttribute('data-registered-only');
+      if (!input.disabled) input.title = 'Можно выбрать пользователя из списка или ввести гостевой ник вручную';
     });
   }
 
@@ -152,7 +115,6 @@
     syncQueued = false;
     syncMainProfileSelect();
     syncEventParticipantInputs();
-    syncRegisteredUserChoices();
   }
 
   function scheduleSync() {
@@ -171,26 +133,23 @@
       import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js')
     ]);
-    for (let attempt = 0; attempt < 120 && !getApps().length; attempt += 1) {
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
+    for (let attempt = 0; attempt < 120 && !getApps().length; attempt += 1) await new Promise(resolve => setTimeout(resolve, 50));
     if (!getApps().length) return;
     unsubscribe = onSnapshot(collection(getFirestore(getApp()), 'userProfiles'), snapshot => {
       setProfiles(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
-    }, error => console.warn('Registered users list load failed', error));
+    }, error => console.warn('Known users list load failed', error));
   }
 
   document.addEventListener('change', event => {
     const input = event.target?.closest?.('.ev-participant-input');
-    if (!input || !profilesLoaded || !registeredByKey.size) return;
-    const profile = registeredByKey.get(normalize(input.value));
+    if (!input || !profilesLoaded) return;
+    const profile = knownByKey.get(normalize(input.value));
     if (profile) input.value = profileName(profile);
-    else input.value = '';
   }, true);
 
   new MutationObserver(scheduleSync).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('beforeunload', () => { try { unsubscribe?.(); } catch (_) {} }, { once: true });
 
-  subscribeProfiles().catch(error => console.warn('Registered users filter failed', error));
+  subscribeProfiles().catch(error => console.warn('Known users helper failed', error));
   [100, 500, 1200, 2500].forEach(delay => window.setTimeout(scheduleSync, delay));
 })();
