@@ -3,7 +3,6 @@
 
   const STORAGE_KEY = 'oc-profile-top-visible-type-v1';
   let activeType = localStorage.getItem(STORAGE_KEY) === 'ED' ? 'ED' : 'OP';
-  let observer = null;
 
   function closeInsertPanels() {
     document.querySelectorAll('.oc-manual-insert-panel').forEach(panel => panel.remove());
@@ -36,23 +35,25 @@
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    closeInsertPanels();
-    if (save) localStorage.setItem(STORAGE_KEY, activeType);
+    if (save) {
+      closeInsertPanels();
+      localStorage.setItem(STORAGE_KEY, activeType);
+    }
   }
 
   function buildSwitch(columns) {
     let switcher = document.querySelector('.oc-profile-top-type-switch');
-    if (!switcher) {
-      switcher = document.createElement('div');
-      switcher.className = 'oc-profile-top-type-switch';
-      switcher.setAttribute('role', 'group');
-      switcher.setAttribute('aria-label', 'Выбор топа');
-      switcher.innerHTML = '<button type="button" class="oc-profile-top-type-btn" data-type="OP">Опенинги</button><button type="button" class="oc-profile-top-type-btn" data-type="ED">Эндинги</button>';
-      columns.before(switcher);
-      switcher.querySelectorAll('.oc-profile-top-type-btn').forEach(button => {
-        button.addEventListener('click', () => applyType(columns, button.dataset.type));
-      });
-    }
+    if (switcher) return switcher;
+
+    switcher = document.createElement('div');
+    switcher.className = 'oc-profile-top-type-switch';
+    switcher.setAttribute('role', 'group');
+    switcher.setAttribute('aria-label', 'Выбор топа');
+    switcher.innerHTML = '<button type="button" class="oc-profile-top-type-btn" data-type="OP">Опенинги</button><button type="button" class="oc-profile-top-type-btn" data-type="ED">Эндинги</button>';
+    columns.before(switcher);
+    switcher.querySelectorAll('.oc-profile-top-type-btn').forEach(button => {
+      button.addEventListener('click', () => applyType(columns, button.dataset.type));
+    });
     return switcher;
   }
 
@@ -72,15 +73,6 @@
     relabelTitle(edWrapper, 'ED');
     buildSwitch(columns);
     applyType(columns, activeType, false);
-
-    if (!observer) {
-      observer = new MutationObserver(() => {
-        relabelTitle(wrapperFor(columns, 'OP'), 'OP');
-        relabelTitle(wrapperFor(columns, 'ED'), 'ED');
-        applyType(columns, activeType, false);
-      });
-      observer.observe(columns, { childList: true, subtree: true });
-    }
   }
 
   window.__OC_PROFILE_TOP_SINGLE_READY__ = true;
