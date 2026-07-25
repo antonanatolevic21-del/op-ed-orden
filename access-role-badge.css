@@ -1,0 +1,11 @@
+#oc-access-badge.oc-access-user {
+	border-color: rgba(71, 240, 180, .52) !important;
+	background: linear-gradient(135deg, rgba(25, 92, 70, .72), rgba(20, 57, 48, .82)) !important;
+	color: #8ff7cf !important;
+	box-shadow: 0 0 0 1px rgba(71, 240, 180, .08), 0 8px 20px rgba(20, 120, 86, .16) !important;
+}
+
+#oc-access-badge.oc-access-user:hover {
+	border-color: rgba(111, 255, 207, .76) !important;
+	color: #c6ffe9 !important;
+}
