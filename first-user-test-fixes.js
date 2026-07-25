@@ -6,17 +6,9 @@
   const SKLT_KEY = 'sklt';
   let scaleSyncing = false;
   let fiveOptionTemplate = null;
-  let usersPanel = null;
-  let usersSearch = '';
 
   const clean = value => String(value || '').trim();
   const norm = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
-  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char]));
-
-  function isAdminUi() {
-    const badge = document.querySelector('#oc-access-badge');
-    return Boolean(badge && badge.classList.contains('admin') && norm(badge.textContent) === 'админ');
-  }
 
   function currentAccountName() {
     return clean(
@@ -111,106 +103,14 @@
     }
   }
 
-  function profileOptions() {
-    const select = document.querySelector('#oc-profile-user');
-    if (!select) return [];
-    const seen = new Set();
-    return [...select.options].map(option => ({
-      value: clean(option.value),
-      label: clean(option.textContent || option.value)
-    })).filter(row => {
-      const key = norm(row.value || row.label);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).sort((a, b) => a.label.localeCompare(b.label, 'ru', { sensitivity: 'base' }));
-  }
-
-  function renderUsersPanel() {
-    if (!usersPanel) return;
-    const admin = isAdminUi();
-    usersPanel.hidden = !admin;
-    if (!admin) return;
-
-    const current = norm(currentAccountName());
-    const rows = profileOptions();
-    const filtered = usersSearch
-      ? rows.filter(row => norm(row.label).includes(norm(usersSearch)))
-      : rows;
-    const list = usersPanel.querySelector('.oc-user-manager-list');
-    const count = usersPanel.querySelector('[data-user-manager-count]');
-    if (count) count.textContent = `${filtered.length} из ${rows.length}`;
-    if (!list) return;
-
-    list.innerHTML = filtered.length ? filtered.map(row => {
-      const isCurrent = norm(row.value || row.label) === current;
-      return `<div class="oc-user-manager-row" data-user-value="${esc(row.value)}">
-        <div><strong>${esc(row.label)}</strong>${isCurrent ? '<span>текущий аккаунт</span>' : ''}</div>
-        <div class="oc-user-manager-actions">
-          <button type="button" data-user-open="${esc(row.value)}">Открыть</button>
-          <button type="button" class="danger" data-user-delete="${esc(row.value)}" ${isCurrent ? 'disabled title="Нельзя удалить аккаунт, под которым выполнен вход"' : ''}>Удалить</button>
-        </div>
-      </div>`;
-    }).join('') : '<div class="oc-user-manager-empty">Пользователи не найдены.</div>';
-  }
-
-  function chooseProfile(value) {
-    const select = document.querySelector('#oc-profile-user');
-    if (!select) return false;
-    const option = [...select.options].find(item => item.value === value);
-    if (!option) return false;
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    select.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    return true;
-  }
-
-  function mountUsersPanel() {
-    if (usersPanel?.isConnected) return;
-    const anchor = document.querySelector('#oc-profile-panel .oc-profile-select-wrap');
-    if (!anchor) return;
-
-    usersPanel = document.createElement('section');
-    usersPanel.className = 'oc-user-manager';
-    usersPanel.hidden = true;
-    usersPanel.innerHTML = `<div class="oc-user-manager-head">
-      <div><div class="oc-section-label">админ · пользователи</div><h3>Управление профилями</h3><p>Список собирается из уже загруженных профилей и оценок сайта.</p></div>
-      <span data-user-manager-count>0</span>
-    </div>
-    <input class="oc-user-manager-search" type="search" placeholder="Найти пользователя…" autocomplete="off" />
-    <div class="oc-user-manager-list"></div>`;
-    anchor.insertAdjacentElement('afterend', usersPanel);
-
-    usersPanel.querySelector('.oc-user-manager-search')?.addEventListener('input', event => {
-      usersSearch = event.target.value;
-      renderUsersPanel();
-    });
-
-    usersPanel.addEventListener('click', event => {
-      const open = event.target.closest('[data-user-open]');
-      if (open) {
-        chooseProfile(open.dataset.userOpen || '');
-        return;
-      }
-      const remove = event.target.closest('[data-user-delete]');
-      if (!remove || remove.disabled || !isAdminUi()) return;
-      const value = remove.dataset.userDelete || '';
-      if (!chooseProfile(value)) return;
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        document.querySelector('#oc-profile-delete-btn')?.click();
-      }));
-    });
-
-    const select = document.querySelector('#oc-profile-user');
-    if (select) new MutationObserver(renderUsersPanel).observe(select, { childList: true, subtree: true });
-    renderUsersPanel();
+  function removeLegacyUserManager() {
+    document.querySelectorAll('.oc-user-manager').forEach(panel => panel.remove());
   }
 
   function syncAll() {
     protectOpeningBackdrop();
     syncScalePolicy();
-    mountUsersPanel();
-    renderUsersPanel();
+    removeLegacyUserManager();
   }
 
   const nameInput = document.querySelector('#oc-myname');
@@ -228,5 +128,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncAll, { once: true });
   else syncAll();
   [250, 900, 2500, 6000].forEach(delay => window.setTimeout(syncAll, delay));
-  window.setInterval(syncAll, 1800);
 })();
