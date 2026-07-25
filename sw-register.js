@@ -12,7 +12,7 @@
   const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
-  const profileTopSingleVersion = '20260725-profile-top-single3';
+  const profileTopSingleVersion = '20260725-profile-top-single4';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -155,7 +155,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force31', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force32', {
         updateViaCache: 'none'
       });
       await registration.update();
