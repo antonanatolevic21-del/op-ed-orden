@@ -7,6 +7,7 @@
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
   const myEventsVersion = '20260725-my-events3';
+  const statsDesignVersion = '20260725-profile-stats-designs1';
   const loadedStyles = new Set();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -73,11 +74,13 @@
     'toast.css', 'accessibility.css'
   ].forEach(file => addStyle(file));
   addStyle('my-events-profile.css', myEventsVersion);
+  addStyle('profile-stats-designs.css', statsDesignVersion);
 
   void addScriptsOrdered([
     ['entity-progress-refresh.js', primaryVersion],
     ['topbar.js', primaryVersion],
     ['profile-tabs.js', primaryVersion],
+    ['profile-stats-designs.js', statsDesignVersion],
     ['profile-filters.js', primaryVersion],
     ['active-filter-chips.js', primaryVersion],
     ['account-sync.js', accountSyncVersion],
@@ -188,7 +191,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force43', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force44', {
         updateViaCache: 'none'
       });
       await registration.update();
