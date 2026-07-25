@@ -12,6 +12,7 @@
   const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
+  const manualTopInsertFixVersion = '20260725-manual-top-insert-fix1';
   const profileTopSingleVersion = '20260725-profile-top-single4';
   const profileTopLayoutFixVersion = '20260725-profile-top-layout-fix1';
 
@@ -87,6 +88,11 @@
   profileTopLayoutFixStylesheet.href = `./profile-top-layout-fixes.css?v=${profileTopLayoutFixVersion}`;
   document.head.append(profileTopLayoutFixStylesheet);
 
+  const manualTopInsertFixStylesheet = document.createElement('link');
+  manualTopInsertFixStylesheet.rel = 'stylesheet';
+  manualTopInsertFixStylesheet.href = `./manual-top-insert-fix.css?v=${manualTopInsertFixVersion}`;
+  document.head.append(manualTopInsertFixStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -136,11 +142,12 @@
   hotkeysScript.async = false;
   document.body.append(hotkeysScript);
 
-  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'profile-top-single.js', 'manual-top-insert-fast.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'profile-top-single.js', 'manual-top-insert-fast.js', 'manual-top-insert-fix.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
     const script = document.createElement('script');
     if (file === 'season-quality-fill.js') script.src = `./${file}?v=${seasonFillVersion}`;
     else if (file === 'profile-top-single.js') script.src = `./${file}?v=${profileTopSingleVersion}`;
     else if (file === 'manual-top-insert-fast.js') script.src = `./${file}?v=${manualTopInsertVersion}`;
+    else if (file === 'manual-top-insert-fix.js') script.src = `./${file}?v=${manualTopInsertFixVersion}`;
     else script.src = `./${file}?v=${uxVersion}`;
     script.async = false;
     document.body.append(script);
@@ -161,7 +168,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force33', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force34', {
         updateViaCache: 'none'
       });
       await registration.update();
