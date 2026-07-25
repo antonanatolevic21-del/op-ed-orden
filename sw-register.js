@@ -8,7 +8,7 @@
   const top100SuiteVersion = '20260725-top100-suite2';
   const myEventsVersion = '20260725-my-events3';
   const statsDesignVersion = '20260725-profile-stats-designs4';
-  const adminMissingVersion = '20260725-admin-missing1';
+  const adminMissingVersion = '20260725-admin-missing2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -215,7 +215,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force51', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force52', {
         updateViaCache: 'none'
       });
       await registration.update();
