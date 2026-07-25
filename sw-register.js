@@ -1,10 +1,16 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell1';
+  const primaryVersion = '20260725-primary-shell2';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
+  const top100SuiteVersion = '20260725-top100-suite1';
+  const loadedStyles = new Set();
+  const loadedScripts = new Map();
+  let top100Promise = null;
+  let seasonPromise = null;
+  let statsPromise = null;
 
   const bootStyle = document.createElement('style');
   bootStyle.id = 'oc-primary-boot-style';
@@ -17,6 +23,7 @@
     #oc-primary-boot .oc-primary-boot-dot{width:11px;height:11px;border:2px solid #08d9d6;border-right-color:transparent;border-radius:50%;animation:ocPrimaryBootSpin .7s linear infinite}
     #oc-primary-boot strong{font-size:14px;letter-spacing:.2px}
     #oc-primary-boot span{display:block;margin-top:2px;color:#8f879b;font:10px/1.35 'Space Mono',monospace}
+    html.oc-top100-loading #oc-profile-panel .oc-topmode-toggle,html.oc-top100-loading #oc-profile-panel .oc-topmode-hint,html.oc-top100-loading #oc-profile-panel .oc-manual-actions,html.oc-top100-loading #oc-profile-panel .oc-profile-columns{visibility:hidden!important}
     @keyframes ocPrimaryBootSpin{to{transform:rotate(360deg)}}
   `;
   document.head.append(bootStyle);
@@ -30,77 +37,129 @@
   document.body.prepend(boot);
 
   function addStyle(file, version = primaryVersion) {
+    const key = `${file}?v=${version}`;
+    if (loadedStyles.has(key)) return;
+    loadedStyles.add(key);
     const stylesheet = document.createElement('link');
     stylesheet.rel = 'stylesheet';
-    stylesheet.href = `./${file}?v=${version}`;
+    stylesheet.href = `./${key}`;
     document.head.append(stylesheet);
-    return stylesheet;
   }
 
   function addScript(file, version = primaryVersion, ordered = false) {
-    const script = document.createElement('script');
-    script.src = `./${file}?v=${version}`;
-    if (ordered) script.async = false;
-    document.body.append(script);
-    return script;
+    const key = `${file}?v=${version}`;
+    if (loadedScripts.has(key)) return loadedScripts.get(key);
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = `./${key}`;
+      if (ordered) script.async = false;
+      script.onload = () => resolve(script);
+      script.onerror = () => reject(new Error(`Не удалось загрузить ${file}`));
+      document.body.append(script);
+    });
+    loadedScripts.set(key, promise);
+    return promise;
+  }
+
+  async function addScriptsOrdered(rows) {
+    for (const [file, version] of rows) await addScript(file, version, true);
   }
 
   [
-    'filter-ui-fixes.css',
-    'entity-album-cards.css',
-    'topbar.css',
-    'profile-tabs.css',
-    'profile-filters.css',
-    'active-filter-chips.css',
-    'stats-lite.css',
-    'quality-center.css',
-    'keyboard-shortcuts.css',
-    'advanced-filters.css',
-    'skeleton-loading.css',
-    'toast.css',
-    'accessibility.css'
+    'filter-ui-fixes.css', 'entity-album-cards.css', 'topbar.css', 'profile-tabs.css',
+    'profile-filters.css', 'active-filter-chips.css', 'quality-center.css',
+    'keyboard-shortcuts.css', 'advanced-filters.css', 'skeleton-loading.css',
+    'toast.css', 'accessibility.css'
   ].forEach(file => addStyle(file));
-  addStyle('season-quality-fill.css', seasonFillVersion);
-  addStyle('manual-top-insert.css', manualTopInsertVersion);
-  addStyle('profile-top-single.css');
-  addStyle('profile-top-layout-fixes.css');
-  addStyle('manual-top-insert-fix.css', manualTopInsertFixVersion);
 
-  addScript('entity-progress-refresh.js');
-  addScript('topbar.js', primaryVersion, true);
-  addScript('profile-tabs.js', primaryVersion, true);
-  addScript('profile-filters.js', primaryVersion, true);
-  addScript('active-filter-chips.js', primaryVersion, true);
-  addScript('account-sync.js', accountSyncVersion, true);
-  addScript('deep-links.js', deepLinksVersion, true);
-  addScript('stats-lite.js', primaryVersion, true);
-  addScript('quality-center.js', primaryVersion, true);
-  addScript('keyboard-shortcuts.js', primaryVersion, true);
-
-  [
-    ['catalog-cache.js', primaryVersion],
-    ['season-quality-fill.js', seasonFillVersion],
+  void addScriptsOrdered([
+    ['entity-progress-refresh.js', primaryVersion],
+    ['topbar.js', primaryVersion],
+    ['profile-tabs.js', primaryVersion],
+    ['profile-filters.js', primaryVersion],
+    ['active-filter-chips.js', primaryVersion],
+    ['account-sync.js', accountSyncVersion],
+    ['deep-links.js', deepLinksVersion],
+    ['quality-center.js', primaryVersion],
+    ['keyboard-shortcuts.js', primaryVersion],
     ['toast.js', primaryVersion],
-    ['profile-top-single.js', primaryVersion],
-    ['manual-top-insert-fast.js', manualTopInsertVersion],
-    ['manual-top-insert-fix.js', manualTopInsertFixVersion],
     ['skeleton-loading.js', primaryVersion],
     ['advanced-filters.js', primaryVersion],
     ['undo-actions.js', primaryVersion],
     ['accessibility.js', primaryVersion]
-  ].forEach(([file, version]) => addScript(file, version, true));
+  ]).catch(error => console.error('Primary UI module load failed', error));
 
   if (document.querySelector('.oc-addbar')) {
     addStyle('track-add-panel.css');
-    addScript('track-add-panel.js', primaryVersion, true);
+    void addScript('track-add-panel.js', primaryVersion, true);
   }
+
+  function loadTop100Package() {
+    if (top100Promise) return top100Promise;
+    document.documentElement.classList.add('oc-top100-loading');
+    addStyle('manual-top-insert.css', manualTopInsertVersion);
+    addStyle('profile-top-single.css', top100SuiteVersion);
+    addStyle('profile-top-layout-fixes.css', top100SuiteVersion);
+    addStyle('manual-top-insert-fix.css', manualTopInsertFixVersion);
+    addStyle('top100-suite.css', top100SuiteVersion);
+    top100Promise = addScriptsOrdered([
+      ['catalog-cache.js', primaryVersion],
+      ['profile-top-single.js', top100SuiteVersion],
+      ['manual-top-insert-fast.js', manualTopInsertVersion],
+      ['top100-suite.js', top100SuiteVersion],
+      ['manual-top-insert-fix.js', manualTopInsertFixVersion]
+    ]).catch(error => {
+      document.documentElement.classList.remove('oc-top100-loading');
+      console.error('Top-100 package load failed', error);
+      throw error;
+    });
+    return top100Promise;
+  }
+
+  function loadSeasonPackage() {
+    if (seasonPromise) return seasonPromise;
+    addStyle('season-quality-fill.css', seasonFillVersion);
+    seasonPromise = addScriptsOrdered([
+      ['catalog-cache.js', primaryVersion],
+      ['season-quality-fill.js', seasonFillVersion]
+    ]).catch(error => { console.error('Season package load failed', error); throw error; });
+    return seasonPromise;
+  }
+
+  function loadStatsPackage() {
+    if (statsPromise) return statsPromise;
+    addStyle('stats-lite.css', primaryVersion);
+    statsPromise = addScript('stats-lite.js', primaryVersion, true).catch(error => { console.error('Stats package load failed', error); throw error; });
+    return statsPromise;
+  }
+
+  function routeLazyModules(target) {
+    if (target?.closest?.('[data-profile-view="top100"]')) void loadTop100Package();
+    if (target?.closest?.('.oc-tab-btn[data-tab="season"]')) void loadSeasonPackage();
+    if (target?.closest?.('.oc-tab-btn[data-tab="stats"]')) void loadStatsPackage();
+  }
+
+  document.addEventListener('click', event => routeLazyModules(event.target), true);
+
+  const profile = document.querySelector('#oc-profile-panel');
+  if (profile) {
+    new MutationObserver(() => {
+      if (profile.dataset.profileView === 'top100') void loadTop100Package();
+    }).observe(profile, { attributes: true, attributeFilter: ['data-profile-view'] });
+  }
+
+  function detectCurrentLazyView() {
+    if (profile?.dataset.profileView === 'top100' && !profile.classList.contains('hidden')) void loadTop100Package();
+    if (document.querySelector('.oc-tab-btn[data-tab="season"]')?.classList.contains('active')) void loadSeasonPackage();
+    if (document.querySelector('.oc-tab-btn[data-tab="stats"]')?.classList.contains('active')) void loadStatsPackage();
+  }
+  window.setTimeout(detectCurrentLazyView, 100);
 
   function revealCurrentShell() {
     if (!document.documentElement.classList.contains('oc-primary-booting')) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       document.documentElement.classList.remove('oc-primary-booting');
       boot.remove();
-      bootStyle.remove();
     }));
   }
 
@@ -110,10 +169,9 @@
       window.__OC_TOPBAR_READY__ &&
       window.__OC_PROFILE_TABS_READY__ &&
       window.__OC_PROFILE_FILTERS_READY__ &&
-      window.__OC_PROFILE_TOP_SINGLE_READY__ &&
       window.__OC_ADVANCED_FILTERS_READY__
     );
-    if (ready || readyChecks >= 120) {
+    if (ready || readyChecks >= 140) {
       revealCurrentShell();
       return;
     }
@@ -126,7 +184,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force38', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force39', {
         updateViaCache: 'none'
       });
       await registration.update();
