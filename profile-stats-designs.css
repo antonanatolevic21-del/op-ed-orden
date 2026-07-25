@@ -129,7 +129,8 @@
 /* Equal leader tiles: three columns, with the final incomplete row centered. */
 #oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-leader-card{
 	grid-column:span 8;
-	dis:flex;
+	display:flex;
+	flex-direction:column;
 	min-height:238px!important;
 	padding:21px 22px!important;
 	background:radial-gradient(circle at 92% 8%,rgba(171,143,224,.12),transparent 40%),linear-gradient(150deg,#1b1623,#131019)!important;
@@ -195,7 +196,16 @@
 @media(max-width:1180px){
 	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats{grid-template-columns:repeat(12,minmax(0,1fr))!important}
 	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-metric-card{grid-column:span 4!important;min-height:145px!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-metric-card[data-stats-tail-size="1"][data-stats-tail-pos="1"]{grid-column:5/span 4!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-metric-card[data-stats-tail-size="2"][data-stats-tail-pos="1"]{grid-column:3/span 4!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-metric-card[data-stats-tail-size="2"][data-stats-tail-pos="2"]{grid-column:7/span 4!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats[data-stats-metric-count="1"]>.oc-profile-metric-card{grid-column:1/-1!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats[data-stats-metric-count="2"]>.oc-profile-metric-card{grid-column:span 6!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats[data-stats-metric-count="3"]>.oc-profile-metric-card{grid-column:span 4!important}
 	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-leader-card{grid-column:span 6!important;min-height:220px!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats>.oc-profile-leader-card[data-stats-tail-size="1"][data-stats-tail-pos="1"]{grid-column:4/span 6!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats[data-stats-leader-count="1"]>.oc-profile-leader-card{grid-column:1/-1!important}
+	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats[data-stats-leader-count="2"]>.oc-profile-leader-card{grid-column:span 6!important}
 }
 @media(max-width:760px){
 	#oc-profile-panel[data-profile-view="overview"] #oc-profile-stats{grid-template-columns:1fr!important;gap:10px!important}
