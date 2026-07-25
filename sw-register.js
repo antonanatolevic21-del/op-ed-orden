@@ -1,11 +1,12 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell2';
+  const primaryVersion = '20260725-primary-shell3';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
+  const myEventsVersion = '20260725-my-events1';
   const loadedStyles = new Set();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -71,6 +72,7 @@
     'keyboard-shortcuts.css', 'advanced-filters.css', 'skeleton-loading.css',
     'toast.css', 'accessibility.css'
   ].forEach(file => addStyle(file));
+  addStyle('my-events-profile.css', myEventsVersion);
 
   void addScriptsOrdered([
     ['entity-progress-refresh.js', primaryVersion],
@@ -79,6 +81,7 @@
     ['profile-filters.js', primaryVersion],
     ['active-filter-chips.js', primaryVersion],
     ['account-sync.js', accountSyncVersion],
+    ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
     ['quality-center.js', primaryVersion],
     ['keyboard-shortcuts.js', primaryVersion],
@@ -185,7 +188,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force40', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force41', {
         updateViaCache: 'none'
       });
       await registration.update();
