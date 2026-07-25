@@ -12,7 +12,7 @@
   const firstUserFixVersion = '20260725-first-user-test1';
   const top100DragVersion = '20260725-top100-drag1';
   const modalReadabilityVersion = '20260726-modal-readability1';
-  const registeredUsersVersion = '20260726-registered-users1';
+  const registeredUsersVersion = '20260726-registered-users2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
