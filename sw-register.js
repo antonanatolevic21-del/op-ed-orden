@@ -8,7 +8,7 @@
   const statsLiteVersion = '20260724-stats-lite3';
   const qualityVersion = '20260724-quality2';
   const hotkeysVersion = '20260725-hotkeys4';
-  const accountSyncVersion = '20260725-account-sync2';
+  const accountSyncVersion = '20260725-account-sync3';
   const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
 
@@ -140,7 +140,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force23', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force24', {
         updateViaCache: 'none'
       });
       await registration.update();
