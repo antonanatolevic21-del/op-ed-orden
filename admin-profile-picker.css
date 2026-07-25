@@ -82,7 +82,18 @@
 	font-weight: 650;
 	text-align: left;
 	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
 	transition: transform .14s ease, border-color .14s ease, background .14s ease;
+}
+
+.oc-profile-picker-option-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .oc-profile-picker-option:hover {
@@ -102,6 +113,21 @@
 .oc-profile-picker-option.is-admin:hover {
 	border-color: rgba(211, 151, 255, .68);
 	background: linear-gradient(105deg, rgba(255, 46, 99, .46), rgba(139, 92, 246, .52) 52%, rgba(0, 229, 255, .32));
+}
+
+.oc-profile-admin-crown {
+	flex: 0 0 auto;
+	font-family: Georgia, 'Times New Roman', serif;
+	font-size: 19px;
+	line-height: 1;
+	color: #ffe27a;
+	text-shadow: 0 0 9px rgba(255, 203, 72, .28);
+	cursor: help;
+}
+
+.oc-profile-admin-crown:hover {
+	color: #fff1a8;
+	text-shadow: 0 0 12px rgba(255, 213, 84, .48);
 }
 
 .oc-profile-picker-option.selected {
