@@ -40,6 +40,18 @@
     return value || null;
   }
 
+  async function waitForAccountRestore(timeout = 8000) {
+    if (window.__OC_ACCOUNT_RESTORE_DONE__) return;
+    if (window.OC_ACCOUNT_READY && typeof window.OC_ACCOUNT_READY.then === 'function') {
+      await Promise.race([window.OC_ACCOUNT_READY, sleep(timeout)]);
+      return;
+    }
+    await Promise.race([
+      new Promise(resolve => window.addEventListener('oped-account-restored', resolve, { once: true })),
+      sleep(timeout)
+    ]);
+  }
+
   function tabButton(view) {
     return [...document.querySelectorAll('.oc-tab-btn[data-tab]')].find(button => button.dataset.tab === view) || null;
   }
@@ -179,6 +191,7 @@
     if (applying) return;
     applying = true;
     try {
+      await waitForAccountRestore();
       const url = currentUrl();
       const track = url.searchParams.get('track');
       let view = url.searchParams.get('view') || 'chart';
@@ -286,7 +299,7 @@
     if (window.__OC_DEEP_LINKS_READY__) return;
     bindUrlUpdates();
     window.__OC_DEEP_LINKS_READY__ = true;
-    window.setTimeout(() => { void applyUrl(); }, 220);
+    window.setTimeout(() => { void applyUrl(); }, 120);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
