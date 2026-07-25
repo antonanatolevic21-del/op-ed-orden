@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell5';
+  const primaryVersion = '20260725-primary-shell6';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
@@ -109,6 +109,11 @@
     ['accessibility.js', primaryVersion]
   ]).catch(error => console.error('Primary UI module load failed', error));
 
+  ['oc-f-score-cmp', 'oc-p-score-cmp'].forEach(id => {
+    const option = document.querySelector(`#${id} option[value="="]`);
+    if (option) option.textContent = '>=';
+  });
+
   if (document.querySelector('.oc-addbar')) {
     addStyle('track-add-panel.css');
     void addScript('track-add-panel.js', primaryVersion, true);
@@ -207,7 +212,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force49', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force50', {
         updateViaCache: 'none'
       });
       await registration.update();
