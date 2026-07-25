@@ -17,9 +17,11 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-aut
   };
 
   let creating = false;
+  let enhanceQueued = false;
 
   const clean = value => String(value || '').trim();
   const normalize = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  const normalizeLabel = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е');
 
   function activeMode() {
     return document.querySelector('.ev-mode-tab.active')?.dataset.mode || '';
@@ -39,21 +41,27 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-aut
   }
 
   function isAdminBadge() {
-    const badge = document.querySelector('#ev-access-badge');
-    return clean(badge?.textContent).toLocaleLowerCase('ru').includes('админ');
+    return normalizeLabel(document.querySelector('#ev-access-badge')?.textContent).includes('админ');
   }
 
   function isRegisteredUser() {
     return Boolean(firebaseState() && !isAdminBadge());
   }
 
+  function setLocalIfChanged(key, value) {
+    if (localStorage.getItem(key) !== value) localStorage.setItem(key, value);
+  }
+
   function restoreNormalUserRole(mode = activeMode()) {
     if (!mode || mode === 'rating' || !isRegisteredUser()) return;
-    localStorage.setItem(ACCESS_KEY, 'user');
-    localStorage.setItem(GUEST_SLOT_KEY, '0');
-    localStorage.setItem(ADMIN_UNLOCKED_KEY, '0');
+    setLocalIfChanged(ACCESS_KEY, 'user');
+    setLocalIfChanged(GUEST_SLOT_KEY, '0');
+    setLocalIfChanged(ADMIN_UNLOCKED_KEY, '0');
+
     const badge = document.querySelector('#ev-access-badge');
-    if (badge && !isAdminBadge()) badge.textContent = 'пользователь';
+    if (badge && !isAdminBadge() && normalizeLabel(badge.textContent) !== 'пользователь') {
+      badge.textContent = 'пользователь';
+    }
   }
 
   function readJson(key) {
@@ -195,17 +203,26 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/12.15.0/firebase-aut
     head.append(button);
   }
 
+  function scheduleEnhance() {
+    if (enhanceQueued) return;
+    enhanceQueued = true;
+    requestAnimationFrame(() => {
+      enhanceQueued = false;
+      enhanceRoomBrowser();
+    });
+  }
+
   document.addEventListener('click', event => {
     const tab = event.target.closest?.('.ev-mode-tab[data-mode]');
     if (!tab) return;
     restoreNormalUserRole(tab.dataset.mode || '');
-    window.setTimeout(enhanceRoomBrowser, 80);
+    window.setTimeout(scheduleEnhance, 80);
   }, true);
 
   const app = document.querySelector('#ev-app');
-  if (app) new MutationObserver(enhanceRoomBrowser).observe(app, { childList: true, subtree: true });
+  if (app) new MutationObserver(scheduleEnhance).observe(app, { childList: true, subtree: true });
   const badge = document.querySelector('#ev-access-badge');
-  if (badge) new MutationObserver(enhanceRoomBrowser).observe(badge, { childList: true, characterData: true, subtree: true, attributes: true });
+  if (badge) new MutationObserver(scheduleEnhance).observe(badge, { childList: true, characterData: true, subtree: true });
 
-  [100, 500, 1200, 2500].forEach(delay => window.setTimeout(enhanceRoomBrowser, delay));
+  [100, 500, 1200, 2500].forEach(delay => window.setTimeout(scheduleEnhance, delay));
 })();
