@@ -1,0 +1,10 @@
+#oc-profile-op>.oc-profile-item.manual,#oc-profile-ed>.oc-profile-item.manual{position:relative}
+.oc-top100-drag-handle{display:none;position:absolute;right:7px;top:7px;z-index:8;width:32px;height:32px;align-items:center;justify-content:center;padding:0;border:1px solid #44384f;border-radius:10px;background:rgba(18,14,25,.92);color:#a89db4;font:900 17px/1 'Space Mono',monospace;cursor:grab;touch-action:none;user-select:none;box-shadow:0 7px 18px rgba(0,0,0,.2)}
+#oc-profile-panel[data-profile-view="top100"] #oc-manual-edit-btn.active~* .oc-top100-drag-handle,
+#oc-profile-panel[data-profile-view="top100"] .oc-profile-columns .oc-top100-drag-handle{display:flex}
+#oc-profile-panel[data-profile-view="top100"]:not(:has(#oc-manual-edit-btn.active)) .oc-top100-drag-handle{display:none!important}
+.oc-top100-drag-handle:hover,.oc-top100-drag-handle.active{border-color:rgba(8,217,214,.62);color:#8ee9e7;background:rgba(8,217,214,.09)}
+.oc-top100-drag-handle:active{cursor:grabbing}
+.oc-top100-card-dragging{opacity:.72;transform:scale(.992);box-shadow:0 0 0 2px rgba(8,217,214,.5),0 18px 42px rgba(0,0,0,.34)!important;pointer-events:none}
+html.oc-top100-drag-active,html.oc-top100-drag-active body{cursor:grabbing!important;user-select:none!important}
+@media(max-width:760px){.oc-top100-drag-handle{right:5px;top:5px;width:36px;height:36px}}
