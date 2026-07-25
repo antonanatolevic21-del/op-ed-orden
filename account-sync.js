@@ -5,7 +5,18 @@
   const EVENT_NAME_KEY = 'my-display-name';
   const MAIN_ACCESS_KEY = 'op-ed-access-level';
   const EVENT_ACCESS_KEY = 'event-access-level';
+  const PROFILE_CACHE_KEY = 'op-ed-auth-profile-v1';
+  const ACCOUNT_MODAL_SELECTOR = '#oc-auth-modal,#oc-register-modal,#oc-name-modal';
+
   let authBound = false;
+  let initialReady = false;
+  let personalUid = '';
+  let userIntentUntil = 0;
+  let startupGuardUntil = Date.now() + 15000;
+  let resolveAccountReady;
+
+  window.__OC_ACCOUNT_RESTORE_DONE__ = false;
+  window.OC_ACCOUNT_READY = new Promise(resolve => { resolveAccountReady = resolve; });
 
   function clean(value) {
     return String(value || '').trim();
@@ -18,18 +29,100 @@
     if (localStorage.getItem(EVENT_NAME_KEY) !== value) localStorage.setItem(EVENT_NAME_KEY, value);
   }
 
-  function mirrorAccess() {
-    const main = clean(sessionStorage.getItem(MAIN_ACCESS_KEY));
-    const event = clean(localStorage.getItem(EVENT_ACCESS_KEY));
-    if (event === 'guest') return;
-    if (['user', 'admin'].includes(main) && !event) localStorage.setItem(EVENT_ACCESS_KEY, main);
-    if (['user', 'admin'].includes(event) && !['user', 'admin'].includes(main)) sessionStorage.setItem(MAIN_ACCESS_KEY, event);
+  function cachedProfileName(uid) {
+    for (const storage of [sessionStorage, localStorage]) {
+      try {
+        const cached = JSON.parse(storage.getItem(PROFILE_CACHE_KEY) || 'null');
+        if (cached?.uid !== uid || !cached.profile) continue;
+        return clean(cached.profile.nickname || cached.profile.nicknameKey || cached.profile.id);
+      } catch (_) {}
+    }
+    return '';
   }
 
-  function applyUser(user) {
-    if (!user || user.isAnonymous) return;
-    mirrorName(user.displayName || localStorage.getItem(PRIMARY_NAME_KEY) || localStorage.getItem(EVENT_NAME_KEY));
-    mirrorAccess();
+  async function accessForUser(user) {
+    try {
+      const module = await import('./firebase-config.js');
+      const admins = new Set((module.adminUids || []).map(String));
+      return admins.has(String(user?.uid || '')) ? 'admin' : 'user';
+    } catch (error) {
+      console.warn('Could not verify admin role during account restore', error);
+      return 'user';
+    }
+  }
+
+  function finishInitial(authenticated) {
+    if (initialReady) return;
+    initialReady = true;
+    window.__OC_ACCOUNT_RESTORE_DONE__ = true;
+    resolveAccountReady?.({ authenticated: Boolean(authenticated), uid: personalUid });
+    window.dispatchEvent(new CustomEvent('oped-account-restored', {
+      detail: { authenticated: Boolean(authenticated), uid: personalUid }
+    }));
+  }
+
+  function hasRecentUserIntent() {
+    return Date.now() <= userIntentUntil;
+  }
+
+  function markUserIntent() {
+    userIntentUntil = Date.now() + 6000;
+  }
+
+  function hideUnexpectedAccountModals() {
+    if (!personalUid || Date.now() > startupGuardUntil || hasRecentUserIntent()) return;
+    document.querySelectorAll(ACCOUNT_MODAL_SELECTOR).forEach(modal => {
+      if (!modal.classList.contains('hidden')) modal.classList.add('hidden');
+    });
+  }
+
+  function suppressRestoreStatus() {
+    if (!personalUid || Date.now() > startupGuardUntil || hasRecentUserIntent()) return;
+    const status = document.querySelector('#oc-status');
+    if (status && /^Вход выполнен:/i.test(clean(status.textContent))) status.textContent = '';
+  }
+
+  function bindStartupGuards() {
+    document.addEventListener('pointerdown', event => {
+      if (event.target?.closest?.('#oc-access-badge,#oc-auth-register-open,#oc-auth-save,#oc-modal-name-save,#oc-register-save')) markUserIntent();
+    }, true);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && event.target?.closest?.('#oc-auth-modal,#oc-register-modal,#oc-name-modal')) markUserIntent();
+    }, true);
+
+    document.querySelectorAll(ACCOUNT_MODAL_SELECTOR).forEach(modal => {
+      new MutationObserver(hideUnexpectedAccountModals).observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+
+    const status = document.querySelector('#oc-status');
+    if (status) new MutationObserver(suppressRestoreStatus).observe(status, { childList: true, characterData: true, subtree: true });
+  }
+
+  async function applyUser(user) {
+    if (!user || user.isAnonymous) {
+      personalUid = '';
+      sessionStorage.removeItem(MAIN_ACCESS_KEY);
+      if (localStorage.getItem(EVENT_ACCESS_KEY) !== 'guest') localStorage.removeItem(EVENT_ACCESS_KEY);
+      finishInitial(false);
+      return;
+    }
+
+    personalUid = clean(user.uid);
+    const level = await accessForUser(user);
+    const name = clean(user.displayName) || cachedProfileName(personalUid)
+      || clean(localStorage.getItem(PRIMARY_NAME_KEY)) || clean(localStorage.getItem(EVENT_NAME_KEY));
+
+    mirrorName(name);
+    sessionStorage.setItem(MAIN_ACCESS_KEY, level);
+    if (localStorage.getItem(EVENT_ACCESS_KEY) !== 'guest') localStorage.setItem(EVENT_ACCESS_KEY, level);
+    finishInitial(true);
+
+    hideUnexpectedAccountModals();
+    suppressRestoreStatus();
+    [0, 150, 500, 1200, 3000].forEach(delay => window.setTimeout(() => {
+      hideUnexpectedAccountModals();
+      suppressRestoreStatus();
+    }, delay));
   }
 
   async function bindAuth(attempt = 0) {
@@ -41,28 +134,29 @@
       ]);
       if (!getApps().length) {
         if (attempt < 50) window.setTimeout(() => bindAuth(attempt + 1), 100);
+        else finishInitial(false);
         return;
       }
+
       const auth = getAuth(getApp());
       authBound = true;
       if (typeof auth.authStateReady === 'function') await auth.authStateReady();
-      applyUser(auth.currentUser);
-      onAuthStateChanged(auth, applyUser);
+      await applyUser(auth.currentUser);
+      onAuthStateChanged(auth, user => { void applyUser(user); });
     } catch (error) {
       console.warn('Account sync skipped', error);
       if (attempt < 10) window.setTimeout(() => bindAuth(attempt + 1), 250);
+      else finishInitial(false);
     }
   }
 
   function init() {
-    mirrorName(localStorage.getItem(PRIMARY_NAME_KEY) || localStorage.getItem(EVENT_NAME_KEY));
-    mirrorAccess();
+    bindStartupGuards();
     void bindAuth();
   }
 
   window.addEventListener('storage', event => {
-    if (event.key === PRIMARY_NAME_KEY || event.key === EVENT_NAME_KEY) mirrorName(event.newValue);
-    if (event.key === EVENT_ACCESS_KEY) mirrorAccess();
+    if ((event.key === PRIMARY_NAME_KEY || event.key === EVENT_NAME_KEY) && personalUid) mirrorName(event.newValue);
   });
   window.addEventListener('oped-db-ready', () => void bindAuth());
 
