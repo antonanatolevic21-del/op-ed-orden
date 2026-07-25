@@ -115,10 +115,44 @@
     });
   }
 
+  function userChoiceContainers() {
+    return document.querySelectorAll([
+      '#ev-guess-users',
+      '#ev-app [id*="users" i]',
+      '#ev-app [class*="users" i]',
+      '#ev-app [data-users]'
+    ].join(','));
+  }
+
+  function syncRegisteredUserChoices() {
+    if (!profilesLoaded || !registeredByKey.size) return;
+
+    userChoiceContainers().forEach(container => {
+      const staleInputs = [...container.querySelectorAll('label input[type="checkbox"], label input[type="radio"]')]
+        .filter(input => {
+          const key = normalize(input.value);
+          return key && !registeredByKey.has(key);
+        });
+      const selectedStaleInput = staleInputs.find(input => input.checked);
+      staleInputs.forEach(input => { input.checked = false; });
+      if (selectedStaleInput) selectedStaleInput.dispatchEvent(new Event('change', { bubbles: true }));
+      staleInputs.forEach(input => input.closest('label')?.remove());
+
+      const staleOptions = [...container.querySelectorAll('option')].filter(option => {
+        const key = normalize(option.value);
+        return key && !registeredByKey.has(key);
+      });
+      const selectedStaleOption = staleOptions.find(option => option.selected);
+      staleOptions.forEach(option => option.remove());
+      if (selectedStaleOption) container.closest('select')?.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
   function syncAll() {
     syncQueued = false;
     syncMainProfileSelect();
     syncEventParticipantInputs();
+    syncRegisteredUserChoices();
   }
 
   function scheduleSync() {
