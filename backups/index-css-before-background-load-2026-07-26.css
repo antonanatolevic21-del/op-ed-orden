@@ -1,0 +1,83 @@
+@import url('./index-shell-current.css?v=20260725-first-paint1');
+
+/*
+ * First-paint guard.
+ * index.css is render-blocking in <head>, so the legacy/base shell cannot paint
+ * before sw-register.js starts. The normal path is released by
+ * html.oc-primary-ready; the delayed fallback only protects users whose browser
+ * still has the previous loader cached.
+ */
+html:not(.oc-primary-ready),
+html:not(.oc-primary-ready) body {
+	min-height: 100%;
+	background: #0b0a10 !important;
+}
+
+html:not(.oc-primary-ready) body {
+	overflow: hidden !important;
+}
+
+html:not(.oc-primary-ready) #opedchart-root {
+	visibility: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+
+html:not(.oc-primary-ready):not(.oc-primary-booting) #opedchart-root {
+	animation: ocFirstPaintFallbackRoot 0s 1.2s forwards;
+}
+
+html.oc-primary-booting #opedchart-root {
+	visibility: hidden !important;
+	opacity: 0 !important;
+	pointer-events: none !important;
+	animation: none !important;
+}
+
+html.oc-primary-ready #opedchart-root {
+	visibility: visible !important;
+	opacity: 1 !important;
+	pointer-events: auto !important;
+	animation: none !important;
+}
+
+html:not(.oc-primary-ready) body::before {
+	content: 'АБОБА';
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	z-index: 9998;
+	transform: translate(-50%, -50%);
+	padding: 14px 18px;
+	border: 1px solid #2d2635;
+	border-radius: 15px;
+	background: #100d16;
+	color: #f5f3fa;
+	box-shadow: 0 18px 60px rgba(0,0,0,.35);
+	font: 800 14px/1 Inter, Arial, sans-serif;
+	letter-spacing: .2px;
+}
+
+html:not(.oc-primary-ready):not(.oc-primary-booting) body::before {
+	animation: ocFirstPaintFallbackBoot 0s 1.2s forwards;
+}
+
+html.oc-primary-ready body::before {
+	content: none !important;
+	display: none !important;
+}
+
+@keyframes ocFirstPaintFallbackRoot {
+	to {
+		visibility: visible;
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+@keyframes ocFirstPaintFallbackBoot {
+	to {
+		visibility: hidden;
+		opacity: 0;
+	}
+}
