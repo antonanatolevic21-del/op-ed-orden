@@ -4,10 +4,11 @@
   const profileTabsVersion = '20260724-profile-tabs3';
   const profileFiltersVersion = '20260724-profile-filters2';
   const filterChipsVersion = '20260724-filter-chips2';
-  const deepLinksVersion = '20260724-deep-links1';
+  const deepLinksVersion = '20260725-deep-links2';
   const statsLiteVersion = '20260724-stats-lite3';
   const qualityVersion = '20260724-quality2';
-  const hotkeysVersion = '20260724-hotkeys3';
+  const hotkeysVersion = '20260725-hotkeys4';
+  const accountSyncVersion = '20260725-account-sync2';
   const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
 
@@ -92,9 +93,14 @@
   filterChipsScript.defer = true;
   document.body.append(filterChipsScript);
 
+  const accountSyncScript = document.createElement('script');
+  accountSyncScript.src = `./account-sync.js?v=${accountSyncVersion}`;
+  accountSyncScript.async = false;
+  document.body.append(accountSyncScript);
+
   const deepLinksScript = document.createElement('script');
   deepLinksScript.src = `./deep-links.js?v=${deepLinksVersion}`;
-  deepLinksScript.defer = true;
+  deepLinksScript.async = false;
   document.body.append(deepLinksScript);
 
   const statsLiteScript = document.createElement('script');
@@ -109,10 +115,10 @@
 
   const hotkeysScript = document.createElement('script');
   hotkeysScript.src = `./keyboard-shortcuts.js?v=${hotkeysVersion}`;
-  hotkeysScript.defer = true;
+  hotkeysScript.async = false;
   document.body.append(hotkeysScript);
 
-  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'account-sync.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
     const script = document.createElement('script');
     script.src = file === 'season-quality-fill.js' ? `./${file}?v=${seasonFillVersion}` : `./${file}?v=${uxVersion}`;
     script.async = false;
@@ -134,7 +140,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force22', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force23', {
         updateViaCache: 'none'
       });
       await registration.update();
