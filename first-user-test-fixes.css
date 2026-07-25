@@ -1,0 +1,28 @@
+.oc-user-manager{
+	margin:14px 0 18px;
+	padding:16px;
+	border:1px solid #30283a;
+	border-radius:18px;
+	background:linear-gradient(145deg,rgba(20,16,28,.96),rgba(13,11,18,.96));
+	box-shadow:0 16px 42px rgba(0,0,0,.24);
+}
+.oc-user-manager[hidden]{display:none!important}
+.oc-user-manager-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}
+.oc-user-manager-head h3{margin:3px 0 5px;font-size:19px}
+.oc-user-manager-head p{margin:0;color:#8f879b;font-size:12px}
+.oc-user-manager-head>[data-user-manager-count]{display:inline-flex;align-items:center;justify-content:center;min-width:72px;min-height:34px;padding:6px 10px;border:1px solid rgba(8,217,214,.28);border-radius:999px;color:#8ee9e7;background:rgba(8,217,214,.07);font:700 10px 'Space Mono',monospace}
+.oc-user-manager-search{width:100%;min-height:42px;margin-bottom:10px;padding:9px 12px;border:1px solid #352d40;border-radius:12px;background:#0d0b12;color:#f5f3fa;outline:none}
+.oc-user-manager-search:focus{border-color:#71617f;box-shadow:0 0 0 3px rgba(113,97,127,.13)}
+.oc-user-manager-list{display:grid;gap:7px;max-height:390px;overflow:auto;padding-right:3px}
+.oc-user-manager-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 11px;border:1px solid #292332;border-radius:12px;background:#100d16}
+.oc-user-manager-row>div:first-child{display:grid;gap:3px;min-width:0}
+.oc-user-manager-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.oc-user-manager-row span{color:#08d9d6;font:700 9px 'Space Mono',monospace}
+.oc-user-manager-actions{display:flex;align-items:center;gap:6px}
+.oc-user-manager-actions button{min-height:34px;padding:7px 10px;border:1px solid #3a3144;border-radius:9px;background:#17131e;color:#d9d4e2;font:700 10px 'Space Mono',monospace;cursor:pointer}
+.oc-user-manager-actions button:hover:not(:disabled){border-color:#665774;color:#fff;background:#211a29}
+.oc-user-manager-actions button.danger{border-color:rgba(255,95,134,.28);color:#ff8aa7;background:rgba(255,95,134,.05)}
+.oc-user-manager-actions button.danger:hover:not(:disabled){border-color:rgba(255,95,134,.6);background:rgba(255,95,134,.11)}
+.oc-user-manager-actions button:disabled{opacity:.35;cursor:not-allowed}
+.oc-user-manager-empty{padding:18px;border:1px dashed #30283a;border-radius:12px;color:#8f879b;text-align:center;font-size:12px}
+@media(max-width:680px){.oc-user-manager-row{grid-template-columns:1fr}.oc-user-manager-actions{display:grid;grid-template-columns:1fr 1fr}.oc-user-manager-actions button{width:100%}}
