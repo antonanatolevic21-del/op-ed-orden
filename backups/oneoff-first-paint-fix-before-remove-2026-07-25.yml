@@ -1,0 +1,49 @@
+name: One-off first paint fix
+
+# Trigger after the workflow exists on main.
+on:
+  push:
+    paths:
+      - '.github/workflows/oneoff-first-paint-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch shell before first paint
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace('<html lang="ru">', '<html lang="ru" class="oc-primary-booting">', 1)
+
+          marker = '  <link rel="stylesheet" href="index.css?v=20260724-filter-range1" />'
+          critical = '''  <style id="oc-critical-first-paint">
+    html.oc-primary-booting,html.oc-primary-booting body{background:#0b0a10!important;min-height:100%}
+    html.oc-primary-booting body{overflow:hidden!important}
+    html.oc-primary-booting #opedchart-root{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+    html.oc-primary-booting body::before{content:'АБОБА';position:fixed;left:50%;top:50%;z-index:9998;transform:translate(-50%,-50%);padding:14px 18px;border:1px solid #2d2635;border-radius:15px;background:#100d16;color:#f5f3fa;box-shadow:0 18px 60px rgba(0,0,0,.35);font:800 14px/1 Inter,Arial,sans-serif;letter-spacing:.2px}
+  </style>'''
+          if 'id="oc-critical-first-paint"' not in text:
+              text = text.replace(marker, critical + '\n' + marker, 1)
+
+          text = text.replace('sw-register.js?v=20260724-filter-ui3', 'sw-register.js?v=20260725-first-paint1')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Hide legacy shell before first paint"
+          git push origin HEAD:main
