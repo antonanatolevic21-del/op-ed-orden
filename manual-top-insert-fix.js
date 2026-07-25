@@ -1,236 +1,294 @@
 (() => {
   if (window.__OC_MANUAL_TOP_INSERT_FIX_READY__) return;
 
-  const FILTER_IDS = [
-    'oc-p-search', 'oc-p-type', 'oc-p-score-cmp', 'oc-p-score-value',
-    'oc-p-from-year', 'oc-p-from-season', 'oc-p-to-year', 'oc-p-to-season',
-    'oc-p-studio', 'oc-p-director', 'oc-p-performer', 'oc-p-franchise',
-    'oc-ar-type', 'oc-ar-metric', 'oc-ar-score', 'oc-content-filter-select'
-  ];
   const clean = value => String(value || '').trim();
-  const sleep = ms => new Promise(resolve => window.setTimeout(resolve, ms));
-  let busy = false;
+  let localDirty = false;
+  let wasEditing = false;
+  let expandTimer = 0;
 
-  function actionButton(action, id) {
-    return [...document.querySelectorAll(`[data-action="${action}"][data-id]`)]
-      .find(button => button.isConnected && clean(button.dataset.id) === clean(id)) || null;
+  function viewedUser() {
+    return clean(document.querySelector('#oc-profile-user')?.value || document.querySelector('#oc-myname')?.value);
   }
 
-  function rankFromButton(button) {
-    const match = clean(button?.textContent).match(/\d+/);
-    return match ? Number(match[0]) : null;
+  function containerFor(type) {
+    return document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
   }
 
-  function visibleRank(type, id) {
-    const container = document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
-    const button = [...(container?.querySelectorAll('.oc-profile-item.manual [data-action="set-rank"][data-id]') || [])]
-      .find(item => clean(item.dataset.id) === clean(id));
-    return rankFromButton(button);
+  function cardId(card) {
+    return clean(card?.querySelector('[data-action="set-rank"][data-id]')?.dataset.id);
   }
 
-  async function waitFor(check, timeout = 5000, interval = 50) {
-    const started = Date.now();
-    while (Date.now() - started < timeout) {
-      const value = check();
-      if (value) return value;
-      await sleep(interval);
-    }
-    return null;
+  function cardsFor(type) {
+    return [...(containerFor(type)?.children || [])].filter(node => node.classList?.contains('oc-profile-item') && node.classList.contains('manual'));
   }
 
-  function captureFilters() {
-    const snapshot = {};
-    FILTER_IDS.forEach(id => {
-      const element = document.getElementById(id);
-      if (!element) return;
-      snapshot[id] = element.multiple
-        ? [...element.options].filter(option => option.selected).map(option => option.value)
-        : element.value;
-    });
-    return snapshot;
+  function findCard(type, id) {
+    return cardsFor(type).find(card => cardId(card) === clean(id)) || null;
   }
 
-  async function restoreFilters(snapshot) {
-    FILTER_IDS.forEach(id => {
-      const element = document.getElementById(id);
-      if (!element) return;
-      if (element.multiple) {
-        const selected = new Set(Array.isArray(snapshot[id]) ? snapshot[id].map(String) : []);
-        [...element.options].forEach(option => { option.selected = selected.has(String(option.value)); });
-      } else {
-        element.value = snapshot[id] ?? '';
-      }
-    });
-    FILTER_IDS.forEach(id => {
-      const element = document.getElementById(id);
-      if (!element) return;
-      element.dispatchEvent(new Event(element.matches('input') ? 'input' : 'change', { bubbles: true }));
-    });
-    await sleep(150);
-  }
-
-  function setControl(selector, value, eventType = 'change') {
-    const element = document.querySelector(selector);
-    if (!element) return;
-    element.value = value;
-    element.dispatchEvent(new Event(eventType, { bubbles: true }));
-  }
-
-  function showToast(message, type = '') {
+  function showMessage(message, type = '') {
     window.OC_TOAST?.show?.(message, { type });
     const status = document.querySelector('#oc-status');
     if (status) status.textContent = message;
   }
 
-  function closeOriginalPanel() {
+  function markDirty() {
+    localDirty = true;
+    document.querySelector('#oc-manual-save-btn')?.classList.add('active');
+  }
+
+  function removeEmptySlot(type) {
+    containerFor(type)?.querySelector(':scope > .oc-manual-local-empty-slot')?.remove();
+  }
+
+  function ensureEmptySlot(type) {
+    const container = containerFor(type);
+    if (!container) return;
+    removeEmptySlot(type);
+    const cards = cardsFor(type);
+    if (cards.length >= 100) return;
+    const place = cards.length + 1;
+    const slot = document.createElement('div');
+    slot.className = 'oc-manual-local-empty-slot';
+    slot.dataset.place = String(place);
+    slot.innerHTML = `<span class="oc-manual-local-empty-rank">${place}</span><span class="oc-manual-local-empty-text">Пустое место</span>`;
+    const expand = container.querySelector('[data-action="toggle-profile-top"]');
+    if (expand) container.insertBefore(slot, expand);
+    else container.append(slot);
+  }
+
+  function renumber(type) {
+    const cards = cardsFor(type);
+    cards.forEach((card, index) => {
+      const rank = card.querySelector('[data-action="set-rank"]');
+      if (rank) rank.textContent = String(index + 1);
+      const up = card.querySelector('[data-action="move-up"]');
+      const down = card.querySelector('[data-action="move-down"]');
+      if (up) up.disabled = index === 0;
+      if (down) down.disabled = index === cards.length - 1;
+    });
+    ensureEmptySlot(type);
+  }
+
+  function closeInsertPanel() {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     document.querySelectorAll('.oc-manual-insert-zone.active').forEach(zone => zone.classList.remove('active'));
   }
 
-  function createProgressNotice(title, target) {
-    document.querySelector('.oc-manual-insert-progress')?.remove();
-    const notice = document.createElement('div');
-    notice.className = 'oc-manual-insert-progress';
-    notice.setAttribute('role', 'status');
-    notice.setAttribute('aria-live', 'polite');
-    notice.innerHTML = `<div class="oc-manual-insert-progress-title">${clean(title) || 'Изменение топа'} · место ${target}</div><div class="oc-manual-insert-progress-text">Начинаю изменение…</div>`;
-    document.body.append(notice);
-    return notice;
+  function makeLocalCard({ id, type, title, meta, score, image, fallback }) {
+    const card = document.createElement('div');
+    card.className = 'oc-profile-item manual oc-manual-local-card';
+    const imageHtml = image
+      ? `<span class="oc-image-link"><div class="oc-profile-thumb"><img class="oc-track-image" src="${image}" data-fallback="${fallback || ''}" alt="" loading="lazy" decoding="async"></div></span>`
+      : `<span class="oc-image-link"><div class="oc-profile-thumb oc-manual-local-noimage">${type}</div></span>`;
+    card.innerHTML = `
+      <button type="button" class="oc-rank-jump-btn" data-action="set-rank" data-type="${type}" data-id="${id}">—</button>
+      ${imageHtml}
+      <div><div class="oc-profile-name"><span class="oc-clickable-title">${title}</span></div>${meta ? `<div class="oc-profile-meta">${meta}</div>` : ''}</div>
+      <div class="oc-profile-score">${score || '—'}</div>
+      <div class="oc-move-btns"><button class="oc-move-btn" data-action="move-up" data-type="${type}" data-id="${id}" title="Выше">▲</button><button class="oc-move-btn" data-action="move-down" data-type="${type}" data-id="${id}" title="Ниже">▼</button></div>
+      <div class="oc-manual-row-actions"><button type="button" class="oc-ar-top-btn" data-action="remove-from-top" data-type="${type}" data-id="${id}" title="Убрать из текущего топ-100">Удалить из топа</button></div>`;
+    return card;
   }
 
-  function setProgress(notice, text, error = false) {
-    if (!notice) return;
-    const line = notice.querySelector('.oc-manual-insert-progress-text');
-    if (line) line.textContent = text || '';
-    notice.classList.toggle('error', error);
+  function insertCardAt(type, card, targetPlace) {
+    const container = containerFor(type);
+    if (!container) return false;
+    removeEmptySlot(type);
+    const cards = cardsFor(type).filter(item => item !== card);
+    card.remove();
+    const target = Math.max(1, Math.min(100, Math.round(Number(targetPlace) || 1)));
+    const reference = cards[target - 1] || container.querySelector('[data-action="toggle-profile-top"]') || null;
+    if (reference) container.insertBefore(card, reference);
+    else container.append(card);
+
+    const after = cardsFor(type);
+    if (after.length > 100) after[after.length - 1].remove();
+    renumber(type);
+    return true;
   }
 
-  function removeProgress(notice, delay = 0) {
-    if (!notice) return;
-    window.setTimeout(() => notice.remove(), delay);
+  function localMove(type, id, targetPlace) {
+    const card = findCard(type, id);
+    if (!card) return false;
+    const current = cardsFor(type).indexOf(card) + 1;
+    const target = Math.max(1, Math.min(cardsFor(type).length, Math.round(Number(targetPlace) || current)));
+    if (current === target) return false;
+    return insertCardAt(type, card, target);
   }
 
-  async function prepareCandidate(id, title, type) {
-    document.querySelector('#oc-p-reset-filters')?.click();
-    await sleep(100);
-    setControl('#oc-content-filter-select', 'all');
-    setControl('#oc-ar-type', type);
-    setControl('#oc-ar-score', '');
-    setControl('#oc-p-search', title, 'input');
+  function localRemove(type, id) {
+    const card = findCard(type, id);
+    if (!card) return false;
+    card.remove();
+    renumber(type);
+    return true;
+  }
 
-    const findControls = () => {
-      const controls = {
-        rank: actionButton('all-set-rank', id),
-        add: actionButton('all-to-top100', id),
-        unhide: actionButton('all-unhide-manual', id)
-      };
-      return controls.rank || controls.add || controls.unhide ? controls : null;
+  function selectedCandidate(panel) {
+    const selected = panel?.querySelector('.oc-manual-insert-result.selected');
+    const preview = panel?.querySelector('.oc-manual-insert-preview');
+    const img = selected?.querySelector('img') || preview?.querySelector('img');
+    return {
+      id: clean(selected?.dataset.id),
+      title: clean(panel?.querySelector('.oc-manual-insert-preview-title')?.textContent),
+      meta: clean(selected?.querySelector('.oc-manual-insert-result-meta')?.textContent),
+      score: clean(selected?.querySelector('.oc-manual-insert-result-score')?.textContent),
+      image: clean(img?.getAttribute('src')),
+      fallback: clean(img?.dataset.fallback)
     };
-
-    let controls = await waitFor(findControls, 6000);
-    if (controls?.unhide && !controls.rank) {
-      controls.unhide.click();
-      controls = await waitFor(findControls, 6000);
-    }
-    if (!controls?.rank && !controls?.add) {
-      throw new Error('Не удалось найти выбранный трек в редакторе топа.');
-    }
-    return controls;
   }
 
-  async function moveByRankButton(rankButton, id, type, target) {
-    let promptCalled = false;
-    const originalPrompt = window.prompt;
-    window.prompt = () => {
-      promptCalled = true;
-      return String(target);
+  function persistLocalMirror(user, payload) {
+    try {
+      const raw = JSON.parse(localStorage.getItem('manual-ranks') || '{}');
+      const safe = window.OPED_DB?.normalizeNickname?.(user) || clean(user).toLowerCase();
+      const existing = raw[user] || raw[safe] || {};
+      const row = { ...existing, nickname: user, nicknameKey: safe, OP: payload.OP, ED: payload.ED, manualOP: payload.OP, manualED: payload.ED };
+      raw[user] = row;
+      if (safe && safe !== user) raw[safe] = row;
+      localStorage.setItem('manual-ranks', JSON.stringify(raw));
+    } catch (error) {
+      console.warn('Could not mirror local top order', error);
+    }
+  }
+
+  async function saveLocalOrder() {
+    const user = viewedUser();
+    if (!user) throw new Error('Не удалось определить пользователя.');
+    const payload = {
+      OP: cardsFor('OP').map(cardId).filter(Boolean).slice(0, 100),
+      ED: cardsFor('ED').map(cardId).filter(Boolean).slice(0, 100)
     };
-    try {
-      rankButton.click();
-    } finally {
-      window.prompt = originalPrompt;
-    }
-    if (!promptCalled) throw new Error('Редактор места не сработал.');
-
-    const changed = await waitFor(() => {
-      const hiddenRank = rankFromButton(actionButton('all-set-rank', id));
-      const topRank = visibleRank(type, id);
-      return hiddenRank === target || topRank === target;
-    }, 6000);
-    if (!changed) throw new Error('Место трека не изменилось.');
+    if (!window.OPED_DB?.saveManualRanks) throw new Error('Сохранение топа сейчас недоступно.');
+    await window.OPED_DB.saveManualRanks(user, payload);
+    persistLocalMirror(user, payload);
+    localDirty = false;
+    document.querySelector('#oc-manual-save-btn')?.classList.remove('active');
   }
 
-  async function performMove({ id, title, type, target, notice }) {
-    const filters = captureFilters();
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
-    let successful = false;
-    try {
-      setProgress(notice, 'Подготавливаю выбранный трек…');
-      let controls = await prepareCandidate(id, title, type);
-      let rankButton = controls.rank;
-      let current = rankFromButton(rankButton);
-
-      if (current && current <= target) {
-        throw new Error(`Трек уже находится на ${current}-м месте или выше.`);
-      }
-
-      if (!rankButton) {
-        setProgress(notice, 'Добавляю трек в ручной список…');
-        controls.add.click();
-        rankButton = await waitFor(() => actionButton('all-set-rank', id), 6000);
-        current = rankFromButton(rankButton);
-        if (!rankButton || !current) throw new Error('После добавления не удалось определить место трека.');
-      }
-
-      if (current !== target) {
-        setProgress(notice, `Перемещаю на ${target}-е место…`);
-        await moveByRankButton(rankButton, id, type, target);
-      }
-      successful = true;
-    } finally {
-      setProgress(notice, successful ? 'Восстанавливаю прежний вид…' : 'Возвращаю прежний вид…');
-      await restoreFilters(filters);
-      requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
-    }
-
-    const confirmed = await waitFor(() => visibleRank(type, id) === target || rankFromButton(actionButton('all-set-rank', id)) === target, 4000);
-    if (!confirmed) throw new Error('Трек не появился на выбранном месте.');
+  function ensureExpanded() {
+    if (!document.querySelector('#oc-manual-edit-btn')?.classList.contains('active')) return;
+    ['OP', 'ED'].forEach(type => {
+      const container = containerFor(type);
+      const button = container?.querySelector('[data-action="toggle-profile-top"]');
+      if (button && /Показать весь топ/i.test(clean(button.textContent))) button.click();
+    });
   }
 
-  document.addEventListener('click', async event => {
+  function editingStateChanged() {
+    const editing = Boolean(document.querySelector('#oc-manual-edit-btn')?.classList.contains('active'));
+    if (editing === wasEditing) return;
+    wasEditing = editing;
+    if (!editing) {
+      localDirty = false;
+      document.querySelectorAll('.oc-manual-local-empty-slot').forEach(slot => slot.remove());
+      return;
+    }
+    window.clearTimeout(expandTimer);
+    expandTimer = window.setTimeout(() => {
+      ensureExpanded();
+      window.setTimeout(() => { renumber('OP'); renumber('ED'); }, 80);
+    }, 0);
+  }
+
+  document.addEventListener('click', event => {
     const confirmButton = event.target.closest?.('.oc-manual-insert-confirm');
-    if (!confirmButton || busy) return;
-
+    if (!confirmButton) return;
     const panel = confirmButton.closest('.oc-manual-insert-panel');
     const zone = panel?.closest('.oc-manual-insert-zone');
-    const selected = panel?.querySelector('.oc-manual-insert-result.selected');
-    const id = clean(selected?.dataset.id);
     const type = clean(zone?.dataset.type);
     const target = Number(zone?.dataset.targetPlace);
-    const title = clean(panel?.querySelector('.oc-manual-insert-preview-title')?.textContent);
-    if (!panel || !id || !type || !Number.isFinite(target)) return;
+    const candidate = selectedCandidate(panel);
+    if (!panel || !candidate.id || !type || !Number.isFinite(target)) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    busy = true;
-    const notice = createProgressNotice(title, target);
-    closeOriginalPanel();
 
-    try {
-      await performMove({ id, title, type, target, notice });
-      setProgress(notice, 'Готово. Осталось сохранить топ-100.');
-      removeProgress(notice, 1800);
-      showToast(`${title}: теперь ${target}-е место. Нажми «Сохранить топ-100».`, 'success');
-    } catch (error) {
-      const message = error?.message || 'Не удалось изменить топ.';
-      setProgress(notice, message, true);
-      removeProgress(notice, 5000);
-      showToast(message, 'error');
-    } finally {
-      busy = false;
+    const currentCard = findCard(type, candidate.id);
+    if (currentCard) {
+      const current = cardsFor(type).indexOf(currentCard) + 1;
+      if (current <= target) {
+        showMessage(`Этот трек уже находится на ${current}-м месте или выше.`, 'error');
+        return;
+      }
+      insertCardAt(type, currentCard, target);
+    } else {
+      const card = makeLocalCard({ ...candidate, type });
+      insertCardAt(type, card, target);
+    }
+
+    closeInsertPanel();
+    markDirty();
+    showMessage(`${candidate.title}: локально поставлен на ${target}-е место.`, 'success');
+  }, true);
+
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('#oc-profile-op .oc-profile-item.manual [data-action], #oc-profile-ed .oc-profile-item.manual [data-action]');
+    if (!button) return;
+    const action = clean(button.dataset.action);
+    if (!['remove-from-top', 'move-up', 'move-down', 'set-rank'].includes(action)) return;
+    const type = clean(button.dataset.type);
+    const id = clean(button.dataset.id);
+    if (!type || !id) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (action === 'remove-from-top') {
+      if (!window.confirm('Убрать из текущего топ-100? Оценка останется. Освободившееся место останется пустым внизу топа.')) return;
+      if (localRemove(type, id)) {
+        markDirty();
+        showMessage('Удалено из топа локально. Нижнее место оставлено пустым.', 'success');
+      }
+      return;
+    }
+
+    const cards = cardsFor(type);
+    const card = findCard(type, id);
+    const current = cards.indexOf(card) + 1;
+    if (!current) return;
+
+    let target = current;
+    if (action === 'move-up') target = current - 1;
+    if (action === 'move-down') target = current + 1;
+    if (action === 'set-rank') {
+      const raw = window.prompt(`Введите место от 1 до ${cards.length}.`, String(current));
+      if (raw === null) return;
+      target = Number(String(raw).replace(',', '.'));
+      if (!Number.isFinite(target)) return;
+    }
+
+    if (target < 1 || target > cards.length) return;
+    if (localMove(type, id, target)) {
+      markDirty();
+      showMessage(`Место изменено локально: №${target}.`, 'success');
     }
   }, true);
+
+  document.addEventListener('click', async event => {
+    const button = event.target.closest?.('#oc-manual-save-btn');
+    if (!button || !localDirty) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    button.disabled = true;
+    const oldText = button.textContent;
+    button.textContent = 'Сохраняю…';
+    try {
+      await saveLocalOrder();
+      showMessage('Топ-100 сохранён.', 'success');
+    } catch (error) {
+      showMessage(error?.message || 'Не удалось сохранить топ-100.', 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = oldText;
+    }
+  }, true);
+
+  const observer = new MutationObserver(() => editingStateChanged());
+  const profile = document.querySelector('#oc-profile-panel');
+  if (profile) observer.observe(profile, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  editingStateChanged();
 
   window.__OC_MANUAL_TOP_INSERT_FIX_READY__ = true;
 })();
