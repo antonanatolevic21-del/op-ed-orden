@@ -12,7 +12,7 @@
   const firstUserFixVersion = '20260726-first-user-test2';
   const top100DragVersion = '20260725-top100-drag1';
   const modalReadabilityVersion = '20260726-modal-readability1';
-  const registeredUsersVersion = '20260726-registered-users2';
+  const registeredUsersVersion = '20260726-known-users4';
   const sitePolicyVersion = '20260726-site-policy2';
   const manualTopExplicitVersion = '20260726-manual-top-explicit1';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
