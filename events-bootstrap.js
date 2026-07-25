@@ -7,6 +7,11 @@ import { firebaseConfig, adminUids, appCheckSiteKey } from './firebase-config.js
 const CURRENT_EVENT_YEAR = 2026;
 const FULL_MARKER_KEY = 'oc-events-full-route-v1';
 const FULL_MARKER_TTL = 90 * 1000;
+const EVENT_ACCESS_KEY = 'event-access-level';
+const EVENT_GUEST_SLOT_KEY = 'event-guest-slot';
+const EVENT_ADMIN_UNLOCKED_KEY = 'event-admin-unlocked';
+const EVENT_NAME_KEY = 'my-display-name';
+const PRIMARY_NAME_KEY = 'op-ed-primary-account-name';
 const ADMIN_UIDS = new Set((adminUids || []).map(String));
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -122,6 +127,18 @@ function participantUrl() {
   return url.href;
 }
 
+function prepareRegisteredFullAccess(user = auth.currentUser, profile = null) {
+  if (!user || user.isAnonymous || ADMIN_UIDS.has(String(user.uid || ''))) return;
+  localStorage.setItem(EVENT_ACCESS_KEY, 'user');
+  localStorage.setItem(EVENT_GUEST_SLOT_KEY, '0');
+  localStorage.setItem(EVENT_ADMIN_UNLOCKED_KEY, '0');
+  const nickname = String(
+    profile?.nickname || profile?.nicknameKey || user.displayName ||
+    localStorage.getItem(PRIMARY_NAME_KEY) || localStorage.getItem(EVENT_NAME_KEY) || ''
+  ).trim();
+  if (nickname) localStorage.setItem(EVENT_NAME_KEY, nickname);
+}
+
 async function clickRequestedMode(mode) {
   if (!mode || mode === 'rating') return;
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -134,9 +151,10 @@ async function clickRequestedMode(mode) {
   }
 }
 
-async function loadFull(mode = '') {
+async function loadFull(mode = '', profile = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
-  await import('./events-app.js?v=20260725-events-full1');
+  prepareRegisteredFullAccess(auth.currentUser, profile);
+  await import('./events-app.js?v=20260725-events-full2');
   if (mode) void clickRequestedMode(mode);
 
   document.addEventListener('click', event => {
@@ -156,6 +174,7 @@ async function start() {
   const mode = requestedMode();
 
   if (isFullRequest() || (mode && mode !== 'rating')) {
+    prepareRegisteredFullAccess(user);
     await loadFull(mode);
     return;
   }
@@ -166,12 +185,14 @@ async function start() {
   }
 
   if (readFullMarker(user.uid)) {
+    prepareRegisteredFullAccess(user);
     await loadFull(mode);
     return;
   }
 
   const profile = await resolveProfile(user);
   if (!profile) {
+    prepareRegisteredFullAccess(user);
     writeFullMarker(user.uid);
     location.replace(fullUrl(mode));
     return;
@@ -185,6 +206,7 @@ async function start() {
   }
 
   if (!seasons.length) {
+    prepareRegisteredFullAccess(user, profile);
     writeFullMarker(user.uid);
     location.replace(fullUrl(mode));
     return;
@@ -194,12 +216,16 @@ async function start() {
   addParticipantStyle();
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = true;
   window.OC_EVENT_PARTICIPANT_CONTEXT = { app, auth, db, profile, seasons, currentYear: CURRENT_EVENT_YEAR };
-  window.OC_EVENTS_OPEN_FULL_MODE = modeName => location.assign(fullUrl(modeName));
+  window.OC_EVENTS_OPEN_FULL_MODE = modeName => {
+    prepareRegisteredFullAccess(user, profile);
+    location.assign(fullUrl(modeName));
+  };
   await import('./events-participant-suite.js?v=20260725-participant-suite2');
 }
 
 start().catch(error => {
   console.error('Events bootstrap failed', error);
+  prepareRegisteredFullAccess(auth.currentUser);
   writeFullMarker(auth.currentUser?.uid || '');
   location.replace(fullUrl(requestedMode()));
 });
