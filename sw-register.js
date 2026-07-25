@@ -1,174 +1,132 @@
 (() => {
-  const version = '20260724-album-dim-frame1';
-  const topbarVersion = '20260724-topbar4';
-  const profileTabsVersion = '20260724-profile-tabs3';
-  const profileFiltersVersion = '20260724-profile-filters2';
-  const filterChipsVersion = '20260724-filter-chips2';
+  const primaryVersion = '20260725-primary-shell1';
   const deepLinksVersion = '20260725-deep-links2';
-  const statsLiteVersion = '20260724-stats-lite3';
-  const qualityVersion = '20260724-quality2';
-  const hotkeysVersion = '20260725-hotkeys4';
   const accountSyncVersion = '20260725-account-sync3';
-  const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
-  const profileTopSingleVersion = '20260725-profile-top-single4';
-  const profileTopLayoutFixVersion = '20260725-profile-top-layout-fix1';
 
-  const filterUiStylesheet = document.createElement('link');
-  filterUiStylesheet.rel = 'stylesheet';
-  filterUiStylesheet.href = `./filter-ui-fixes.css?v=${version}`;
-  document.head.append(filterUiStylesheet);
+  const bootStyle = document.createElement('style');
+  bootStyle.id = 'oc-primary-boot-style';
+  bootStyle.textContent = `
+    html.oc-primary-booting,html.oc-primary-booting body{background:#0b0a10!important}
+    html.oc-primary-booting body{overflow:hidden!important}
+    html.oc-primary-booting #opedchart-root{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+    #oc-primary-boot{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b0a10;color:#f5f3fa;font-family:Inter,Arial,sans-serif}
+    #oc-primary-boot .oc-primary-boot-card{display:flex;align-items:center;gap:13px;padding:15px 19px;border:1px solid #2d2635;border-radius:15px;background:#100d16;box-shadow:0 18px 60px rgba(0,0,0,.35)}
+    #oc-primary-boot .oc-primary-boot-dot{width:11px;height:11px;border:2px solid #08d9d6;border-right-color:transparent;border-radius:50%;animation:ocPrimaryBootSpin .7s linear infinite}
+    #oc-primary-boot strong{font-size:14px;letter-spacing:.2px}
+    #oc-primary-boot span{display:block;margin-top:2px;color:#8f879b;font:10px/1.35 'Space Mono',monospace}
+    @keyframes ocPrimaryBootSpin{to{transform:rotate(360deg)}}
+  `;
+  document.head.append(bootStyle);
+  document.documentElement.classList.add('oc-primary-booting');
 
-  const albumStylesheet = document.createElement('link');
-  albumStylesheet.rel = 'stylesheet';
-  albumStylesheet.href = `./entity-album-cards.css?v=${version}`;
-  document.head.append(albumStylesheet);
+  const boot = document.createElement('div');
+  boot.id = 'oc-primary-boot';
+  boot.setAttribute('role', 'status');
+  boot.setAttribute('aria-live', 'polite');
+  boot.innerHTML = '<div class="oc-primary-boot-card"><i class="oc-primary-boot-dot"></i><div><strong>АБОБА</strong><span>загружаю актуальную версию…</span></div></div>';
+  document.body.prepend(boot);
 
-  const topbarStylesheet = document.createElement('link');
-  topbarStylesheet.rel = 'stylesheet';
-  topbarStylesheet.href = `./topbar.css?v=${topbarVersion}`;
-  document.head.append(topbarStylesheet);
-
-  const profileTabsStylesheet = document.createElement('link');
-  profileTabsStylesheet.rel = 'stylesheet';
-  profileTabsStylesheet.href = `./profile-tabs.css?v=${profileTabsVersion}`;
-  document.head.append(profileTabsStylesheet);
-
-  const profileFiltersStylesheet = document.createElement('link');
-  profileFiltersStylesheet.rel = 'stylesheet';
-  profileFiltersStylesheet.href = `./profile-filters.css?v=${profileFiltersVersion}`;
-  document.head.append(profileFiltersStylesheet);
-
-  const filterChipsStylesheet = document.createElement('link');
-  filterChipsStylesheet.rel = 'stylesheet';
-  filterChipsStylesheet.href = `./active-filter-chips.css?v=${filterChipsVersion}`;
-  document.head.append(filterChipsStylesheet);
-
-  const statsLiteStylesheet = document.createElement('link');
-  statsLiteStylesheet.rel = 'stylesheet';
-  statsLiteStylesheet.href = `./stats-lite.css?v=${statsLiteVersion}`;
-  document.head.append(statsLiteStylesheet);
-
-  const qualityStylesheet = document.createElement('link');
-  qualityStylesheet.rel = 'stylesheet';
-  qualityStylesheet.href = `./quality-center.css?v=${qualityVersion}`;
-  document.head.append(qualityStylesheet);
-
-  const hotkeysStylesheet = document.createElement('link');
-  hotkeysStylesheet.rel = 'stylesheet';
-  hotkeysStylesheet.href = `./keyboard-shortcuts.css?v=${hotkeysVersion}`;
-  document.head.append(hotkeysStylesheet);
-
-  ['advanced-filters.css', 'skeleton-loading.css', 'toast.css', 'accessibility.css'].forEach(file => {
+  function addStyle(file, version = primaryVersion) {
     const stylesheet = document.createElement('link');
     stylesheet.rel = 'stylesheet';
-    stylesheet.href = `./${file}?v=${uxVersion}`;
+    stylesheet.href = `./${file}?v=${version}`;
     document.head.append(stylesheet);
-  });
+    return stylesheet;
+  }
 
-  const seasonFillStylesheet = document.createElement('link');
-  seasonFillStylesheet.rel = 'stylesheet';
-  seasonFillStylesheet.href = `./season-quality-fill.css?v=${seasonFillVersion}`;
-  document.head.append(seasonFillStylesheet);
-
-  const manualTopInsertStylesheet = document.createElement('link');
-  manualTopInsertStylesheet.rel = 'stylesheet';
-  manualTopInsertStylesheet.href = `./manual-top-insert.css?v=${manualTopInsertVersion}`;
-  document.head.append(manualTopInsertStylesheet);
-
-  const profileTopSingleStylesheet = document.createElement('link');
-  profileTopSingleStylesheet.rel = 'stylesheet';
-  profileTopSingleStylesheet.href = `./profile-top-single.css?v=${profileTopSingleVersion}`;
-  document.head.append(profileTopSingleStylesheet);
-
-  const profileTopLayoutFixStylesheet = document.createElement('link');
-  profileTopLayoutFixStylesheet.rel = 'stylesheet';
-  profileTopLayoutFixStylesheet.href = `./profile-top-layout-fixes.css?v=${profileTopLayoutFixVersion}`;
-  document.head.append(profileTopLayoutFixStylesheet);
-
-  const manualTopInsertFixStylesheet = document.createElement('link');
-  manualTopInsertFixStylesheet.rel = 'stylesheet';
-  manualTopInsertFixStylesheet.href = `./manual-top-insert-fix.css?v=${manualTopInsertFixVersion}`;
-  document.head.append(manualTopInsertFixStylesheet);
-
-  const entityProgressScript = document.createElement('script');
-  entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
-  document.body.append(entityProgressScript);
-
-  const topbarScript = document.createElement('script');
-  topbarScript.src = `./topbar.js?v=${topbarVersion}`;
-  topbarScript.defer = true;
-  document.body.append(topbarScript);
-
-  const profileTabsScript = document.createElement('script');
-  profileTabsScript.src = `./profile-tabs.js?v=${profileTabsVersion}`;
-  profileTabsScript.defer = true;
-  document.body.append(profileTabsScript);
-
-  const profileFiltersScript = document.createElement('script');
-  profileFiltersScript.src = `./profile-filters.js?v=${profileFiltersVersion}`;
-  profileFiltersScript.defer = true;
-  document.body.append(profileFiltersScript);
-
-  const filterChipsScript = document.createElement('script');
-  filterChipsScript.src = `./active-filter-chips.js?v=${filterChipsVersion}`;
-  filterChipsScript.defer = true;
-  document.body.append(filterChipsScript);
-
-  const accountSyncScript = document.createElement('script');
-  accountSyncScript.src = `./account-sync.js?v=${accountSyncVersion}`;
-  accountSyncScript.async = false;
-  document.body.append(accountSyncScript);
-
-  const deepLinksScript = document.createElement('script');
-  deepLinksScript.src = `./deep-links.js?v=${deepLinksVersion}`;
-  deepLinksScript.async = false;
-  document.body.append(deepLinksScript);
-
-  const statsLiteScript = document.createElement('script');
-  statsLiteScript.src = `./stats-lite.js?v=${statsLiteVersion}`;
-  statsLiteScript.defer = true;
-  document.body.append(statsLiteScript);
-
-  const qualityScript = document.createElement('script');
-  qualityScript.src = `./quality-center.js?v=${qualityVersion}`;
-  qualityScript.defer = true;
-  document.body.append(qualityScript);
-
-  const hotkeysScript = document.createElement('script');
-  hotkeysScript.src = `./keyboard-shortcuts.js?v=${hotkeysVersion}`;
-  hotkeysScript.async = false;
-  document.body.append(hotkeysScript);
-
-  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'profile-top-single.js', 'manual-top-insert-fast.js', 'manual-top-insert-fix.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+  function addScript(file, version = primaryVersion, ordered = false) {
     const script = document.createElement('script');
-    if (file === 'season-quality-fill.js') script.src = `./${file}?v=${seasonFillVersion}`;
-    else if (file === 'profile-top-single.js') script.src = `./${file}?v=${profileTopSingleVersion}`;
-    else if (file === 'manual-top-insert-fast.js') script.src = `./${file}?v=${manualTopInsertVersion}`;
-    else if (file === 'manual-top-insert-fix.js') script.src = `./${file}?v=${manualTopInsertFixVersion}`;
-    else script.src = `./${file}?v=${uxVersion}`;
-    script.async = false;
+    script.src = `./${file}?v=${version}`;
+    if (ordered) script.async = false;
     document.body.append(script);
-  });
+    return script;
+  }
+
+  [
+    'filter-ui-fixes.css',
+    'entity-album-cards.css',
+    'topbar.css',
+    'profile-tabs.css',
+    'profile-filters.css',
+    'active-filter-chips.css',
+    'stats-lite.css',
+    'quality-center.css',
+    'keyboard-shortcuts.css',
+    'advanced-filters.css',
+    'skeleton-loading.css',
+    'toast.css',
+    'accessibility.css'
+  ].forEach(file => addStyle(file));
+  addStyle('season-quality-fill.css', seasonFillVersion);
+  addStyle('manual-top-insert.css', manualTopInsertVersion);
+  addStyle('profile-top-single.css');
+  addStyle('profile-top-layout-fixes.css');
+  addStyle('manual-top-insert-fix.css', manualTopInsertFixVersion);
+
+  addScript('entity-progress-refresh.js');
+  addScript('topbar.js', primaryVersion, true);
+  addScript('profile-tabs.js', primaryVersion, true);
+  addScript('profile-filters.js', primaryVersion, true);
+  addScript('active-filter-chips.js', primaryVersion, true);
+  addScript('account-sync.js', accountSyncVersion, true);
+  addScript('deep-links.js', deepLinksVersion, true);
+  addScript('stats-lite.js', primaryVersion, true);
+  addScript('quality-center.js', primaryVersion, true);
+  addScript('keyboard-shortcuts.js', primaryVersion, true);
+
+  [
+    ['catalog-cache.js', primaryVersion],
+    ['season-quality-fill.js', seasonFillVersion],
+    ['toast.js', primaryVersion],
+    ['profile-top-single.js', primaryVersion],
+    ['manual-top-insert-fast.js', manualTopInsertVersion],
+    ['manual-top-insert-fix.js', manualTopInsertFixVersion],
+    ['skeleton-loading.js', primaryVersion],
+    ['advanced-filters.js', primaryVersion],
+    ['undo-actions.js', primaryVersion],
+    ['accessibility.js', primaryVersion]
+  ].forEach(([file, version]) => addScript(file, version, true));
 
   if (document.querySelector('.oc-addbar')) {
-    const stylesheet = document.createElement('link');
-    stylesheet.rel = 'stylesheet';
-    stylesheet.href = `./track-add-panel.css?v=${version}`;
-    document.head.append(stylesheet);
-
-    const script = document.createElement('script');
-    script.src = `./track-add-panel.js?v=${version}`;
-    document.body.append(script);
+    addStyle('track-add-panel.css');
+    addScript('track-add-panel.js', primaryVersion, true);
   }
+
+  function revealCurrentShell() {
+    if (!document.documentElement.classList.contains('oc-primary-booting')) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.documentElement.classList.remove('oc-primary-booting');
+      boot.remove();
+      bootStyle.remove();
+    }));
+  }
+
+  let readyChecks = 0;
+  function waitForCurrentShell() {
+    const ready = Boolean(
+      window.__OC_TOPBAR_READY__ &&
+      window.__OC_PROFILE_TABS_READY__ &&
+      window.__OC_PROFILE_FILTERS_READY__ &&
+      window.__OC_PROFILE_TOP_SINGLE_READY__ &&
+      window.__OC_ADVANCED_FILTERS_READY__
+    );
+    if (ready || readyChecks >= 120) {
+      revealCurrentShell();
+      return;
+    }
+    readyChecks += 1;
+    window.setTimeout(waitForCurrentShell, 20);
+  }
+  waitForCurrentShell();
 })();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force37', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force38', {
         updateViaCache: 'none'
       });
       await registration.update();
