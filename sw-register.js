@@ -7,7 +7,7 @@
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
   const myEventsVersion = '20260725-my-events3';
-  const statsDesignVersion = '20260725-profile-stats-designs2';
+  const statsDesignVersion = '20260725-profile-stats-designs3';
   const loadedStyles = new Set();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -191,7 +191,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force46', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force47', {
         updateViaCache: 'none'
       });
       await registration.update();
