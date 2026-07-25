@@ -35,3 +35,10 @@ html body::before {
 	pointer-events: none !important;
 	content: none !important;
 }
+
+/* In season cards the missing-fields emoji is informational only. */
+#oc-season-list .oc-missing-link {
+	pointer-events: none !important;
+	cursor: default !important;
+	user-select: none;
+}
