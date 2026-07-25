@@ -7,9 +7,6 @@ import { firebaseConfig, adminUids, appCheckSiteKey } from './firebase-config.js
 const CURRENT_EVENT_YEAR = 2026;
 const FULL_MARKER_KEY = 'oc-events-full-route-v1';
 const FULL_MARKER_TTL = 90 * 1000;
-const PROFILE_CACHE_KEY = 'op-ed-auth-profile-v1';
-const PRIMARY_NAME_KEY = 'op-ed-primary-account-name';
-const EVENT_NAME_KEY = 'my-display-name';
 const ADMIN_UIDS = new Set((adminUids || []).map(String));
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -46,18 +43,6 @@ function clearFullMarker() {
   try { sessionStorage.removeItem(FULL_MARKER_KEY); } catch (_) {}
 }
 
-function cachedNickname(uid) {
-  for (const storage of [sessionStorage, localStorage]) {
-    try {
-      const cached = JSON.parse(storage.getItem(PROFILE_CACHE_KEY) || 'null');
-      if (cached?.uid !== uid || !cached.profile) continue;
-      const value = String(cached.profile.nickname || cached.profile.nicknameKey || cached.profile.id || '').trim();
-      if (value) return value;
-    } catch (_) {}
-  }
-  return String(auth.currentUser?.displayName || localStorage.getItem(PRIMARY_NAME_KEY) || localStorage.getItem(EVENT_NAME_KEY) || '').trim();
-}
-
 function ensureAppCheck() {
   if (appCheckReady || !appCheckSiteKey) return;
   initializeAppCheck(app, {
@@ -68,17 +53,21 @@ function ensureAppCheck() {
 }
 
 async function resolveProfile(user) {
-  let nickname = cachedNickname(user.uid);
-  if (nickname) return { nickname, nicknameKey: normalizeNickname(nickname), authUid: user.uid };
   ensureAppCheck();
   try {
     const snapshot = await getDocs(query(collection(db, 'userProfiles'), where('authUid', '==', user.uid), limit(1)));
     const docSnap = snapshot.docs[0];
     if (!docSnap) return null;
     const row = docSnap.data() || {};
-    nickname = String(row.nickname || row.nicknameKey || docSnap.id || '').trim();
+    const nickname = String(row.nickname || row.nicknameKey || docSnap.id || '').trim();
     if (!nickname) return null;
-    return { id: docSnap.id, ...row, nickname, nicknameKey: normalizeNickname(row.nicknameKey || nickname), authUid: user.uid };
+    return {
+      id: docSnap.id,
+      ...row,
+      nickname,
+      nicknameKey: normalizeNickname(row.nicknameKey || nickname),
+      authUid: String(user.uid)
+    };
   } catch (error) {
     console.warn('Events bootstrap profile lookup failed', error);
     return null;
@@ -114,7 +103,7 @@ function addParticipantStyle() {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.dataset.eventParticipantSuite = '1';
-  link.href = './events-participant-suite.css?v=20260725-participant-suite1';
+  link.href = './events-participant-suite.css?v=20260725-participant-suite2';
   document.head.append(link);
 }
 
@@ -206,7 +195,7 @@ async function start() {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = true;
   window.OC_EVENT_PARTICIPANT_CONTEXT = { app, auth, db, profile, seasons, currentYear: CURRENT_EVENT_YEAR };
   window.OC_EVENTS_OPEN_FULL_MODE = modeName => location.assign(fullUrl(modeName));
-  await import('./events-participant-suite.js?v=20260725-participant-suite1');
+  await import('./events-participant-suite.js?v=20260725-participant-suite2');
 }
 
 start().catch(error => {
