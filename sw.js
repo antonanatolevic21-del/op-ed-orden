@@ -1,4 +1,10 @@
-const CACHE_NAME = 'op-ed-images-v2-20260723-force3';
+const CACHE_NAME = 'op-ed-images-v2-20260725-primary1';
+
+function isLegacySiteCache(key) {
+  const name = String(key || '').toLowerCase();
+  if (name === CACHE_NAME.toLowerCase()) return false;
+  return name.startsWith('op-ed-') || name.startsWith('oped-') || name.includes('op-ed-orden') || name.includes('aboba');
+}
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -7,9 +13,7 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
-      keys
-        .filter(key => key.startsWith('op-ed-images-') && key !== CACHE_NAME)
-        .map(key => caches.delete(key))
+      keys.filter(isLegacySiteCache).map(key => caches.delete(key))
     )).then(() => self.clients.claim())
   );
 });
