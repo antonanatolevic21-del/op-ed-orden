@@ -11,7 +11,7 @@
   const accountSyncVersion = '20260725-account-sync3';
   const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
-  const manualTopInsertVersion = '20260725-manual-top-insert3';
+  const manualTopInsertVersion = '20260725-manual-top-insert4';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -124,10 +124,10 @@
   hotkeysScript.async = false;
   document.body.append(hotkeysScript);
 
-  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'manual-top-insert.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'manual-top-insert-fast.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
     const script = document.createElement('script');
     if (file === 'season-quality-fill.js') script.src = `./${file}?v=${seasonFillVersion}`;
-    else if (file === 'manual-top-insert.js') script.src = `./${file}?v=${manualTopInsertVersion}`;
+    else if (file === 'manual-top-insert-fast.js') script.src = `./${file}?v=${manualTopInsertVersion}`;
     else script.src = `./${file}?v=${uxVersion}`;
     script.async = false;
     document.body.append(script);
@@ -148,7 +148,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force27', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force28', {
         updateViaCache: 'none'
       });
       await registration.update();
