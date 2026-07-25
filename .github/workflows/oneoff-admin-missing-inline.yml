@@ -1,0 +1,68 @@
+name: One-off admin missing inline patch
+
+on:
+  push:
+    paths:
+      - '.github/workflows/oneoff-admin-missing-inline.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Back up current shell files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p backups
+          cp sw-register.js backups/sw-register-before-admin-missing-inline-2026-07-25.js
+          cp index.html backups/index-before-admin-missing-inline-2026-07-25.html
+          git add backups/sw-register-before-admin-missing-inline-2026-07-25.js backups/index-before-admin-missing-inline-2026-07-25.html
+          git commit -m "Back up shell before admin missing inline tools"
+          git push origin HEAD:main
+
+      - name: Patch loader and cache versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sw_path = Path('sw-register.js')
+          sw = sw_path.read_text(encoding='utf-8')
+
+          replacements = [
+              ("const primaryVersion = '20260725-primary-shell6';", "const primaryVersion = '20260725-primary-shell7';"),
+              ("const statsDesignVersion = '20260725-profile-stats-designs4';", "const statsDesignVersion = '20260725-profile-stats-designs4';\n  const adminMissingVersion = '20260725-admin-missing1';"),
+              ("initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));", "initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));\n  initialStylePromises.push(addStyle('admin-missing-inline.css', adminMissingVersion));"),
+              ("['account-sync.js', accountSyncVersion],", "['account-sync.js', accountSyncVersion],\n    ['admin-missing-inline.js', adminMissingVersion],"),
+              ("./sw.js?v=20260725-force50", "./sw.js?v=20260725-force51"),
+          ]
+          for old, new in replacements:
+              if old not in sw:
+                  raise SystemExit(f'Missing sw-register marker: {old}')
+              sw = sw.replace(old, new, 1)
+          sw_path.write_text(sw, encoding='utf-8')
+
+          index_path = Path('index.html')
+          index = index_path.read_text(encoding='utf-8')
+          old_loader = 'sw-register.js?v=20260725-primary-shell5'
+          if old_loader not in index:
+              raise SystemExit(f'Missing index loader marker: {old_loader}')
+          index = index.replace(old_loader, 'sw-register.js?v=20260725-admin-missing1', 1)
+          index_path.write_text(index, encoding='utf-8')
+          PY
+
+          git add sw-register.js index.html
+          git commit -m "Enable admin-only inline missing-field editing"
+          git push origin HEAD:main
