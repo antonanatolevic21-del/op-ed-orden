@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell6';
+  const primaryVersion = '20260725-primary-shell7';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
@@ -8,6 +8,7 @@
   const top100SuiteVersion = '20260725-top100-suite2';
   const myEventsVersion = '20260725-my-events3';
   const statsDesignVersion = '20260725-profile-stats-designs4';
+  const adminMissingVersion = '20260725-admin-missing1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -88,6 +89,7 @@
   ].map(file => addStyle(file));
   initialStylePromises.push(addStyle('my-events-profile.css', myEventsVersion));
   initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));
+  initialStylePromises.push(addStyle('admin-missing-inline.css', adminMissingVersion));
   void Promise.all(initialStylePromises).finally(() => { initialStylesReady = true; });
 
   void addScriptsOrdered([
@@ -98,6 +100,7 @@
     ['profile-filters.js', primaryVersion],
     ['active-filter-chips.js', primaryVersion],
     ['account-sync.js', accountSyncVersion],
+    ['admin-missing-inline.js', adminMissingVersion],
     ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
     ['quality-center.js', primaryVersion],
@@ -212,7 +215,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force50', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force51', {
         updateViaCache: 'none'
       });
       await registration.update();
