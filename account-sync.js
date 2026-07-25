@@ -12,7 +12,7 @@
   let initialReady = false;
   let personalUid = '';
   let userIntentUntil = 0;
-  let startupGuardUntil = Date.now() + 15000;
+  const startupGuardUntil = Date.now() + 15000;
   let resolveAccountReady;
 
   window.__OC_ACCOUNT_RESTORE_DONE__ = false;
@@ -139,11 +139,12 @@
       }
 
       const auth = getAuth(getApp());
-      authBound = true;
       if (typeof auth.authStateReady === 'function') await auth.authStateReady();
+      authBound = true;
       await applyUser(auth.currentUser);
       onAuthStateChanged(auth, user => { void applyUser(user); });
     } catch (error) {
+      authBound = false;
       console.warn('Account sync skipped', error);
       if (attempt < 10) window.setTimeout(() => bindAuth(attempt + 1), 250);
       else finishInitial(false);
