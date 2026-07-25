@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell4';
+  const primaryVersion = '20260725-primary-shell5';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
@@ -8,11 +8,14 @@
   const top100SuiteVersion = '20260725-top100-suite2';
   const myEventsVersion = '20260725-my-events3';
   const statsDesignVersion = '20260725-profile-stats-designs4';
-  const loadedStyles = new Set();
+  const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
   let seasonPromise = null;
   let statsPromise = null;
+  let initialStylesReady = false;
+
+  document.documentElement.classList.remove('oc-primary-ready');
 
   const bootStyle = document.createElement('style');
   bootStyle.id = 'oc-primary-boot-style';
@@ -40,12 +43,22 @@
 
   function addStyle(file, version = primaryVersion) {
     const key = `${file}?v=${version}`;
-    if (loadedStyles.has(key)) return;
-    loadedStyles.add(key);
-    const stylesheet = document.createElement('link');
-    stylesheet.rel = 'stylesheet';
-    stylesheet.href = `./${key}`;
-    document.head.append(stylesheet);
+    if (loadedStyles.has(key)) return loadedStyles.get(key);
+
+    const promise = new Promise(resolve => {
+      const stylesheet = document.createElement('link');
+      stylesheet.rel = 'stylesheet';
+      stylesheet.href = `./${key}`;
+      stylesheet.onload = () => resolve(stylesheet);
+      stylesheet.onerror = () => {
+        console.warn(`Не удалось загрузить ${file}`);
+        resolve(stylesheet);
+      };
+      document.head.append(stylesheet);
+    });
+
+    loadedStyles.set(key, promise);
+    return promise;
   }
 
   function addScript(file, version = primaryVersion, ordered = false) {
@@ -67,14 +80,15 @@
     for (const [file, version] of rows) await addScript(file, version, true);
   }
 
-  [
+  const initialStylePromises = [
     'filter-ui-fixes.css', 'entity-album-cards.css', 'topbar.css', 'profile-tabs.css',
     'profile-filters.css', 'active-filter-chips.css', 'quality-center.css',
     'keyboard-shortcuts.css', 'advanced-filters.css', 'skeleton-loading.css',
     'toast.css', 'accessibility.css'
-  ].forEach(file => addStyle(file));
-  addStyle('my-events-profile.css', myEventsVersion);
-  addStyle('profile-stats-designs.css', statsDesignVersion);
+  ].map(file => addStyle(file));
+  initialStylePromises.push(addStyle('my-events-profile.css', myEventsVersion));
+  initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));
+  void Promise.all(initialStylePromises).finally(() => { initialStylesReady = true; });
 
   void addScriptsOrdered([
     ['entity-progress-refresh.js', primaryVersion],
@@ -165,6 +179,7 @@
   function revealCurrentShell() {
     if (!document.documentElement.classList.contains('oc-primary-booting')) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.documentElement.classList.add('oc-primary-ready');
       document.documentElement.classList.remove('oc-primary-booting');
       boot.remove();
     }));
@@ -173,12 +188,13 @@
   let readyChecks = 0;
   function waitForCurrentShell() {
     const ready = Boolean(
+      initialStylesReady &&
       window.__OC_TOPBAR_READY__ &&
       window.__OC_PROFILE_TABS_READY__ &&
       window.__OC_PROFILE_FILTERS_READY__ &&
       window.__OC_ADVANCED_FILTERS_READY__
     );
-    if (ready || readyChecks >= 140) {
+    if (ready || readyChecks >= 250) {
       revealCurrentShell();
       return;
     }
@@ -191,7 +207,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force48', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force49', {
         updateViaCache: 'none'
       });
       await registration.update();
