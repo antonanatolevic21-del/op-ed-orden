@@ -2,6 +2,8 @@
   if (window.__OC_KEYBOARD_SHORTCUTS_READY__) return;
 
   let help = null;
+  let loginAttemptSerial = 0;
+  let lastLoginAttemptAt = 0;
 
   function isEditable(target) {
     return Boolean(target?.closest?.('input,textarea,select,[contenteditable="true"]'));
@@ -122,18 +124,28 @@
     }
   }
 
+  function markLoginAttempt() {
+    loginAttemptSerial += 1;
+    lastLoginAttemptAt = Date.now();
+  }
+
   function watchLoginModal(modal) {
     if (!modal) return;
     let wasOpen = !modal.classList.contains('hidden');
     let uidWhenOpened = wasOpen ? currentPersonalUid() : '';
+    let attemptWhenOpened = loginAttemptSerial;
 
     new MutationObserver(() => {
       const isOpen = !modal.classList.contains('hidden');
-      if (isOpen && !wasOpen) uidWhenOpened = currentPersonalUid();
+      if (isOpen && !wasOpen) {
+        uidWhenOpened = currentPersonalUid();
+        attemptWhenOpened = loginAttemptSerial;
+      }
       if (!isOpen && wasOpen) {
+        const hadExplicitLogin = loginAttemptSerial > attemptWhenOpened && Date.now() - lastLoginAttemptAt < 15000;
         window.setTimeout(() => {
           const uidAfter = currentPersonalUid();
-          if (uidAfter && uidAfter !== uidWhenOpened) showHelp();
+          if (hadExplicitLogin && uidAfter && uidAfter !== uidWhenOpened) showHelp();
         }, 120);
       }
       wasOpen = isOpen;
@@ -141,6 +153,12 @@
   }
 
   function bindLoginGuide() {
+    document.addEventListener('pointerdown', event => {
+      if (event.target?.closest?.('#oc-auth-save,#oc-modal-name-save')) markLoginAttempt();
+    }, true);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && event.target?.closest?.('#oc-auth-modal,#oc-name-modal')) markLoginAttempt();
+    }, true);
     watchLoginModal(document.querySelector('#oc-auth-modal'));
     watchLoginModal(document.querySelector('#oc-name-modal'));
   }
