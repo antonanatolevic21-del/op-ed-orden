@@ -14,6 +14,15 @@
     '.oc-e-image',
     '.oc-e-link'
   ];
+  const FORM_HOTKEY_SELECTOR = [
+    '#oc-add-type',
+    '.oc-e-type',
+    '#oc-add-season',
+    '.oc-e-season',
+    '.oc-addbar input[type="checkbox"]',
+    '.oc-editcard input[type="checkbox"]'
+  ].join(', ');
+  let hoveredFormHotkeyControl = null;
 
   function isAdminUi() {
     const badge = document.querySelector('#oc-access-badge');
@@ -106,6 +115,52 @@
     document.querySelectorAll('#oc-list-container .oc-main-card .oc-missing-link').forEach(bindMarker);
   }
 
+  function dispatchFormControlChange(control) {
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function resolveFormHotkeyControl(event) {
+    const focused = event.target instanceof HTMLElement && event.target.matches(FORM_HOTKEY_SELECTOR)
+      ? event.target
+      : null;
+    if (focused) return focused;
+    if (hoveredFormHotkeyControl?.isConnected && hoveredFormHotkeyControl.matches(FORM_HOTKEY_SELECTOR)) {
+      return hoveredFormHotkeyControl;
+    }
+    return null;
+  }
+
+  function handleFieldChoiceHotkeys(event) {
+    if (!isAdminUi() || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const control = resolveFormHotkeyControl(event);
+    if (!(control instanceof HTMLElement)) return;
+    if (!control.closest('.oc-addbar, .oc-editcard')) return;
+
+    if (control.matches('#oc-add-type, .oc-e-type') && (event.key === '1' || event.key === '2')) {
+      event.preventDefault();
+      event.stopPropagation();
+      control.value = event.key === '1' ? 'OP' : 'ED';
+      dispatchFormControlChange(control);
+      return;
+    }
+
+    if (control.matches('#oc-add-season, .oc-e-season') && ['1', '2', '3', '4'].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      control.value = { '1': 'winter', '2': 'spring', '3': 'summer', '4': 'fall' }[event.key];
+      dispatchFormControlChange(control);
+      return;
+    }
+
+    if (control.matches('input[type="checkbox"]') && event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      control.checked = !control.checked;
+      dispatchFormControlChange(control);
+    }
+  }
+
   function handleFormArrowNavigation(event) {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !isAdminUi()) return;
@@ -151,6 +206,17 @@
     }).observe(list, { childList: true, subtree: true });
   }
 
+  document.addEventListener('pointerover', event => {
+    const control = event.target instanceof Element ? event.target.closest(FORM_HOTKEY_SELECTOR) : null;
+    hoveredFormHotkeyControl = control && control.closest('.oc-addbar, .oc-editcard') ? control : null;
+  }, true);
+  document.addEventListener('pointerout', event => {
+    if (!hoveredFormHotkeyControl) return;
+    const next = event.relatedTarget instanceof Element ? event.relatedTarget.closest(FORM_HOTKEY_SELECTOR) : null;
+    if (next === hoveredFormHotkeyControl) return;
+    hoveredFormHotkeyControl = null;
+  }, true);
+  document.addEventListener('keydown', handleFieldChoiceHotkeys, true);
   document.addEventListener('keydown', handleFormArrowNavigation, true);
   syncAdminClass();
 })();
