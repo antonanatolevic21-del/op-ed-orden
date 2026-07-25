@@ -17,6 +17,7 @@
   const manualTopExplicitVersion = '20260726-manual-top-explicit1';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
+  const adminProfilePickerVersion = '20260726-admin-profile-picker1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -82,6 +83,7 @@
   initialStylePromises.push(addStyle('admin-missing-inline.css', adminMissingVersion));
   initialStylePromises.push(addStyle('first-user-test-fixes.css', firstUserFixVersion));
   initialStylePromises.push(addStyle('access-role-badge.css', accessRoleBadgeVersion));
+  initialStylePromises.push(addStyle('admin-profile-picker.css', adminProfilePickerVersion));
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
   void addScriptsOrdered([
@@ -97,6 +99,7 @@
     ['profile-events-ownership.js', profileEventsOwnershipVersion],
     ['first-user-test-fixes.js', firstUserFixVersion],
     ['registered-users-only.js', registeredUsersVersion],
+    ['admin-profile-picker.js', adminProfilePickerVersion],
     ['admin-missing-inline.js', adminMissingVersion],
     ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
