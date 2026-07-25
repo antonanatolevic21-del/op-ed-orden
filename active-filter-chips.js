@@ -61,14 +61,10 @@
       const from = fromYear?.value ? `${SEASONS[fromSeason?.value] || ''} ${fromYear.value}`.trim() : 'с начала';
       const to = toYear?.value ? `${SEASONS[toSeason?.value] || ''} ${toYear.value}`.trim() : 'до конца';
       rows.push(chip(`Период: ${from} — ${to}`, 'period', () => {
-        if (fromYear) fromYear.value = '';
-        if (toYear) toYear.value = '';
-        if (fromSeason) fromSeason.value = 'winter';
-        if (toSeason) toSeason.value = 'fall';
-        fire(fromYear);
-        fire(toYear);
-        fire(fromSeason);
-        fire(toSeason);
+        if (fromYear) { fromYear.value = ''; fire(fromYear); }
+        if (toYear) { toYear.value = ''; fire(toYear); }
+        if (fromSeason) { fromSeason.value = 'winter'; fire(fromSeason); }
+        if (toSeason) { toSeason.value = 'fall'; fire(toSeason); }
       }));
     }
 
