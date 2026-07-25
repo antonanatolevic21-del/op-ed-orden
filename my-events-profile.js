@@ -16,6 +16,7 @@
 
   function root() { return document.querySelector('#oc-profile-panel'); }
   function tab() { return root()?.querySelector('.oc-profile-subtabs [data-profile-view="events"]'); }
+  function bell() { return document.querySelector('#oc-daily-bell'); }
 
   function ensurePanel() {
     const profile = root();
@@ -126,16 +127,36 @@
   }
 
   function updateNoticeBadge(data) {
-    const button = tab();
-    if (!button) return;
     const count = noticeCount(data);
-    button.classList.toggle('oc-my-events-has-notice', count > 0);
-    button.dataset.noticeCount = count ? String(count) : '';
+    const button = tab();
+    if (button) {
+      button.classList.toggle('oc-my-events-has-notice', count > 0);
+      button.dataset.noticeCount = count ? String(count) : '';
+    }
+    const notificationBell = bell();
+    if (notificationBell) {
+      notificationBell.classList.toggle('oc-event-notice', count > 0);
+      notificationBell.dataset.eventNoticeCount = count ? String(count) : '';
+      if (count > 0) notificationBell.title = `Есть уведомления по ивентам: ${count}`;
+      else if (notificationBell.title?.startsWith('Есть уведомления по ивентам')) notificationBell.removeAttribute('title');
+    }
   }
 
   function ownProfileSelected(data) {
     const selected = clean(document.querySelector('#oc-profile-user')?.value);
     return !selected || norm(selected) === norm(data?.nickname);
+  }
+
+  function openMyEvents() {
+    const profileButton = document.querySelector('.oc-tab-btn[data-tab="profile"]');
+    if (profileButton && !profileButton.classList.contains('active')) profileButton.click();
+    window.setTimeout(() => {
+      const eventsTab = tab();
+      if (eventsTab) {
+        eventsTab.click();
+        eventsTab.focus?.();
+      }
+    }, 0);
   }
 
   function render(data) {
@@ -165,6 +186,7 @@
   async function refresh(force = false) {
     try {
       const data = await loadData(force);
+      updateNoticeBadge(data);
       if (root()?.dataset.profileView === 'events') render(data);
     } catch (error) {
       console.warn('My Events profile load failed', error);
@@ -184,8 +206,19 @@
     profile.querySelector('#oc-profile-user')?.addEventListener('change', () => { if (profile.dataset.profileView === 'events') render(lastData); });
   }
 
+  function bindBell() {
+    document.addEventListener('click', event => {
+      const notificationBell = event.target.closest?.('#oc-daily-bell');
+      if (!notificationBell || noticeCount(lastData) <= 0) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openMyEvents();
+    }, true);
+  }
+
   function init() {
     watchProfileView();
+    bindBell();
     window.setTimeout(() => void refresh(false), 800);
     window.addEventListener('oped-account-restored', () => { loadedForUid=''; lastData=null; void refresh(true); });
     window.addEventListener('storage', event => { if (event.key?.startsWith(ASSIGNMENT_SEEN_PREFIX)) updateNoticeBadge(lastData); });
