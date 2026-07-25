@@ -1,0 +1,138 @@
+name: One-off admin form hotkeys patch
+
+on:
+  push:
+    paths:
+      - '.github/workflows/oneoff-admin-form-hotkeys.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Back up current hotkey and shell files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p backups
+          cp admin-missing-inline.js backups/admin-missing-inline-before-form-hotkeys-2026-07-25.js
+          cp sw-register.js backups/sw-register-before-form-hotkeys-2026-07-25.js
+          cp index.html backups/index-before-form-hotkeys-2026-07-25.html
+          git add backups/admin-missing-inline-before-form-hotkeys-2026-07-25.js backups/sw-register-before-form-hotkeys-2026-07-25.js backups/index-before-form-hotkeys-2026-07-25.html
+          git commit -m "Back up files before admin form hotkeys"
+          git push origin HEAD:main
+
+      - name: Add focused and hovered field hotkeys
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 - <<'PY'
+          from pathlib import Path
+
+          js_path = Path('admin-missing-inline.js')
+          js = js_path.read_text(encoding='utf-8')
+
+          marker = "  function handleFormArrowNavigation(event) {\n"
+          if marker not in js:
+              raise SystemExit('Missing admin hotkey insertion marker')
+
+          addition = r'''  const FORM_HOTKEY_SELECTOR = [
+    '#oc-add-type',
+    '.oc-e-type',
+    '#oc-add-season',
+    '.oc-e-season',
+    '.oc-addbar input[type="checkbox"]',
+    '.oc-editcard input[type="checkbox"]'
+  ].join(', ');
+  let hoveredFormHotkeyControl = null;
+
+  function dispatchFormControlChange(control) {
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function resolveFormHotkeyControl(event) {
+    const focused = event.target instanceof HTMLElement && event.target.matches(FORM_HOTKEY_SELECTOR)
+      ? event.target
+      : null;
+    if (focused) return focused;
+    if (hoveredFormHotkeyControl?.isConnected && hoveredFormHotkeyControl.matches(FORM_HOTKEY_SELECTOR)) {
+      return hoveredFormHotkeyControl;
+    }
+    return null;
+  }
+
+  function handleFieldChoiceHotkeys(event) {
+    if (!isAdminUi() || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const control = resolveFormHotkeyControl(event);
+    if (!(control instanceof HTMLElement)) return;
+    if (!control.closest('.oc-addbar, .oc-editcard')) return;
+
+    if (control.matches('#oc-add-type, .oc-e-type') && (event.key === '1' || event.key === '2')) {
+      event.preventDefault();
+      event.stopPropagation();
+      control.value = event.key === '1' ? 'OP' : 'ED';
+      dispatchFormControlChange(control);
+      return;
+    }
+
+    if (control.matches('#oc-add-season, .oc-e-season') && ['1', '2', '3', '4'].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      control.value = { '1': 'winter', '2': 'spring', '3': 'summer', '4': 'fall' }[event.key];
+      dispatchFormControlChange(control);
+      return;
+    }
+
+    if (control.matches('input[type="checkbox"]') && event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      control.checked = !control.checked;
+      dispatchFormControlChange(control);
+    }
+  }
+
+'''
+          js = js.replace(marker, addition + marker, 1)
+
+          old_listener = "  document.addEventListener('keydown', handleFormArrowNavigation, true);\n  syncAdminClass();\n"
+          new_listener = "  document.addEventListener('pointerover', event => {\n    const control = event.target instanceof Element ? event.target.closest(FORM_HOTKEY_SELECTOR) : null;\n    hoveredFormHotkeyControl = control && control.closest('.oc-addbar, .oc-editcard') ? control : null;\n  }, true);\n  document.addEventListener('pointerout', event => {\n    if (!hoveredFormHotkeyControl) return;\n    const next = event.relatedTarget instanceof Element ? event.relatedTarget.closest(FORM_HOTKEY_SELECTOR) : null;\n    if (next === hoveredFormHotkeyControl) return;\n    hoveredFormHotkeyControl = null;\n  }, true);\n  document.addEventListener('keydown', handleFieldChoiceHotkeys, true);\n  document.addEventListener('keydown', handleFormArrowNavigation, true);\n  syncAdminClass();\n"
+          if old_listener not in js:
+              raise SystemExit('Missing admin hotkey listener marker')
+          js = js.replace(old_listener, new_listener, 1)
+          js_path.write_text(js, encoding='utf-8')
+
+          sw_path = Path('sw-register.js')
+          sw = sw_path.read_text(encoding='utf-8')
+          replacements = [
+              ("const adminMissingVersion = '20260725-admin-missing1';", "const adminMissingVersion = '20260725-admin-missing2';"),
+              ("./sw.js?v=20260725-force51", "./sw.js?v=20260725-force52"),
+          ]
+          for old, new in replacements:
+              if old not in sw:
+                  raise SystemExit(f'Missing sw-register marker: {old}')
+              sw = sw.replace(old, new, 1)
+          sw_path.write_text(sw, encoding='utf-8')
+
+          index_path = Path('index.html')
+          index = index_path.read_text(encoding='utf-8')
+          old_loader = 'sw-register.js?v=20260725-admin-missing1'
+          if old_loader not in index:
+              raise SystemExit(f'Missing index loader marker: {old_loader}')
+          index = index.replace(old_loader, 'sw-register.js?v=20260725-admin-missing2', 1)
+          index_path.write_text(index, encoding='utf-8')
+          PY
+
+          git add admin-missing-inline.js sw-register.js index.html
+          git commit -m "Add admin field selection hotkeys"
+          git push origin HEAD:main
