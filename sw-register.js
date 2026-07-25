@@ -13,6 +13,7 @@
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const profileTopSingleVersion = '20260725-profile-top-single4';
+  const profileTopLayoutFixVersion = '20260725-profile-top-layout-fix1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -80,6 +81,11 @@
   profileTopSingleStylesheet.rel = 'stylesheet';
   profileTopSingleStylesheet.href = `./profile-top-single.css?v=${profileTopSingleVersion}`;
   document.head.append(profileTopSingleStylesheet);
+
+  const profileTopLayoutFixStylesheet = document.createElement('link');
+  profileTopLayoutFixStylesheet.rel = 'stylesheet';
+  profileTopLayoutFixStylesheet.href = `./profile-top-layout-fixes.css?v=${profileTopLayoutFixVersion}`;
+  document.head.append(profileTopLayoutFixStylesheet);
 
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
@@ -155,7 +161,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force32', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force33', {
         updateViaCache: 'none'
       });
       await registration.update();
