@@ -17,7 +17,7 @@
   const manualTopExplicitVersion = '20260726-manual-top-explicit1';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
-  const adminProfilePickerVersion = '20260726-admin-profile-picker1';
+  const adminProfilePickerVersion = '20260726-admin-profile-picker2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
