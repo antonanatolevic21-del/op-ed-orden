@@ -1,7 +1,7 @@
 (() => {
   if (window.__OC_PROFILE_TABS_READY__) return;
 
-  const VIEWS = new Set(['overview', 'top100', 'ratings', 'daily']);
+  const VIEWS = new Set(['overview', 'top100', 'ratings', 'daily', 'events']);
   const STORAGE_KEY = 'oc-profile-subtab';
   let currentView = 'overview';
   let statsEnhanceScheduled = false;
@@ -30,7 +30,8 @@
       <button type="button" role="tab" data-profile-view="overview">Обзор</button>
       <button type="button" role="tab" data-profile-view="top100">Мой топ-100</button>
       <button type="button" role="tab" data-profile-view="ratings">Все оценки</button>
-      <button type="button" role="tab" data-profile-view="daily">Дейлики</button>`;
+      <button type="button" role="tab" data-profile-view="daily">Дейлики</button>
+      <button type="button" role="tab" data-profile-view="events">Мои ивенты</button>`;
     anchor.insertAdjacentElement('afterend', tabs);
 
     tabs.addEventListener('click', event => {
@@ -168,6 +169,7 @@
     setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns', currentView === 'top100');
     setVisible('.oc-allratings', currentView === 'ratings');
     setVisible('#oc-daily-panel', currentView === 'daily');
+    setVisible('#oc-my-events-panel', currentView === 'events');
     setVisible('.oc-profile-filterbar', currentView === 'top100' || currentView === 'ratings');
     syncDailyPlaceholder();
     scheduleManualOwnershipSync();
