@@ -11,6 +11,8 @@
   const adminMissingVersion = '20260726-admin-missing3';
   const firstUserFixVersion = '20260725-first-user-test1';
   const top100DragVersion = '20260725-top100-drag1';
+  const modalReadabilityVersion = '20260726-modal-readability1';
+  const registeredUsersVersion = '20260726-registered-users1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -70,7 +72,7 @@
     'profile-filters.css', 'active-filter-chips.css', 'quality-center.css',
     'keyboard-shortcuts.css', 'advanced-filters.css', 'skeleton-loading.css',
     'toast.css', 'accessibility.css'
-  ].map(file => addStyle(file));
+  ].map(file => addStyle(file, ['quality-center.css', 'keyboard-shortcuts.css'].includes(file) ? modalReadabilityVersion : primaryVersion));
   initialStylePromises.push(addStyle('my-events-profile.css', myEventsVersion));
   initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));
   initialStylePromises.push(addStyle('admin-missing-inline.css', adminMissingVersion));
@@ -86,6 +88,7 @@
     ['active-filter-chips.js', primaryVersion],
     ['account-sync.js', accountSyncVersion],
     ['first-user-test-fixes.js', firstUserFixVersion],
+    ['registered-users-only.js', registeredUsersVersion],
     ['admin-missing-inline.js', adminMissingVersion],
     ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
