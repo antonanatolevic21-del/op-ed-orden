@@ -68,7 +68,20 @@
 				button.className = `oc-profile-picker-option${row.admin ? ' is-admin' : ''}`;
 				button.dataset.value = row.value;
 				button.setAttribute('role', 'option');
-				button.textContent = row.label;
+
+				const label = document.createElement('span');
+				label.className = 'oc-profile-picker-option-label';
+				label.textContent = row.label;
+				button.append(label);
+
+				if (row.admin) {
+					const crown = document.createElement('span');
+					crown.className = 'oc-profile-admin-crown';
+					crown.textContent = '♛';
+					crown.title = 'Администратор';
+					crown.setAttribute('aria-label', 'Администратор');
+					button.append(crown);
+				}
 				return button;
 			}));
 		}
