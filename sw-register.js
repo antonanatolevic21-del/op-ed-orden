@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell8';
+  const primaryVersion = '20260726-progressive-shell1';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
@@ -8,7 +8,7 @@
   const top100SuiteVersion = '20260725-top100-suite2';
   const myEventsVersion = '20260725-my-events3';
   const statsDesignVersion = '20260725-profile-stats-designs4';
-  const adminMissingVersion = '20260725-admin-missing2';
+  const adminMissingVersion = '20260726-admin-missing3';
   const firstUserFixVersion = '20260725-first-user-test1';
   const top100DragVersion = '20260725-top100-drag1';
   const loadedStyles = new Map();
@@ -16,33 +16,15 @@
   let top100Promise = null;
   let seasonPromise = null;
   let statsPromise = null;
-  let initialStylesReady = false;
 
-  document.documentElement.classList.remove('oc-primary-ready');
-
-  const bootStyle = document.createElement('style');
-  bootStyle.id = 'oc-primary-boot-style';
-  bootStyle.textContent = `
-    html.oc-primary-booting,html.oc-primary-booting body{background:#0b0a10!important}
-    html.oc-primary-booting body{overflow:hidden!important}
-    html.oc-primary-booting #opedchart-root{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
-    #oc-primary-boot{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b0a10;color:#f5f3fa;font-family:Inter,Arial,sans-serif}
-    #oc-primary-boot .oc-primary-boot-card{display:flex;align-items:center;gap:13px;padding:15px 19px;border:1px solid #2d2635;border-radius:15px;background:#100d16;box-shadow:0 18px 60px rgba(0,0,0,.35)}
-    #oc-primary-boot .oc-primary-boot-dot{width:11px;height:11px;border:2px solid #08d9d6;border-right-color:transparent;border-radius:50%;animation:ocPrimaryBootSpin .7s linear infinite}
-    #oc-primary-boot strong{font-size:14px;letter-spacing:.2px}
-    #oc-primary-boot span{display:block;margin-top:2px;color:#8f879b;font:10px/1.35 'Space Mono',monospace}
-    html.oc-top100-loading #oc-profile-panel .oc-topmode-toggle,html.oc-top100-loading #oc-profile-panel .oc-topmode-hint,html.oc-top100-loading #oc-profile-panel .oc-manual-actions,html.oc-top100-loading #oc-profile-panel .oc-profile-columns{visibility:hidden!important}
-    @keyframes ocPrimaryBootSpin{to{transform:rotate(360deg)}}
-  `;
-  document.head.append(bootStyle);
-  document.documentElement.classList.add('oc-primary-booting');
-
-  const boot = document.createElement('div');
-  boot.id = 'oc-primary-boot';
-  boot.setAttribute('role', 'status');
-  boot.setAttribute('aria-live', 'polite');
-  boot.innerHTML = '<div class="oc-primary-boot-card"><i class="oc-primary-boot-dot"></i><div><strong>АБОБА</strong><span>загружаю актуальную версию…</span></div></div>';
-  document.body.prepend(boot);
+  /*
+   * The static HTML shell is usable immediately. Optional styles, Firebase
+   * snapshots and feature modules continue loading in the background instead
+   * of covering the whole page with a blocking splash screen.
+   */
+  document.documentElement.classList.remove('oc-primary-booting');
+  document.documentElement.classList.add('oc-primary-ready', 'oc-primary-progressive');
+  document.querySelector('#oc-primary-boot')?.remove();
 
   function addStyle(file, version = primaryVersion) {
     const key = `${file}?v=${version}`;
@@ -93,7 +75,7 @@
   initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));
   initialStylePromises.push(addStyle('admin-missing-inline.css', adminMissingVersion));
   initialStylePromises.push(addStyle('first-user-test-fixes.css', firstUserFixVersion));
-  void Promise.all(initialStylePromises).finally(() => { initialStylesReady = true; });
+  void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
   void addScriptsOrdered([
     ['entity-progress-refresh.js', primaryVersion],
@@ -190,39 +172,12 @@
     if (document.querySelector('.oc-tab-btn[data-tab="stats"]')?.classList.contains('active')) void loadStatsPackage();
   }
   window.setTimeout(detectCurrentLazyView, 100);
-
-  function revealCurrentShell() {
-    if (!document.documentElement.classList.contains('oc-primary-booting')) return;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      document.documentElement.classList.add('oc-primary-ready');
-      document.documentElement.classList.remove('oc-primary-booting');
-      boot.remove();
-    }));
-  }
-
-  let readyChecks = 0;
-  function waitForCurrentShell() {
-    const ready = Boolean(
-      initialStylesReady &&
-      window.__OC_TOPBAR_READY__ &&
-      window.__OC_PROFILE_TABS_READY__ &&
-      window.__OC_PROFILE_FILTERS_READY__ &&
-      window.__OC_ADVANCED_FILTERS_READY__
-    );
-    if (ready || readyChecks >= 250) {
-      revealCurrentShell();
-      return;
-    }
-    readyChecks += 1;
-    window.setTimeout(waitForCurrentShell, 20);
-  }
-  waitForCurrentShell();
 })();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force53', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260726-force54', {
         updateViaCache: 'none'
       });
       await registration.update();
