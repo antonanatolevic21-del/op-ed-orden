@@ -9,12 +9,13 @@
   const myEventsVersion = '20260725-my-events3';
   const statsDesignVersion = '20260725-profile-stats-designs4';
   const adminMissingVersion = '20260726-admin-missing3';
-  const firstUserFixVersion = '20260725-first-user-test1';
+  const firstUserFixVersion = '20260726-first-user-test2';
   const top100DragVersion = '20260725-top100-drag1';
   const modalReadabilityVersion = '20260726-modal-readability1';
   const registeredUsersVersion = '20260726-registered-users2';
-  const sitePolicyVersion = '20260726-site-policy1';
+  const sitePolicyVersion = '20260726-site-policy2';
   const manualTopExplicitVersion = '20260726-manual-top-explicit1';
+  const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -90,6 +91,7 @@
     ['profile-filters.js', primaryVersion],
     ['active-filter-chips.js', primaryVersion],
     ['account-sync.js', accountSyncVersion],
+    ['profile-events-ownership.js', profileEventsOwnershipVersion],
     ['first-user-test-fixes.js', firstUserFixVersion],
     ['registered-users-only.js', registeredUsersVersion],
     ['admin-missing-inline.js', adminMissingVersion],
