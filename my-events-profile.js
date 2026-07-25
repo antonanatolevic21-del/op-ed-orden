@@ -5,7 +5,6 @@
   const CURRENT_EVENT_YEAR = 2026;
   const SEASONS = ['winter', 'spring', 'summer', 'fall'];
   const SEASON_LABEL = { winter:'Зима', spring:'Весна', summer:'Лето', fall:'Осень' };
-  const PROFILE_CACHE_KEY = 'op-ed-auth-profile-v1';
   const ASSIGNMENT_SEEN_PREFIX = 'oc-event-assignment-seen-v1:';
   let loadedForUid = '';
   let loading = false;
@@ -25,23 +24,12 @@
     if (!panel) {
       panel = document.createElement('section');
       panel.id = 'oc-my-events-panel';
-      panel.className = 'oc-my-events-panel oc-profile-section-hidden';
+      panel.className = 'oc-my-events-panel';
       const anchor = profile.querySelector('#oc-daily-panel') || profile.querySelector('.oc-allratings') || profile.lastElementChild;
       anchor?.insertAdjacentElement('afterend', panel);
     }
+    panel.classList.toggle('oc-profile-section-hidden', profile.dataset.profileView !== 'events');
     return panel;
-  }
-
-  function cachedNickname(uid) {
-    for (const storage of [sessionStorage, localStorage]) {
-      try {
-        const cached = JSON.parse(storage.getItem(PROFILE_CACHE_KEY) || 'null');
-        if (cached?.uid !== uid || !cached.profile) continue;
-        const name = clean(cached.profile.nickname || cached.profile.nicknameKey || cached.profile.id);
-        if (name) return name;
-      } catch (_) {}
-    }
-    return clean(document.querySelector('#oc-myname')?.value || localStorage.getItem('op-ed-primary-account-name') || localStorage.getItem('my-display-name'));
   }
 
   function seenAssignments(uid) {
@@ -83,6 +71,15 @@
     return { app, auth:authModule.getAuth(app), db:firestore.getFirestore(app), ...firestore };
   }
 
+  async function accountProfile(tools, user) {
+    const snapshot = await tools.getDocs(tools.query(tools.collection(tools.db,'userProfiles'), tools.where('authUid','==',String(user.uid)), tools.limit(1)));
+    const docSnap = snapshot.docs[0];
+    if (!docSnap) return null;
+    const row = { id:docSnap.id, ...docSnap.data() };
+    const nickname = clean(row.nickname || row.nicknameKey || docSnap.id);
+    return nickname ? { ...row, nickname, nicknameKey:norm(row.nicknameKey || nickname) } : null;
+  }
+
   async function loadData(force = false) {
     if (loading) return lastData;
     const tools = await firebaseTools();
@@ -92,17 +89,20 @@
     if (!force && loadedForUid === user.uid && lastData) return lastData;
     loading = true;
     try {
-      const nickname = cachedNickname(user.uid);
-      const nicknameKey = norm(nickname);
-      if (!nicknameKey) return null;
-      const [seasonSnapshot, ratingSnapshot, reminderSnapshot] = await Promise.all([
-        tools.getDocs(tools.collection(tools.db,'eventSeasons')),
-        tools.getDocs(tools.query(tools.collection(tools.db,'eventRatings'), tools.where('nicknameKey','==',nicknameKey))),
-        tools.getDocs(tools.query(tools.collection(tools.db,'eventNotifications'), tools.where('recipientUid','==',String(user.uid))))
-      ]);
+      const profile = await accountProfile(tools, user);
+      if (!profile?.nicknameKey) return null;
+      const nickname = profile.nickname;
+      const nicknameKey = profile.nicknameKey;
+      const seasonPromise = tools.getDocs(tools.collection(tools.db,'eventSeasons'));
+      const ratingPromise = tools.getDocs(tools.query(tools.collection(tools.db,'eventRatings'), tools.where('nicknameKey','==',nicknameKey)));
+      const reminderPromise = tools.getDocs(tools.query(tools.collection(tools.db,'eventNotifications'), tools.where('recipientUid','==',String(user.uid)))).catch(error => {
+        console.warn('My Events reminders load skipped', error);
+        return null;
+      });
+      const [seasonSnapshot, ratingSnapshot, reminderSnapshot] = await Promise.all([seasonPromise, ratingPromise, reminderPromise]);
       const seasons = seasonSnapshot.docs.map(docSnap => accessibleSeason({ id:docSnap.id, ...docSnap.data() }, nickname, user.uid)).filter(Boolean).sort((a,b)=>SEASONS.indexOf(a.season)-SEASONS.indexOf(b.season));
       const ratings = ratingSnapshot.docs.map(docSnap => ({ id:docSnap.id, ...docSnap.data() }));
-      const reminders = reminderSnapshot.docs.map(docSnap => ({ id:docSnap.id, ...docSnap.data() })).filter(row => row.eventType === 'season-reminder' && !row.acknowledged);
+      const reminders = reminderSnapshot ? reminderSnapshot.docs.map(docSnap => ({ id:docSnap.id, ...docSnap.data() })).filter(row => row.eventType === 'season-reminder' && !row.acknowledged) : [];
       lastData = { uid:String(user.uid), nickname, nicknameKey, seasons, ratings, reminders };
       loadedForUid = user.uid;
       updateNoticeBadge(lastData);
@@ -177,6 +177,8 @@
     if (!profile) return;
     ensurePanel();
     new MutationObserver(() => {
+      const panel = ensurePanel();
+      panel?.classList.toggle('oc-profile-section-hidden', profile.dataset.profileView !== 'events');
       if (profile.dataset.profileView === 'events') void refresh(false);
     }).observe(profile, { attributes:true, attributeFilter:['data-profile-view'] });
     profile.querySelector('#oc-profile-user')?.addEventListener('change', () => { if (profile.dataset.profileView === 'events') render(lastData); });
