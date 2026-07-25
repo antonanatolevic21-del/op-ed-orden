@@ -4,6 +4,7 @@
 
   const PROFILE_LIST_ID = 'oc-profile-user';
   const EVENT_DATALIST_ID = 'ev-known-participants';
+  const ADMIN_ORDER = ['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа'];
   let knownByKey = new Map();
   let profilesLoaded = false;
   let syncQueued = false;
@@ -16,6 +17,28 @@
     return clean(row?.nickname || row?.displayName || row?.name || row?.nicknameKey || row?.id);
   }
 
+  function adminRank(rowOrName) {
+    const name = typeof rowOrName === 'string' ? rowOrName : profileName(rowOrName);
+    const key = normalize(name);
+    const ranks = ['пес_кошачий', 'toxexex', 'egortos', 'кофа'];
+    return ranks.indexOf(key);
+  }
+
+  function isAdminProfile(rowOrName) {
+    return adminRank(rowOrName) >= 0;
+  }
+
+  function compareProfiles(a, b) {
+    const rankA = adminRank(a);
+    const rankB = adminRank(b);
+    if (rankA >= 0 || rankB >= 0) {
+      if (rankA < 0) return 1;
+      if (rankB < 0) return -1;
+      return rankA - rankB;
+    }
+    return profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' });
+  }
+
   function knownRows(rows) {
     const next = new Map();
     (Array.isArray(rows) ? rows : []).forEach(row => {
@@ -25,7 +48,7 @@
       const existing = next.get(key);
       if (!existing || (!clean(existing.avatar) && clean(row?.avatar))) next.set(key, { ...row, nickname: name, nicknameKey: key });
     });
-    return [...next.values()].sort((a, b) => profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' }));
+    return [...next.values()].sort(compareProfiles);
   }
 
   function setProfiles(rows) {
@@ -52,7 +75,7 @@
     const select = document.getElementById(PROFILE_LIST_ID);
     if (!select || !profilesLoaded || !knownByKey.size) return;
 
-    const profiles = [...knownByKey.values()].sort((a, b) => profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' }));
+    const profiles = [...knownByKey.values()].sort(compareProfiles);
     const previous = clean(select.value);
     const previousKey = normalize(previous);
     const accountKey = normalize(currentAccountName());
@@ -62,7 +85,8 @@
     const expected = profiles.map(row => {
       const name = profileName(row);
       const avatar = clean(row.avatar) || '🙂';
-      return { value: name, label: `${avatar} ${name}` };
+      const admin = isAdminProfile(row);
+      return { value: name, label: `${admin ? '🔧 ' : ''}${avatar} ${name}`, admin };
     });
     const expectedSignature = expected.map(row => `${row.value}\u0000${row.label}`).join('\u0001');
     const selectionChanged = normalize(previous) !== normalize(selectedName);
@@ -72,6 +96,7 @@
         const option = document.createElement('option');
         option.value = row.value;
         option.textContent = row.label;
+        if (row.admin) option.dataset.admin = '1';
         return option;
       }));
     }
@@ -87,12 +112,15 @@
       datalist.id = EVENT_DATALIST_ID;
       document.body.append(datalist);
     }
-    const expected = [...knownByKey.values()].map(profileName).sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
-    const current = [...datalist.options].map(option => option.value);
-    if (current.join('\u0001') !== expected.join('\u0001')) {
-      datalist.replaceChildren(...expected.map(name => {
+    const profiles = [...knownByKey.values()].sort(compareProfiles);
+    const expected = profiles.map(row => ({ name: profileName(row), admin: isAdminProfile(row) }));
+    const current = [...datalist.options].map(option => `${option.value}\u0000${option.label || ''}`);
+    const signature = expected.map(row => `${row.name}\u0000${row.admin ? '🔧 админ' : ''}`);
+    if (current.join('\u0001') !== signature.join('\u0001')) {
+      datalist.replaceChildren(...expected.map(row => {
         const option = document.createElement('option');
-        option.value = name;
+        option.value = row.name;
+        if (row.admin) option.label = '🔧 админ';
         return option;
       }));
     }
