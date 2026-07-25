@@ -5,7 +5,7 @@
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
-  const top100SuiteVersion = '20260725-top100-suite1';
+  const top100SuiteVersion = '20260725-top100-suite2';
   const loadedStyles = new Set();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -107,6 +107,7 @@
       ['profile-top-single.js', top100SuiteVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion],
       ['top100-suite.js', top100SuiteVersion],
+      ['top100-suite-view-fix.js', top100SuiteVersion],
       ['manual-top-insert-fix.js', manualTopInsertFixVersion]
     ]).catch(error => {
       document.documentElement.classList.remove('oc-top100-loading');
@@ -184,7 +185,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force39', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force40', {
         updateViaCache: 'none'
       });
       await registration.update();
