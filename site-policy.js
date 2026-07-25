@@ -14,17 +14,20 @@
     }
   } catch (_) {}
 
-  function hideLegacyProfileManagement() {
+  function removeLegacyProfileManager() {
+    document.querySelectorAll('.oc-user-manager').forEach(panel => panel.remove());
+  }
+
+  function restoreProfileControls() {
     const selector = document.querySelector('#oc-profile-panel .oc-profile-select-wrap');
     const deleteButton = document.querySelector('#oc-profile-delete-btn');
     if (selector) {
-      selector.hidden = true;
-      selector.setAttribute('aria-hidden', 'true');
+      selector.hidden = false;
+      selector.removeAttribute('aria-hidden');
     }
     if (deleteButton) {
-      deleteButton.hidden = true;
-      deleteButton.setAttribute('aria-hidden', 'true');
-      deleteButton.disabled = true;
+      deleteButton.hidden = false;
+      deleteButton.removeAttribute('aria-hidden');
     }
   }
 
@@ -38,7 +41,8 @@
   }
 
   function applyPolicy() {
-    hideLegacyProfileManagement();
+    removeLegacyProfileManager();
+    restoreProfileControls();
     applyAllContentMode();
   }
 
