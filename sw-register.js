@@ -12,6 +12,7 @@
   const uxVersion = '20260724-uxpack5';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
+  const profileTopSingleVersion = '20260725-profile-top-single1';
 
   const filterUiStylesheet = document.createElement('link');
   filterUiStylesheet.rel = 'stylesheet';
@@ -75,6 +76,11 @@
   manualTopInsertStylesheet.href = `./manual-top-insert.css?v=${manualTopInsertVersion}`;
   document.head.append(manualTopInsertStylesheet);
 
+  const profileTopSingleStylesheet = document.createElement('link');
+  profileTopSingleStylesheet.rel = 'stylesheet';
+  profileTopSingleStylesheet.href = `./profile-top-single.css?v=${profileTopSingleVersion}`;
+  document.head.append(profileTopSingleStylesheet);
+
   const entityProgressScript = document.createElement('script');
   entityProgressScript.src = `./entity-progress-refresh.js?v=${version}`;
   document.body.append(entityProgressScript);
@@ -124,9 +130,10 @@
   hotkeysScript.async = false;
   document.body.append(hotkeysScript);
 
-  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'manual-top-insert-fast.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
+  ['catalog-cache.js', 'season-quality-fill.js', 'toast.js', 'profile-top-single.js', 'manual-top-insert-fast.js', 'skeleton-loading.js', 'advanced-filters.js', 'undo-actions.js', 'accessibility.js'].forEach(file => {
     const script = document.createElement('script');
     if (file === 'season-quality-fill.js') script.src = `./${file}?v=${seasonFillVersion}`;
+    else if (file === 'profile-top-single.js') script.src = `./${file}?v=${profileTopSingleVersion}`;
     else if (file === 'manual-top-insert-fast.js') script.src = `./${file}?v=${manualTopInsertVersion}`;
     else script.src = `./${file}?v=${uxVersion}`;
     script.async = false;
@@ -148,7 +155,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force28', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force29', {
         updateViaCache: 'none'
       });
       await registration.update();
