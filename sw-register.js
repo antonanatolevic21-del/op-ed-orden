@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260725-primary-shell7';
+  const primaryVersion = '20260725-primary-shell8';
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260725-account-sync3';
   const seasonFillVersion = '20260725-season-fill2';
@@ -9,6 +9,8 @@
   const myEventsVersion = '20260725-my-events3';
   const statsDesignVersion = '20260725-profile-stats-designs4';
   const adminMissingVersion = '20260725-admin-missing2';
+  const firstUserFixVersion = '20260725-first-user-test1';
+  const top100DragVersion = '20260725-top100-drag1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -90,6 +92,7 @@
   initialStylePromises.push(addStyle('my-events-profile.css', myEventsVersion));
   initialStylePromises.push(addStyle('profile-stats-designs.css', statsDesignVersion));
   initialStylePromises.push(addStyle('admin-missing-inline.css', adminMissingVersion));
+  initialStylePromises.push(addStyle('first-user-test-fixes.css', firstUserFixVersion));
   void Promise.all(initialStylePromises).finally(() => { initialStylesReady = true; });
 
   void addScriptsOrdered([
@@ -100,10 +103,12 @@
     ['profile-filters.js', primaryVersion],
     ['active-filter-chips.js', primaryVersion],
     ['account-sync.js', accountSyncVersion],
+    ['first-user-test-fixes.js', firstUserFixVersion],
     ['admin-missing-inline.js', adminMissingVersion],
     ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
     ['quality-center.js', primaryVersion],
+    ['quality-center-user-route.js', firstUserFixVersion],
     ['keyboard-shortcuts.js', primaryVersion],
     ['toast.js', primaryVersion],
     ['skeleton-loading.js', primaryVersion],
@@ -130,13 +135,15 @@
     addStyle('profile-top-layout-fixes.css', top100SuiteVersion);
     addStyle('manual-top-insert-fix.css', manualTopInsertFixVersion);
     addStyle('top100-suite.css', top100SuiteVersion);
+    addStyle('top100-drag.css', top100DragVersion);
     top100Promise = addScriptsOrdered([
       ['catalog-cache.js', primaryVersion],
       ['profile-top-single.js', top100SuiteVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion],
       ['top100-suite.js', top100SuiteVersion],
       ['top100-suite-view-fix.js', top100SuiteVersion],
-      ['manual-top-insert-fix.js', manualTopInsertFixVersion]
+      ['manual-top-insert-fix.js', manualTopInsertFixVersion],
+      ['top100-drag.js', top100DragVersion]
     ]).catch(error => {
       document.documentElement.classList.remove('oc-top100-loading');
       console.error('Top-100 package load failed', error);
@@ -215,7 +222,7 @@
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force52', {
+      const registration = await navigator.serviceWorker.register('./sw.js?v=20260725-force53', {
         updateViaCache: 'none'
       });
       await registration.update();
