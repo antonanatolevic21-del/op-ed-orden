@@ -52,8 +52,16 @@
     });
   }
 
+  function statLabel(card) {
+    return String(card.querySelector('.oc-stat-label')?.textContent || '').trim().toLowerCase();
+  }
+
+  function isLeaderStat(card) {
+    return /^топ\s*-?\s*\d+/i.test(statLabel(card));
+  }
+
   function statTone(card) {
-    const label = String(card.querySelector('.oc-stat-label')?.textContent || '').toLowerCase();
+    const label = statLabel(card);
     if (/(^|[\s·])op($|[\s·])/i.test(label)) return 'op';
     if (/(^|[\s·])ed($|[\s·])/i.test(label)) return 'ed';
     if (label.includes('песня')) return 'song';
@@ -85,25 +93,26 @@
     const cards = [...stats.children].filter(element => element.classList.contains('oc-stat-card'));
     if (!cards.length) return;
 
-    cards.forEach((card, index) => {
-      card.classList.toggle('oc-profile-metric-card', index < 7);
-      card.classList.toggle('oc-profile-leader-card', index >= 7);
+    cards.forEach(card => {
+      const leader = isLeaderStat(card);
+      card.classList.toggle('oc-profile-metric-card', !leader);
+      card.classList.toggle('oc-profile-leader-card', leader);
       card.dataset.profileStatTone = statTone(card);
     });
 
-    let summary = stats.querySelector('.oc-profile-overview-heading-summary');
-    if (!summary) {
-      summary = overviewHeading('summary', 'Ключевые показатели', 'Средние оценки и прогресс по каталогу без лишней россыпи карточек.');
-      stats.insertBefore(summary, cards[0]);
-    }
+    const firstMetric = cards.find(card => !isLeaderStat(card));
+    const firstLeader = cards.find(isLeaderStat);
 
-    const firstLeader = cards[7];
+    let summary = stats.querySelector('.oc-profile-overview-heading-summary');
+    if (!summary) summary = overviewHeading('summary', 'Ключевые показатели', 'Средние оценки и прогресс по каталогу без лишней россыпи карточек.');
+    if (firstMetric) stats.insertBefore(summary, firstMetric);
+
+    let leaders = stats.querySelector('.oc-profile-overview-heading-leaders');
     if (firstLeader) {
-      let leaders = stats.querySelector('.oc-profile-overview-heading-leaders');
-      if (!leaders) {
-        leaders = overviewHeading('leaders', 'Лидеры', 'Студии, исполнители, режиссёры, франшизы и сезоны — крупными, читаемыми блоками.');
-        stats.insertBefore(leaders, firstLeader);
-      }
+      if (!leaders) leaders = overviewHeading('leaders', 'Лидеры', 'Студии, исполнители, режиссёры, франшизы и сезоны — крупными, читаемыми блоками.');
+      stats.insertBefore(leaders, firstLeader);
+    } else if (leaders) {
+      leaders.remove();
     }
   }
 
