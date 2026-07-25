@@ -1,5 +1,6 @@
 name: One-off first paint fix
 
+# Trigger after the workflow exists on main.
 on:
   push:
     paths:
