@@ -34,6 +34,13 @@
 		return event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
 	}
 
+	// Must be registered before deep-links.js: its capture listener would otherwise
+	// rewrite the current tab URL even when Ctrl/middle-click is meant for a new tab.
+	document.addEventListener('click', event => {
+		const link = event.target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]');
+		if (link && isModifiedClick(event)) event.stopImmediatePropagation();
+	}, true);
+
 	function installOverlayLink(button, href) {
 		if (!button || button.tagName !== 'BUTTON' || !href) return;
 		button.classList.add('oc-nav-real-host');
@@ -45,10 +52,7 @@
 			link.tabIndex = -1;
 			button.append(link);
 			link.addEventListener('click', event => {
-				if (isModifiedClick(event)) {
-					event.stopImmediatePropagation();
-					return;
-				}
+				if (isModifiedClick(event)) return;
 				event.preventDefault();
 				event.stopImmediatePropagation();
 				button.click();
