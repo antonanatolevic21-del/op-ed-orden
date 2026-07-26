@@ -50,6 +50,38 @@
     return null;
   }
 
+  function visibleManualTop(user, key) {
+    const viewed = clean(document.querySelector('#oc-profile-user')?.value || user);
+    if (!viewed || normalize(viewed) !== key) return null;
+
+    const manualMode = document.querySelector('#oc-topmode-manual');
+    const scoreMode = document.querySelector('#oc-topmode-score');
+    if (scoreMode?.classList.contains('active')) return null;
+    if (manualMode && !manualMode.classList.contains('active')) return null;
+
+    const collect = selector => {
+      const container = document.querySelector(selector);
+      if (!container) return [];
+      const result = [];
+      const seen = new Set();
+      container.querySelectorAll(':scope > .oc-profile-item').forEach(card => {
+        const id = clean(
+          card.dataset.explicitTopId
+          || card.querySelector('[data-action="set-rank"][data-id]')?.dataset.id
+          || card.querySelector('[data-action="open-card"][data-id]')?.dataset.id
+          || card.querySelector('[data-id]')?.dataset.id
+        );
+        if (!id || seen.has(id) || result.length >= 100) return;
+        seen.add(id);
+        result.push(id);
+      });
+      return result;
+    };
+
+    const top = { OP: collect('#oc-profile-op'), ED: collect('#oc-profile-ed') };
+    return hasTop(top) ? top : null;
+  }
+
   async function waitForDb() {
     if (window.OPED_DB?.saveManualRanks) return window.OPED_DB;
     await Promise.race([
@@ -85,14 +117,16 @@
       const tools = await firebaseTools();
       const manualRef = tools.doc(tools.db, 'manualRanks', key);
       const manualSnap = await tools.getDoc(manualRef);
+      const currentTop = manualSnap.exists() ? topFrom(manualSnap.data() || {}) : { OP: [], ED: [] };
 
-      // Once manualRanks exists it is authoritative, even when a type was
-      // intentionally left empty. Never resurrect older data over it.
-      if (manualSnap.exists()) {
+      // A non-empty current manualRanks document is authoritative.
+      if (hasTop(currentTop)) {
         completedFor = key;
         return;
       }
 
+      // If current storage is empty, recover any real top that still exists in an
+      // older mirror, local storage or the already-rendered manual profile view.
       let existingTop = null;
       const profileSnap = await tools.getDoc(tools.doc(tools.db, 'userProfiles', key));
       if (profileSnap.exists()) {
@@ -101,13 +135,12 @@
       }
 
       if (!existingTop) existingTop = legacyLocalTop(user, key);
-      if (!hasTop(existingTop)) {
-        completedFor = key;
-        return;
-      }
+      if (!existingTop) existingTop = visibleManualTop(user, key);
 
-      // saveManualRanks verifies ownership through the current personal Firebase
-      // account and mirrors the same payload into userProfiles.
+      // Do not mark the user as completed yet. The profile/top package may still
+      // be rendering; later timers and the observer will retry and can recover it.
+      if (!hasTop(existingTop)) return;
+
       await dbApi.saveManualRanks(user, existingTop);
       completedFor = key;
       try { localStorage.removeItem(`oc-explicit-top-draft-v1:${key}`); } catch (_) {}
@@ -116,16 +149,25 @@
       }));
       window.OC_TOAST?.show?.('Существующий топ-100 сохранён как актуальный ✓', { type: 'success' });
     } catch (error) {
-      // Most commonly this means there is no personal authenticated account yet.
-      // oped-account-restored will retry after the next successful login.
       console.warn('Existing manual top migration skipped', error);
     } finally {
       running = false;
     }
   }
 
-  window.addEventListener('oped-account-restored', () => setTimeout(migrateExistingTop, 0));
-  window.addEventListener('oped-db-ready', () => setTimeout(migrateExistingTop, 0));
-  window.addEventListener('pageshow', () => setTimeout(migrateExistingTop, 50));
-  [0, 300, 1000, 2500].forEach(delay => setTimeout(migrateExistingTop, delay));
+  function retrySoon() {
+    window.setTimeout(migrateExistingTop, 0);
+  }
+
+  window.addEventListener('oped-account-restored', retrySoon);
+  window.addEventListener('oped-db-ready', retrySoon);
+  window.addEventListener('pageshow', () => window.setTimeout(migrateExistingTop, 50));
+  document.querySelector('#oc-profile-user')?.addEventListener('change', retrySoon);
+
+  const profile = document.querySelector('#oc-profile-panel');
+  if (profile) {
+    new MutationObserver(() => retrySoon()).observe(profile, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-profile-view'] });
+  }
+
+  [0, 300, 1000, 2500, 5000, 8000, 12000].forEach(delay => window.setTimeout(migrateExistingTop, delay));
 })();
