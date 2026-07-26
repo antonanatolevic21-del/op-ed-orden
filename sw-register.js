@@ -16,7 +16,7 @@
   const sitePolicyVersion = '20260726-site-policy2';
   const manualTopExplicitVersion = '20260726-manual-top-explicit1';
   const manualTopSaveBridgeVersion = '20260726-manual-top-save-bridge1';
-  const manualTopExistingMigrationVersion = '20260726-manual-top-existing-migration1';
+  const manualTopExistingMigrationVersion = '20260726-manual-top-existing-migration2';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
   const adminProfilePickerVersion = '20260726-admin-profile-picker2';
