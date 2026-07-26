@@ -3,6 +3,7 @@
   window.__OC_TOP100_EDITOR_V2_READY__ = true;
 
   const VERSION = 2;
+  const MAX_HISTORY = 30;
   const DRAFT_PREFIX = 'oc-top100-editor-v2-draft:';
   const state = {
     user: '', key: '', loaded: false, loading: false, editing: false, applying: false, saving: false,
@@ -100,6 +101,23 @@
 
   function clearLocalDraft() {
     try { if (state.key) localStorage.removeItem(draftKey(state.key)); } catch (_) {}
+  }
+
+  function historyEntry(order, savedAtLocal = Date.now()) {
+    const cleanOrder = cloneOrder(order);
+    return { savedAtLocal, OP: cleanOrder.OP, ED: cleanOrder.ED };
+  }
+
+  function dedupeHistory(entries) {
+    const seen = new Set(), result = [];
+    for (const entry of entries || []) {
+      const cleanEntry = historyEntry(entry, Number(entry?.savedAtLocal) || Date.now());
+      const key = fingerprint(cleanEntry);
+      if (seen.has(key)) continue;
+      seen.add(key); result.push(cleanEntry);
+      if (result.length >= MAX_HISTORY) break;
+    }
+    return result;
   }
 
   function scoreFromAllRatings(id) {
@@ -241,9 +259,20 @@
       const db = window.OPED_DB;
       if (!db?.saveManualRanks) throw new Error('Firebase ещё не готов.');
       const payload = cloneOrder(state.draft);
-      await db.saveManualRanks(state.user, payload);
       const tools = await firebaseTools();
-      const snap = await tools.getDoc(tools.doc(tools.db, 'manualRanks', state.key));
+      const manualRef = tools.doc(tools.db, 'manualRanks', state.key);
+      const previousSnap = await tools.getDoc(manualRef);
+      const previousRow = previousSnap.exists() ? previousSnap.data() || {} : {};
+      const previousOrder = { OP: uniqueIds(previousRow.OP || previousRow.manualOP), ED: uniqueIds(previousRow.ED || previousRow.manualED) };
+      const previousTime = previousRow.updatedAt?.toMillis?.() || Date.now();
+      const hasPreviousOrder = previousOrder.OP.length || previousOrder.ED.length;
+      const history = dedupeHistory([
+        ...(hasPreviousOrder && fingerprint(previousOrder) !== fingerprint(payload) ? [historyEntry(previousOrder, previousTime)] : []),
+        ...(Array.isArray(previousRow.history) ? previousRow.history : [])
+      ]);
+      await db.saveManualRanks(state.user, payload);
+      await tools.setDoc(manualRef, { history }, { merge: true });
+      const snap = await tools.getDoc(manualRef);
       const row = snap.exists() ? snap.data() || {} : {};
       const verified = { OP: uniqueIds(row.OP || row.manualOP), ED: uniqueIds(row.ED || row.manualED) };
       if (fingerprint(verified) !== fingerprint(payload)) throw new Error('Firebase сохранил другой порядок.');
@@ -264,7 +293,7 @@
     const columns = document.querySelector('#oc-profile-panel .oc-profile-columns');
     if (!columns) return;
     const toolbar = document.createElement('div'); toolbar.className = 'oc-top100-toolbar';
-    toolbar.innerHTML = `<div class="oc-top100-toolbar-type"></div><div class="oc-top100-search-wrap"><input id="oc-top100-search" type="search" placeholder="Найти в топе…" autocomplete="off"><div id="oc-top100-search-results" class="oc-top100-search-results" hidden></div></div><div class="oc-top100-jump"><input id="oc-top100-jump" type="number" min="1" max="100" placeholder="№"><button type="button" data-top100-jump>Перейти</button></div><div class="oc-top100-history-actions"><button type="button" data-top100-undo title="Отменить">↶</button><button type="button" data-top100-redo title="Вернуть">↷</button><button type="button" data-top100-reset>Сбросить</button></div><span class="oc-top100-dirty" data-top100-dirty>Сохранено</span><div class="oc-top100-extra"></div><div class="oc-top100-toolbar-save"></div>`;
+    toolbar.innerHTML = `<div class="oc-top100-toolbar-type"></div><div class="oc-top100-search-wrap"><input id="oc-top100-search" type="search" placeholder="Найти в топе…" autocomplete="off"><div id="oc-top100-search-results" class="oc-top100-search-results" hidden></div></div><div class="oc-top100-jump"><input id="oc-top100-jump" type="number" min="1" max="100" placeholder="№"><button type="button" data-top100-jump>Перейти</button></div><div class="oc-top100-history-actions"><button type="button" data-top100-undo title="Отменить">↶</button><button type="button" data-top100-redo title="Вернуть">↷</button><button type="button" data-top100-reset>Сбросить</button></div><span class="oc-top100-dirty" data-top100-dirty>Сохранено</span><div class="oc-top100-extra"><button type="button" data-top100-history>История</button><button type="button" data-top100-compare>Сравнить</button></div><div class="oc-top100-toolbar-save"></div>`;
     columns.before(toolbar);
     const switcher = document.querySelector('.oc-profile-top-type-switch'); if (switcher) toolbar.querySelector('.oc-top100-toolbar-type').append(switcher);
     const edit = editButton(), save = saveButton();
@@ -273,6 +302,8 @@
     toolbar.querySelector('[data-top100-undo]').addEventListener('click', undo);
     toolbar.querySelector('[data-top100-redo]').addEventListener('click', redo);
     toolbar.querySelector('[data-top100-reset]').addEventListener('click', resetDraft);
+    toolbar.querySelector('[data-top100-history]').addEventListener('click', () => void openHistory());
+    toolbar.querySelector('[data-top100-compare]').addEventListener('click', () => void openCompare());
     toolbar.querySelector('[data-top100-jump]').addEventListener('click', () => jumpTo(toolbar.querySelector('#oc-top100-jump').value));
     toolbar.querySelector('#oc-top100-jump').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); jumpTo(event.target.value); } });
     toolbar.querySelector('#oc-top100-search').addEventListener('input', renderSearch);
@@ -287,7 +318,6 @@
 
   function jumpTo(place) {
     const index = Math.max(1, Math.min(100, Math.round(Number(place) || 1))) - 1;
-    if (!state.editing && index >= 10 && !state.expanded[activeType()]) { state.expanded[activeType()] = true; renderType(activeType()); }
     const card = containerFor(activeType())?.querySelectorAll(':scope > .oc-profile-item')?.[index];
     card?.scrollIntoView({ behavior: 'smooth', block: 'center' }); card?.classList.add('oc-top100-flash');
     setTimeout(() => card?.classList.remove('oc-top100-flash'), 1500);
@@ -325,6 +355,82 @@
       state.draft = readLocalDraft(state.key) || cloneOrder(state.baseline); state.undo = []; state.redo = []; renderAll();
     } else {
       state.draft = cloneOrder(state.baseline); state.undo = []; state.redo = []; clearLocalDraft(); renderAll();
+    }
+  }
+
+  function modalRoot(kind) {
+    document.querySelector('.oc-top100-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.className = 'oc-top100-modal';
+    modal.dataset.kind = kind;
+    modal.innerHTML = `<div class="oc-top100-dialog"><button type="button" class="oc-top100-modal-close" aria-label="Закрыть">×</button><div class="oc-top100-modal-body"></div></div>`;
+    document.body.append(modal);
+    modal.addEventListener('click', event => {
+      if (event.target === modal || event.target.closest('.oc-top100-modal-close')) modal.remove();
+    });
+    return modal;
+  }
+
+  const rowUser = row => clean(row.nickname || row.displayName || row.name || row.id);
+  const rowOrder = (row, type) => uniqueIds(row?.[type] || row?.[`manual${type}`]);
+
+  async function loadManualRows() {
+    const tools = await firebaseTools();
+    const snap = await tools.getDocs(tools.collection(tools.db, 'manualRanks'));
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+
+  async function openHistory() {
+    const modal = modalRoot('history'), body = modal.querySelector('.oc-top100-modal-body');
+    body.innerHTML = '<h2>История топ-100</h2><p class="oc-top100-muted">Загружаю сохранённые версии…</p>';
+    try {
+      const tools = await firebaseTools();
+      const snap = await tools.getDoc(tools.doc(tools.db, 'manualRanks', state.key));
+      const row = snap.exists() ? snap.data() || {} : {};
+      const history = Array.isArray(row.history) ? row.history : [];
+      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>История топ-100</h2><p>${esc(viewedUser())} · до ${MAX_HISTORY} предыдущих сохранений</p></div></div><div class="oc-top100-history-list">${history.length ? history.map((entry, index) => `<div class="oc-top100-history-row"><div><strong>${new Date(Number(entry.savedAtLocal) || Date.now()).toLocaleString('ru-RU')}</strong><span>OP: ${uniqueIds(entry.OP).length} · ED: ${uniqueIds(entry.ED).length}</span></div><button type="button" data-history-index="${index}" ${state.editing && isOwnProfile() ? '' : 'disabled'}>Восстановить</button></div>`).join('') : '<div class="oc-empty">Предыдущих версий пока нет. Они начнут сохраняться при следующем изменении топа.</div>'}</div>`;
+      body.addEventListener('click', event => {
+        const button = event.target.closest('[data-history-index]');
+        if (!button || !state.editing || !isOwnProfile()) return;
+        const entry = history[Number(button.dataset.historyIndex)];
+        if (!entry || !window.confirm('Восстановить эту версию в черновик? Текущий сохранённый топ изменится только после нажатия «Сохранить».')) return;
+        setDraft({ OP: uniqueIds(entry.OP), ED: uniqueIds(entry.ED) });
+        modal.remove();
+        toast('Версия восстановлена в черновик. Проверь её и нажми «Сохранить».', 'success');
+      });
+    } catch (error) {
+      body.innerHTML = `<h2>История топ-100</h2><div class="oc-top100-error">${esc(error?.message || 'Не удалось загрузить историю.')}</div>`;
+    }
+  }
+
+  async function openCompare() {
+    const modal = modalRoot('compare'), body = modal.querySelector('.oc-top100-modal-body');
+    body.innerHTML = '<h2>Сравнение топов</h2><p class="oc-top100-muted">Загружаю профили…</p>';
+    try {
+      const rows = await loadManualRows();
+      const users = [...new Set(rows.map(rowUser).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+      if (users.length < 2) throw new Error('Для сравнения нужно хотя бы два сохранённых топа.');
+      const byUser = user => rows.find(row => normalize(row.nicknameKey || rowUser(row)) === normalize(user));
+      const current = users.find(user => normalize(user) === normalize(viewedUser())) || users[0];
+      const other = users.find(user => normalize(user) !== normalize(current)) || users[1];
+      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>Сравнение топов</h2><p>Совпадения, расхождения по местам и уникальные позиции.</p></div></div><div class="oc-top100-compare-controls"><select id="oc-top100-compare-a">${users.map(user => `<option ${user === current ? 'selected' : ''}>${esc(user)}</option>`).join('')}</select><span>vs</span><select id="oc-top100-compare-b">${users.map(user => `<option ${user === other ? 'selected' : ''}>${esc(user)}</option>`).join('')}</select><select id="oc-top100-compare-type"><option value="OP">Опенинги</option><option value="ED">Эндинги</option></select></div><div id="oc-top100-compare-result"></div>`;
+      const render = () => {
+        const a = body.querySelector('#oc-top100-compare-a').value, b = body.querySelector('#oc-top100-compare-b').value;
+        const type = body.querySelector('#oc-top100-compare-type').value === 'ED' ? 'ED' : 'OP';
+        const orderFor = user => normalize(user) === normalize(viewedUser()) && state.editing ? state.draft[type] : rowOrder(byUser(user), type);
+        const ao = orderFor(a), bo = orderFor(b);
+        const posA = new Map(ao.map((id, index) => [String(id), index + 1])), posB = new Map(bo.map((id, index) => [String(id), index + 1]));
+        const title = id => metaFor(type, id).title || id;
+        const common = ao.filter(id => posB.has(String(id))).map(id => ({ id:String(id), a:posA.get(String(id)), b:posB.get(String(id)) }));
+        const overlap = Math.round(common.length / Math.max(1, ao.length, bo.length) * 100);
+        const gaps = common.map(row => ({ ...row, gap:Math.abs(row.a - row.b) })).sort((a, b) => b.gap - a.gap).slice(0, 20);
+        const onlyA = ao.filter(id => !posB.has(String(id))), onlyB = bo.filter(id => !posA.has(String(id)));
+        body.querySelector('#oc-top100-compare-result').innerHTML = `<div class="oc-top100-compare-summary"><div><strong>${overlap}%</strong><span>совпадение</span></div><div><strong>${common.length}</strong><span>общих</span></div><div><strong>${onlyA.length}</strong><span>только у ${esc(a)}</span></div><div><strong>${onlyB.length}</strong><span>только у ${esc(b)}</span></div></div><h3>Самые большие расхождения</h3><div class="oc-top100-compare-table">${gaps.length ? gaps.map(row => `<div><span>${esc(title(row.id))}</span><b>№${row.a} → №${row.b}</b><em>Δ ${row.gap}</em></div>`).join('') : '<div class="oc-empty">Общих треков нет.</div>'}</div><div class="oc-top100-compare-unique"><section><h3>Только у ${esc(a)}</h3>${onlyA.slice(0, 20).map(id => `<p>№${posA.get(String(id))} · ${esc(title(id))}</p>`).join('') || '<p>—</p>'}</section><section><h3>Только у ${esc(b)}</h3>${onlyB.slice(0, 20).map(id => `<p>№${posB.get(String(id))} · ${esc(title(id))}</p>`).join('') || '<p>—</p>'}</section></div>`;
+      };
+      body.querySelectorAll('#oc-top100-compare-a,#oc-top100-compare-b,#oc-top100-compare-type').forEach(input => input.addEventListener('change', render));
+      render();
+    } catch (error) {
+      body.innerHTML = `<h2>Сравнение топов</h2><div class="oc-top100-error">${esc(error?.message || 'Не удалось сравнить топы.')}</div>`;
     }
   }
 
