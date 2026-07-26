@@ -21,7 +21,7 @@
   const entityAlbumEditorVersion = '20260726-entity-album-editor4';
   const top100RankReadabilityVersion = '20260726-top100-rank-readability1';
   const entityRealLinksVersion = '20260726-entity-real-links1';
-  const navigationRealLinksVersion = '20260726-navigation-real-links3';
+  const navigationRealLinksVersion = '20260726-navigation-real-links4';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
