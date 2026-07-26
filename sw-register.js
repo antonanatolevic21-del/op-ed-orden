@@ -22,6 +22,7 @@
   const top100RankReadabilityVersion = '20260726-top100-rank-readability1';
   const entityRealLinksVersion = '20260726-entity-real-links1';
   const navigationRealLinksVersion = '20260726-navigation-real-links1';
+  const startupDeepLinkFixVersion = '20260726-startup-deep-link-fix1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -115,6 +116,7 @@
     ['admin-missing-inline.js', adminMissingVersion],
     ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
+    ['startup-deep-link-fix.js', startupDeepLinkFixVersion],
     ['quality-center.js', primaryVersion],
     ['quality-center-user-route.js', firstUserFixVersion],
     ['keyboard-shortcuts.js', primaryVersion],
