@@ -18,6 +18,7 @@
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
   const adminProfilePickerVersion = '20260726-admin-profile-picker2';
+  const entityAlbumEditorVersion = '20260726-entity-album-editor1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -84,11 +85,13 @@
   initialStylePromises.push(addStyle('first-user-test-fixes.css', firstUserFixVersion));
   initialStylePromises.push(addStyle('access-role-badge.css', accessRoleBadgeVersion));
   initialStylePromises.push(addStyle('admin-profile-picker.css', adminProfilePickerVersion));
+  initialStylePromises.push(addStyle('entity-album-editor.css', entityAlbumEditorVersion));
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
   void addScriptsOrdered([
     ['site-policy.js', sitePolicyVersion],
     ['entity-progress-refresh.js', primaryVersion],
+    ['entity-album-editor.js', entityAlbumEditorVersion],
     ['topbar.js', primaryVersion],
     ['profile-tabs.js', primaryVersion],
     ['profile-stats-designs.js', statsDesignVersion],
