@@ -297,6 +297,7 @@
         nickname: displayName,
         nicknameKey: safeName,
         ownerUid: requirePersonalUid(),
+        manualCreated: true,
         OP: cleanRanks.OP,
         ED: cleanRanks.ED,
         manualOP: cleanRanks.OP,
