@@ -1,1 +1,24 @@
-.oc-nav-real-host{position:relative!important}.oc-nav-real-hit{position:absolute;inset:0;z-index:20;display:block;border-radius:inherit;color:inherit!important;text-decoration:none!important;cursor:pointer}.oc-nav-real-hit:visited{color:inherit!important}.oc-nav-real-host:focus-visible{outline:2px solid #ff5f86;outline-offset:2px}
+.oc-nav-real-wrap{position:relative;display:inline-flex;min-width:0}.oc-tabs>.oc-nav-real-wrap{display:inline-flex}.ev-mode-switch>.oc-nav-real-wrap{display:flex;width:100%;min-width:0}.ev-tabs>.oc-nav-real-wrap{display:inline-flex;width:auto}.oc-nav-real-wrap>.oc-tab-btn,.oc-nav-real-wrap>.ev-mode-tab,.oc-nav-real-wrap>.ev-tab{width:100%;height:100%}.oc-nav-real-hit{position:absolute;inset:0;z-index:20;display:block;border-radius:inherit;color:inherit!important;text-decoration:none!important;cursor:pointer}.oc-nav-real-hit:visited{color:inherit!important}.oc-nav-real-hit:focus-visible{outline:2px solid #ff5f86;outline-offset:2px}
+
+html.oc-route-previewing #oc-main-panel,
+html.oc-route-previewing #oc-profile-panel,
+html.oc-route-previewing #oc-top100-panel,
+html.oc-route-previewing #oc-season-panel,
+html.oc-route-previewing #oc-tier-panel,
+html.oc-route-previewing #oc-stats-panel,
+html.oc-route-previewing #oc-entity-panel{display:none!important}
+html.oc-route-view-chart #oc-main-panel{display:block!important}
+html.oc-route-view-profile #oc-profile-panel{display:block!important}
+html.oc-route-view-top100 #oc-top100-panel{display:block!important}
+html.oc-route-view-season #oc-season-panel{display:block!important}
+html.oc-route-view-tier #oc-tier-panel{display:block!important}
+html.oc-route-view-stats #oc-stats-panel{display:block!important}
+html.oc-route-view-entity-studios #oc-entity-panel,
+html.oc-route-view-entity-performers #oc-entity-panel,
+html.oc-route-view-entity-directors #oc-entity-panel,
+html.oc-route-view-entity-franchises #oc-entity-panel{display:block!important}
+
+html.oc-route-previewing .oc-tab-btn.active:not(.oc-route-preview-active){border-color:var(--border)!important;background:transparent!important;color:var(--muted)!important;box-shadow:none!important}
+html.oc-route-previewing .oc-tab-btn.oc-route-preview-active{color:var(--text)!important;border-color:var(--pink)!important;background:linear-gradient(135deg,rgba(255,46,99,.22),rgba(8,217,214,.08))!important;box-shadow:0 5px 18px rgba(0,0,0,.22)}
+.ev-mode-tab.oc-route-preview-active{color:var(--text)!important;border-color:var(--pink)!important;background:linear-gradient(135deg,rgba(255,46,99,.22),rgba(8,217,214,.08))!important;box-shadow:0 5px 18px rgba(0,0,0,.22)}
+.ev-tab.oc-route-preview-active{background:rgba(255,46,99,.14)!important;border-color:var(--pink)!important;color:var(--pink)!important}
