@@ -241,10 +241,38 @@
     requestAnimationFrame(sync);
   }
 
-  function commitDraft() {
+  function renderDraftNow(type = null) {
+    if (!state.loaded || !editing() || !profileVisible()) return;
+    state.applying = true;
+    try {
+      collectRenderedCards();
+      if (type === 'OP' || type === 'ED') renderType(type);
+      else {
+        renderType('OP');
+        renderType('ED');
+      }
+      syncAllRatingsControls();
+      syncButtons();
+    } finally {
+      state.applying = false;
+    }
+  }
+
+  function commitDraft(type = null) {
     state.draft = { OP: uniqueIds(state.draft.OP), ED: uniqueIds(state.draft.ED) };
     writeLocalDraft();
+    renderDraftNow(type);
     scheduleSync();
+  }
+
+  function applyExternalOrder(type, ids, user = '') {
+    const normalizedType = type === 'ED' ? 'ED' : 'OP';
+    if (!state.loaded || !editing() || !profileVisible()) return false;
+    if (user && normalize(user) !== state.userKey) return false;
+    collectRenderedCards();
+    state.draft[normalizedType] = uniqueIds(ids);
+    commitDraft(normalizedType);
+    return true;
   }
 
   function addToTop(type, id, target = null) {
@@ -252,7 +280,7 @@
     const index = target === null ? order.length : Math.max(0, Math.min(order.length, Math.round(Number(target) || 1) - 1));
     order.splice(index, 0, id);
     state.draft[type] = uniqueIds(order);
-    commitDraft();
+    commitDraft(type);
   }
 
   function move(type, id, offset) {
@@ -263,7 +291,7 @@
     const [item] = order.splice(from, 1);
     order.splice(to, 0, item);
     state.draft[type] = order;
-    commitDraft();
+    commitDraft(type);
   }
 
   function setRank(type, id) {
@@ -275,6 +303,26 @@
     const place = Math.max(1, Math.min(max, Math.round(Number(String(raw).replace(',', '.')) || 1)));
     addToTop(type, id, place);
   }
+
+  window.OC_MANUAL_TOP_DRAFT = {
+    get(type) {
+      const normalizedType = type === 'ED' ? 'ED' : 'OP';
+      return state.draft[normalizedType].slice();
+    },
+    applyOrder(type, ids, user = '') {
+      return applyExternalOrder(type, ids, user);
+    },
+    place(type, id, target) {
+      const normalizedType = type === 'ED' ? 'ED' : 'OP';
+      addToTop(normalizedType, clean(id), target);
+      return state.draft[normalizedType].slice();
+    }
+  };
+
+  document.addEventListener('oc:manual-top-order-change', event => {
+    const detail = event.detail || {};
+    applyExternalOrder(detail.type, detail.ids, detail.user || '');
+  });
 
   document.addEventListener('click', event => {
     const button = event.target.closest?.('[data-action][data-id]');
@@ -293,7 +341,7 @@
     else if (action === 'move-down') move(type, id, 1);
     else if (action === 'remove-from-top') {
       state.draft[type] = state.draft[type].filter(value => value !== id);
-      commitDraft();
+      commitDraft(type);
     }
   }, true);
 
@@ -325,12 +373,19 @@
   document.addEventListener('oc:top100-saved', event => {
     const user = clean(event.detail?.user || viewedUser());
     if (normalize(user) !== state.userKey) return;
-    state.baseline = { OP: uniqueIds(state.draft.OP), ED: uniqueIds(state.draft.ED) };
+    const saved = {
+      OP: uniqueIds(event.detail?.OP || state.draft.OP),
+      ED: uniqueIds(event.detail?.ED || state.draft.ED)
+    };
+    state.baseline = { OP: saved.OP.slice(), ED: saved.ED.slice() };
+    state.draft = { OP: saved.OP.slice(), ED: saved.ED.slice() };
     try { localStorage.removeItem(draftKey(state.userKey)); } catch (_) {}
+    renderDraftNow();
     scheduleSync();
   });
 
   const observer = new MutationObserver(() => {
+    if (document.documentElement.classList.contains('oc-top100-drag-active')) return;
     if (!state.applying) scheduleSync();
   });
   ['#oc-profile-panel', '#oc-profile-op', '#oc-profile-ed', '#oc-allratings-columns'].forEach(selector => {
