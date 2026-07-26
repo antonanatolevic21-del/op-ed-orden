@@ -4701,7 +4701,10 @@
         const row = manualRanks[key] || {};
         const display = String(row.nickname || row.displayName || row.name || key || '').trim();
         if (!display) return;
-        if (scope === 'admins' && !isAdminNickname(display)) return;
+        const belongsToAdmin =
+          [display, key, row.nicknameKey, row.id].some(value => isAdminNickname(value)) ||
+          ADMIN_UIDS.has(String(row.ownerUid || ''));
+        if (scope === 'admins' && !belongsToAdmin) return;
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
         if (seenKeys.has(safe)) return;
         const arr = manualOrderFor(display, type);
