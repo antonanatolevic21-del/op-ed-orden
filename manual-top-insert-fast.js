@@ -11,8 +11,28 @@
   const viewedUser = () => clean(document.querySelector('#oc-profile-user')?.value || document.querySelector('#oc-myname')?.value);
   const activeType = () => document.querySelector('.oc-profile-top-type-btn.active')?.dataset.type === 'ED' ? 'ED' : 'OP';
   const editing = () => Boolean(document.querySelector('#oc-manual-edit-btn')?.classList.contains('active'));
+  const topVisible = () => document.querySelector('#oc-profile-panel')?.dataset.profileView === 'top100';
+  const containerFor = type => document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
   let cache = new Map();
   let modal = null;
+  let activeZone = null;
+  let mountTimer = 0;
+
+  function ensureStyles() {
+    if (document.querySelector('#oc-top100-inline-insert-style')) return;
+    const style = document.createElement('style');
+    style.id = 'oc-top100-inline-insert-style';
+    style.textContent = `
+      .oc-manual-insert-zone.oc-top100-inline-zone{margin:4px 0;min-height:24px}
+      .oc-manual-insert-zone.oc-top100-inline-zone>button{min-height:24px;border-color:rgba(169,155,184,.28);color:#716979;background:rgba(139,92,246,.025)}
+      .oc-manual-insert-zone.oc-top100-inline-zone>button b{color:#08d9d6;font-size:16px}
+      .oc-manual-insert-zone.oc-top100-inline-zone>button span{opacity:.62}
+      .oc-manual-insert-zone.oc-top100-inline-zone:hover>button,.oc-manual-insert-zone.oc-top100-inline-zone:focus-within>button,.oc-manual-insert-zone.oc-top100-inline-zone.active>button{min-height:38px;border-color:#08d9d6;color:#08d9d6;background:rgba(8,217,214,.07)}
+      .oc-manual-insert-zone.oc-top100-inline-zone:hover>button span,.oc-manual-insert-zone.oc-top100-inline-zone:focus-within>button span,.oc-manual-insert-zone.oc-top100-inline-zone.active>button span{opacity:1}
+      @media(max-width:760px),(hover:none) and (pointer:coarse){.oc-manual-insert-zone.oc-top100-inline-zone{margin:5px 0;min-height:40px}.oc-manual-insert-zone.oc-top100-inline-zone>button{min-height:40px;padding:8px 10px;border-color:#4b3f58;color:#a99bb8;background:rgba(139,92,246,.065)}.oc-manual-insert-zone.oc-top100-inline-zone>button span{opacity:1}}
+    `;
+    document.head.append(style);
+  }
 
   function toast(message, type = '') {
     window.OC_TOAST?.show?.(message, { type });
@@ -62,7 +82,12 @@
     return index >= 0 ? index + 1 : null;
   }
 
-  function closeModal() { modal?.remove(); modal = null; }
+  function closeModal() {
+    modal?.remove();
+    modal = null;
+    activeZone?.classList.remove('active');
+    activeZone = null;
+  }
 
   function dispatchPlacement(type, id, place) {
     const fake = document.createElement('button');
@@ -86,12 +111,16 @@
     list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
   }
 
-  async function openAddDialog() {
+  async function openAddDialog(typeArg = activeType(), initialPlace = 1, sourceZone = null) {
     if (!editing()) { toast('Сначала включи редактирование топа.', 'error'); return; }
     closeModal();
-    const type = activeType(), user = viewedUser();
+    const type = typeArg === 'ED' ? 'ED' : 'OP';
+    const user = viewedUser();
+    const startPlace = Math.max(1, Math.min(100, Math.round(Number(initialPlace) || 1)));
+    activeZone = sourceZone || null;
+    activeZone?.classList.add('active');
     modal = document.createElement('div'); modal.className = 'oc-top100-modal';
-    modal.innerHTML = `<div class="oc-top100-dialog"><button type="button" class="oc-top100-modal-close" aria-label="Закрыть">×</button><div class="oc-top100-modal-body"><div class="oc-top100-modal-head"><div><h2>Добавить в топ-100 · ${type}</h2><p>Выбери оценённый трек и точное место. Остальные автоматически сдвинутся вниз.</p></div></div><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;margin:14px 0;"><input id="oc-top100-add-place" type="number" min="1" max="100" value="1" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"><input id="oc-top100-add-search" type="search" placeholder="Название трека…" autocomplete="off" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"></div><div id="oc-top100-add-list" class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю оценённые треки…</div></div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" id="oc-top100-add-confirm" class="oc-soft-btn" disabled>Добавить на выбранное место</button></div></div></div>`;
+    modal.innerHTML = `<div class="oc-top100-dialog"><button type="button" class="oc-top100-modal-close" aria-label="Закрыть">×</button><div class="oc-top100-modal-body"><div class="oc-top100-modal-head"><div><h2>Вставить на ${startPlace}-е место · ${type}</h2><p>Выбери оценённый трек. Остальные автоматически сдвинутся вниз.</p></div></div><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;margin:14px 0;"><input id="oc-top100-add-place" type="number" min="1" max="100" value="${startPlace}" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"><input id="oc-top100-add-search" type="search" placeholder="Название трека…" autocomplete="off" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"></div><div id="oc-top100-add-list" class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю оценённые треки…</div></div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" id="oc-top100-add-confirm" class="oc-soft-btn" disabled>Вставить на выбранное место</button></div></div></div>`;
     document.body.append(modal);
     modal.addEventListener('click', event => { if (event.target === modal || event.target.closest('.oc-top100-modal-close')) closeModal(); });
     const search = modal.querySelector('#oc-top100-add-search'), place = modal.querySelector('#oc-top100-add-place'), list = modal.querySelector('#oc-top100-add-list'), confirm = modal.querySelector('#oc-top100-add-confirm');
@@ -107,15 +136,67 @@
     catch (error) { if (list) list.innerHTML = `<div class="oc-top100-error">${esc(error?.message || 'Не удалось загрузить оценки.')}</div>`; }
   }
 
+  function makeZone(type, targetPlace) {
+    const zone = document.createElement('div');
+    zone.className = 'oc-manual-insert-zone oc-top100-inline-zone';
+    zone.dataset.type = type;
+    zone.dataset.targetPlace = String(targetPlace);
+    zone.innerHTML = `<button type="button" title="Вставить трек на ${targetPlace}-е место"><b>↳</b><span>Вставить на ${targetPlace}-е место</span></button>`;
+    zone.querySelector('button').addEventListener('click', () => void openAddDialog(type, targetPlace, zone));
+    return zone;
+  }
+
+  function clearZones(container) {
+    container?.querySelectorAll(':scope > .oc-top100-inline-zone').forEach(zone => zone.remove());
+    if (container) container.dataset.top100InsertSignature = '';
+  }
+
+  function mountZones(type) {
+    const container = containerFor(type);
+    if (!container) return;
+    if (!editing() || !topVisible()) { clearZones(container); return; }
+    const cards = [...container.children].filter(node => node.classList?.contains('oc-profile-item'));
+    const signature = cards.map(card => clean(card.dataset.top100Id || card.querySelector('[data-id]')?.dataset.id)).join('|');
+    if (container.dataset.top100InsertSignature === signature && container.querySelector(':scope > .oc-top100-inline-zone')) return;
+    clearZones(container);
+    container.dataset.top100InsertSignature = signature;
+
+    if (!cards.length) {
+      const empty = container.querySelector(':scope > .oc-empty');
+      const zone = makeZone(type, 1);
+      if (empty) container.insertBefore(zone, empty); else container.prepend(zone);
+      return;
+    }
+
+    cards.forEach((card, index) => card.before(makeZone(type, index + 1)));
+    if (cards.length < 100) cards[cards.length - 1].after(makeZone(type, cards.length + 1));
+  }
+
   function mountButton() {
     const extra = document.querySelector('.oc-top100-toolbar .oc-top100-extra');
     if (!extra || extra.querySelector('[data-top100-add]')) return;
     const button = document.createElement('button'); button.type = 'button'; button.dataset.top100Add = '1'; button.textContent = '+ Добавить';
-    button.addEventListener('click', () => void openAddDialog()); extra.append(button);
+    button.addEventListener('click', () => void openAddDialog(activeType(), 1)); extra.append(button);
   }
 
-  new MutationObserver(mountButton).observe(document.documentElement, { childList: true, subtree: true });
-  document.querySelector('#oc-profile-user')?.addEventListener('change', () => cache.clear());
-  document.querySelector('.oc-profile-top-type-switch')?.addEventListener('click', closeModal);
-  [0, 100, 400, 1000].forEach(delay => setTimeout(mountButton, delay));
+  function mountAll() {
+    mountTimer = 0;
+    ensureStyles();
+    mountButton();
+    mountZones('OP');
+    mountZones('ED');
+  }
+
+  function scheduleMount() {
+    window.clearTimeout(mountTimer);
+    mountTimer = window.setTimeout(mountAll, 0);
+  }
+
+  new MutationObserver(scheduleMount).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-profile-view'] });
+  document.querySelector('#oc-profile-user')?.addEventListener('change', () => { cache.clear(); closeModal(); scheduleMount(); });
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('.oc-profile-top-type-btn')) closeModal();
+    if (event.target.closest?.('#oc-manual-edit-btn')) window.setTimeout(scheduleMount, 0);
+  }, true);
+  [0, 100, 400, 1000].forEach(delay => setTimeout(mountAll, delay));
 })();
