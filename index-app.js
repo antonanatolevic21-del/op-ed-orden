@@ -31,6 +31,7 @@
     const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация сейчас недоступна. Попробуйте позже.';
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
     const ADMIN_UIDS = new Set(adminUids);
+    const ARCHIVED_MANUAL_TOP_KEYS = new Set(['albemute']);
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
     const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
@@ -891,7 +892,7 @@
 
     function rebuildManualRanksFromFirebase() {
       if (!Array.isArray(firebaseManualRanks)) return;
-      const next = { ...manualRanks };
+      const next = {};
       firebaseManualRanks.forEach(row => mergeManualRankRowInto(next, row));
       manualRanks = next;
       persistManualRanksCache();
@@ -914,20 +915,14 @@
 
     function rebuildUserProfilesFromFirebase() {
       const next = { ...avatarsMap };
-      const nextManualRanks = { ...manualRanks };
       (firebaseUserProfiles || []).forEach(row => {
         const nickname = String(row.nickname || row.displayName || row.name || row.id || '').trim();
-        const nicknameKey = String(row.nicknameKey || row.id || '').trim();
         const avatar = String(row.avatar || '').trim();
         if (nickname && avatar) next[nickname] = avatar;
-        if (rowHasManualTopData(row)) mergeManualRankRowInto(nextManualRanks, row);
       });
       avatarsMap = next;
-      manualRanks = nextManualRanks;
       markAvatarsChanged();
-      markManualRanksChanged();
       try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
-      persistManualRanksCache();
       scheduleVisibleRefresh();
       refreshDailyUi();
     }
@@ -2222,7 +2217,6 @@
             firebaseRatings = rows || [];
             gotRatings = true;
             rebuildCatalogWhenReady();
-            rebuildManualRanksFromRatingDocs();
             maybeResolve();
           });
 
@@ -4700,6 +4694,8 @@
         const row = manualRanks[key] || {};
         const display = String(row.nickname || row.displayName || row.name || key || '').trim();
         if (!display) return;
+        const canonicalKey = String(row.nicknameKey || manualUserSafeKey(display) || key).trim().toLowerCase();
+        if (ARCHIVED_MANUAL_TOP_KEYS.has(canonicalKey)) return;
         const belongsToAdmin = [display, key, row.nicknameKey, row.id].some(value => isAdminNickname(value));
         if (scope === 'admins' && !belongsToAdmin) return;
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
