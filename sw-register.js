@@ -19,6 +19,7 @@
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
   const adminProfilePickerVersion = '20260726-admin-profile-picker2';
   const entityAlbumEditorVersion = '20260726-entity-album-editor4';
+  const top100RankReadabilityVersion = '20260726-top100-rank-readability1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -86,12 +87,14 @@
   initialStylePromises.push(addStyle('access-role-badge.css', accessRoleBadgeVersion));
   initialStylePromises.push(addStyle('admin-profile-picker.css', adminProfilePickerVersion));
   initialStylePromises.push(addStyle('entity-album-editor.css', entityAlbumEditorVersion));
+  initialStylePromises.push(addStyle('top100-rank-readability.css', top100RankReadabilityVersion));
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
   void addScriptsOrdered([
     ['site-policy.js', sitePolicyVersion],
     ['entity-progress-refresh.js', primaryVersion],
     ['entity-album-editor.js', entityAlbumEditorVersion],
+    ['top100-rank-readability.js', top100RankReadabilityVersion],
     ['topbar.js', primaryVersion],
     ['profile-tabs.js', primaryVersion],
     ['profile-stats-designs.js', statsDesignVersion],
