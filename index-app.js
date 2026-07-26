@@ -4696,7 +4696,7 @@
         if (!display) return;
         const canonicalKey = String(row.nicknameKey || manualUserSafeKey(display) || key).trim().toLowerCase();
         if (ARCHIVED_MANUAL_TOP_KEYS.has(canonicalKey)) return;
-        const belongsToAdmin = [display, key, row.nicknameKey, row.id].some(value => isAdminNickname(value));
+        const belongsToAdmin = isAdminNickname(display);
         if (scope === 'admins' && !belongsToAdmin) return;
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
         if (seenKeys.has(safe)) return;
