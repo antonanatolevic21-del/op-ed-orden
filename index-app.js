@@ -4494,8 +4494,7 @@
       const editable = !!opts.editable;
       const type = opts.type || 'OP';
       const fullOrder = editable ? manualOrderFor(user, type, true) : [];
-      const expanded = Boolean(profileTopExpanded[type]);
-      const visibleList = list.slice(0, expanded ? 100 : 10);
+      const visibleList = list.slice(0, 100);
       const html = visibleList.map((item, idx) => {
         const absoluteIdx = idx;
         const rankClass = absoluteIdx === 0 ? 'gold' : absoluteIdx === 1 ? 'silver' : absoluteIdx === 2 ? 'bronze' : '';
@@ -4531,16 +4530,8 @@
           </div>
         `;
       }).join('');
-      const remaining = Math.max(0, Math.min(100, list.length) - 10);
-      const expandButton = list.length > 10
-        ? `<div style="display:flex;justify-content:center;padding-top:10px;"><button type="button" class="oc-soft-btn" data-action="toggle-profile-top" data-type="${type}">${expanded ? 'Свернуть до 10 мест' : `Показать весь топ · ещё ${remaining}`}</button></div>`
-        : '';
-      container.innerHTML = html + expandButton;
+      container.innerHTML = html;
       container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
-      container.querySelector('[data-action="toggle-profile-top"]')?.addEventListener('click', () => {
-        profileTopExpanded[type] = !profileTopExpanded[type];
-        renderProfile();
-      });
 
       if (editable) {
         container.querySelectorAll('[data-action="set-rank"]').forEach(btn => {
