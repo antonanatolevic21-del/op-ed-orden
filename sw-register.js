@@ -21,6 +21,7 @@
   const entityAlbumEditorVersion = '20260726-entity-album-editor4';
   const top100RankReadabilityVersion = '20260726-top100-rank-readability1';
   const entityRealLinksVersion = '20260726-entity-real-links1';
+  const navigationRealLinksVersion = '20260726-navigation-real-links1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -90,6 +91,7 @@
   initialStylePromises.push(addStyle('entity-album-editor.css', entityAlbumEditorVersion));
   initialStylePromises.push(addStyle('top100-rank-readability.css', top100RankReadabilityVersion));
   initialStylePromises.push(addStyle('entity-real-links.css', entityRealLinksVersion));
+  initialStylePromises.push(addStyle('navigation-real-links.css', navigationRealLinksVersion));
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
   void addScriptsOrdered([
@@ -97,6 +99,7 @@
     ['entity-progress-refresh.js', primaryVersion],
     ['entity-album-editor.js', entityAlbumEditorVersion],
     ['entity-real-links.js', entityRealLinksVersion],
+    ['navigation-real-links.js', navigationRealLinksVersion],
     ['top100-rank-readability.js', top100RankReadabilityVersion],
     ['topbar.js', primaryVersion],
     ['profile-tabs.js', primaryVersion],
