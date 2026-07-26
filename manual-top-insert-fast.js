@@ -17,7 +17,6 @@
   let cache = new Map();
   let panel = null;
   let panelAnchor = null;
-  let panelResizeObserver = null;
   let mountTimer = 0;
   let hoverCard = null;
   let hoverMode = '';
@@ -28,13 +27,13 @@
     style.id = 'oc-top100-inline-insert-style';
     style.textContent = `
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{position:relative;margin-top:18px!important;transition:margin-top .16s ease,margin-bottom .16s ease}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{position:relative;margin-top:28px!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after],
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:18px!important}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:28px!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before{margin-top:42px!important}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before{margin-top:28px!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after{margin-bottom:42px!important}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after{margin-bottom:28px!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before,
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before{margin-top:var(--oc-top100-inline-panel-gap,360px)!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after,
@@ -55,9 +54,9 @@
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before::before,
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after::after,
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after::after{opacity:0;pointer-events:none}
-      .oc-top100-inline-search-panel{position:absolute!important;z-index:1100!important;margin:0!important;width:auto!important;max-width:none!important;box-sizing:border-box}
+      .oc-top100-inline-search-panel{position:relative!important;z-index:40!important;grid-column:1/-1;width:100%!important;max-width:none!important;margin:10px 0 14px!important;box-sizing:border-box}
       .oc-top100-inline-search-panel .oc-manual-insert-search{margin-top:10px}
-      .oc-top100-inline-search-panel .oc-manual-insert-results{max-height:300px}
+      .oc-top100-inline-search-panel .oc-manual-insert-results{grid-template-columns:repeat(2,minmax(0,1fr));max-height:420px}
       .oc-top100-inline-search-panel-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
       .oc-top100-inline-search-panel-actions .oc-soft-btn{min-height:40px}
       @media(max-width:760px),(hover:none) and (pointer:coarse){
@@ -68,11 +67,12 @@
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before,
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before{margin-top:var(--oc-top100-inline-panel-gap,360px)!important}
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after,
-        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after{margin-bottom:var(--oc-top100-inline-panel-gap,360px)!important}
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after{margin-bottom:40px!important}
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before{top:-40px;height:40px;padding:8px 10px;border-color:#4b3f58;background:rgba(139,92,246,.065);color:#a99bb8}
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{bottom:-40px;height:40px;padding:8px 10px;border-color:#4b3f58;background:rgba(139,92,246,.065);color:#a99bb8}
+        .oc-top100-inline-search-panel .oc-manual-insert-results{grid-template-columns:1fr}
       }
     `;
     document.head.append(style);
@@ -144,18 +144,10 @@
     list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
   }
 
-  function dispatchPlacement(type, id, place) {
-    const fake = document.createElement('button');
-    fake.type = 'button';
-    fake.dataset.action = 'all-set-rank';
-    fake.dataset.type = type;
-    fake.dataset.id = String(id);
-    fake.style.display = 'none';
-    document.body.append(fake);
-    const originalPrompt = window.prompt;
-    window.prompt = () => String(place);
-    try { fake.click(); }
-    finally { window.prompt = originalPrompt; fake.remove(); }
+  function dispatchPlacement(type, id, place, row) {
+    document.dispatchEvent(new CustomEvent('oc:top100-place', {
+      detail: { type, id: String(id), place, row }
+    }));
   }
 
   function clearHover() {
@@ -175,41 +167,11 @@
     card.classList.add(mode === 'after' ? 'oc-top100-insert-hover-after' : 'oc-top100-insert-hover-before');
   }
 
-  function clearAnchorSpacing() {
-    const card = panelAnchor?.card;
-    if (!card) return;
-    card.classList.remove('oc-top100-inline-panel-before', 'oc-top100-inline-panel-after');
-    card.style.removeProperty('--oc-top100-inline-panel-gap');
-  }
-
   function closePanel() {
-    panelResizeObserver?.disconnect();
-    panelResizeObserver = null;
     panel?.remove();
     panel = null;
-    clearAnchorSpacing();
     panelAnchor = null;
     clearHover();
-  }
-
-  function positionPanel() {
-    if (!panel || !panelAnchor?.card?.isConnected) return;
-    const card = panelAnchor.card;
-    const panelHeight = Math.max(160, Math.ceil(panel.getBoundingClientRect().height));
-    const gap = panelHeight + 24;
-    card.style.setProperty('--oc-top100-inline-panel-gap', `${gap}px`);
-    card.classList.toggle('oc-top100-inline-panel-before', panelAnchor.mode === 'before');
-    card.classList.toggle('oc-top100-inline-panel-after', panelAnchor.mode === 'after');
-
-    requestAnimationFrame(() => {
-      if (!panel || !panelAnchor?.card?.isConnected) return;
-      const nextRect = panelAnchor.card.getBoundingClientRect();
-      panel.style.width = `${nextRect.width}px`;
-      panel.style.left = `${window.scrollX + nextRect.left}px`;
-      panel.style.top = panelAnchor.mode === 'before'
-        ? `${window.scrollY + nextRect.top - gap + 12}px`
-        : `${window.scrollY + nextRect.bottom + 12}px`;
-    });
   }
 
   async function openInlinePanel(card, mode, type, place) {
@@ -237,7 +199,7 @@
       <div class="oc-top100-inline-search-panel-actions">
         <button type="button" class="oc-soft-btn oc-top100-inline-confirm" disabled>Вставить сюда</button>
       </div>`;
-    document.body.append(panel);
+    card.parentElement.insertBefore(panel, mode === 'before' ? card : card.nextSibling);
 
     const search = panel.querySelector('.oc-manual-insert-search');
     const list = panel.querySelector('.oc-manual-insert-results');
@@ -257,24 +219,18 @@
       if (!selectedId || !panelAnchor) return;
       const row = rows.find(item => String(item.id) === String(selectedId));
       const { type: currentType, place: currentPlace } = panelAnchor;
-      dispatchPlacement(currentType, selectedId, currentPlace);
+      dispatchPlacement(currentType, selectedId, currentPlace, row);
       closePanel();
       toast(`${row?.title || selectedId}: поставлен на ${currentPlace}-е место.`, 'success');
     });
-
-    panelResizeObserver = new ResizeObserver(() => positionPanel());
-    panelResizeObserver.observe(panel);
-    positionPanel();
 
     try {
       rows = await candidates(user, panelAnchor.type);
       if (!panel?.isConnected || !panelAnchor) return;
       render();
       search.focus({ preventScroll: true });
-      positionPanel();
     } catch (error) {
       if (list) list.innerHTML = `<div class="oc-manual-insert-error">${esc(error?.message || 'Не удалось загрузить оценки.')}</div>`;
-      positionPanel();
     }
   }
 
@@ -354,7 +310,6 @@
     mountButton();
     decorateType('OP');
     decorateType('ED');
-    if (panelAnchor) positionPanel();
   }
 
   function scheduleMount() {
@@ -423,13 +378,7 @@
     closePanel();
     scheduleMount();
   });
-  window.addEventListener('resize', () => {
-    clearHover();
-    if (panel) positionPanel();
-  }, { passive: true });
-  window.addEventListener('scroll', () => {
-    if (panel) positionPanel();
-  }, { passive: true });
+  window.addEventListener('resize', clearHover, { passive: true });
 
   [0, 100, 400, 1000].forEach(delay => setTimeout(mountAll, delay));
 })();
