@@ -23,6 +23,20 @@
 		return `${url.pathname}${url.search}`;
 	}
 
+	function syncBackUrl() {
+		const url = new URL(window.location.href);
+		const view = clean(url.searchParams.get('view'));
+		if (url.searchParams.has('album')) {
+			url.searchParams.delete('album');
+			url.searchParams.delete('track');
+		} else if (view.startsWith('entity-')) {
+			url.searchParams.delete('view');
+			url.searchParams.delete('album');
+			url.searchParams.delete('track');
+		}
+		window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+	}
+
 	function syncLinks() {
 		window.clearTimeout(syncTimer);
 		document.querySelectorAll('.oc-entity-card[data-entity-open]').forEach(card => {
@@ -51,6 +65,11 @@
 	// anchor behaviour and must not trigger the old delegated album opener in
 	// the current tab.
 	document.addEventListener('click', event => {
+		if (event.target?.closest?.('#oc-entity-back')) {
+			syncBackUrl();
+			return;
+		}
+
 		const link = event.target?.closest?.('a.oc-entity-card-link[data-entity-album-link]');
 		if (!link) return;
 		const modified = event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
