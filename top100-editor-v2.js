@@ -318,7 +318,7 @@
     const toolbar = document.querySelector('.oc-top100-toolbar'); if (!toolbar) return;
     state.editing = isEditing() && isOwnProfile();
     toolbar.classList.toggle('editing', state.editing); toolbar.classList.toggle('dirty', dirty());
-    const marker = toolbar.querySelector('[data-top100-dirty]'); if (marker) marker.textContent = dirty() ? 'Есть несохранённые изменения' : 'Сохранено';
+    const marker = toolbar.querySelector('[data-top100-dirty]'); if (marker) marker.textContent = dirty() ? 'Черновик сохранён · не опубликовано' : 'Все изменения сохранены';
     const undoButton = toolbar.querySelector('[data-top100-undo]'), redoButton = toolbar.querySelector('[data-top100-redo]'), resetButton = toolbar.querySelector('[data-top100-reset]');
     if (undoButton) undoButton.disabled = !state.editing || !state.undo.length;
     if (redoButton) redoButton.disabled = !state.editing || !state.redo.length;
@@ -338,6 +338,22 @@
   }
 
   function closeInsertPanel(panel) { panel?.closest('.oc-manual-insert-zone')?.classList.remove('active'); panel?.remove(); }
+
+  document.addEventListener('oc:top100-place', event => {
+    if (!state.editing || !isOwnProfile()) return;
+    const detail = event.detail || {}, type = detail.type === 'ED' ? 'ED' : 'OP', id = clean(detail.id);
+    const target = Math.max(1, Math.min(100, Math.round(Number(detail.place) || 1)));
+    if (!id) return;
+    const row = detail.row || {};
+    state.meta.set(`${type}:${id}`, {
+      title: clean(row.title || id),
+      meta: clean([row.year, row.season].filter(Boolean).join(' · ')),
+      score: clean(row.score),
+      image: clean(row.fallbackImage || row.image),
+      fallback: clean(row.fallbackImage)
+    });
+    place(type, id, target);
+  });
 
   document.addEventListener('click', event => {
     const save = event.target.closest?.('#oc-manual-save-btn');
@@ -434,7 +450,14 @@
   function monitorDom() {
     ['OP', 'ED'].forEach(type => {
       const container = containerFor(type); if (!container) return;
-      new MutationObserver(() => { if (state.applying || state.drag || !state.loaded || !isTopView()) return; scheduleRender(); }).observe(container, { childList:true, subtree:true });
+      new MutationObserver(records => {
+        if (state.applying || state.drag || !state.loaded || !isTopView()) return;
+        const editorPanelOnly = records.every(record =>
+          record.target?.closest?.('.oc-top100-inline-search-panel') ||
+          [...record.addedNodes, ...record.removedNodes].every(node => node.nodeType !== 1 || node.matches?.('.oc-top100-inline-search-panel'))
+        );
+        if (!editorPanelOnly) scheduleRender();
+      }).observe(container, { childList:true, subtree:true });
     });
     const edit = editButton(); if (edit) new MutationObserver(() => setTimeout(handleEditState, 0)).observe(edit, { attributes:true, attributeFilter:['class'] });
     const panel = profilePanel();
