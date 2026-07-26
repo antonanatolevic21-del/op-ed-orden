@@ -119,11 +119,32 @@
     return { done:done.size, total:ids.size, complete:ids.size>0 && done.size>=ids.size };
   }
 
+  function pendingSeasons(data) {
+    if (!data) return [];
+    return data.seasons.filter(season => {
+      const state = progress(data, season);
+      return state.total > state.done;
+    });
+  }
+
+  function activeReminders(data) {
+    if (!data) return [];
+    const pending = pendingSeasons(data);
+    const pendingKeys = new Set(pending.map(season => String(season.key)));
+    const pendingNames = new Set(pending.map(season => String(season.season || '')));
+    return data.reminders.filter(row => {
+      const seasonKey = String(row.seasonKey || '');
+      if (seasonKey) return pendingKeys.has(seasonKey);
+      const season = String(row.season || '');
+      return Boolean(season && pendingNames.has(season));
+    });
+  }
+
   function noticeCount(data) {
     if (!data) return 0;
     const seen = seenAssignments(data.uid);
-    const assignments = data.seasons.filter(row => !seen.has(String(row.key))).length;
-    return assignments + data.reminders.length;
+    const assignments = pendingSeasons(data).filter(row => !seen.has(String(row.key))).length;
+    return assignments + activeReminders(data).length;
   }
 
   function updateNoticeBadge(data) {
@@ -177,7 +198,8 @@
       return `<article class="oc-my-events-season ${p.complete?'complete':''} ${unseen?'unseen':''}"><div class="oc-my-events-season-top"><div><span>${esc(SEASON_LABEL[season.season] || season.season)} ${season.year}</span><strong>${p.done}/${p.total} оценено${p.complete?' ✓':''}</strong></div><span class="oc-my-events-linked">аккаунт ✓</span></div><div class="oc-my-events-progress"><span style="width:${p.total?Math.round(p.done/p.total*100):0}%"></span></div><p>${p.complete?'Сезон полностью оценён.':`Осталось ${Math.max(0,p.total-p.done)} OP · строка участника ${season.slot}.`}</p><a href="events.html?season=${encodeURIComponent(season.season)}" data-my-events-open-season="${esc(season.key)}">${p.done ? 'Продолжить оценивание' : 'Начать оценку'}</a></article>`;
     }).join('') : '<div class="oc-empty">Сейчас твой ник не указан ни в одном открытом сезоне.</div>';
 
-    const reminderHtml = data.reminders.length ? `<section class="oc-my-events-reminders"><h3>Напоминания</h3>${data.reminders.map(row => `<div><strong>${esc(row.seasonLabel || SEASON_LABEL[row.season] || 'Сезон')}</strong><span>${esc(row.message || 'Есть незавершённые оценки.')}</span><a href="events.html?season=${encodeURIComponent(row.season || '')}">Открыть</a></div>`).join('')}</section>` : '';
+    const reminders = activeReminders(data);
+    const reminderHtml = reminders.length ? `<section class="oc-my-events-reminders"><h3>Напоминания</h3>${reminders.map(row => `<div><strong>${esc(row.seasonLabel || SEASON_LABEL[row.season] || 'Сезон')}</strong><span>${esc(row.message || 'Есть незавершённые оценки.')}</span><a href="events.html?season=${encodeURIComponent(row.season || '')}">Открыть</a></div>`).join('')}</section>` : '';
 
     panel.innerHTML = `<div class="oc-my-events-head"><div><span>личный центр</span><h2>Мои ивенты</h2><p>${esc(data.nickname)} · сезоны и быстрый переход к игровым режимам.</p></div><a href="events.html">Открыть Events</a></div>${reminderHtml}<section class="oc-my-events-seasons"><h3>Сезонные оценки</h3><div class="oc-my-events-grid">${seasonCards}</div></section><section class="oc-my-events-games"><h3>Игровые режимы</h3><div><a href="events.html?full=1&mode=guess">Угадайка</a><a href="events.html?full=1&mode=bestworst">Лучшее / Худшее</a><a href="events.html?full=1&mode=codenames">Codenames</a><a href="events.html?full=1&mode=blindtier">Слепой тир-лист</a><a href="events.html?full=1&mode=whoami">Кто я?</a><a href="events.html?full=1&mode=predictions">Предикты</a></div></section>`;
     panel.querySelectorAll('[data-my-events-open-season]').forEach(link => link.addEventListener('click', () => markSeen(data.uid, link.dataset.myEventsOpenSeason)));
