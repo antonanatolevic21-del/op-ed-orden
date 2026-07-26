@@ -31,7 +31,7 @@
     const PERSONAL_ACCOUNT_DISABLED_MESSAGE = 'Регистрация сейчас недоступна. Попробуйте позже.';
     const ADMIN_NICKNAMES = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
     const ADMIN_UIDS = new Set(adminUids);
-    const ARCHIVED_MANUAL_TOP_KEYS = new Set(['albemute']);
+    const CONFIRMED_LEGACY_MANUAL_TOP_KEYS = new Set(['пёс_кошачий', 'пес_кошачий', 'egortos', 'кофа', 'holdes']);
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
     const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
@@ -855,6 +855,8 @@
       const display = identity.display;
       const safeKey = identity.safeKey;
       if (!display && !safeKey) return;
+      const provenanceKey = String(safeKey || manualUserSafeKey(display)).trim().toLowerCase();
+      if (row.manualCreated !== true && !CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(provenanceKey)) return;
       const hasOP = Array.isArray(row.OP) || Array.isArray(row.manualOP) || Array.isArray(row.op);
       const hasED = Array.isArray(row.ED) || Array.isArray(row.manualED) || Array.isArray(row.ed);
       const hasExcludedOP = Array.isArray(row.excludedOP);
@@ -4694,8 +4696,6 @@
         const row = manualRanks[key] || {};
         const display = String(row.nickname || row.displayName || row.name || key || '').trim();
         if (!display) return;
-        const canonicalKey = String(row.nicknameKey || manualUserSafeKey(display) || key).trim().toLowerCase();
-        if (ARCHIVED_MANUAL_TOP_KEYS.has(canonicalKey)) return;
         const belongsToAdmin = isAdminNickname(display);
         if (scope === 'admins' && !belongsToAdmin) return;
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
