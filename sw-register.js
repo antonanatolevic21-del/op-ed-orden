@@ -4,7 +4,7 @@
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
-  const top100EditorVersion = '20260726-top100-editor-v2-2';
+  const top100EditorVersion = '20260726-top100-editor-v2-3';
   const top100DragVersion = '20260726-top100-drag2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
