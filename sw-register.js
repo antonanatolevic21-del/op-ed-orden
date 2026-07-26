@@ -1,7 +1,7 @@
 (() => {
   const primaryVersion = '20260726-progressive-shell1';
   const deepLinksVersion = '20260725-deep-links2';
-  const accountSyncVersion = '20260725-account-sync3';
+  const accountSyncVersion = '20260726-account-sync4';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
@@ -21,8 +21,7 @@
   const entityAlbumEditorVersion = '20260726-entity-album-editor4';
   const top100RankReadabilityVersion = '20260726-top100-rank-readability1';
   const entityRealLinksVersion = '20260726-entity-real-links1';
-  const navigationRealLinksVersion = '20260726-navigation-real-links2';
-  const startupDeepLinkFixVersion = '20260726-startup-deep-link-fix1';
+  const navigationRealLinksVersion = '20260726-navigation-real-links3';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
@@ -95,19 +94,21 @@
   initialStylePromises.push(addStyle('navigation-real-links.css', navigationRealLinksVersion));
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
+  // Route preview and account restore are deliberately first. A deep-linked tab can
+  // paint immediately while Firebase restores the account in parallel.
   void addScriptsOrdered([
+    ['navigation-real-links.js', navigationRealLinksVersion],
+    ['account-sync.js', accountSyncVersion],
     ['site-policy.js', sitePolicyVersion],
     ['entity-progress-refresh.js', primaryVersion],
     ['entity-album-editor.js', entityAlbumEditorVersion],
     ['entity-real-links.js', entityRealLinksVersion],
-    ['navigation-real-links.js', navigationRealLinksVersion],
     ['top100-rank-readability.js', top100RankReadabilityVersion],
     ['topbar.js', primaryVersion],
     ['profile-tabs.js', primaryVersion],
     ['profile-stats-designs.js', statsDesignVersion],
     ['profile-filters.js', primaryVersion],
     ['active-filter-chips.js', primaryVersion],
-    ['account-sync.js', accountSyncVersion],
     ['access-role-badge.js', accessRoleBadgeVersion],
     ['profile-events-ownership.js', profileEventsOwnershipVersion],
     ['first-user-test-fixes.js', firstUserFixVersion],
@@ -116,7 +117,6 @@
     ['admin-missing-inline.js', adminMissingVersion],
     ['my-events-profile.js', myEventsVersion],
     ['deep-links.js', deepLinksVersion],
-    ['startup-deep-link-fix.js', startupDeepLinkFixVersion],
     ['quality-center.js', primaryVersion],
     ['quality-center-user-route.js', firstUserFixVersion],
     ['keyboard-shortcuts.js', primaryVersion],
@@ -176,7 +176,7 @@
   function loadStatsPackage() {
     if (statsPromise) return statsPromise;
     addStyle('stats-lite.css', primaryVersion);
-    statsPromise = addScript('stats-lite.js', primaryVersion, true).catch(error => { console.error('Stats package load failed', error); throw error; });
+    statsPromise = addScript('stats-lite.js', primaryVersion, true).catch(error => { console.error('Stats-lite package load failed', error); throw error; });
     return statsPromise;
   }
 
