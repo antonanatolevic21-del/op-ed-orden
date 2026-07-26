@@ -7,9 +7,15 @@
   function panel() { return document.querySelector('#oc-profile-panel'); }
   function isTopView() { return panel()?.dataset.profileView === 'top100'; }
   function isEditing() { return Boolean(document.querySelector('#oc-manual-edit-btn')?.classList.contains('active')); }
+  function clean(value) { return String(value ?? '').trim(); }
+  function viewedUser() { return clean(document.querySelector('#oc-profile-user')?.value || document.querySelector('#oc-myname')?.value); }
 
   function cards() {
     return [...document.querySelectorAll('#oc-profile-op > .oc-profile-item.manual, #oc-profile-ed > .oc-profile-item.manual')];
+  }
+
+  function cardId(card) {
+    return clean(card?.dataset.explicitTopId || card?.querySelector('[data-action="set-rank"][data-id]')?.dataset.id);
   }
 
   function ensureHandles() {
@@ -27,6 +33,23 @@
       });
       card.append(handle);
     });
+  }
+
+  function commitDragOrder() {
+    if (!drag?.moved || !drag.container) return;
+    const type = drag.container.id === 'oc-profile-ed' ? 'ED' : 'OP';
+    const ids = [...drag.container.querySelectorAll(':scope > .oc-profile-item.manual')]
+      .map(cardId)
+      .filter(Boolean)
+      .slice(0, 100);
+
+    if (window.OC_MANUAL_TOP_DRAFT?.applyOrder) {
+      window.OC_MANUAL_TOP_DRAFT.applyOrder(type, ids, viewedUser());
+    } else {
+      document.dispatchEvent(new CustomEvent('oc:manual-top-order-change', {
+        detail: { user: viewedUser(), type, ids }
+      }));
+    }
   }
 
   function cleanup() {
@@ -84,6 +107,7 @@
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     try { drag.handle.releasePointerCapture(event.pointerId); } catch (_) {}
+    commitDragOrder();
     cleanup();
   }, true);
 
