@@ -25,21 +25,25 @@
     style.id = 'oc-top100-inline-insert-style';
     style.textContent = `
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{position:relative;margin-top:12px!important}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{position:relative;margin-top:18px!important;transition:margin-top .16s ease,margin-bottom .16s ease}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after],
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:12px!important}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:18px!important}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before{margin-top:42px!important}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after{margin-bottom:42px!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{position:absolute;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:center;box-sizing:border-box;height:12px;padding:0;border:1px dashed rgba(169,155,184,.28);border-radius:9px;background:rgba(139,92,246,.025);color:#716979;font:700 10px/1 'Space Mono',monospace;white-space:nowrap;overflow:hidden;cursor:pointer;pointer-events:auto;transition:height .16s ease,top .16s ease,bottom .16s ease,padding .16s ease,border-color .16s ease,background .16s ease,color .16s ease}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{position:absolute;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:center;box-sizing:border-box;height:18px;padding:1px 8px;border:1px dashed rgba(169,155,184,.34);border-radius:9px;background:rgba(139,92,246,.035);color:#82768f;font:700 10px/1 'Space Mono',monospace;white-space:nowrap;overflow:hidden;cursor:pointer;pointer-events:auto;transition:height .16s ease,top .16s ease,bottom .16s ease,padding .16s ease,border-color .16s ease,background .16s ease,color .16s ease}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before{content:'↳  ' attr(data-top100-insert-label);top:-12px}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before{content:'↳  ' attr(data-top100-insert-label);top:-18px}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{content:'↳  ' attr(data-top100-insert-after-label);bottom:-12px}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{content:'↳  ' attr(data-top100-insert-after-label);bottom:-18px}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before::before,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before::before{top:-38px;height:38px;padding:8px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before::before{top:-42px;height:42px;padding:9px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after,
-      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after{bottom:-38px;height:38px;padding:8px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after{bottom:-42px;height:42px;padding:9px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
       @media(max-width:760px),(hover:none) and (pointer:coarse){
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{margin-top:40px!important}
