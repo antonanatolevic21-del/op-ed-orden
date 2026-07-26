@@ -143,8 +143,7 @@
     const container = containerFor(type);
     if (!container || !state.loaded) return;
     const order = state.editing ? state.draft[type] : state.baseline[type];
-    const showAll = state.editing || state.expanded[type];
-    const visible = showAll ? order : order.slice(0, 10);
+    const visible = order;
     const fragment = document.createDocumentFragment();
     visible.forEach((id, index) => fragment.append(makeCard(type, id, index, state.editing)));
     if (!visible.length) {
@@ -152,14 +151,6 @@
       empty.className = 'oc-empty';
       empty.textContent = 'Топ пока пуст.';
       fragment.append(empty);
-    }
-    if (!state.editing && order.length > 10) {
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;justify-content:center;padding-top:10px;';
-      const button = document.createElement('button');
-      button.type = 'button'; button.className = 'oc-soft-btn'; button.dataset.top100Expand = type;
-      button.textContent = state.expanded[type] ? 'Свернуть до 10 мест' : `Показать весь топ · ещё ${order.length - 10}`;
-      wrap.append(button); fragment.append(wrap);
     }
     container.replaceChildren(fragment);
   }
@@ -366,10 +357,6 @@
         event.preventDefault(); event.stopImmediatePropagation(); return;
       }
       setTimeout(handleEditState, 0); return;
-    }
-    const expand = event.target.closest?.('[data-top100-expand]');
-    if (expand) {
-      event.preventDefault(); const type = expand.dataset.top100Expand === 'ED' ? 'ED' : 'OP'; state.expanded[type] = !state.expanded[type]; renderType(type); return;
     }
     if (!state.editing || !isOwnProfile()) return;
 
