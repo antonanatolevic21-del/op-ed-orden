@@ -6,7 +6,7 @@
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
-  const myEventsVersion = '20260725-my-events3';
+  const myEventsVersion = '20260726-my-events-complete1';
   const statsDesignVersion = '20260725-profile-stats-designs4';
   const adminMissingVersion = '20260726-admin-missing3';
   const firstUserFixVersion = '20260726-first-user-test2';
