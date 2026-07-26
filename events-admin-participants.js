@@ -58,11 +58,14 @@ function progressText(slot) {
   return match ? { done:Number(match[1]), total:Number(match[2]) } : null;
 }
 
-function toolsMarkup(profile, reviewable) {
+function toolsMarkup(profile, reviewable, progress) {
   const linked = Boolean(profile?.authUid);
+  const complete = Boolean(progress && progress.done >= progress.total);
+  const remindDisabled = !linked || complete;
+  const remindLabel = complete ? 'Всё оценено' : 'Напомнить';
   return `<div class="ev-participant-account-tools">
     <span class="ev-participant-account-state ${linked ? 'linked' : ''}">${linked ? 'аккаунт ✓' : 'без аккаунта'}</span>
-    <button type="button" data-participant-remind ${linked ? '' : 'disabled'}>Напомнить</button>
+    <button type="button" data-participant-remind ${remindDisabled ? 'disabled' : ''}>${remindLabel}</button>
     <button type="button" data-participant-replace>Заменить</button>
     <button type="button" data-participant-open-ratings ${reviewable ? '' : 'disabled'}>Оценки</button>
   </div>`;
@@ -103,7 +106,8 @@ async function enhance() {
       if (profile?.authUid) linkedCount += 1;
       slot.querySelector('.ev-participant-account-tools')?.remove();
       const review = slot.querySelector('[data-participant-review]');
-      slot.insertAdjacentHTML('beforeend', toolsMarkup(profile, Boolean(review)));
+      const progress = progressText(slot);
+      slot.insertAdjacentHTML('beforeend', toolsMarkup(profile, Boolean(review), progress));
       slot.dataset.participantKey = key;
       slot.dataset.participantUid = String(profile?.authUid || '');
     });
@@ -168,6 +172,14 @@ async function sendReminder(slot) {
   if (!info) return;
   const progress = progressText(slot);
   const remaining = progress ? Math.max(0, progress.total - progress.done) : null;
+  if (remaining === 0) {
+    const button = slot.querySelector('[data-participant-remind]');
+    if (button) {
+      button.textContent = 'Всё оценено';
+      button.disabled = true;
+    }
+    return;
+  }
   const message = `${info.label} ${info.year}: ${remaining === null ? 'есть незавершённые оценки' : `осталось оценить ${remaining} OP`}.`;
   const app = await waitForApp();
   if (!app) return;
