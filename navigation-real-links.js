@@ -83,33 +83,33 @@
 		window.history[push ? 'pushState' : 'replaceState']({}, '', href);
 	}
 
-	function wrapButton(button) {
-		if (!button || button.tagName !== 'BUTTON') return null;
-		let wrap = button.parentElement?.classList.contains('oc-nav-real-wrap') ? button.parentElement : null;
-		if (!wrap) {
-			wrap = document.createElement('span');
-			wrap.className = 'oc-nav-real-wrap';
-			button.before(wrap);
-			wrap.append(button);
-		}
-		return wrap;
+	function unwrapLegacyNavigation() {
+		document.querySelectorAll('.oc-nav-real-wrap').forEach(wrap => {
+			const button = wrap.querySelector(':scope > button');
+			if (!button) {
+				wrap.remove();
+				return;
+			}
+			wrap.before(button);
+			wrap.remove();
+		});
 	}
 
 	function installOverlayLink(button, href) {
-		const wrap = wrapButton(button);
-		if (!wrap || !href) return;
-		let link = wrap.querySelector(':scope > .oc-nav-real-hit');
+		if (!button || button.tagName !== 'BUTTON' || !href) return;
+		button.classList.add('oc-nav-real-host');
+		let link = button.querySelector(':scope > .oc-nav-real-hit');
 		if (!link) {
 			link = document.createElement('a');
 			link.className = 'oc-nav-real-hit';
 			link.dataset.navRealLink = '1';
-			wrap.append(link);
+			button.append(link);
 			link.addEventListener('click', event => {
 				if (isModifiedClick(event)) return;
 				event.preventDefault();
 				event.stopImmediatePropagation();
-				const host = link.parentElement?.querySelector('button');
-				if (!host) return;
+				const host = link.parentElement;
+				if (!(host instanceof HTMLButtonElement)) return;
 				replaceCurrentUrl(link.getAttribute('href') || '', true);
 				if (host.matches('.oc-tab-btn[data-tab]')) {
 					previewMainRoute(String(host.dataset.tab || 'chart'));
@@ -134,7 +134,7 @@
 			});
 		}
 		link.href = href;
-		const label = String(button.textContent || '').trim();
+		const label = String(button.childNodes[0]?.textContent || button.textContent || '').trim();
 		link.setAttribute('aria-label', label ? `Открыть «${label}»` : 'Открыть раздел');
 		link.title = label;
 	}
@@ -147,6 +147,7 @@
 	}, true);
 
 	function syncLinks() {
+		unwrapLegacyNavigation();
 		document.querySelectorAll('.oc-tab-btn[data-tab]').forEach(button => {
 			const view = String(button.dataset.tab || '');
 			if (MAIN_VIEWS.has(view)) installOverlayLink(button, mainHref(view));
