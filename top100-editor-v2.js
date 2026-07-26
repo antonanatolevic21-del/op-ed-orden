@@ -4,6 +4,7 @@
 
   const VERSION = 2;
   const MAX_HISTORY = 30;
+  const CONFIRMED_LEGACY_MANUAL_TOP_KEYS = new Set(['пёс_кошачий', 'пес_кошачий', 'egortos', 'кофа', 'holdes']);
   const DRAFT_PREFIX = 'oc-top100-editor-v2-draft:';
   const state = {
     user: '', key: '', loaded: false, loading: false, editing: false, applying: false, saving: false,
@@ -31,6 +32,10 @@
   const isEditing = () => Boolean(editButton()?.classList.contains('active'));
   const dirty = () => fingerprint(state.draft) !== fingerprint(state.baseline);
   const draftKey = key => DRAFT_PREFIX + key;
+  const isVisibleManualTop = row => {
+    const key = normalize(row?.nicknameKey || row?.nickname || row?.displayName || row?.name || row?.id);
+    return row?.manualCreated === true || CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(key);
+  };
 
   function toast(message, type = '') {
     window.OC_TOAST?.show?.(message, { type });
@@ -239,7 +244,9 @@
       const tools = await firebaseTools();
       const snap = await tools.getDoc(tools.doc(tools.db, 'manualRanks', key));
       const row = snap.exists() ? snap.data() || {} : {};
-      const saved = { OP: uniqueIds(row.OP || row.manualOP), ED: uniqueIds(row.ED || row.manualED) };
+      const saved = isVisibleManualTop(row)
+        ? { OP: uniqueIds(row.OP || row.manualOP), ED: uniqueIds(row.ED || row.manualED) }
+        : { OP: [], ED: [] };
       state.user = user; state.key = key; state.baseline = cloneOrder(saved);
       const local = isOwnProfile() ? readLocalDraft(key) : null;
       state.draft = local || cloneOrder(saved); state.undo = []; state.redo = []; state.loaded = true;
@@ -377,7 +384,7 @@
   async function loadManualRows() {
     const tools = await firebaseTools();
     const snap = await tools.getDocs(tools.collection(tools.db, 'manualRanks'));
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(isVisibleManualTop);
   }
 
   async function openHistory() {
@@ -387,7 +394,7 @@
       const tools = await firebaseTools();
       const snap = await tools.getDoc(tools.doc(tools.db, 'manualRanks', state.key));
       const row = snap.exists() ? snap.data() || {} : {};
-      const history = Array.isArray(row.history) ? row.history : [];
+      const history = isVisibleManualTop(row) && Array.isArray(row.history) ? row.history : [];
       body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>История топ-100</h2><p>${esc(viewedUser())} · до ${MAX_HISTORY} предыдущих сохранений</p></div></div><div class="oc-top100-history-list">${history.length ? history.map((entry, index) => `<div class="oc-top100-history-row"><div><strong>${new Date(Number(entry.savedAtLocal) || Date.now()).toLocaleString('ru-RU')}</strong><span>OP: ${uniqueIds(entry.OP).length} · ED: ${uniqueIds(entry.ED).length}</span></div><button type="button" data-history-index="${index}" ${state.editing && isOwnProfile() ? '' : 'disabled'}>Восстановить</button></div>`).join('') : '<div class="oc-empty">Предыдущих версий пока нет. Они начнут сохраняться при следующем изменении топа.</div>'}</div>`;
       body.addEventListener('click', event => {
         const button = event.target.closest('[data-history-index]');
