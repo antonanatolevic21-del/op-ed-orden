@@ -15,6 +15,7 @@
   const registeredUsersVersion = '20260726-known-users4';
   const sitePolicyVersion = '20260726-site-policy2';
   const manualTopExplicitVersion = '20260726-manual-top-explicit1';
+  const manualTopSaveBridgeVersion = '20260726-manual-top-save-bridge1';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
   const adminProfilePickerVersion = '20260726-admin-profile-picker2';
@@ -151,6 +152,7 @@
       ['profile-top-single.js', top100SuiteVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion],
       ['manual-top-explicit.js', manualTopExplicitVersion],
+      ['manual-top-save-bridge.js', manualTopSaveBridgeVersion],
       ['top100-suite.js', top100SuiteVersion],
       ['top100-suite-view-fix.js', top100SuiteVersion],
       ['manual-top-insert-fix.js', manualTopInsertFixVersion],
