@@ -6,6 +6,7 @@
   const manualTopInsertVersion = '20260725-manual-top-insert4';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
+  const top100EditorVersion = '20260726-top100-editor-v2-1';
   const myEventsVersion = '20260726-my-events-complete1';
   const statsDesignVersion = '20260725-profile-stats-designs4';
   const adminMissingVersion = '20260726-admin-missing3';
@@ -14,9 +15,6 @@
   const modalReadabilityVersion = '20260726-modal-readability1';
   const registeredUsersVersion = '20260726-known-users4';
   const sitePolicyVersion = '20260726-site-policy2';
-  const manualTopExplicitVersion = '20260726-manual-top-explicit2';
-  const manualTopLiveInsertVersion = '20260726-manual-top-live-insert1';
-  const manualTopSaveBridgeVersion = '20260726-manual-top-save-bridge1';
   const manualTopExistingMigrationVersion = '20260726-manual-top-existing-migration2';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
@@ -31,11 +29,6 @@
   let seasonPromise = null;
   let statsPromise = null;
 
-  /*
-   * The static HTML shell is usable immediately. Optional styles, Firebase
-   * snapshots and feature modules continue loading in the background instead
-   * of covering the whole page with a blocking splash screen.
-   */
   document.documentElement.classList.remove('oc-primary-booting');
   document.documentElement.classList.add('oc-primary-ready', 'oc-primary-progressive');
   document.querySelector('#oc-primary-boot')?.remove();
@@ -43,19 +36,14 @@
   function addStyle(file, version = primaryVersion) {
     const key = `${file}?v=${version}`;
     if (loadedStyles.has(key)) return loadedStyles.get(key);
-
     const promise = new Promise(resolve => {
       const stylesheet = document.createElement('link');
       stylesheet.rel = 'stylesheet';
       stylesheet.href = `./${key}`;
       stylesheet.onload = () => resolve(stylesheet);
-      stylesheet.onerror = () => {
-        console.warn(`Не удалось загрузить ${file}`);
-        resolve(stylesheet);
-      };
+      stylesheet.onerror = () => { console.warn(`Не удалось загрузить ${file}`); resolve(stylesheet); };
       document.head.append(stylesheet);
     });
-
     loadedStyles.set(key, promise);
     return promise;
   }
@@ -97,8 +85,6 @@
   initialStylePromises.push(addStyle('navigation-real-links.css', navigationRealLinksVersion));
   void Promise.all(initialStylePromises).catch(error => console.warn('Background style load failed', error));
 
-  // Route preview and account restore are deliberately first. A deep-linked tab can
-  // paint immediately while Firebase restores the account in parallel.
   void addScriptsOrdered([
     ['navigation-real-links.js', navigationRealLinksVersion],
     ['account-sync.js', accountSyncVersion],
@@ -153,14 +139,8 @@
     top100Promise = addScriptsOrdered([
       ['catalog-cache.js', primaryVersion],
       ['profile-top-single.js', top100SuiteVersion],
-      ['manual-top-insert-fast.js', manualTopInsertVersion],
-      ['manual-top-explicit.js', manualTopExplicitVersion],
-      ['manual-top-live-insert.js', manualTopLiveInsertVersion],
-      ['manual-top-save-bridge.js', manualTopSaveBridgeVersion],
-      ['top100-suite.js', top100SuiteVersion],
-      ['top100-suite-view-fix.js', top100SuiteVersion],
-      ['manual-top-insert-fix.js', manualTopInsertFixVersion],
-      ['top100-drag.js', top100DragVersion]
+      ['top100-editor-v2.js', top100EditorVersion],
+      ['manual-top-insert-fast.js', manualTopInsertVersion]
     ]).catch(error => {
       document.documentElement.classList.remove('oc-top100-loading');
       console.error('Top-100 package load failed', error);
@@ -193,12 +173,10 @@
   }
 
   document.addEventListener('click', event => routeLazyModules(event.target), true);
-
   const profile = document.querySelector('#oc-profile-panel');
   if (profile) {
-    new MutationObserver(() => {
-      if (profile.dataset.profileView === 'top100') void loadTop100Package();
-    }).observe(profile, { attributes: true, attributeFilter: ['data-profile-view'] });
+    new MutationObserver(() => { if (profile.dataset.profileView === 'top100') void loadTop100Package(); })
+      .observe(profile, { attributes: true, attributeFilter: ['data-profile-view'] });
   }
 
   function detectCurrentLazyView() {
@@ -207,17 +185,13 @@
     if (document.querySelector('.oc-tab-btn[data-tab="stats"]')?.classList.contains('active')) void loadStatsPackage();
   }
   window.setTimeout(detectCurrentLazyView, 100);
-})();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      const registration = await navigator.serviceWorker.register('./sw.js?v=20260726-force54', {
-        updateViaCache: 'none'
-      });
-      await registration.update();
-    } catch (error) {
-      console.warn('Image cache service worker registration failed', error);
-    }
-  });
-}
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const registration = await navigator.serviceWorker.register('./sw.js?v=20260726-force54', { updateViaCache: 'none' });
+        await registration.update();
+      } catch (error) { console.warn('Image cache service worker registration failed', error); }
+    });
+  }
+})();
