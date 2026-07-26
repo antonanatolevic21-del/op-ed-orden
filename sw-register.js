@@ -10,11 +10,12 @@
   const statsDesignVersion = '20260725-profile-stats-designs4';
   const adminMissingVersion = '20260726-admin-missing3';
   const firstUserFixVersion = '20260726-first-user-test2';
-  const top100DragVersion = '20260725-top100-drag1';
+  const top100DragVersion = '20260726-top100-drag2';
   const modalReadabilityVersion = '20260726-modal-readability1';
   const registeredUsersVersion = '20260726-known-users4';
   const sitePolicyVersion = '20260726-site-policy2';
-  const manualTopExplicitVersion = '20260726-manual-top-explicit1';
+  const manualTopExplicitVersion = '20260726-manual-top-explicit2';
+  const manualTopLiveInsertVersion = '20260726-manual-top-live-insert1';
   const manualTopSaveBridgeVersion = '20260726-manual-top-save-bridge1';
   const manualTopExistingMigrationVersion = '20260726-manual-top-existing-migration2';
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
@@ -154,6 +155,7 @@
       ['profile-top-single.js', top100SuiteVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion],
       ['manual-top-explicit.js', manualTopExplicitVersion],
+      ['manual-top-live-insert.js', manualTopLiveInsertVersion],
       ['manual-top-save-bridge.js', manualTopSaveBridgeVersion],
       ['top100-suite.js', top100SuiteVersion],
       ['top100-suite-view-fix.js', top100SuiteVersion],
