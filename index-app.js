@@ -4131,9 +4131,8 @@
       const row = getManualRanksForUser(user);
       const saved = row && Array.isArray(row[type]) ? row[type].map(String) : [];
       const valid = new Set(entries.filter(e => e.type === type).map(e => String(e.id)));
-      const excluded = manualExcludedSet(user, type);
       const seen = new Set();
-      return saved.filter(id => valid.has(String(id)) && !excluded.has(String(id)) && !seen.has(String(id)) && (seen.add(String(id)) || true));
+      return saved.filter(id => valid.has(String(id)) && !seen.has(String(id)) && (seen.add(String(id)) || true));
     }
 
     function ensureManualOrderForEditing(user, type) {
@@ -4701,9 +4700,7 @@
         const row = manualRanks[key] || {};
         const display = String(row.nickname || row.displayName || row.name || key || '').trim();
         if (!display) return;
-        const belongsToAdmin =
-          [display, key, row.nicknameKey, row.id].some(value => isAdminNickname(value)) ||
-          ADMIN_UIDS.has(String(row.ownerUid || ''));
+        const belongsToAdmin = [display, key, row.nicknameKey, row.id].some(value => isAdminNickname(value));
         if (scope === 'admins' && !belongsToAdmin) return;
         const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
         if (seenKeys.has(safe)) return;
