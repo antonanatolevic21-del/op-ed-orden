@@ -9,7 +9,7 @@
   const state = {
     user: '', key: '', loaded: false, loading: false, editing: false, applying: false, saving: false,
     baseline: { OP: [], ED: [] }, draft: { OP: [], ED: [] }, undo: [], redo: [], expanded: { OP: false, ED: false },
-    catalog: new Map(), meta: new Map(), rerenderTimer: 0, drag: null
+    catalog: new Map(), meta: new Map(), scores: new Map(), scoresLoaded: false, rerenderTimer: 0, drag: null
   };
 
   const clean = value => String(value ?? '').trim();
@@ -59,6 +59,38 @@
       const rows = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
       state.catalog = new Map((rows || []).map(row => [String(row.id), row]));
     } catch (error) { console.warn('Top-100 editor catalog load failed', error); }
+  }
+
+  async function loadUserScores(user, tools) {
+    state.scores = new Map();
+    state.scoresLoaded = false;
+    const snapshots = [];
+    try {
+      snapshots.push(await tools.getDocs(tools.query(
+        tools.collection(tools.db, 'ratings'),
+        tools.where('nicknameKey', '==', normalize(user))
+      )));
+    } catch (_) {}
+    if (!snapshots.some(snapshot => snapshot.size)) {
+      try {
+        snapshots.push(await tools.getDocs(tools.query(
+          tools.collection(tools.db, 'ratings'),
+          tools.where('nickname', '==', user)
+        )));
+      } catch (_) {}
+    }
+    snapshots.forEach(snapshot => snapshot.docs.forEach(doc => {
+      const row = doc.data() || {};
+      const id = clean(row.openingId);
+      const score = Number(row.score);
+      if (id && Number.isFinite(score)) state.scores.set(id, score);
+    }));
+    state.scoresLoaded = true;
+  }
+
+  function displayScore(value) {
+    const score = Number(value);
+    return Number.isFinite(score) ? score.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) : '—';
   }
 
   function captureMetaFromDom() {
@@ -138,7 +170,9 @@
     return {
       title: cached.title || clean(entry.title || entry.anime || id),
       meta: cached.meta || [entry.year, seasons[entry.season] || entry.season].filter(Boolean).join(' · '),
-      score: cached.score || scoreFromAllRatings(id) || '—',
+      score: state.scoresLoaded
+        ? (state.scores.has(String(id)) ? displayScore(state.scores.get(String(id))) : '—')
+        : (cached.score || scoreFromAllRatings(id) || '—'),
       image: cached.image || clean(entry.fallbackImage || entry.image), fallback: cached.fallback || clean(entry.fallbackImage)
     };
   }
@@ -242,7 +276,10 @@
     try {
       await loadCatalog(); captureMetaFromDom();
       const tools = await firebaseTools();
-      const snap = await tools.getDoc(tools.doc(tools.db, 'manualRanks', key));
+      const [snap] = await Promise.all([
+        tools.getDoc(tools.doc(tools.db, 'manualRanks', key)),
+        loadUserScores(user, tools)
+      ]);
       const row = snap.exists() ? snap.data() || {} : {};
       const saved = isVisibleManualTop(row)
         ? { OP: uniqueIds(row.OP || row.manualOP), ED: uniqueIds(row.ED || row.manualED) }
