@@ -13,8 +13,11 @@
   const editing = () => Boolean(document.querySelector('#oc-manual-edit-btn')?.classList.contains('active'));
   const topVisible = () => document.querySelector('#oc-profile-panel')?.dataset.profileView === 'top100';
   const containerFor = type => document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
+
   let cache = new Map();
-  let modal = null;
+  let panel = null;
+  let panelAnchor = null;
+  let panelResizeObserver = null;
   let mountTimer = 0;
   let hoverCard = null;
   let hoverMode = '';
@@ -32,6 +35,10 @@
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before{margin-top:42px!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after,
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after{margin-bottom:42px!important}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before{margin-top:var(--oc-top100-inline-panel-gap,360px)!important}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after{margin-bottom:var(--oc-top100-inline-panel-gap,360px)!important}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
@@ -44,11 +51,24 @@
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before::before{top:-42px;height:42px;padding:9px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
       #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after,
       #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after{bottom:-42px;height:42px;padding:9px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before::before,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before::before,
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after::after,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after::after{opacity:0;pointer-events:none}
+      .oc-top100-inline-search-panel{position:absolute!important;z-index:1100!important;margin:0!important;width:auto!important;max-width:none!important;box-sizing:border-box}
+      .oc-top100-inline-search-panel .oc-manual-insert-search{margin-top:10px}
+      .oc-top100-inline-search-panel .oc-manual-insert-results{max-height:300px}
+      .oc-top100-inline-search-panel-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+      .oc-top100-inline-search-panel-actions .oc-soft-btn{min-height:40px}
       @media(max-width:760px),(hover:none) and (pointer:coarse){
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{margin-top:40px!important}
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after],
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:40px!important}
+        #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before,
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-before{margin-top:var(--oc-top100-inline-panel-gap,360px)!important}
+        #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after,
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-inline-panel-after{margin-bottom:var(--oc-top100-inline-panel-gap,360px)!important}
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
         #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before{top:-40px;height:40px;padding:8px 10px;border-color:#4b3f58;background:rgba(139,92,246,.065);color:#a99bb8}
         #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
@@ -92,7 +112,9 @@
         if (id && score !== undefined) scores.set(id, Number(score));
       }));
       const catalog = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
-      return (catalog || []).filter(entry => entry?.type === type && scores.has(String(entry.id))).map(entry => ({ ...entry, score: scores.get(String(entry.id)) }))
+      return (catalog || [])
+        .filter(entry => entry?.type === type && scores.has(String(entry.id)))
+        .map(entry => ({ ...entry, score: scores.get(String(entry.id)) }))
         .sort((a, b) => b.score - a.score || clean(a.title).localeCompare(clean(b.title), 'ru'));
     })();
     cache.set(key, promise);
@@ -106,11 +128,29 @@
     return index >= 0 ? index + 1 : null;
   }
 
-  function closeModal() { modal?.remove(); modal = null; }
+  function renderRows(rows, type, query, list, selectedId, onSelect) {
+    const q = clean(query).toLocaleLowerCase('ru');
+    const filtered = rows.filter(row => !q || [row.title, ...(Array.isArray(row.alternativeTitles) ? row.alternativeTitles : [])]
+      .some(value => clean(value).toLocaleLowerCase('ru').includes(q))).slice(0, 30);
+    if (!filtered.length) {
+      list.innerHTML = '<div class="oc-empty">Подходящих оценённых треков не найдено.</div>';
+      return;
+    }
+    list.innerHTML = filtered.map(row => {
+      const rank = currentRank(type, row.id);
+      const image = clean(row.fallbackImage || row.image);
+      return `<button type="button" class="oc-manual-insert-result${String(selectedId) === String(row.id) ? ' selected' : ''}" data-id="${esc(row.id)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span class="oc-manual-insert-noimage">—</span>'}<span class="oc-manual-insert-result-main"><span class="oc-manual-insert-result-title">${esc(row.title || row.id)}</span><span class="oc-manual-insert-result-meta">${rank ? `сейчас №${rank}` : 'сейчас вне топ-100'}</span></span><span class="oc-manual-insert-result-score">${esc(row.score)}</span></button>`;
+    }).join('');
+    list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
+  }
 
   function dispatchPlacement(type, id, place) {
     const fake = document.createElement('button');
-    fake.type = 'button'; fake.dataset.action = 'all-set-rank'; fake.dataset.type = type; fake.dataset.id = String(id); fake.style.display = 'none';
+    fake.type = 'button';
+    fake.dataset.action = 'all-set-rank';
+    fake.dataset.type = type;
+    fake.dataset.id = String(id);
+    fake.style.display = 'none';
     document.body.append(fake);
     const originalPrompt = window.prompt;
     window.prompt = () => String(place);
@@ -118,53 +158,124 @@
     finally { window.prompt = originalPrompt; fake.remove(); }
   }
 
-  function renderRows(rows, type, query, list, selectedId, onSelect) {
-    const q = clean(query).toLocaleLowerCase('ru');
-    const filtered = rows.filter(row => !q || [row.title, ...(Array.isArray(row.alternativeTitles) ? row.alternativeTitles : [])]
-      .some(value => clean(value).toLocaleLowerCase('ru').includes(q))).slice(0, 30);
-    if (!filtered.length) { list.innerHTML = '<div class="oc-empty">Подходящих оценённых треков не найдено.</div>'; return; }
-    list.innerHTML = filtered.map(row => {
-      const rank = currentRank(type, row.id), image = clean(row.fallbackImage || row.image);
-      return `<button type="button" class="oc-manual-insert-result${String(selectedId) === String(row.id) ? ' selected' : ''}" data-id="${esc(row.id)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span></span>'}<span class="oc-manual-insert-result-main"><span class="oc-manual-insert-result-title">${esc(row.title || row.id)}</span><span class="oc-manual-insert-result-meta">${rank ? `сейчас №${rank}` : 'сейчас вне топ-100'}</span></span><span class="oc-manual-insert-result-score">${esc(row.score)}</span></button>`;
-    }).join('');
-    list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
-  }
-
-  async function openAddDialog(typeArg = activeType(), initialPlace = 1) {
-    if (!editing()) { toast('Сначала включи редактирование топа.', 'error'); return; }
-    closeModal();
-    const type = typeArg === 'ED' ? 'ED' : 'OP';
-    const user = viewedUser();
-    const startPlace = Math.max(1, Math.min(100, Math.round(Number(initialPlace) || 1)));
-    modal = document.createElement('div'); modal.className = 'oc-top100-modal';
-    modal.innerHTML = `<div class="oc-top100-dialog"><button type="button" class="oc-top100-modal-close" aria-label="Закрыть">×</button><div class="oc-top100-modal-body"><div class="oc-top100-modal-head"><div><h2>Вставить на ${startPlace}-е место · ${type}</h2><p>Выбери оценённый трек. Остальные автоматически сдвинутся вниз.</p></div></div><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;margin:14px 0;"><input id="oc-top100-add-place" type="number" min="1" max="100" value="${startPlace}" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"><input id="oc-top100-add-search" type="search" placeholder="Название трека…" autocomplete="off" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"></div><div id="oc-top100-add-list" class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю оценённые треки…</div></div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" id="oc-top100-add-confirm" class="oc-soft-btn" disabled>Вставить на выбранное место</button></div></div></div>`;
-    document.body.append(modal);
-    modal.addEventListener('click', event => { if (event.target === modal || event.target.closest('.oc-top100-modal-close')) closeModal(); });
-    const search = modal.querySelector('#oc-top100-add-search'), place = modal.querySelector('#oc-top100-add-place'), list = modal.querySelector('#oc-top100-add-list'), confirm = modal.querySelector('#oc-top100-add-confirm');
-    let rows = [], selectedId = '';
-    const render = () => renderRows(rows, type, search.value, list, selectedId, id => { selectedId = id; confirm.disabled = false; render(); });
-    search.addEventListener('input', render);
-    confirm.addEventListener('click', () => {
-      if (!selectedId) return;
-      const target = Math.max(1, Math.min(100, Math.round(Number(place.value) || 1))), row = rows.find(item => String(item.id) === String(selectedId));
-      dispatchPlacement(type, selectedId, target); closeModal(); toast(`${row?.title || selectedId}: поставлен на ${target}-е место.`, 'success');
-    });
-    try { rows = await candidates(user, type); if (!modal?.isConnected) return; render(); search.focus(); }
-    catch (error) { if (list) list.innerHTML = `<div class="oc-top100-error">${esc(error?.message || 'Не удалось загрузить оценки.')}</div>`; }
-  }
-
   function clearHover() {
     if (!hoverCard) return;
     hoverCard.classList.remove('oc-top100-insert-hover-before', 'oc-top100-insert-hover-after');
-    hoverCard = null; hoverMode = '';
+    hoverCard = null;
+    hoverMode = '';
   }
 
   function setHover(card, mode) {
+    if (panelAnchor) return;
     if (hoverCard === card && hoverMode === mode) return;
     clearHover();
     if (!card || !mode) return;
-    hoverCard = card; hoverMode = mode;
+    hoverCard = card;
+    hoverMode = mode;
     card.classList.add(mode === 'after' ? 'oc-top100-insert-hover-after' : 'oc-top100-insert-hover-before');
+  }
+
+  function clearAnchorSpacing() {
+    const card = panelAnchor?.card;
+    if (!card) return;
+    card.classList.remove('oc-top100-inline-panel-before', 'oc-top100-inline-panel-after');
+    card.style.removeProperty('--oc-top100-inline-panel-gap');
+  }
+
+  function closePanel() {
+    panelResizeObserver?.disconnect();
+    panelResizeObserver = null;
+    panel?.remove();
+    panel = null;
+    clearAnchorSpacing();
+    panelAnchor = null;
+    clearHover();
+  }
+
+  function positionPanel() {
+    if (!panel || !panelAnchor?.card?.isConnected) return;
+    const card = panelAnchor.card;
+    const panelHeight = Math.max(160, Math.ceil(panel.getBoundingClientRect().height));
+    const gap = panelHeight + 24;
+    card.style.setProperty('--oc-top100-inline-panel-gap', `${gap}px`);
+    card.classList.toggle('oc-top100-inline-panel-before', panelAnchor.mode === 'before');
+    card.classList.toggle('oc-top100-inline-panel-after', panelAnchor.mode === 'after');
+
+    requestAnimationFrame(() => {
+      if (!panel || !panelAnchor?.card?.isConnected) return;
+      const nextRect = panelAnchor.card.getBoundingClientRect();
+      panel.style.width = `${nextRect.width}px`;
+      panel.style.left = `${window.scrollX + nextRect.left}px`;
+      panel.style.top = panelAnchor.mode === 'before'
+        ? `${window.scrollY + nextRect.top - gap + 12}px`
+        : `${window.scrollY + nextRect.bottom + 12}px`;
+    });
+  }
+
+  async function openInlinePanel(card, mode, type, place) {
+    if (!editing()) {
+      toast('Сначала включи редактирование топа.', 'error');
+      return;
+    }
+    closePanel();
+    clearHover();
+
+    const user = viewedUser();
+    const targetPlace = Math.max(1, Math.min(100, Math.round(Number(place) || 1)));
+    panelAnchor = { card, mode, type: type === 'ED' ? 'ED' : 'OP', place: targetPlace };
+
+    panel = document.createElement('div');
+    panel.className = 'oc-manual-insert-panel oc-top100-inline-search-panel';
+    panel.dataset.top100InlinePanel = '1';
+    panel.innerHTML = `
+      <div class="oc-manual-insert-head">
+        <div><strong>Вставить на ${targetPlace}-е место · ${panelAnchor.type}</strong><small>Поиск среди оценённых треков</small></div>
+        <button type="button" class="oc-manual-insert-close" aria-label="Закрыть">×</button>
+      </div>
+      <input class="oc-manual-insert-search" type="search" placeholder="Название трека…" autocomplete="off">
+      <div class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю оценённые треки…</div></div>
+      <div class="oc-top100-inline-search-panel-actions">
+        <button type="button" class="oc-soft-btn oc-top100-inline-confirm" disabled>Вставить сюда</button>
+      </div>`;
+    document.body.append(panel);
+
+    const search = panel.querySelector('.oc-manual-insert-search');
+    const list = panel.querySelector('.oc-manual-insert-results');
+    const confirm = panel.querySelector('.oc-top100-inline-confirm');
+    let rows = [];
+    let selectedId = '';
+
+    const render = () => renderRows(rows, panelAnchor.type, search.value, list, selectedId, id => {
+      selectedId = id;
+      confirm.disabled = false;
+      render();
+    });
+
+    panel.querySelector('.oc-manual-insert-close').addEventListener('click', closePanel);
+    search.addEventListener('input', render);
+    confirm.addEventListener('click', () => {
+      if (!selectedId || !panelAnchor) return;
+      const row = rows.find(item => String(item.id) === String(selectedId));
+      const { type: currentType, place: currentPlace } = panelAnchor;
+      dispatchPlacement(currentType, selectedId, currentPlace);
+      closePanel();
+      toast(`${row?.title || selectedId}: поставлен на ${currentPlace}-е место.`, 'success');
+    });
+
+    panelResizeObserver = new ResizeObserver(() => positionPanel());
+    panelResizeObserver.observe(panel);
+    positionPanel();
+
+    try {
+      rows = await candidates(user, panelAnchor.type);
+      if (!panel?.isConnected || !panelAnchor) return;
+      render();
+      search.focus({ preventScroll: true });
+      positionPanel();
+    } catch (error) {
+      if (list) list.innerHTML = `<div class="oc-manual-insert-error">${esc(error?.message || 'Не удалось загрузить оценки.')}</div>`;
+      positionPanel();
+    }
   }
 
   function clearDecorations(container) {
@@ -176,17 +287,29 @@
       card.removeAttribute('data-top100-insert-label');
       card.removeAttribute('data-top100-insert-after');
       card.removeAttribute('data-top100-insert-after-label');
-      card.classList.remove('oc-top100-insert-hover-before', 'oc-top100-insert-hover-after');
+      card.classList.remove(
+        'oc-top100-insert-hover-before',
+        'oc-top100-insert-hover-after',
+        'oc-top100-inline-panel-before',
+        'oc-top100-inline-panel-after'
+      );
+      card.style.removeProperty('--oc-top100-inline-panel-gap');
     });
   }
 
   function decorateType(type) {
     const container = containerFor(type);
     if (!container) return;
-    if (!editing() || !topVisible()) { clearDecorations(container); return; }
+    if (!editing() || !topVisible()) {
+      clearDecorations(container);
+      if (panelAnchor?.type === type) closePanel();
+      return;
+    }
     const cards = [...container.children].filter(node => node.classList?.contains('oc-profile-item'));
-    if (!cards.length) { clearDecorations(container); return; }
-
+    if (!cards.length) {
+      clearDecorations(container);
+      return;
+    }
     cards.forEach((card, index) => {
       const place = index + 1;
       card.dataset.top100InsertPlace = String(place);
@@ -202,16 +325,36 @@
     container.classList.add('oc-top100-inline-insert-enabled');
   }
 
+  function firstCard(type) {
+    return containerFor(type)?.querySelector(':scope > .oc-profile-item.manual') || null;
+  }
+
   function mountButton() {
     const extra = document.querySelector('.oc-top100-toolbar .oc-top100-extra');
     if (!extra || extra.querySelector('[data-top100-add]')) return;
-    const button = document.createElement('button'); button.type = 'button'; button.dataset.top100Add = '1'; button.textContent = '+ Добавить';
-    button.addEventListener('click', () => void openAddDialog(activeType(), 1)); extra.append(button);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.top100Add = '1';
+    button.textContent = '+ Добавить';
+    button.addEventListener('click', () => {
+      const type = activeType();
+      const card = firstCard(type);
+      if (!card) {
+        toast('Для пустого топа сначала добавь трек из раздела «Все оценки».', 'error');
+        return;
+      }
+      void openInlinePanel(card, 'before', type, 1);
+    });
+    extra.append(button);
   }
 
   function mountAll() {
     mountTimer = 0;
-    ensureStyles(); mountButton(); decorateType('OP'); decorateType('ED');
+    ensureStyles();
+    mountButton();
+    decorateType('OP');
+    decorateType('ED');
+    if (panelAnchor) positionPanel();
   }
 
   function scheduleMount() {
@@ -220,9 +363,16 @@
   }
 
   document.addEventListener('pointermove', event => {
-    if (!editing() || !topVisible()) { clearHover(); return; }
+    if (panel?.contains(event.target)) return;
+    if (!editing() || !topVisible()) {
+      clearHover();
+      return;
+    }
     const card = event.target.closest?.('#oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,#oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual');
-    if (!card) { clearHover(); return; }
+    if (!card) {
+      clearHover();
+      return;
+    }
     const rect = card.getBoundingClientRect();
     if (event.clientY < rect.top && event.clientY >= rect.top - 42) setHover(card, 'before');
     else if (card.dataset.top100InsertAfter && event.clientY > rect.bottom && event.clientY <= rect.bottom + 42) setHover(card, 'after');
@@ -230,26 +380,56 @@
   }, true);
 
   document.addEventListener('click', event => {
+    if (panel?.contains(event.target)) return;
     const card = event.target.closest?.('#oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,#oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual');
     if (card && editing() && topVisible()) {
       const rect = card.getBoundingClientRect();
       const type = card.parentElement?.id === 'oc-profile-ed' ? 'ED' : 'OP';
       if (event.clientY < rect.top && card.dataset.top100InsertPlace) {
-        event.preventDefault(); event.stopImmediatePropagation(); void openAddDialog(type, card.dataset.top100InsertPlace); return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void openInlinePanel(card, 'before', type, card.dataset.top100InsertPlace);
+        return;
       }
       if (event.clientY > rect.bottom && card.dataset.top100InsertAfter) {
-        event.preventDefault(); event.stopImmediatePropagation(); void openAddDialog(type, card.dataset.top100InsertAfter); return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void openInlinePanel(card, 'after', type, card.dataset.top100InsertAfter);
+        return;
       }
     }
-    if (event.target.closest?.('.oc-profile-top-type-btn')) closeModal();
+    if (event.target.closest?.('.oc-profile-top-type-btn')) closePanel();
     if (event.target.closest?.('#oc-manual-edit-btn,[data-profile-view="top100"]')) window.setTimeout(scheduleMount, 0);
   }, true);
 
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && panel) closePanel();
+  });
+
   new MutationObserver(records => {
-    if (records.some(record => record.type === 'childList')) scheduleMount();
+    const relevant = records.some(record => {
+      if (record.target?.closest?.('.oc-top100-inline-search-panel')) return false;
+      return record.type === 'childList';
+    });
+    if (relevant) scheduleMount();
   }).observe(document.documentElement, { childList: true, subtree: true });
-  document.querySelector('#oc-profile-user')?.addEventListener('change', () => { cache.clear(); closeModal(); scheduleMount(); });
-  document.addEventListener('oc:top100-saved', scheduleMount);
-  window.addEventListener('resize', clearHover, { passive: true });
+
+  document.querySelector('#oc-profile-user')?.addEventListener('change', () => {
+    cache.clear();
+    closePanel();
+    scheduleMount();
+  });
+  document.addEventListener('oc:top100-saved', () => {
+    closePanel();
+    scheduleMount();
+  });
+  window.addEventListener('resize', () => {
+    clearHover();
+    if (panel) positionPanel();
+  }, { passive: true });
+  window.addEventListener('scroll', () => {
+    if (panel) positionPanel();
+  }, { passive: true });
+
   [0, 100, 400, 1000].forEach(delay => setTimeout(mountAll, delay));
 })();
