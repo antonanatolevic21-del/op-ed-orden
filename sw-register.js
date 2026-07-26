@@ -3,7 +3,7 @@
   const deepLinksVersion = '20260725-deep-links2';
   const accountSyncVersion = '20260726-account-sync4';
   const seasonFillVersion = '20260725-season-fill2';
-  const manualTopInsertVersion = '20260726-manual-top-insert6';
+  const manualTopInsertVersion = '20260726-manual-top-insert7';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
   const top100EditorVersion = '20260726-top100-editor-v2-1';
