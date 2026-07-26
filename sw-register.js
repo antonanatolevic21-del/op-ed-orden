@@ -18,7 +18,7 @@
   const profileEventsOwnershipVersion = '20260726-profile-events-owner1';
   const accessRoleBadgeVersion = '20260726-access-role-badge1';
   const adminProfilePickerVersion = '20260726-admin-profile-picker2';
-  const entityAlbumEditorVersion = '20260726-entity-album-editor3';
+  const entityAlbumEditorVersion = '20260726-entity-album-editor4';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   let top100Promise = null;
