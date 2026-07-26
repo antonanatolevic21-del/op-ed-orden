@@ -15,21 +15,41 @@
   const containerFor = type => document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
   let cache = new Map();
   let modal = null;
-  let activeZone = null;
   let mountTimer = 0;
+  let hoverCard = null;
+  let hoverMode = '';
 
   function ensureStyles() {
     if (document.querySelector('#oc-top100-inline-insert-style')) return;
     const style = document.createElement('style');
     style.id = 'oc-top100-inline-insert-style';
     style.textContent = `
-      .oc-manual-insert-zone.oc-top100-inline-zone{margin:4px 0;min-height:24px}
-      .oc-manual-insert-zone.oc-top100-inline-zone>button{min-height:24px;border-color:rgba(169,155,184,.28);color:#716979;background:rgba(139,92,246,.025)}
-      .oc-manual-insert-zone.oc-top100-inline-zone>button b{color:#08d9d6;font-size:16px}
-      .oc-manual-insert-zone.oc-top100-inline-zone>button span{opacity:.62}
-      .oc-manual-insert-zone.oc-top100-inline-zone:hover>button,.oc-manual-insert-zone.oc-top100-inline-zone:focus-within>button,.oc-manual-insert-zone.oc-top100-inline-zone.active>button{min-height:38px;border-color:#08d9d6;color:#08d9d6;background:rgba(8,217,214,.07)}
-      .oc-manual-insert-zone.oc-top100-inline-zone:hover>button span,.oc-manual-insert-zone.oc-top100-inline-zone:focus-within>button span,.oc-manual-insert-zone.oc-top100-inline-zone.active>button span{opacity:1}
-      @media(max-width:760px),(hover:none) and (pointer:coarse){.oc-manual-insert-zone.oc-top100-inline-zone{margin:5px 0;min-height:40px}.oc-manual-insert-zone.oc-top100-inline-zone>button{min-height:40px;padding:8px 10px;border-color:#4b3f58;color:#a99bb8;background:rgba(139,92,246,.065)}.oc-manual-insert-zone.oc-top100-inline-zone>button span{opacity:1}}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{position:relative;margin-top:12px!important}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after],
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:12px!important}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{position:absolute;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:center;box-sizing:border-box;height:12px;padding:0;border:1px dashed rgba(169,155,184,.28);border-radius:9px;background:rgba(139,92,246,.025);color:#716979;font:700 10px/1 'Space Mono',monospace;white-space:nowrap;overflow:hidden;cursor:pointer;pointer-events:auto;transition:height .16s ease,top .16s ease,bottom .16s ease,padding .16s ease,border-color .16s ease,background .16s ease,color .16s ease}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before{content:'↳  ' attr(data-top100-insert-label);top:-12px}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{content:'↳  ' attr(data-top100-insert-after-label);bottom:-12px}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before::before,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-before::before{top:-38px;height:38px;padding:8px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
+      #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after,
+      #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual.oc-top100-insert-hover-after::after{bottom:-38px;height:38px;padding:8px 12px;border-color:#08d9d6;background:rgba(8,217,214,.07);color:#08d9d6}
+      @media(max-width:760px),(hover:none) and (pointer:coarse){
+        #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual{margin-top:40px!important}
+        #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after],
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]{margin-bottom:40px!important}
+        #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before,
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual::before{top:-40px;height:40px;padding:8px 10px;border-color:#4b3f58;background:rgba(139,92,246,.065);color:#a99bb8}
+        #oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after,
+        #oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual[data-top100-insert-after]::after{bottom:-40px;height:40px;padding:8px 10px;border-color:#4b3f58;background:rgba(139,92,246,.065);color:#a99bb8}
+      }
     `;
     document.head.append(style);
   }
@@ -82,12 +102,7 @@
     return index >= 0 ? index + 1 : null;
   }
 
-  function closeModal() {
-    modal?.remove();
-    modal = null;
-    activeZone?.classList.remove('active');
-    activeZone = null;
-  }
+  function closeModal() { modal?.remove(); modal = null; }
 
   function dispatchPlacement(type, id, place) {
     const fake = document.createElement('button');
@@ -111,14 +126,12 @@
     list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
   }
 
-  async function openAddDialog(typeArg = activeType(), initialPlace = 1, sourceZone = null) {
+  async function openAddDialog(typeArg = activeType(), initialPlace = 1) {
     if (!editing()) { toast('Сначала включи редактирование топа.', 'error'); return; }
     closeModal();
     const type = typeArg === 'ED' ? 'ED' : 'OP';
     const user = viewedUser();
     const startPlace = Math.max(1, Math.min(100, Math.round(Number(initialPlace) || 1)));
-    activeZone = sourceZone || null;
-    activeZone?.classList.add('active');
     modal = document.createElement('div'); modal.className = 'oc-top100-modal';
     modal.innerHTML = `<div class="oc-top100-dialog"><button type="button" class="oc-top100-modal-close" aria-label="Закрыть">×</button><div class="oc-top100-modal-body"><div class="oc-top100-modal-head"><div><h2>Вставить на ${startPlace}-е место · ${type}</h2><p>Выбери оценённый трек. Остальные автоматически сдвинутся вниз.</p></div></div><div style="display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;margin:14px 0;"><input id="oc-top100-add-place" type="number" min="1" max="100" value="${startPlace}" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"><input id="oc-top100-add-search" type="search" placeholder="Название трека…" autocomplete="off" style="min-height:42px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;"></div><div id="oc-top100-add-list" class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю оценённые треки…</div></div><div style="display:flex;justify-content:flex-end;margin-top:12px;"><button type="button" id="oc-top100-add-confirm" class="oc-soft-btn" disabled>Вставить на выбранное место</button></div></div></div>`;
     document.body.append(modal);
@@ -136,40 +149,53 @@
     catch (error) { if (list) list.innerHTML = `<div class="oc-top100-error">${esc(error?.message || 'Не удалось загрузить оценки.')}</div>`; }
   }
 
-  function makeZone(type, targetPlace) {
-    const zone = document.createElement('div');
-    zone.className = 'oc-manual-insert-zone oc-top100-inline-zone';
-    zone.dataset.type = type;
-    zone.dataset.targetPlace = String(targetPlace);
-    zone.innerHTML = `<button type="button" title="Вставить трек на ${targetPlace}-е место"><b>↳</b><span>Вставить на ${targetPlace}-е место</span></button>`;
-    zone.querySelector('button').addEventListener('click', () => void openAddDialog(type, targetPlace, zone));
-    return zone;
+  function clearHover() {
+    if (!hoverCard) return;
+    hoverCard.classList.remove('oc-top100-insert-hover-before', 'oc-top100-insert-hover-after');
+    hoverCard = null; hoverMode = '';
   }
 
-  function clearZones(container) {
-    container?.querySelectorAll(':scope > .oc-top100-inline-zone').forEach(zone => zone.remove());
-    if (container) container.dataset.top100InsertSignature = '';
+  function setHover(card, mode) {
+    if (hoverCard === card && hoverMode === mode) return;
+    clearHover();
+    if (!card || !mode) return;
+    hoverCard = card; hoverMode = mode;
+    card.classList.add(mode === 'after' ? 'oc-top100-insert-hover-after' : 'oc-top100-insert-hover-before');
   }
 
-  function mountZones(type) {
+  function clearDecorations(container) {
+    if (!container) return;
+    container.classList.remove('oc-top100-inline-insert-enabled');
+    [...container.children].forEach(card => {
+      if (!card.classList?.contains('oc-profile-item')) return;
+      card.removeAttribute('data-top100-insert-place');
+      card.removeAttribute('data-top100-insert-label');
+      card.removeAttribute('data-top100-insert-after');
+      card.removeAttribute('data-top100-insert-after-label');
+      card.classList.remove('oc-top100-insert-hover-before', 'oc-top100-insert-hover-after');
+    });
+  }
+
+  function decorateType(type) {
     const container = containerFor(type);
     if (!container) return;
-    if (!editing() || !topVisible()) { clearZones(container); return; }
+    if (!editing() || !topVisible()) { clearDecorations(container); return; }
     const cards = [...container.children].filter(node => node.classList?.contains('oc-profile-item'));
-    const signature = cards.map(card => clean(card.dataset.top100Id || card.querySelector('[data-id]')?.dataset.id)).join('|');
-    if (container.dataset.top100InsertSignature === signature && container.querySelector(':scope > .oc-top100-inline-zone')) return;
-    clearZones(container);
-    container.dataset.top100InsertSignature = signature;
+    if (!cards.length) { clearDecorations(container); return; }
 
-    if (!cards.length) {
-      const empty = container.querySelector(':scope > .oc-empty');
-      const zone = makeZone(type, 1);
-      if (empty) container.insertBefore(zone, empty); else container.prepend(zone);
-      return;
+    cards.forEach((card, index) => {
+      const place = index + 1;
+      card.dataset.top100InsertPlace = String(place);
+      card.dataset.top100InsertLabel = `Вставить на ${place}-е место`;
+      card.removeAttribute('data-top100-insert-after');
+      card.removeAttribute('data-top100-insert-after-label');
+    });
+    if (cards.length < 100) {
+      const last = cards[cards.length - 1];
+      last.dataset.top100InsertAfter = String(cards.length + 1);
+      last.dataset.top100InsertAfterLabel = `Вставить на ${cards.length + 1}-е место`;
     }
-
-    cards.forEach((card, index) => card.before(makeZone(type, index + 1)));
-    if (cards.length < 100) cards[cards.length - 1].after(makeZone(type, cards.length + 1));
+    container.classList.add('oc-top100-inline-insert-enabled');
   }
 
   function mountButton() {
@@ -181,10 +207,7 @@
 
   function mountAll() {
     mountTimer = 0;
-    ensureStyles();
-    mountButton();
-    mountZones('OP');
-    mountZones('ED');
+    ensureStyles(); mountButton(); decorateType('OP'); decorateType('ED');
   }
 
   function scheduleMount() {
@@ -192,11 +215,37 @@
     mountTimer = window.setTimeout(mountAll, 0);
   }
 
-  new MutationObserver(scheduleMount).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-profile-view'] });
-  document.querySelector('#oc-profile-user')?.addEventListener('change', () => { cache.clear(); closeModal(); scheduleMount(); });
-  document.addEventListener('click', event => {
-    if (event.target.closest?.('.oc-profile-top-type-btn')) closeModal();
-    if (event.target.closest?.('#oc-manual-edit-btn')) window.setTimeout(scheduleMount, 0);
+  document.addEventListener('pointermove', event => {
+    if (!editing() || !topVisible()) { clearHover(); return; }
+    const card = event.target.closest?.('#oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,#oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual');
+    if (!card) { clearHover(); return; }
+    const rect = card.getBoundingClientRect();
+    if (event.clientY < rect.top && event.clientY >= rect.top - 42) setHover(card, 'before');
+    else if (card.dataset.top100InsertAfter && event.clientY > rect.bottom && event.clientY <= rect.bottom + 42) setHover(card, 'after');
+    else clearHover();
   }, true);
+
+  document.addEventListener('click', event => {
+    const card = event.target.closest?.('#oc-profile-op.oc-top100-inline-insert-enabled>.oc-profile-item.manual,#oc-profile-ed.oc-top100-inline-insert-enabled>.oc-profile-item.manual');
+    if (card && editing() && topVisible()) {
+      const rect = card.getBoundingClientRect();
+      const type = card.parentElement?.id === 'oc-profile-ed' ? 'ED' : 'OP';
+      if (event.clientY < rect.top && card.dataset.top100InsertPlace) {
+        event.preventDefault(); event.stopImmediatePropagation(); void openAddDialog(type, card.dataset.top100InsertPlace); return;
+      }
+      if (event.clientY > rect.bottom && card.dataset.top100InsertAfter) {
+        event.preventDefault(); event.stopImmediatePropagation(); void openAddDialog(type, card.dataset.top100InsertAfter); return;
+      }
+    }
+    if (event.target.closest?.('.oc-profile-top-type-btn')) closeModal();
+    if (event.target.closest?.('#oc-manual-edit-btn,[data-profile-view="top100"]')) window.setTimeout(scheduleMount, 0);
+  }, true);
+
+  new MutationObserver(records => {
+    if (records.some(record => record.type === 'childList')) scheduleMount();
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  document.querySelector('#oc-profile-user')?.addEventListener('change', () => { cache.clear(); closeModal(); scheduleMount(); });
+  document.addEventListener('oc:top100-saved', scheduleMount);
+  window.addEventListener('resize', clearHover, { passive: true });
   [0, 100, 400, 1000].forEach(delay => setTimeout(mountAll, delay));
 })();
