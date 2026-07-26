@@ -1,4 +1,4 @@
-@import url('./backups/index-before-four-digit-rank-2026-07-23.css');
+@import url('./index-base.css?v=20260726-cleanup2');
 
 /* Four-digit positions keep their own grid column and never overlap previews. */
 .oc-rank {

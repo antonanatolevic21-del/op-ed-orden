@@ -1,11 +1,7 @@
-@import url('./index-shell-current.css?v=20260725-first-paint1');
+@import url('./index-shell-current.css?v=20260726-cleanup2');
 
-/*
- * Progressive first paint.
- * The static shell is useful immediately, so it must never be covered by the
- * old full-screen boot layer. Firebase data and optional UI modules can fill
- * the page after the first frame without blocking navigation.
- */
+/* Keep the neutral page background visible until the final UI bundle has
+ * applied. This prevents the legacy base layout from flashing for one frame. */
 html,
 html body {
 	min-height: 100%;
@@ -16,6 +12,11 @@ html body {
 	overflow: auto !important;
 }
 
+html.oc-enhancements-loading body #opedchart-root {
+	visibility: hidden !important;
+	opacity: 0 !important;
+}
+
 html body #opedchart-root,
 html.oc-primary-booting body #opedchart-root,
 html:not(.oc-primary-ready) body #opedchart-root {
@@ -23,6 +24,11 @@ html:not(.oc-primary-ready) body #opedchart-root {
 	opacity: 1 !important;
 	pointer-events: auto !important;
 	animation: none !important;
+}
+
+html:not(.oc-enhancements-loading) body #opedchart-root {
+	visibility: visible !important;
+	opacity: 1 !important;
 }
 
 /* Overrides both the old stylesheet guard and the boot node injected by a
