@@ -43,7 +43,11 @@
 		link.dataset.navRealLink = '1';
 		link.addEventListener('click', event => {
 			const modified = event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
-			if (!modified) event.preventDefault();
+			if (modified) return;
+			event.preventDefault();
+			// If this module loaded after the old app handlers, they are still attached
+			// to the detached original button. Trigger it so the SPA behaviour remains.
+			button.click();
 		});
 		button.replaceWith(link);
 		return link;
@@ -67,7 +71,7 @@
 		});
 	}
 
-	// This listener is registered before the old deep-link handlers. Modified
+	// Registered before the deep-link listeners whenever possible. Modified
 	// clicks keep the anchor's native browser action, but never reach SPA click
 	// handlers in the current tab.
 	document.addEventListener('click', event => {
