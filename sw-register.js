@@ -1,10 +1,10 @@
 (() => {
   const primaryVersion = '20260726-cleanup2';
   const seasonFillVersion = '20260725-season-fill2';
-  const manualTopInsertVersion = '20260726-manual-top-insert12';
+  const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
-  const top100EditorVersion = '20260726-top100-editor-v2-1';
+  const top100EditorVersion = '20260726-top100-editor-v2-2';
   const top100DragVersion = '20260726-top100-drag2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
