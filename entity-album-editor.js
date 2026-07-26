@@ -52,6 +52,12 @@
     }, { merge: true });
   }
 
+  async function saveBaseCard(card) {
+    for (let attempt = 0; attempt < 120 && typeof window.OPED_DB?.saveEntityCard !== 'function'; attempt += 1) await new Promise(resolve => setTimeout(resolve, 50));
+    if (typeof window.OPED_DB?.saveEntityCard !== 'function') throw new Error('Сервис альбомов ещё не готов.');
+    return window.OPED_DB.saveEntityCard(card);
+  }
+
   async function patchPendingCreate() {
     if (!pendingCreate || !cards.length) return;
     const match = cards.find(card =>
@@ -74,7 +80,7 @@
     const image = article.querySelector('.oc-entity-cover img');
     if (!image) return;
     const position = normalizePosition(card?.imagePosition);
-    image.style.objectPosition = POSITION_CSS[position];
+    image.style.setProperty('object-position', POSITION_CSS[position], 'important');
     image.dataset.entityImagePosition = position;
   }
 
@@ -191,7 +197,9 @@
     const save = modal.querySelector('[data-entity-edit-save]');
     if (save) { save.disabled = true; save.textContent = 'Сохраняю…'; }
     try {
-      await patchCard(id, { value, image, imagePosition });
+      const newId = await saveBaseCard({ type: card.type, value, image });
+      await patchCard(newId, { imagePosition });
+      if (String(newId) !== String(id) && typeof window.OPED_DB?.deleteEntityCard === 'function') await window.OPED_DB.deleteEntityCard(id);
       closeModal();
     } catch (error) {
       console.error('Entity album edit failed', error);
