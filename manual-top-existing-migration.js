@@ -1,6 +1,7 @@
 (() => {
   if (window.__OC_MANUAL_TOP_EXISTING_MIGRATION_READY__) return;
   window.__OC_MANUAL_TOP_EXISTING_MIGRATION_READY__ = true;
+  return;
 
   const clean = value => String(value ?? '').trim();
   const uniqueIds = values => [...new Set((Array.isArray(values) ? values : []).map(String).filter(Boolean))].slice(0, 100);
