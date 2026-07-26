@@ -52,13 +52,13 @@
   }
 
   function finishInitial(authenticated) {
-    if (initialReady) return;
-    initialReady = true;
-    window.__OC_ACCOUNT_RESTORE_DONE__ = true;
-    resolveAccountReady?.({ authenticated: Boolean(authenticated), uid: personalUid });
-    window.dispatchEvent(new CustomEvent('oped-account-restored', {
-      detail: { authenticated: Boolean(authenticated), uid: personalUid }
-    }));
+    const detail = { authenticated: Boolean(authenticated), uid: personalUid };
+    if (!initialReady) {
+      initialReady = true;
+      window.__OC_ACCOUNT_RESTORE_DONE__ = true;
+      resolveAccountReady?.(detail);
+    }
+    window.dispatchEvent(new CustomEvent('oped-account-restored', { detail }));
   }
 
   function hasRecentUserIntent() {
