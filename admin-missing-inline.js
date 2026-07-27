@@ -45,7 +45,7 @@
   function editableControls(scope) {
     if (!scope) return [];
     return [...scope.querySelectorAll(
-      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
+      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not(.oc-add-field-pin):not([disabled])'
     )].filter(control => {
       if (!(control instanceof HTMLElement)) return false;
       if (control.getAttribute('aria-hidden') === 'true') return false;
