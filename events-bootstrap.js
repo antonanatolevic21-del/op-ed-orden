@@ -154,7 +154,7 @@ async function clickRequestedMode(mode) {
 async function loadFull(mode = '', profile = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260725-events-full2');
+  await import('./events-app.js?v=20260727-participant-review-close1');
   if (mode) void clickRequestedMode(mode);
 
   document.addEventListener('click', event => {
