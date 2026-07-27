@@ -5486,8 +5486,6 @@
           const previousFallbackImage = String(entry.fallbackImage || '').trim();
           const nextImage = card.querySelector('.oc-e-image').value.trim();
           const imageChanged = nextImage !== previousImage;
-          let createdFallbackImage = '';
-          let openingSaved = false;
 
           const updatedEntry = {
             ...entry,
@@ -5513,18 +5511,12 @@
             isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked)
           };
 
-          try {
-            if (imageChanged) {
-              if (nextImage) {
-                createdFallbackImage = await createFallbackImageCopy(nextImage, title, newType);
-                updatedEntry.fallbackImage = createdFallbackImage;
-              } else {
-                updatedEntry.fallbackImage = '';
-              }
-            }
+          if (imageChanged) {
+            updatedEntry.fallbackImage = nextImage ? previousFallbackImage : '';
+          }
 
+          try {
             await window.OPED_DB.updateOpening(id, updatedEntry);
-            openingSaved = true;
             await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened, sameSongGroupId: updatedEntry.sameSongGroupId, sameSongTitle: updatedEntry.sameSongTitle });
 
             Object.assign(entry, updatedEntry);
@@ -5533,22 +5525,49 @@
             populateFilterOptions();
             render();
 
-            if (imageChanged && previousFallbackImage && previousFallbackImage !== updatedEntry.fallbackImage) {
-              try {
-                await deleteFallbackImageCopy(previousFallbackImage);
-                setStatus('Изменения сохранены, старая резервная картинка удалена ✓');
-              } catch (deleteError) {
-                console.error('Old fallback image deletion failed', deleteError);
-                setStatus('Изменения сохранены, но старую картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
-              }
-            } else {
+            if (!imageChanged) {
               setStatus('Изменения сохранены ✓');
+              return;
             }
+
+            if (!nextImage) {
+              setStatus('Изменения сохранены ✓');
+              if (previousFallbackImage) void (async () => {
+                try {
+                  await deleteFallbackImageCopy(previousFallbackImage);
+                } catch (deleteError) {
+                  console.error('Old fallback image deletion failed', deleteError);
+                  setStatus('Изменения сохранены, но старую резервную картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
+                }
+              })();
+              return;
+            }
+
+            setStatus('Изменения сохранены ✓ Новая резервная картинка создаётся в фоне…');
+            void (async () => {
+              try {
+                const createdFallbackImage = await createFallbackImageCopy(nextImage, title, newType);
+                await window.OPED_DB.updateOpeningFallbackImage(id, createdFallbackImage);
+                entry.fallbackImage = createdFallbackImage;
+                touchEntryCache(entry);
+
+                if (previousFallbackImage && previousFallbackImage !== createdFallbackImage) {
+                  try {
+                    await deleteFallbackImageCopy(previousFallbackImage);
+                  } catch (deleteError) {
+                    console.error('Old fallback image deletion failed', deleteError);
+                    setStatus('Изменения сохранены, но старую резервную картинку удалить не удалось: ' + (deleteError.message || deleteError), true);
+                    return;
+                  }
+                }
+                setStatus('Изменения и новая резервная картинка сохранены ✓');
+              } catch (backupError) {
+                console.warn('Edited track fallback image upload failed', backupError);
+                setStatus('Изменения сохранены ✓ Но новую резервную картинку создать не удалось: ' + (backupError.message || backupError), true);
+              }
+            })();
           } catch (err) {
             console.error(err);
-            if (!openingSaved && createdFallbackImage && createdFallbackImage !== previousFallbackImage) {
-              try { await deleteFallbackImageCopy(createdFallbackImage); } catch (cleanupError) { console.error('New fallback cleanup failed', cleanupError); }
-            }
             setStatus('Не удалось сохранить изменения: ' + (err.message || err), true);
           }
         });
