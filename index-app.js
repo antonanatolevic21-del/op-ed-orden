@@ -3665,6 +3665,7 @@
           '<div class="oc-entity-card-body"><h3>' + escapeHtml(card.value) + '</h3><p>' + progress.rated + ' из ' + progress.related.length + ' оценено</p>' +
           '<div class="oc-entity-progressbar"><i style="width:' + (progress.related.length ? Math.round(progress.rated / progress.related.length * 100) : 0) + '%"></i></div>' +
           (progress.complete ? '<span class="oc-entity-done">Всё просмотрено ✓</span>' : '') +
+          (isAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
           (isAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
           '</div></article>';
       }).join('') : '<div class="oc-empty">Альбомов пока нет.</div>';
