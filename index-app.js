@@ -2732,11 +2732,19 @@
       if (sortedCache.input === list && sortedCache.key === cacheKey && Array.isArray(sortedCache.value)) return sortedCache.value;
       const searchQuery = normalizedSearchValue(filters.search);
       const withScore = list.map((e, idx) => ({ e, score: avg(e.scores), ts: entryTimestamp(e, idx), relevance: searchQuery ? entrySearchRelevance(e, searchQuery) : 0 }));
+      const compareSeason = (left, right, direction) => {
+        const leftIndex = SEASON_ORDER.indexOf(String(left || ''));
+        const rightIndex = SEASON_ORDER.indexOf(String(right || ''));
+        if (leftIndex < 0 && rightIndex < 0) return 0;
+        if (leftIndex < 0) return 1;
+        if (rightIndex < 0) return -1;
+        return (leftIndex - rightIndex) * direction;
+      };
       withScore.sort((a, b) => {
         if (searchQuery && a.relevance !== b.relevance) return a.relevance - b.relevance;
         if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || b.e.title.localeCompare(a.e.title, 'ru');
-        if (sortMode === 'year_desc') return (b.e.year || 0) - (a.e.year || 0) || (b.ts || 0) - (a.ts || 0);
-        if (sortMode === 'year_asc') return (a.e.year || 0) - (b.e.year || 0) || (b.ts || 0) - (a.ts || 0);
+        if (sortMode === 'year_desc') return (b.e.year || 0) - (a.e.year || 0) || compareSeason(a.e.season, b.e.season, -1) || (b.ts || 0) - (a.ts || 0);
+        if (sortMode === 'year_asc') return (a.e.year || 0) - (b.e.year || 0) || compareSeason(a.e.season, b.e.season, 1) || (b.ts || 0) - (a.ts || 0);
         if (sortMode === 'title') return a.e.title.localeCompare(b.e.title, 'ru');
         if (sortMode === 'score_asc') {
           if (a.score === null && b.score === null) return (b.ts || 0) - (a.ts || 0);
