@@ -5952,35 +5952,56 @@
     }
 
     async function createFallbackImageCopy(imageUrl, title, type) {
-      const secret = getImageUploadSecret();
-      if (!secret) throw new Error('Не введён UPLOAD_SECRET');
-      setStatus('Скачиваю основную картинку для резервной копии…');
+      let stage = 'проверка пароля загрузчика';
+      let bitmap = null;
+      try {
+        const secret = getImageUploadSecret();
+        if (!secret) throw new Error('не введён UPLOAD_SECRET');
 
-      const sourceBlob = await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob');
-      const bitmap = await createImageBitmap(sourceBlob);
-      if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 50000000) {
+        stage = 'скачивание основной картинки';
+        setStatus('Скачиваю основную картинку для резервной копии…');
+        const sourceBlob = await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob');
+
+        stage = 'декодирование картинки';
+        setStatus('Проверяю и декодирую основную картинку…');
+        bitmap = await createImageBitmap(sourceBlob);
+        if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 50000000) {
+          throw new Error('слишком большое разрешение исходной картинки');
+        }
+
+        stage = 'уменьшение картинки';
+        const maxSide = 1400;
+        const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+        const width = Math.max(1, Math.round(bitmap.width * scale));
+        const height = Math.max(1, Math.round(bitmap.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) throw new Error('браузер не смог создать Canvas');
+        context.fillStyle = '#111';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(bitmap, 0, 0, width, height);
         bitmap.close();
-        throw new Error('Слишком большое разрешение исходной картинки');
-      }
-      const maxSide = 1400;
-      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-      const width = Math.max(1, Math.round(bitmap.width * scale));
-      const height = Math.max(1, Math.round(bitmap.height * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      const context = canvas.getContext('2d', { alpha: false });
-      context.fillStyle = '#111';
-      context.fillRect(0, 0, width, height);
-      context.drawImage(bitmap, 0, 0, width, height);
-      bitmap.close();
+        bitmap = null;
 
-      setStatus('Сжимаю картинку в WebP…');
-      const webp = await canvasToWebp(canvas, 0.78);
-      const contentBase64 = await blobToBase64(webp);
-      const path = compactImageFileName(title, type, imageUrl);
-      setStatus('Загружаю резервную картинку в images/…');
-      await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
-      return path;
+        stage = 'сжатие картинки в WebP';
+        setStatus('Сжимаю картинку в WebP…');
+        const webp = await canvasToWebp(canvas, 0.78);
+
+        stage = 'подготовка картинки к загрузке';
+        setStatus('Подготавливаю резервную картинку к загрузке…');
+        const contentBase64 = await blobToBase64(webp);
+        const path = compactImageFileName(title, type, imageUrl);
+
+        stage = 'загрузка резервной картинки в GitHub';
+        setStatus('Загружаю резервную картинку в images/…');
+        await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
+        return path;
+      } catch (error) {
+        if (bitmap) bitmap.close();
+        const message = error && error.message ? error.message : String(error || 'неизвестная ошибка');
+        throw new Error('Проблема на этапе «' + stage + '»: ' + message);
+      }
     }
 
 
