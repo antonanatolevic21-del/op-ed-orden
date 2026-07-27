@@ -5881,21 +5881,36 @@
     }
 
     async function workerImageRequest(path, secret, body, responseType) {
-      const response = await fetch(IMAGE_UPLOAD_WORKER + path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Upload-Secret': secret },
-        body: JSON.stringify(body)
-      });
-      if (!response.ok) {
-        let message = 'HTTP ' + response.status;
-        try { const data = await response.json(); message = data.error || message; } catch (_) {}
-        if (response.status === 401) {
-          try { localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
-          try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
+      const controller = new AbortController();
+      const timeoutMs = path === '/proxy-image' ? 20000 : 30000;
+      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(IMAGE_UPLOAD_WORKER + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Upload-Secret': secret },
+          body: JSON.stringify(body),
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          let message = 'HTTP ' + response.status;
+          try { const data = await response.json(); message = data.error || message; } catch (_) {}
+          if (response.status === 401) {
+            try { localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
+            try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
+          }
+          throw new Error(message);
         }
-        throw new Error(message);
+        return responseType === 'blob' ? response.blob() : response.json();
+      } catch (error) {
+        if (error && error.name === 'AbortError') {
+          throw new Error(path === '/proxy-image'
+            ? 'Источник картинки не ответил за 20 секунд'
+            : 'Загрузка резервной картинки не завершилась за 30 секунд');
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
       }
-      return responseType === 'blob' ? response.blob() : response.json();
     }
 
     function canvasToWebp(canvas, quality) {
@@ -6115,18 +6130,6 @@
         return;
       }
 
-      let backupWarning = '';
-      if (image && makeImageBackup && !fallbackImage) {
-        try {
-          fallbackImage = await createFallbackImageCopy(image, title, type);
-          $('#oc-add-fallback-image').value = fallbackImage;
-        } catch (backupError) {
-          console.warn('Fallback image upload failed', backupError);
-          backupWarning = backupError && backupError.message ? backupError.message : 'неизвестная ошибка';
-          fallbackImage = '';
-        }
-      }
-
       try {
         const createdRef = await window.OPED_DB.addOpening({
           title,
@@ -6166,7 +6169,24 @@
         if ($('#oc-add-movie')) $('#oc-add-movie').checked = false;
         if ($('#oc-add-shortened')) $('#oc-add-shortened').checked = false;
 
-        setStatus(backupWarning ? 'Трек добавлен ✓ Но запасная картинка не создана: ' + backupWarning : 'Трек добавлен ✓', Boolean(backupWarning));
+        const shouldCreateBackup = Boolean(image && makeImageBackup && !fallbackImage && createdRef && createdRef.id);
+        if (!shouldCreateBackup) {
+          setStatus('Трек добавлен ✓');
+          return;
+        }
+
+        setStatus('Трек добавлен ✓ Резервная картинка создаётся в фоне…');
+        void (async () => {
+          try {
+            const createdFallbackImage = await createFallbackImageCopy(image, title, type);
+            await window.OPED_DB.updateOpeningFallbackImage(createdRef.id, createdFallbackImage);
+            setStatus('Трек и резервная картинка добавлены ✓');
+          } catch (backupError) {
+            console.warn('Fallback image upload failed', backupError);
+            const message = backupError && backupError.message ? backupError.message : 'неизвестная ошибка';
+            setStatus('Трек добавлен ✓ Но запасная картинка не создана: ' + message, true);
+          }
+        })();
       } catch (err) {
         console.error(err);
         const message = err && err.message ? err.message : 'неизвестная ошибка';
