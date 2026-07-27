@@ -5920,7 +5920,7 @@
           }
           throw new Error(message);
         }
-        return responseType === 'blob' ? response.blob() : response.json();
+        return responseType === 'blob' ? await response.blob() : await response.json();
       } catch (error) {
         if (error && error.name === 'AbortError') {
           throw new Error(path === '/proxy-image'
@@ -5951,25 +5951,45 @@
       });
     }
 
-    async function createFallbackImageCopy(imageUrl, title, type) {
+    async function createFallbackImageCopy(imageUrl, title, type, onProgress) {
       let stage = 'проверка пароля загрузчика';
+      let stageStartedAt = Date.now();
       let bitmap = null;
+      const report = (state, details) => {
+        if (typeof onProgress !== 'function') return;
+        onProgress({
+          state,
+          stage,
+          details: details || '',
+          elapsedMs: Math.max(0, Date.now() - stageStartedAt)
+        });
+      };
+      const beginStage = nextStage => {
+        stage = nextStage;
+        stageStartedAt = Date.now();
+        report('start');
+      };
+      const finishStage = details => report('done', details);
       try {
+        beginStage('проверка пароля загрузчика');
         const secret = getImageUploadSecret();
         if (!secret) throw new Error('не введён UPLOAD_SECRET');
+        finishStage();
 
-        stage = 'скачивание основной картинки';
+        beginStage('скачивание основной картинки');
         setStatus('Скачиваю основную картинку для резервной копии…');
         const sourceBlob = await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob');
+        finishStage(Math.max(1, Math.round(sourceBlob.size / 1024)) + ' КБ');
 
-        stage = 'декодирование картинки';
+        beginStage('декодирование картинки');
         setStatus('Проверяю и декодирую основную картинку…');
         bitmap = await createImageBitmap(sourceBlob);
         if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 50000000) {
           throw new Error('слишком большое разрешение исходной картинки');
         }
+        finishStage(bitmap.width + '×' + bitmap.height);
 
-        stage = 'уменьшение картинки';
+        beginStage('уменьшение картинки');
         const maxSide = 1400;
         const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
         const width = Math.max(1, Math.round(bitmap.width * scale));
@@ -5983,23 +6003,28 @@
         context.drawImage(bitmap, 0, 0, width, height);
         bitmap.close();
         bitmap = null;
+        finishStage(width + '×' + height);
 
-        stage = 'сжатие картинки в WebP';
+        beginStage('сжатие картинки в WebP');
         setStatus('Сжимаю картинку в WebP…');
         const webp = await canvasToWebp(canvas, 0.78);
+        finishStage(Math.max(1, Math.round(webp.size / 1024)) + ' КБ');
 
-        stage = 'подготовка картинки к загрузке';
+        beginStage('подготовка картинки к загрузке');
         setStatus('Подготавливаю резервную картинку к загрузке…');
         const contentBase64 = await blobToBase64(webp);
         const path = compactImageFileName(title, type, imageUrl);
+        finishStage(path);
 
-        stage = 'загрузка резервной картинки в GitHub';
+        beginStage('загрузка резервной картинки в GitHub');
         setStatus('Загружаю резервную картинку в images/…');
         await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
+        finishStage(path);
         return path;
       } catch (error) {
         if (bitmap) bitmap.close();
         const message = error && error.message ? error.message : String(error || 'неизвестная ошибка');
+        report('error', message);
         throw new Error('Проблема на этапе «' + stage + '»: ' + message);
       }
     }
@@ -6097,12 +6122,25 @@
         if (imageMigrationStopRequested) break;
         const entry = candidates[index];
         imageMigrationStatus('Обрабатываю ' + (index + 1) + ' из ' + candidates.length + ': ' + entry.title);
+        appendImageMigrationLog('▶ ' + (index + 1) + '/' + candidates.length + ' · ' + entry.title);
         try {
-          const fallbackImage = await createFallbackImageCopy(entry.image, entry.title, entry.type);
+          const fallbackImage = await createFallbackImageCopy(entry.image, entry.title, entry.type, progress => {
+            const seconds = (progress.elapsedMs / 1000).toFixed(1) + ' с';
+            if (progress.state === 'start') {
+              appendImageMigrationLog('  … ' + progress.stage);
+            } else if (progress.state === 'done') {
+              appendImageMigrationLog('  ✓ ' + progress.stage + ' · ' + seconds + (progress.details ? ' · ' + progress.details : ''));
+            } else {
+              appendImageMigrationLog('  ✕ ' + progress.stage + ' · ' + seconds + ' · ' + progress.details, true);
+            }
+          });
+          appendImageMigrationLog('  … сохранение ссылки fallbackImage в Firebase');
+          const firebaseStartedAt = Date.now();
           await window.OPED_DB.updateOpening(entry.id, { ...entry, fallbackImage });
+          appendImageMigrationLog('  ✓ сохранение ссылки fallbackImage в Firebase · ' + ((Date.now() - firebaseStartedAt) / 1000).toFixed(1) + ' с');
           entry.fallbackImage = fallbackImage;
           success++;
-          appendImageMigrationLog('✓ ' + entry.title + ' → ' + fallbackImage);
+          appendImageMigrationLog('✓ Готово: ' + entry.title + ' → ' + fallbackImage);
         } catch (error) {
           failed++;
           const message = error && error.message ? error.message : 'неизвестная ошибка';
