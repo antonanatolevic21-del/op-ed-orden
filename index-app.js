@@ -6241,21 +6241,30 @@
         });
         if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, ...sameSong });
 
-        $('#oc-add-title').value = '';
-        $('#oc-add-year').value = '';
-        $('#oc-add-season').value = '';
-        $('#oc-add-studio').value = '';
-        $('#oc-add-director').value = '';
-        $('#oc-add-performer').value = '';
-        if ($('#oc-add-same-song')) $('#oc-add-same-song').value = '';
-        $('#oc-add-franchise').value = '';
-        if ($('#oc-add-alt-titles')) $('#oc-add-alt-titles').value = '';
-        $('#oc-add-image').value = '';
-        $('#oc-add-fallback-image').value = '';
-        $('#oc-add-link').value = '';
-        if ($('#oc-add-chinese')) $('#oc-add-chinese').checked = false;
-        if ($('#oc-add-movie')) $('#oc-add-movie').checked = false;
-        if ($('#oc-add-shortened')) $('#oc-add-shortened').checked = false;
+        const resetAddControl = (id, value, checked) => {
+          if (window.OC_ADD_FIELD_PINS?.isPinned?.(id)) return;
+          const control = $('#' + id);
+          if (!control) return;
+          if (control.type === 'checkbox') control.checked = Boolean(checked);
+          else control.value = value;
+        };
+        resetAddControl('oc-add-title', '');
+        resetAddControl('oc-add-type', 'OP');
+        resetAddControl('oc-add-year', '');
+        resetAddControl('oc-add-season', '');
+        resetAddControl('oc-add-studio', '');
+        resetAddControl('oc-add-director', '');
+        resetAddControl('oc-add-performer', '');
+        resetAddControl('oc-add-same-song', '');
+        resetAddControl('oc-add-franchise', '');
+        resetAddControl('oc-add-alt-titles', '');
+        resetAddControl('oc-add-image', '');
+        resetAddControl('oc-add-fallback-image', '');
+        resetAddControl('oc-add-link', '');
+        resetAddControl('oc-add-chinese', '', false);
+        resetAddControl('oc-add-movie', '', false);
+        resetAddControl('oc-add-shortened', '', false);
+        resetAddControl('oc-add-backup-image', '', true);
 
         const shouldCreateBackup = Boolean(image && makeImageBackup && !fallbackImage && createdRef && createdRef.id);
         if (!shouldCreateBackup) {
