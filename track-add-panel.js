@@ -4,17 +4,22 @@
 
   const PIN_STORAGE_KEY = 'op-ed-add-field-pins-v1';
   const pinFieldIds = [
-    'oc-add-title', 'oc-add-type', 'oc-add-year', 'oc-add-season',
+    'oc-add-type', 'oc-add-year', 'oc-add-season',
     'oc-add-studio', 'oc-add-director', 'oc-add-performer', 'oc-add-same-song',
-    'oc-add-franchise', 'oc-add-image', 'oc-add-fallback-image', 'oc-add-link',
-    'oc-add-alt-titles', 'oc-add-chinese', 'oc-add-movie', 'oc-add-shortened',
+    'oc-add-franchise', 'oc-add-alt-titles',
+    'oc-add-chinese', 'oc-add-movie', 'oc-add-shortened',
     'oc-add-backup-image'
+  ];
+  const uniqueFieldIds = [
+    'oc-add-title', 'oc-add-image', 'oc-add-fallback-image', 'oc-add-link', 'oc-add-notes'
   ];
   let pinState = {};
   try {
     const parsed = JSON.parse(localStorage.getItem(PIN_STORAGE_KEY) || '{}');
     if (parsed && typeof parsed === 'object') pinState = parsed;
   } catch (_) {}
+  uniqueFieldIds.forEach(id => delete pinState[id]);
+  try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinState)); } catch (_) {}
 
   function controlValue(control) {
     return control.type === 'checkbox' ? Boolean(control.checked) : String(control.value || '');
@@ -42,6 +47,7 @@
   function makePinButton(control) {
     const button = document.createElement('button');
     button.type = 'button';
+    button.tabIndex = -1;
     button.className = 'oc-add-field-pin';
     button.textContent = '📌';
     syncPinButton(control, button);
