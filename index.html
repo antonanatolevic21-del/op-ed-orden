@@ -47,7 +47,7 @@
         </select>
         <span id="oc-access-badge" class="oc-access-badge" role="button" tabindex="0" title="Войти или сменить аккаунт">гость</span>
         <button id="oc-franchise-repair-btn" class="oc-franchise-repair-btn oc-admin-only oc-locked" type="button" title="Проверить и починить разбитые франшизы" aria-label="Починить разбитые франшизы">↻</button>
-        <button id="oc-image-migration-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные копии старых изображений">Копии старых картинок</button>
+        <button id="oc-image-migration-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные картинки для треков, у которых заполнена основная картинка, но нет запасной">Недостающие резервные картинки</button>
         <button id="oc-avatar-btn" class="oc-avatar-btn" title="Выбрать аватарку">🙂</button>
         <button id="oc-daily-bell" class="oc-daily-bell" type="button" title="Ежедневная оценка" aria-label="Ежедневная оценка">🔔<span id="oc-daily-bell-dot" class="oc-daily-bell-dot hidden"></span></button>
         <div id="oc-avatar-picker" class="oc-avatar-picker hidden"></div>
@@ -127,6 +127,7 @@
           <label class="oc-flag-check"><input id="oc-add-shortened" type="checkbox" /> Укороченный OP/ED</label>
           <label class="oc-flag-check"><input id="oc-add-backup-image" type="checkbox" checked /> Сжать копию в images</label>
         </div>
+        <button id="oc-image-migration-inline-btn" class="oc-db-import-btn oc-admin-only oc-locked" type="button" title="Создать резервные картинки для треков, у которых заполнена основная картинка, но нет запасной">Создать недостающие резервные картинки</button>
         <button class="oc-addbtn" id="oc-add-btn">Добавить</button>
       </div>
       <div class="oc-hint">Студии/режиссёры/исполнители — через запятую. Франшизы — по одной на строку, чтобы названия с запятой не дробились.</div>
@@ -610,7 +611,7 @@
     <div class="oc-status" id="oc-status"></div>
   </div>
 
-  <script type="module" src="index-app.js?v=20260727-image-edit-async1"></script>
+  <script type="module" src="index-app.js?v=20260727-image-migration-button1"></script>
   <script type="module" src="firebase-app.js?v=20260727-image-backup-async1"></script>
   <script src="sw-register.js?v=20260727-manual-top-source1" defer></script>
 </body>
