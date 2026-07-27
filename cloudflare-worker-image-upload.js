@@ -112,28 +112,36 @@ async function uploadImage(request, env) {
   }
 
   const apiPath = "/contents/" + path.split("/").map(encodeURIComponent).join("/");
-  let existingSha = "";
-  const existing = await githubRequest(env, apiPath + "?ref=main");
-  if (existing.ok) {
-    const data = await existing.json();
-    existingSha = String(data.sha || "");
-  } else if (existing.status !== 404) {
-    return json(request, env, { error: "GitHub не разрешил проверить файл: HTTP " + existing.status }, 502);
-  }
-
-  const payload = {
-    message: existingSha ? "update fallback image " + path : "add fallback image " + path,
+  const createPayload = {
+    message: "add fallback image " + path,
     content,
     branch: "main"
   };
-  if (existingSha) payload.sha = existingSha;
-
-  const saved = await githubRequest(env, apiPath, {
+  let saved = await githubRequest(env, apiPath, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(createPayload)
   });
-  const result = await saved.json().catch(() => ({}));
+
+  let result = await saved.json().catch(() => ({}));
+  if (saved.status === 422) {
+    const existing = await githubRequest(env, apiPath + "?ref=main");
+    const existingData = await existing.json().catch(() => ({}));
+    if (!existing.ok || !existingData.sha) {
+      return json(request, env, { error: existingData.message || ("GitHub не разрешил проверить файл: HTTP " + existing.status) }, 502);
+    }
+    saved = await githubRequest(env, apiPath, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...createPayload,
+        message: "update fallback image " + path,
+        sha: String(existingData.sha)
+      })
+    });
+    result = await saved.json().catch(() => ({}));
+  }
+
   if (!saved.ok) {
     return json(request, env, { error: result.message || ("GitHub upload failed: HTTP " + saved.status) }, 502);
   }
