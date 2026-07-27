@@ -139,6 +139,7 @@
     const confirmModal = $('#oc-confirm-modal');
     const franchiseRepairModal = $('#oc-franchise-repair-modal');
     const imageMigrationBtn = $('#oc-image-migration-btn');
+    const imageMigrationInlineBtn = $('#oc-image-migration-inline-btn');
     const imageMigrationModal = $('#oc-image-migration-modal');
     let imageMigrationRunning = false;
     let imageMigrationStopRequested = false;
@@ -6104,6 +6105,7 @@
     }
 
     if (imageMigrationBtn) imageMigrationBtn.addEventListener('click', openImageMigrationModal);
+    if (imageMigrationInlineBtn) imageMigrationInlineBtn.addEventListener('click', openImageMigrationModal);
     if ($('#oc-image-migration-start')) $('#oc-image-migration-start').addEventListener('click', runExistingImageMigrationBatch);
     if ($('#oc-image-migration-stop')) $('#oc-image-migration-stop').addEventListener('click', () => {
       imageMigrationStopRequested = true;
