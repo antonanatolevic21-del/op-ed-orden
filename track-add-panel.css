@@ -68,6 +68,68 @@
   resize:none;
   line-height:1.35;
 }
+.oc-addbar-compact .oc-add-pin-field{
+  position:relative;
+  display:block;
+  width:100%;
+  min-width:0;
+}
+.oc-addbar-compact .oc-add-pin-field>input,
+.oc-addbar-compact .oc-add-pin-field>select,
+.oc-addbar-compact .oc-add-pin-field>textarea{
+  width:100%;
+  box-sizing:border-box;
+  padding-right:44px!important;
+}
+.oc-addbar-compact .oc-add-pin-field:has(>select)>select{padding-right:62px!important}
+.oc-addbar-compact .oc-add-field-pin{
+  position:absolute;
+  z-index:2;
+  top:7px;
+  right:7px;
+  width:28px;
+  height:28px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid #3c3347;
+  border-radius:8px;
+  background:#17111f;
+  color:#8b8698;
+  filter:grayscale(1);
+  opacity:.48;
+  cursor:pointer;
+  font-size:14px;
+  line-height:1;
+  transition:border-color .16s ease,background .16s ease,opacity .16s ease,transform .16s ease,filter .16s ease;
+}
+.oc-addbar-compact .oc-add-pin-field:has(>select)>.oc-add-field-pin{right:27px}
+.oc-addbar-compact .oc-add-field-pin:hover{
+  opacity:.85;
+  border-color:#75608a;
+  transform:translateY(-1px);
+}
+.oc-addbar-compact .oc-add-field-pin.active{
+  border-color:#ff2e63;
+  background:rgba(255,46,99,.13);
+  color:#ff6d91;
+  filter:none;
+  opacity:1;
+  box-shadow:0 0 0 2px rgba(255,46,99,.08);
+}
+.oc-addbar-compact .oc-add-pin-flag{
+  position:relative;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+}
+.oc-addbar-compact .oc-add-pin-flag>.oc-add-field-pin{
+  position:static;
+  flex:0 0 auto;
+  width:25px;
+  height:25px;
+  font-size:12px;
+}
 .oc-addbar-compact .oc-add-alt-row textarea{
   height:62px;
   min-height:62px;
