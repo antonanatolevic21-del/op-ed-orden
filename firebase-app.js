@@ -377,6 +377,15 @@
       return updateDoc(doc(db, "openings", safeOpeningId), cleanOpening(opening, false));
     }
 
+    async function updateOpeningFallbackImage(openingId, fallbackImage) {
+      const safeOpeningId = String(openingId || "").trim();
+      if (!safeOpeningId) throw new Error("Не найден id трека");
+      return updateDoc(doc(db, "openings", safeOpeningId), {
+        fallbackImage: String(fallbackImage || "").trim(),
+        updatedAt: serverTimestamp()
+      });
+    }
+
     async function deleteOpening(openingId) {
       const safeOpeningId = String(openingId || "").trim();
       if (!safeOpeningId) throw new Error("Не найден id трека");
@@ -423,6 +432,7 @@
       saveUserProfile,
       addOpening,
       updateOpening,
+      updateOpeningFallbackImage,
       deleteOpening,
       saveRating,
       deleteRating,
