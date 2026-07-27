@@ -6709,25 +6709,48 @@
     }
 
 
+    let personalSessionRestorePromise = null;
+
+    async function restorePersonalSession(clearWhenMissing = false) {
+      if (personalSessionRestorePromise) return personalSessionRestorePromise;
+      personalSessionRestorePromise = (async () => {
+        try {
+          const db = await waitForFirebaseDb();
+          const resumed = await db.resumePersonalAccount();
+          if (resumed) {
+            await applyPersonalAccountSession(resumed, true);
+            return true;
+          }
+          if (clearWhenMissing) {
+            authenticatedUid = '';
+            accessLevel = '';
+            sessionStorage.removeItem(ACCESS_KEY);
+            updateAccessUi();
+          }
+          return false;
+        } catch (error) {
+          console.warn('Saved personal session restore failed', error);
+          return false;
+        } finally {
+          personalSessionRestorePromise = null;
+        }
+      })();
+      return personalSessionRestorePromise;
+    }
+
+    window.addEventListener('oped-account-restored', event => {
+      if (event?.detail?.authenticated && !authenticatedUid) void restorePersonalSession(false);
+    });
+
     (async function init() {
       updateAccessUi();
+      await restorePersonalSession(true);
       await loadName();
       await loadAvatar();
       await loadScale();
       await loadContentFilterMode();
       await loadAvatarsMap();
       await loadManualRanks();
-      try {
-        const db = await waitForFirebaseDb();
-        const resumed = await db.resumePersonalAccount();
-        if (resumed) await applyPersonalAccountSession(resumed, true);
-        else {
-          authenticatedUid = '';
-          accessLevel = '';
-          sessionStorage.removeItem(ACCESS_KEY);
-          updateAccessUi();
-        }
-      } catch (error) { console.warn('Saved personal session restore failed', error); }
       if (myName && !avatarsMap[myName]) avatarsMap[myName] = myAvatar;
       await loadTierOrders();
       await loadEntries();
