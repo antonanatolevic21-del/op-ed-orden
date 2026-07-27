@@ -7019,6 +7019,7 @@
     function openSeasonPostModal(state) {
       if (!isAdmin()) return;
       const text = buildSeasonPostText(state);
+      postModalEl.dataset.modalKind = 'season-post';
       postModalEl.innerHTML = `
         <div class="ev-dialog">
           <div class="ev-dialog-top">
@@ -7082,11 +7083,18 @@
       return lines.join('\n');
     }
 
+    function closeParticipantReviewModal() {
+      if (postModalEl.dataset.modalKind !== 'participant-review') return;
+      postModalEl.classList.add('hidden');
+      delete postModalEl.dataset.modalKind;
+    }
+
     function openParticipantReviewModal(state, participant) {
       if (!isAdmin() || !participant?.nicknameKey) return;
       const rows = getParticipantReviewRows(state, participant);
       const nickname = String(participant.nickname || '').trim() || participant.nicknameKey;
       const done = rows.filter(row => row.rating && Number.isFinite(Number(row.rating.score))).length;
+      postModalEl.dataset.modalKind = 'participant-review';
       postModalEl.innerHTML = `
         <div class="ev-dialog">
           <div class="ev-dialog-top">
@@ -7121,7 +7129,7 @@
         </div>
       `;
       postModalEl.classList.remove('hidden');
-      $('#ev-review-close')?.addEventListener('click', () => postModalEl.classList.add('hidden'));
+      $('#ev-review-close')?.addEventListener('click', closeParticipantReviewModal);
       $('#ev-review-copy')?.addEventListener('click', async () => {
         const ok = await copyTextToClipboard(buildParticipantReviewText(state, participant));
         const status = $('#ev-review-status');
@@ -7131,6 +7139,16 @@
         }
       });
     }
+
+    postModalEl.addEventListener('click', event => {
+      if (event.target === postModalEl) closeParticipantReviewModal();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || postModalEl.classList.contains('hidden')) return;
+      if (postModalEl.dataset.modalKind !== 'participant-review') return;
+      event.preventDefault();
+      closeParticipantReviewModal();
+    });
 
     function bindFirstStageEvents() {
       document.querySelectorAll('.ev-season-btn').forEach(btn => {
