@@ -3798,8 +3798,9 @@
     for (const opening of openings) {
       const rawTitle = String(opening.title || opening.anime || '').trim();
       if (!rawTitle) byId.get('title').rows.push(opening);
-      if (!String(opening.image || '').trim()) byId.get('image').rows.push(opening);
-      if (!String(opening.fallbackImage || opening.imageFallback || '').trim()) byId.get('fallback').rows.push(opening);
+      const hasPrimaryImage = Boolean(String(opening.image || '').trim());
+      if (!hasPrimaryImage) byId.get('image').rows.push(opening);
+      if (hasPrimaryImage && !String(opening.fallbackImage || opening.imageFallback || '').trim()) byId.get('fallback').rows.push(opening);
       if (!cleanList(opening.performers)) byId.get('performer').rows.push(opening);
       if (!cleanList(opening.studios)) byId.get('studio').rows.push(opening);
       if (!cleanList(opening.directors)) byId.get('director').rows.push(opening);
