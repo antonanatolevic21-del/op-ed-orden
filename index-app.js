@@ -3441,10 +3441,10 @@
       const className = opts.className ? ` ${opts.className}` : '';
       const metaLines = [];
       const fields = opts.fields || ['studios', 'directors', 'performers', 'franchises'];
-      if (fields.includes('studios') && entry.studios && entry.studios.length) metaLines.push(`<span class="oc-meta-key">студия:</span> ${escapeHtml(entry.studios.join(', '))}`);
-      if (fields.includes('directors') && entry.directors && entry.directors.length) metaLines.push(`<span class="oc-meta-key">режиссёр:</span> ${escapeHtml(entry.directors.join(', '))}`);
-      if (fields.includes('performers') && entry.performers && entry.performers.length) metaLines.push(`<span class="oc-meta-key">исполнитель:</span> ${escapeHtml(entry.performers.join(', '))}`);
-      if (fields.includes('franchises') && entry.franchises && entry.franchises.length) metaLines.push(`<span class="oc-meta-key">франшиза:</span> ${escapeHtml(entry.franchises.join(', '))}`);
+      if (fields.includes('studios') && entry.studios && entry.studios.length) metaLines.push(`<span class="oc-meta-key">студия:</span> ${entityFilterValuesMarkup('studios', entry.studios)}`);
+      if (fields.includes('directors') && entry.directors && entry.directors.length) metaLines.push(`<span class="oc-meta-key">режиссёр:</span> ${entityFilterValuesMarkup('directors', entry.directors)}`);
+      if (fields.includes('performers') && entry.performers && entry.performers.length) metaLines.push(`<span class="oc-meta-key">исполнитель:</span> ${entityFilterValuesMarkup('performers', entry.performers)}`);
+      if (fields.includes('franchises') && entry.franchises && entry.franchises.length) metaLines.push(`<span class="oc-meta-key">франшиза:</span> ${entityFilterValuesMarkup('franchises', entry.franchises)}`);
       if (opts.showImageLink && entry.image) metaLines.push(`<span class="oc-meta-key">картинка:</span> <a href="${escapeHtml(normalizeUrl(entry.image))}" target="_blank" rel="noopener noreferrer">открыть ↗</a>`);
       if (opts.showTrackLink && entry.link) metaLines.push(`<a href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer">ссылка ↗</a>`);
       const extraHtml = opts.extraHtml || '';
@@ -3473,6 +3473,37 @@
         <div class="oc-season-score">${scoreText}${scoreSub}</div>
         ${controlsHtml}
       </div>`;
+    }
+
+    function entityFilterValuesMarkup(kind, values) {
+      return (values || []).filter(Boolean).map((value, index) =>
+        `${index ? '<span class="oc-entity-filter-separator">, </span>' : ''}<button type="button" class="oc-entity-filter-value" data-entity-filter-kind="${escapeHtml(kind)}" data-entity-filter-value="${escapeHtml(value)}">${escapeHtml(value)}</button>`
+      ).join('');
+    }
+
+    function applyEntityCardFilter(kind, value) {
+      if (!['studios', 'directors', 'performers', 'franchises'].includes(kind) || !value) return;
+      filters.search = '';
+      filters.type = '';
+      filters.fromYear = '';
+      filters.fromSeason = 'winter';
+      filters.toYear = '';
+      filters.toSeason = 'fall';
+      filters.scoreCmp = '';
+      filters.scoreValue = '';
+      filters.missingOnly = false;
+      filters.studios = [];
+      filters.directors = [];
+      filters.performers = [];
+      filters.franchises = [];
+      filters[kind] = [value];
+      chartPage = 1;
+      closeCardModal();
+      switchTab('chart');
+      populateFilterOptions();
+      syncFilterControls();
+      render();
+      document.querySelector('#oc-main-panel .oc-filterbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function renderSeasonViews() {
@@ -5225,7 +5256,7 @@
       const avgSong = avgAny(entry.songScores || {});
       const avgVisual = avgAny(entry.visualScores || {});
       const votes = Object.entries(entry.scores || {}).sort((a,b)=> Number(b[1]) - Number(a[1]));
-      const arrayValue = (arr) => escapeHtml((arr || []).filter(Boolean).join(', ') || '—');
+      const arrayValue = (arr, kind) => (arr || []).filter(Boolean).length ? entityFilterValuesMarkup(kind, arr) : '—';
       const scoreRows = [
         `<div class="oc-detail-box"><div class="oc-detail-label">общая средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
         isAdmin() ? `<div class="oc-detail-box"><div class="oc-detail-label">средняя админов</div><div class="oc-detail-value">${formatScore(adminScore)} · ${adminCount} оценок</div></div>` : '',
@@ -5236,11 +5267,11 @@
         <div class="oc-detail-box"><div class="oc-detail-label">тип</div><div class="oc-detail-value">${escapeHtml(entry.type || '—')}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">год</div><div class="oc-detail-value">${escapeHtml(entry.year || '—')}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">сезон</div><div class="oc-detail-value">${entry.season ? escapeHtml(SEASON_LABEL[entry.season]) : '—'}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">студии</div><div class="oc-detail-value">${arrayValue(entry.studios)}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">режиссёры</div><div class="oc-detail-value">${arrayValue(entry.directors)}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">исполнители</div><div class="oc-detail-value">${arrayValue(entry.performers)}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">франшизы</div><div class="oc-detail-value">${arrayValue(entry.franchises)}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">альт. названия</div><div class="oc-detail-value">${arrayValue(entry.alternativeTitles)}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">студии</div><div class="oc-detail-value">${arrayValue(entry.studios, 'studios')}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">режиссёры</div><div class="oc-detail-value">${arrayValue(entry.directors, 'directors')}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">исполнители</div><div class="oc-detail-value">${arrayValue(entry.performers, 'performers')}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">франшизы</div><div class="oc-detail-value">${arrayValue(entry.franchises, 'franchises')}</div></div>
+        <div class="oc-detail-box"><div class="oc-detail-label">альт. названия</div><div class="oc-detail-value">${escapeHtml((entry.alternativeTitles || []).filter(Boolean).join(', ') || '—')}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">оценок</div><div class="oc-detail-value">${ratingCount(entry.scores)} общих${ratingCount(entry.songScores) ? ' · ' + ratingCount(entry.songScores) + ' песня' : ''}${ratingCount(entry.visualScores) ? ' · ' + ratingCount(entry.visualScores) + ' визуал' : ''}</div></div>
       `;
       const imageHtml = renderOpeningVideoBlock(entry);
@@ -5416,14 +5447,6 @@
         const extraBits = [];
         if (ratingCount(entry.scores) > 0 && ratingCount(entry.scores) < MIN_PUBLIC_VOTES) extraBits.push(`<div class="oc-song-small">средняя появится после ${MIN_PUBLIC_VOTES} оценок · сейчас ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}</div>`);
         if (myPersonalScore !== null) extraBits.push(`<div class="oc-song-small">твоя оценка: ${escapeHtml(formatFiveScore(myPersonalScore))}</div>`);
-        if (absoluteIdx === 0) {
-          const relatedCount = entries.filter(other => other.id !== entry.id && (entry.franchises || []).some(franchise => (other.franchises || []).includes(franchise))).length;
-          extraBits.push(`<div class="oc-card-demo-preview">
-            <span>тест расширенной карточки</span>
-            <strong>${ratingCount(entry.scores)} оценок · ${relatedCount} связанных треков</strong>
-            <small>Нажми «Карточка»: внутри видео, общая / песня / визуал, пользователи и полное описание.</small>
-          </div>`);
-        }
         const hasSavedScore = isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null;
         const ticks = Array.from({ length: isPersonalScale() ? 5 : 10 }, (_, tickIndex) => {
           const tickValue = tickIndex + 1;
@@ -5452,7 +5475,7 @@
           extraHtml: extraBits.join(''),
           votesHtml: `<div class="oc-votes">${chips}</div>`,
           controlsHtml,
-          className: `main-card ${(myPublicScore !== null || myPersonalScore !== null) ? 'oc-card-rated' : ''}${absoluteIdx === 0 ? ' oc-detail-card-demo' : ''}`
+          className: `main-card ${(myPublicScore !== null || myPersonalScore !== null) ? 'oc-card-rated' : ''}`
         });
       }).join('');
 
@@ -6577,6 +6600,13 @@
     });
 
     authRegisterOpenBtn?.addEventListener('click', showRegistrationModal);
+    document.addEventListener('click', event => {
+      const target = event.target.closest('[data-entity-filter-kind][data-entity-filter-value]');
+      if (!target) return;
+      event.preventDefault();
+      event.stopPropagation();
+      applyEntityCardFilter(target.dataset.entityFilterKind, target.dataset.entityFilterValue);
+    });
     window.addEventListener('oped-catalog-view-change', event => {
       catalogView = event.detail === 'compact' ? 'compact' : 'detailed';
     });
