@@ -2125,6 +2125,15 @@
     });
   }
 
+  function scheduleScopeRender(scope) {
+    if (scope.renderQueued) return;
+    scope.renderQueued = true;
+    queueMicrotask(() => {
+      scope.renderQueued = false;
+      renderScope(scope);
+    });
+  }
+
   function init() {
     if (window.__OC_FILTER_CHIPS_READY__) return;
     const main = document.querySelector('#oc-main-panel > .oc-filterbar');
@@ -2138,11 +2147,11 @@
     scopes.forEach(scope => {
       scope.root.addEventListener('input', event => {
         if (event.target.closest('.oc-filter-chip')) return;
-        requestAnimationFrame(() => renderScope(scope));
+        scheduleScopeRender(scope);
       });
       scope.root.addEventListener('change', event => {
         if (event.target.closest('.oc-filter-chip')) return;
-        requestAnimationFrame(() => renderScope(scope));
+        scheduleScopeRender(scope);
       });
       scope.root.addEventListener('click', event => {
         if (event.target.closest('.oc-reset-btn')) window.setTimeout(() => renderScope(scope), 20);
