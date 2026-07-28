@@ -4687,6 +4687,23 @@
   const listHost = $('#oc-list-container');
   if (!detailed || !compact || !listHost) return;
 
+  const filterPrimary = $('#oc-main-panel .oc-filter-primary');
+  if (filterPrimary && !filterPrimary.querySelector('.oc-filter-group')) {
+    const fields = [...filterPrimary.children].filter(node => node.classList.contains('oc-field'));
+    const makeGroup = (title, className, indexes) => {
+      const group = document.createElement('section');
+      group.className = `oc-filter-group ${className}`;
+      group.innerHTML = `<div class="oc-filter-group-title">${title}</div>`;
+      indexes.forEach(index => fields[index] && group.appendChild(fields[index]));
+      return group;
+    };
+    filterPrimary.append(
+      makeGroup('Что ищем', 'oc-filter-group-search', [0, 1]),
+      makeGroup('Период', 'oc-filter-group-period', [3, 4]),
+      makeGroup('Оценка и качество', 'oc-filter-group-score', [2, 5])
+    );
+  }
+
   function setView(view) {
     localStorage.setItem('op-ed-catalog-view-v1', view);
     window.dispatchEvent(new CustomEvent('oped-catalog-view-change', { detail: view }));
