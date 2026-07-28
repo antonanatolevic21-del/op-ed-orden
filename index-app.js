@@ -36,6 +36,8 @@
     const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
     const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
     const DAILY_DISMISSED_KEY = 'op-ed-daily-dismissed-v1';
+    const CATALOG_VIEW_KEY = 'op-ed-catalog-view-v1';
+    const WELCOME_ACK_KEY = 'op-ed-welcome-ack-v1';
     const DAILY_MSK_OFFSET_HOURS = 3;
     const DAILY_RELEASE_HOUR = 18;
 
@@ -50,6 +52,7 @@
     let avatarsMap = {};
     let ratingScale = 'int'; // 'int', 'half' or personal 'five'
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
+    let catalogView = localStorage.getItem(CATALOG_VIEW_KEY) === 'compact' ? 'compact' : 'detailed';
     const filters = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
     let sortMode = 'added_desc';
     let editingId = null;
@@ -108,6 +111,11 @@
     const avatarPicker = $('#oc-avatar-picker');
     const dailyBell = $('#oc-daily-bell');
     const dailyBellDot = $('#oc-daily-bell-dot');
+    const accountWelcome = $('#oc-account-welcome');
+    const welcomeAck = $('#oc-welcome-ack');
+    const catalogProgress = $('#oc-catalog-progress');
+    const detailedViewBtn = $('#oc-view-detailed');
+    const compactViewBtn = $('#oc-view-compact');
     const dailyPanel = $('#oc-daily-panel');
     const dailyToast = $('#oc-daily-toast');
     const scaleSelect = $('#oc-scale-select');
@@ -958,6 +966,29 @@
         accessBadge.textContent = isAdmin() ? 'админ' : (accessLevel ? 'вход' : 'гость');
         accessBadge.classList.toggle('admin', isAdmin());
       }
+      updateAccountDashboard();
+    }
+
+    function welcomeStorageKey() {
+      return `${WELCOME_ACK_KEY}:${normalizedAccountName(myName)}`;
+    }
+
+    function updateAccountDashboard() {
+      const signedIn = Boolean(accessLevel && authenticatedUid && myName);
+      if (accountWelcome) {
+        const acknowledged = signedIn && (localStorage.getItem(welcomeStorageKey()) === '1' || accountProfile(myName)?.welcomeAcknowledged === true);
+        accountWelcome.classList.toggle('hidden', !signedIn || acknowledged);
+      }
+      if (catalogProgress) catalogProgress.classList.toggle('hidden', !signedIn);
+      if (!signedIn || !entries.length) return;
+      const visibleEntries = entries.filter(entry => entryPassesHiddenFlags(entry, filters.hideChinese, filters.hideMovie, filters.hideShortened));
+      const rated = visibleEntries.filter(entry => scoreFor(entry, myName) !== null);
+      const ratedOp = rated.filter(entry => entry.type === 'OP').length;
+      const ratedEd = rated.filter(entry => entry.type === 'ED').length;
+      const percent = visibleEntries.length ? Math.round(rated.length * 100 / visibleEntries.length) : 0;
+      $('#oc-catalog-progress-title').textContent = `Оценено ${rated.length} из ${visibleEntries.length} · ${percent}%`;
+      $('#oc-catalog-progress-detail').textContent = `OP ${ratedOp} · ED ${ratedEd} · осталось ${Math.max(0, visibleEntries.length - rated.length)}`;
+      $('#oc-catalog-progress-fill').style.width = `${percent}%`;
     }
 
     function showAuthModal(message) {
@@ -3290,7 +3321,7 @@
       const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
       const title = escapeHtml(entry && entry.title ? entry.title : 'видео');
       const imageBlock = entry.image
-        ? `<div class="${className}"><img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}"></div>`
+        ? `<div class="${className} oc-image-loading"><img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}"></div>`
         : `<div class="${className}">${fallback}</div>`;
       if (!entry.link) return imageBlock;
       return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
@@ -5356,6 +5387,7 @@
         ? `Показано: ${page.start + 1}–${Math.min(sorted.length, page.start + PAGE_SIZE)} из ${sorted.length} / всего ${entries.length}`
         : `Показано: 0 из ${entries.length}`;
       renderFilterStat(filtered);
+      updateAccountDashboard();
 
       if (!entries.length) {
         listContainer.innerHTML = '<div class="oc-empty">Пока пусто. Добавьте первый опенинг или эндинг выше ☝</div>';
@@ -5384,12 +5416,28 @@
         const extraBits = [];
         if (ratingCount(entry.scores) > 0 && ratingCount(entry.scores) < MIN_PUBLIC_VOTES) extraBits.push(`<div class="oc-song-small">средняя появится после ${MIN_PUBLIC_VOTES} оценок · сейчас ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}</div>`);
         if (myPersonalScore !== null) extraBits.push(`<div class="oc-song-small">твоя оценка: ${escapeHtml(formatFiveScore(myPersonalScore))}</div>`);
+        if (absoluteIdx === 0) {
+          const relatedCount = entries.filter(other => other.id !== entry.id && (entry.franchises || []).some(franchise => (other.franchises || []).includes(franchise))).length;
+          extraBits.push(`<div class="oc-card-demo-preview">
+            <span>тест расширенной карточки</span>
+            <strong>${ratingCount(entry.scores)} оценок · ${relatedCount} связанных треков</strong>
+            <small>Нажми «Карточка»: внутри видео, общая / песня / визуал, пользователи и полное описание.</small>
+          </div>`);
+        }
+        const hasSavedScore = isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null;
+        const ticks = Array.from({ length: isPersonalScale() ? 5 : 10 }, (_, tickIndex) => {
+          const tickValue = tickIndex + 1;
+          return `<button type="button" class="oc-score-tick${Number(myVal) === tickValue ? ' selected' : ''}" data-score="${tickValue}" tabindex="-1">${tickValue}</button>`;
+        }).join('');
         const controlsHtml = `
+          <div class="oc-rate-control ${hasSavedScore ? 'is-saved' : 'is-empty'}" data-saved="${hasSavedScore ? escapeHtml(String(myVal)) : ''}">
           <div class="oc-rate-row">
             <input type="range" min="${ratingMin()}" max="${ratingMax()}" step="${scaleStep()}" value="${myVal}" class="oc-slider" data-id="${entry.id}" />
-            <span class="oc-rate-val">${escapeHtml(formatInputScore(myVal))}</span>
+            <span class="oc-rate-val">${hasSavedScore ? `твоя: ${escapeHtml(formatInputScore(myVal))}` : `выбрано: ${escapeHtml(formatInputScore(myVal))}`}</span>
           </div>
-          <button class="oc-rate-btn" data-action="rate" data-id="${entry.id}">Оценить</button>
+          <div class="oc-score-ticks" aria-label="Быстрый выбор оценки">${ticks}</div>
+          </div>
+          <button class="oc-rate-btn" data-action="rate" data-id="${entry.id}">${hasSavedScore ? 'Изменить оценку' : 'Оценить'}</button>
           <button class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
           ${(isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null) ? `<button class="oc-secondary-btn" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? 'удалить отметку' : 'удалить оценку'}</button>` : ''}
           ${isAdmin() ? `<button class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
@@ -5404,18 +5452,31 @@
           extraHtml: extraBits.join(''),
           votesHtml: `<div class="oc-votes">${chips}</div>`,
           controlsHtml,
-          className: `main-card ${(myPublicScore !== null || myPersonalScore !== null) ? 'oc-card-rated' : ''}`
+          className: `main-card ${(myPublicScore !== null || myPersonalScore !== null) ? 'oc-card-rated' : ''}${absoluteIdx === 0 ? ' oc-detail-card-demo' : ''}`
         });
       }).join('');
 
       const pager = paginationHtml('chart', chartPage, sorted.length);
-      listContainer.innerHTML = `${pager}<div class="oc-list">${html}</div>${pager}`;
+      listContainer.innerHTML = `${pager}<div class="oc-list ${catalogView === 'compact' ? 'oc-list-compact' : ''}">${html}</div>${pager}`;
       bindPagination(listContainer, 'chart', () => chartPage, v => { chartPage = clampPage(v, sorted.length); }, render);
 
       listContainer.querySelectorAll('.oc-slider').forEach(slider => {
         slider.addEventListener('input', (e) => {
           const val = parseFloat(e.target.value);
-          e.target.parentElement.querySelector('.oc-rate-val').textContent = formatInputScore(val);
+          const control = e.target.closest('.oc-rate-control');
+          const saved = control?.dataset.saved;
+          control?.classList.add('is-dirty');
+          e.target.parentElement.querySelector('.oc-rate-val').textContent = saved ? `новая: ${formatInputScore(val)} · была ${formatInputScore(saved)}` : `выбрано: ${formatInputScore(val)}`;
+          control?.querySelectorAll('.oc-score-tick').forEach(tick => tick.classList.toggle('selected', Number(tick.dataset.score) === val));
+        });
+      });
+      listContainer.querySelectorAll('.oc-score-tick').forEach(tick => {
+        tick.addEventListener('click', () => {
+          const control = tick.closest('.oc-rate-control');
+          const slider = control?.querySelector('.oc-slider');
+          if (!slider) return;
+          slider.value = tick.dataset.score;
+          slider.dispatchEvent(new Event('input', { bubbles: true }));
         });
       });
 
@@ -6516,6 +6577,9 @@
     });
 
     authRegisterOpenBtn?.addEventListener('click', showRegistrationModal);
+    window.addEventListener('oped-catalog-view-change', event => {
+      catalogView = event.detail === 'compact' ? 'compact' : 'detailed';
+    });
     registerCloseBtn?.addEventListener('click', () => { hideRegistrationModal(); showAuthModal('Войди или создай аккаунт.'); });
     accessBadge?.addEventListener('click', () => showAuthModal(accessLevel ? 'Войди заново или смени аккаунт.' : 'Войди в аккаунт.'));
     accessBadge?.addEventListener('keydown', (event) => {
