@@ -54,12 +54,32 @@ async function proxyImage(request, env) {
   if (!url) return json(request, env, { error: "Недопустимый URL изображения" }, 400);
 
   let upstream;
+  let firstError = "";
+  const sourceOrigin = url.origin + "/";
   try {
     upstream = await fetch(url.toString(), {
-      headers: { "User-Agent": "OP-ED-Orden-Image-Backup/1.0", "Accept": "image/*" }
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; OP-ED-Orden-Image-Backup/2.0)",
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "ru,en;q=0.8",
+        "Referer": sourceOrigin
+      }
     });
-  } catch (_) {
-    return json(request, env, { error: "Не удалось скачать исходное изображение" }, 502);
+    if (!upstream.ok) firstError = "HTTP " + upstream.status;
+  } catch (error) {
+    firstError = error && error.message ? error.message : "ошибка сети";
+  }
+  if (!upstream || !upstream.ok) {
+    try {
+      upstream = await fetch(url.toString(), {
+        redirect: "follow",
+        headers: { "Accept": "image/*,*/*;q=0.8" }
+      });
+    } catch (error) {
+      const retryError = error && error.message ? error.message : "ошибка сети";
+      return json(request, env, { error: "Не удалось скачать исходное изображение: " + firstError + "; повтор: " + retryError }, 502);
+    }
   }
   if (!upstream.ok) return json(request, env, { error: "Источник вернул HTTP " + upstream.status }, 502);
 
