@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260728-rating-no-refresh1';
+  const primaryVersion = '20260728-rating-no-password1';
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
