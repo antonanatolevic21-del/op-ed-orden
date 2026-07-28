@@ -6076,6 +6076,56 @@
       });
     }
 
+    async function directImageRequest(imageUrl) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch(imageUrl, {
+          method: 'GET',
+          mode: 'cors',
+          credentials: 'omit',
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer',
+          headers: { 'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error('источник вернул HTTP ' + response.status);
+        const type = String(response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+        if (!type.startsWith('image/') || type === 'image/svg+xml') {
+          throw new Error('ссылка не ведёт на растровое изображение');
+        }
+        const announced = Number(response.headers.get('Content-Length') || 0);
+        if (announced > 12 * 1024 * 1024) throw new Error('исходная картинка больше 12 МБ');
+        const blob = await response.blob();
+        if (blob.size > 12 * 1024 * 1024) throw new Error('исходная картинка больше 12 МБ');
+        return blob;
+      } catch (error) {
+        if (error && error.name === 'AbortError') throw new Error('источник не ответил за 12 секунд');
+        throw error;
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    async function downloadFallbackSource(imageUrl, secret) {
+      let directError = null;
+      try {
+        return { blob: await directImageRequest(imageUrl), route: 'напрямую через браузер' };
+      } catch (error) {
+        directError = error;
+      }
+      try {
+        return {
+          blob: await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob'),
+          route: 'через Cloudflare Worker'
+        };
+      } catch (workerError) {
+        const directMessage = directError && directError.message ? directError.message : 'неизвестная ошибка';
+        const workerMessage = workerError && workerError.message ? workerError.message : 'неизвестная ошибка';
+        throw new Error('напрямую: ' + directMessage + '; через Worker: ' + workerMessage);
+      }
+    }
+
     async function createFallbackImageCopy(imageUrl, title, type, onProgress) {
       let stage = 'проверка пароля загрузчика';
       let stageStartedAt = Date.now();
@@ -6103,8 +6153,9 @@
 
         beginStage('скачивание основной картинки');
         setStatus('Скачиваю основную картинку для резервной копии…');
-        const sourceBlob = await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob');
-        finishStage(Math.max(1, Math.round(sourceBlob.size / 1024)) + ' КБ');
+        const source = await downloadFallbackSource(imageUrl, secret);
+        const sourceBlob = source.blob;
+        finishStage(Math.max(1, Math.round(sourceBlob.size / 1024)) + ' КБ · ' + source.route);
 
         beginStage('декодирование картинки');
         setStatus('Проверяю и декодирую основную картинку…');
