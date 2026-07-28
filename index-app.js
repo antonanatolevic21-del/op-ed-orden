@@ -772,6 +772,16 @@
     function rebuildEntriesFromFirebase() {
       const next = firebaseOpenings.map(normalizeEntryFromFirebase);
       const byId = new Map(next.map(e => [String(e.id), e]));
+      const profileAvatarNames = new Set(
+        (firebaseUserProfiles || [])
+          .filter(row => String(row.avatar || '').trim())
+          .flatMap(row => [
+            String(row.nickname || row.displayName || row.name || row.id || '').trim(),
+            String(row.nicknameKey || '').trim()
+          ])
+          .filter(Boolean)
+          .map(normalizedAccountName)
+      );
       let avatarChanged = false;
 
       firebaseRatings.forEach(r => {
@@ -786,7 +796,11 @@
         if (!entry || !nickname) return;
         if (r.avatar) {
           const av = String(r.avatar).trim();
-          if (av && avatarsMap[nickname] !== av) { avatarsMap[nickname] = av; avatarChanged = true; }
+          const hasCanonicalAvatar = profileAvatarNames.has(normalizedAccountName(nickname));
+          if (av && !hasCanonicalAvatar && !avatarsMap[nickname]) {
+            avatarsMap[nickname] = av;
+            avatarChanged = true;
+          }
         }
         if (Number.isFinite(personalScore)) {
           entry.personalScores = entry.personalScores || {};
@@ -6312,7 +6326,11 @@
           });
           appendImageMigrationLog('  … сохранение ссылки fallbackImage в Firebase');
           const firebaseStartedAt = Date.now();
-          await window.OPED_DB.updateOpening(entry.id, { ...entry, fallbackImage });
+          if (typeof window.OPED_DB.updateOpeningFallbackImage === 'function') {
+            await window.OPED_DB.updateOpeningFallbackImage(entry.id, fallbackImage);
+          } else {
+            await window.OPED_DB.updateOpening(entry.id, { ...entry, fallbackImage });
+          }
           appendImageMigrationLog('  ✓ сохранение ссылки fallbackImage в Firebase · ' + ((Date.now() - firebaseStartedAt) / 1000).toFixed(1) + ' с');
           entry.fallbackImage = fallbackImage;
           success++;
