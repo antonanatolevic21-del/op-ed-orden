@@ -18,7 +18,7 @@
   <meta name="twitter:image" content="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9IjYzMCIgdmlld0JveD0iMCAwIDEyMDAgNjMwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB4Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRkYyRTYzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMDhEOUQ2Ii8+PC9saW5lYXJHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9InIiIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjcwJSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMUQxODI5Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMEIwQTEwIi8+PC9yYWRpYWxHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNjMwIiBmaWxsPSJ1cmwoI3IpIi8+PGNpcmNsZSBjeD0iMTMwIiBjeT0iMTIwIiByPSIxNzAiIGZpbGw9IiNGRjJFNjMiIG9wYWNpdHk9Ii4xOCIvPjxjaXJjbGUgY3g9IjEwNTAiIGN5PSI1MjAiIHI9IjIxMCIgZmlsbD0iIzA4RDlENiIgb3BhY2l0eT0iLjE2Ii8+PHJlY3QgeD0iNjYiIHk9IjY2IiB3aWR0aD0iMTA2OCIgaGVpZ2h0PSI0OTgiIHJ4PSI0MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMkEyNDM1IiBzdHJva2Utd2lkdGg9IjQiLz48dGV4dCB4PSI2MDAiIHk9IjI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIEJsYWNrLCBJbXBhY3QsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTE4IiBmaWxsPSJ1cmwoI2cpIj7QkNCR0J7QkdCQPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iMzYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiNGNUYzRkEiPk9QIC8gRUQgY2hhcnQgwrcg0YLQvtC/0Ysgwrcg0YLQuNGALdC70LjRgdGC0Ysgwrcg0YHQtdC30L7QvdGLPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iNDIwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ibW9ub3NwYWNlIiBmb250LXNpemU9IjI0IiBmaWxsPSIjOEI4Njk4Ij5hbmltZSBvcGVuaW5ncyAmIGVuZGluZ3MgcmFua2luZzwvdGV4dD48L3N2Zz4=" />
 
   <link rel="stylesheet" href="index.css?v=20260726-cleanup2" />
-  <link rel="stylesheet" href="primary-enhancements.css?v=20260726-cleanup2" />
+  <link rel="stylesheet" href="primary-enhancements.css?v=20260728-catalog-improvements1" />
 </head>
 <body>
   <div id="opedchart-root">
@@ -88,6 +88,30 @@
           <span><strong>Франшизы</strong><small>Музыка одной истории в единой коллекции</small></span><i>→</i>
         </button>
       </div>
+    </section>
+
+    <section id="oc-account-welcome" class="oc-account-welcome hidden" aria-labelledby="oc-account-welcome-title">
+      <div>
+        <div class="oc-section-label">добро пожаловать</div>
+        <h2 id="oc-account-welcome-title">С чего начать</h2>
+        <p>Найди знакомый трек, оцени сезон или постепенно собери личный топ — оценки сохранятся в твоём профиле.</p>
+      </div>
+      <div class="oc-account-welcome-actions">
+        <button type="button" data-welcome-action="search">Найти трек</button>
+        <button type="button" data-welcome-action="season">Оценить сезон</button>
+        <button type="button" data-welcome-action="profile">Открыть профиль</button>
+        <label><input id="oc-welcome-ack" type="checkbox" /> Я ознакомился — больше не показывать</label>
+      </div>
+    </section>
+
+    <section id="oc-catalog-progress" class="oc-catalog-progress hidden" aria-label="Прогресс оценивания">
+      <div class="oc-catalog-progress-copy">
+        <span>твой прогресс</span>
+        <strong id="oc-catalog-progress-title">Оценено 0 из 0</strong>
+        <small id="oc-catalog-progress-detail">OP 0 · ED 0</small>
+      </div>
+      <div class="oc-catalog-progress-track"><i id="oc-catalog-progress-fill"></i></div>
+      <button id="oc-random-unrated" type="button">Случайный неоценённый</button>
     </section>
 
     <div class="oc-addbar oc-admin-only oc-locked">
@@ -233,6 +257,11 @@
 
     <div class="oc-resultcount" id="oc-resultcount"></div>
     <div class="oc-filterstat" id="oc-filterstat"></div>
+    <div class="oc-catalog-viewbar" aria-label="Вид каталога">
+      <span>Вид карточек</span>
+      <button id="oc-view-detailed" class="active" type="button" aria-pressed="true">Подробный</button>
+      <button id="oc-view-compact" type="button" aria-pressed="false">Компактный · 5 в ряд</button>
+    </div>
     <div id="oc-list-container"><div class="oc-empty">Загрузка списка…</div></div>
 
     </div>
@@ -611,8 +640,8 @@
     <div class="oc-status" id="oc-status"></div>
   </div>
 
-  <script type="module" src="index-app.js?v=20260727-entity-edit-return1"></script>
-  <script type="module" src="firebase-app.js?v=20260727-image-backup-async1"></script>
-  <script src="sw-register.js?v=20260727-entity-edit-return1" defer></script>
+  <script type="module" src="index-app.js?v=20260728-catalog-improvements1"></script>
+  <script type="module" src="firebase-app.js?v=20260728-catalog-improvements1"></script>
+  <script src="sw-register.js?v=20260728-catalog-improvements1" defer></script>
 </body>
 </html>
