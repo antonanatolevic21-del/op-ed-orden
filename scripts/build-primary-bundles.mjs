@@ -23,6 +23,7 @@ const styles = [
   'top100-rank-readability.css',
   'entity-real-links.css',
   'navigation-real-links.css'
+  ,'catalog-improvements.css'
 ];
 
 const scripts = [
@@ -55,6 +56,7 @@ const scripts = [
   'advanced-filters.js',
   'undo-actions.js',
   'accessibility.js'
+  ,'catalog-improvements.js'
 ];
 
 async function bundle(files, output, comment) {
