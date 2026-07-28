@@ -367,6 +367,19 @@
       }, { merge: true });
     }
 
+    async function acknowledgeWelcome(nickname) {
+      const displayName = String(nickname || "").trim();
+      const safeName = normalizeNickname(displayName);
+      if (!safeName) throw new Error("Никнейм обязателен");
+      return setDoc(doc(db, "userProfiles", safeName), {
+        nickname: displayName,
+        nicknameKey: safeName,
+        authUid: requirePersonalUid(),
+        welcomeAcknowledged: true,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+
     async function addOpening(opening) {
       return addDoc(collection(db, "openings"), cleanOpening(opening, true));
     }
@@ -430,6 +443,7 @@
       deleteEntityCard,
       saveManualRanks,
       saveUserProfile,
+      acknowledgeWelcome,
       addOpening,
       updateOpening,
       updateOpeningFallbackImage,
