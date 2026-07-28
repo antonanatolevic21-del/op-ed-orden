@@ -5448,17 +5448,12 @@
         if (ratingCount(entry.scores) > 0 && ratingCount(entry.scores) < MIN_PUBLIC_VOTES) extraBits.push(`<div class="oc-song-small">средняя появится после ${MIN_PUBLIC_VOTES} оценок · сейчас ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}</div>`);
         if (myPersonalScore !== null) extraBits.push(`<div class="oc-song-small">твоя оценка: ${escapeHtml(formatFiveScore(myPersonalScore))}</div>`);
         const hasSavedScore = isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null;
-        const ticks = Array.from({ length: isPersonalScale() ? 5 : 10 }, (_, tickIndex) => {
-          const tickValue = tickIndex + 1;
-          return `<button type="button" class="oc-score-tick${Number(myVal) === tickValue ? ' selected' : ''}" data-score="${tickValue}" tabindex="-1">${tickValue}</button>`;
-        }).join('');
         const controlsHtml = `
           <div class="oc-rate-control ${hasSavedScore ? 'is-saved' : 'is-empty'}" data-saved="${hasSavedScore ? escapeHtml(String(myVal)) : ''}">
           <div class="oc-rate-row">
             <input type="range" min="${ratingMin()}" max="${ratingMax()}" step="${scaleStep()}" value="${myVal}" class="oc-slider" data-id="${entry.id}" />
-            <span class="oc-rate-val">${hasSavedScore ? `твоя: ${escapeHtml(formatInputScore(myVal))}` : `выбрано: ${escapeHtml(formatInputScore(myVal))}`}</span>
+            <span class="oc-rate-val">${escapeHtml(formatInputScore(myVal))}</span>
           </div>
-          <div class="oc-score-ticks" aria-label="Быстрый выбор оценки">${ticks}</div>
           </div>
           <button class="oc-rate-btn" data-action="rate" data-id="${entry.id}">${hasSavedScore ? 'Изменить оценку' : 'Оценить'}</button>
           <button class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
@@ -5487,19 +5482,8 @@
         slider.addEventListener('input', (e) => {
           const val = parseFloat(e.target.value);
           const control = e.target.closest('.oc-rate-control');
-          const saved = control?.dataset.saved;
           control?.classList.add('is-dirty');
-          e.target.parentElement.querySelector('.oc-rate-val').textContent = saved ? `новая: ${formatInputScore(val)} · была ${formatInputScore(saved)}` : `выбрано: ${formatInputScore(val)}`;
-          control?.querySelectorAll('.oc-score-tick').forEach(tick => tick.classList.toggle('selected', Number(tick.dataset.score) === val));
-        });
-      });
-      listContainer.querySelectorAll('.oc-score-tick').forEach(tick => {
-        tick.addEventListener('click', () => {
-          const control = tick.closest('.oc-rate-control');
-          const slider = control?.querySelector('.oc-slider');
-          if (!slider) return;
-          slider.value = tick.dataset.score;
-          slider.dispatchEvent(new Event('input', { bubbles: true }));
+          e.target.parentElement.querySelector('.oc-rate-val').textContent = formatInputScore(val);
         });
       });
 
