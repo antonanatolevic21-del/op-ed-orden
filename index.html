@@ -18,7 +18,7 @@
   <meta name="twitter:image" content="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9IjYzMCIgdmlld0JveD0iMCAwIDEyMDAgNjMwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB4Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRkYyRTYzIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMDhEOUQ2Ii8+PC9saW5lYXJHcmFkaWVudD48cmFkaWFsR3JhZGllbnQgaWQ9InIiIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjcwJSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjMUQxODI5Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMEIwQTEwIi8+PC9yYWRpYWxHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNjMwIiBmaWxsPSJ1cmwoI3IpIi8+PGNpcmNsZSBjeD0iMTMwIiBjeT0iMTIwIiByPSIxNzAiIGZpbGw9IiNGRjJFNjMiIG9wYWNpdHk9Ii4xOCIvPjxjaXJjbGUgY3g9IjEwNTAiIGN5PSI1MjAiIHI9IjIxMCIgZmlsbD0iIzA4RDlENiIgb3BhY2l0eT0iLjE2Ii8+PHJlY3QgeD0iNjYiIHk9IjY2IiB3aWR0aD0iMTA2OCIgaGVpZ2h0PSI0OTgiIHJ4PSI0MiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMkEyNDM1IiBzdHJva2Utd2lkdGg9IjQiLz48dGV4dCB4PSI2MDAiIHk9IjI4MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIEJsYWNrLCBJbXBhY3QsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTE4IiBmaWxsPSJ1cmwoI2cpIj7QkNCR0J7QkdCQPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iMzYwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzQiIGZpbGw9IiNGNUYzRkEiPk9QIC8gRUQgY2hhcnQgwrcg0YLQvtC/0Ysgwrcg0YLQuNGALdC70LjRgdGC0Ysgwrcg0YHQtdC30L7QvdGLPC90ZXh0Pjx0ZXh0IHg9IjYwMCIgeT0iNDIwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ibW9ub3NwYWNlIiBmb250LXNpemU9IjI0IiBmaWxsPSIjOEI4Njk4Ij5hbmltZSBvcGVuaW5ncyAmIGVuZGluZ3MgcmFua2luZzwvdGV4dD48L3N2Zz4=" />
 
   <link rel="stylesheet" href="index.css?v=20260726-cleanup2" />
-  <link rel="stylesheet" href="primary-enhancements.css?v=20260728-rating-no-refresh1" />
+  <link rel="stylesheet" href="primary-enhancements.css?v=20260728-rating-no-password1" />
 </head>
 <body>
   <div id="opedchart-root">
@@ -558,7 +558,7 @@
         <div class="oc-name-modal-row">
           <input id="oc-modal-name" type="text" placeholder="например: Пёс кошачий" autocomplete="nickname" />
           <input id="oc-modal-account-email" type="email" placeholder="email защищённого аккаунта" autocomplete="email" />
-          <input id="oc-modal-account-pass" type="password" placeholder="личный пароль, если установлен" autocomplete="current-password" />
+          <input id="oc-modal-account-pass" type="password" placeholder="личный пароль, если установлен" autocomplete="current-password" disabled />
           <label style="display:flex;align-items:center;gap:7px;color:#8B8698;font-size:12px;cursor:pointer;"><input id="oc-remember-account" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
           <button class="oc-addbtn" id="oc-modal-name-save" type="button">Войти</button>
           <button class="oc-edit-cancel" id="oc-forgot-password" type="button">Забыли пароль?</button>
@@ -599,7 +599,7 @@
         <p>Вход выполняется через личный Firebase-аккаунт. Email не публикуется в профиле.</p>
         <div class="oc-login-fields">
           <label class="oc-login-field"><span>Email</span><input id="oc-auth-identifier" type="email" placeholder="name@example.com" autocomplete="email" /></label>
-          <label class="oc-login-field"><span>Пароль</span><input id="oc-auth-pass" type="password" placeholder="Введите пароль" autocomplete="current-password" /></label>
+          <label class="oc-login-field"><span>Пароль</span><input id="oc-auth-pass" type="password" placeholder="Введите пароль" autocomplete="current-password" disabled /></label>
           <label class="oc-account-remember"><input id="oc-auth-remember" type="checkbox" checked /> Запомнить меня на этом устройстве</label>
           <div class="oc-login-actions">
             <button class="oc-addbtn" id="oc-auth-save" type="button">Войти в аккаунт</button>
@@ -621,8 +621,8 @@
         <div class="oc-account-form" style="margin-top:16px;">
           <label class="oc-account-field">Логин<input id="oc-register-name" type="text" placeholder="Никнейм" autocomplete="nickname" /></label>
           <label class="oc-account-field">Email<input id="oc-register-email" type="email" placeholder="name@example.com" autocomplete="email" /></label>
-          <label class="oc-account-field">Пароль<input id="oc-register-pass" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" /></label>
-          <label class="oc-account-field">Повторите пароль<input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" /></label>
+          <label class="oc-account-field">Пароль<input id="oc-register-pass" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" disabled /></label>
+          <label class="oc-account-field">Повторите пароль<input id="oc-register-pass-confirm" type="password" placeholder="Введите пароль ещё раз" autocomplete="new-password" disabled /></label>
         </div>
         <label class="oc-account-remember" style="margin-top:14px;"><input id="oc-register-remember" type="checkbox" checked /> Запомнить меня после входа</label>
         <button class="oc-addbtn oc-account-submit" id="oc-register-save" type="button" style="margin-top:14px;">Создать аккаунт</button>
@@ -640,8 +640,8 @@
     <div class="oc-status" id="oc-status"></div>
   </div>
 
-  <script type="module" src="index-app.js?v=20260728-rating-no-refresh1"></script>
+  <script type="module" src="index-app.js?v=20260728-rating-no-password1"></script>
   <script type="module" src="firebase-app.js?v=20260728-catalog-improvements1"></script>
-  <script src="sw-register.js?v=20260728-rating-no-refresh1" defer></script>
+  <script src="sw-register.js?v=20260728-rating-no-password1" defer></script>
 </body>
 </html>
