@@ -252,6 +252,7 @@
     let sortedCache = { key: '', input: null, value: null };
     let uiRefreshTimer = null;
     let uiRefreshNeedsFilterOptions = false;
+    let suppressChartRatingRefreshUntil = 0;
     let lastOpeningsSnapshotKey = '';
 
     function waitForFirebaseDb() {
@@ -820,7 +821,11 @@
       entries = next;
       rebuildFastIndexes({ catalogChanged });
       if (avatarChanged) markAvatarsChanged();
-      scheduleVisibleRefresh({ forceFilters: catalogChanged });
+      if (activeTab === 'chart' && !catalogChanged && Date.now() < suppressChartRatingRefreshUntil) {
+        updateAccountDashboard();
+      } else {
+        scheduleVisibleRefresh({ forceFilters: catalogChanged });
+      }
     }
 
     function rowHasManualTopData(row) {
@@ -5455,11 +5460,11 @@
             <span class="oc-rate-val">${escapeHtml(formatInputScore(myVal))}</span>
           </div>
           </div>
-          <button class="oc-rate-btn" data-action="rate" data-id="${entry.id}">${hasSavedScore ? 'Изменить оценку' : 'Оценить'}</button>
-          <button class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
-          ${(isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null) ? `<button class="oc-secondary-btn" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? 'удалить отметку' : 'удалить оценку'}</button>` : ''}
-          ${isAdmin() ? `<button class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
-          <button class="oc-del" data-action="delete" data-id="${entry.id}">удалить трек</button>` : ''}`;
+          <button type="button" class="oc-rate-btn" data-action="rate" data-id="${entry.id}">${hasSavedScore ? 'Изменить оценку' : 'Оценить'}</button>
+          <button type="button" class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
+          <button type="button" class="oc-secondary-btn${hasSavedScore ? '' : ' hidden'}" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? 'удалить отметку' : 'удалить оценку'}</button>
+          ${isAdmin() ? `<button type="button" class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
+          <button type="button" class="oc-del" data-action="delete" data-id="${entry.id}">удалить трек</button>` : ''}`;
         return renderUnifiedEntryCard(entry, {
           rankLabel,
           rankClass,
@@ -5489,13 +5494,15 @@
 
       listContainer.querySelectorAll('[data-action="rate"]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
+          e.preventDefault();
           if (!ensureNickname()) return;
-          const id = e.target.getAttribute('data-id');
+          const id = btn.getAttribute('data-id');
           const slider = listContainer.querySelector(`.oc-slider[data-id="${id}"]`);
           const val = clampScore(slider.value);
           const entry = entriesById.get(String(id));
           if (!entry || val === null) return;
           try {
+            suppressChartRatingRefreshUntil = Date.now() + 3000;
             if (isPersonalScale()) {
               entry.personalScores = entry.personalScores || {};
               entry.personalScores[myName] = val;
@@ -5509,7 +5516,28 @@
             }
             touchEntryCache(entry);
             markRatingDataChanged();
-            render();
+            const card = btn.closest('.oc-unified-card');
+            const control = btn.closest('.oc-card-actions')?.querySelector('.oc-rate-control');
+            if (control) {
+              control.classList.remove('is-empty', 'is-dirty');
+              control.classList.add('is-saved');
+              control.dataset.saved = String(val);
+            }
+            if (card) {
+              card.classList.add('oc-card-rated');
+              const scoreNode = card.querySelector('.oc-season-score');
+              if (scoreNode) scoreNode.innerHTML = `${visibleAverageMarkup(entry, avg(entry.scores))}<span class="oc-season-score-sub">средняя</span>`;
+              const votesNode = card.querySelector('.oc-votes');
+              if (votesNode) {
+                votesNode.innerHTML = Object.entries(entry.scores || {}).map(([voter, score]) => {
+                  const mine = voter === myName ? ' mine' : '';
+                  return `<span class="oc-chip${mine}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(score)}</span>`;
+                }).join('');
+              }
+            }
+            btn.textContent = 'Изменить оценку';
+            btn.closest('.oc-card-actions')?.querySelector('[data-action="delete-rating"]')?.classList.remove('hidden');
+            updateAccountDashboard();
             setStatus('Оценка сохранена ✓');
           } catch (err) {
             console.error(err);
