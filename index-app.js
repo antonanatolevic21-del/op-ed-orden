@@ -999,6 +999,7 @@
     function showAuthModal(message) {
       if (!authModal) return;
       authError.textContent = message || '';
+      if (authPassInput) authPassInput.disabled = false;
       authModal.classList.remove('hidden');
       setTimeout(() => authIdentifierInput && authIdentifierInput.focus(), 0);
     }
@@ -1006,13 +1007,18 @@
     function hideAuthModal() {
       if (authModal) authModal.classList.add('hidden');
       if (authError) authError.textContent = '';
-      if (authPassInput) authPassInput.value = '';
+      if (authPassInput) {
+        authPassInput.value = '';
+        authPassInput.disabled = true;
+      }
     }
 
     function showRegistrationModal() {
       hideAuthModal();
       if (registerError) registerError.textContent = '';
       if (registerNameInput && !registerNameInput.value) registerNameInput.value = '';
+      if (registerPassInput) registerPassInput.disabled = false;
+      if (registerPassConfirmInput) registerPassConfirmInput.disabled = false;
       registerModal?.classList.remove('hidden');
       setTimeout(() => registerNameInput?.focus(), 0);
     }
@@ -1020,6 +1026,14 @@
     function hideRegistrationModal() {
       registerModal?.classList.add('hidden');
       if (registerError) registerError.textContent = '';
+      if (registerPassInput) {
+        registerPassInput.value = '';
+        registerPassInput.disabled = true;
+      }
+      if (registerPassConfirmInput) {
+        registerPassConfirmInput.value = '';
+        registerPassConfirmInput.disabled = true;
+      }
     }
 
     function requireAccount(message = 'Войди в аккаунт, чтобы открыть этот раздел.') {
@@ -1098,7 +1112,10 @@
       modalNameError.textContent = message || '';
       modalNameInput.value = String(candidate || myName || nameInput.value.trim() || '').trim();
       if (modalAccountEmail) modalAccountEmail.value = '';
-      if (modalAccountPass) modalAccountPass.value = '';
+      if (modalAccountPass) {
+        modalAccountPass.value = '';
+        modalAccountPass.disabled = false;
+      }
       nameModal.classList.remove('hidden');
       setTimeout(() => modalNameInput.focus(), 0);
     }
@@ -1107,7 +1124,10 @@
       if (nameModal) nameModal.classList.add('hidden');
       if (modalNameError) modalNameError.textContent = '';
       if (modalAccountEmail) modalAccountEmail.value = '';
-      if (modalAccountPass) modalAccountPass.value = '';
+      if (modalAccountPass) {
+        modalAccountPass.value = '';
+        modalAccountPass.disabled = true;
+      }
       nameInput.value = myName || localStorage.getItem(PRIMARY_NAME_KEY) || '';
     }
 
