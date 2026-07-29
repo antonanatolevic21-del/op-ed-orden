@@ -3,6 +3,7 @@
   if (!panel) return;
 
   const PIN_STORAGE_KEY = 'op-ed-add-field-pins-v1';
+  const LAST_TITLE_STORAGE_KEY = 'op-ed-last-added-title-v1';
   const pinFieldIds = [
     'oc-add-type', 'oc-add-year', 'oc-add-season',
     'oc-add-studio', 'oc-add-director', 'oc-add-performer', 'oc-add-same-song',
@@ -113,6 +114,18 @@
   Object.entries(placeholders).forEach(([id, placeholder]) => {
     const control = document.getElementById(id);
     if (control) control.placeholder = placeholder;
+  });
+
+  const titleInput = document.getElementById('oc-add-title');
+  titleInput?.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowDown' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    let previousTitle = '';
+    try { previousTitle = String(localStorage.getItem(LAST_TITLE_STORAGE_KEY) || ''); } catch (_) {}
+    if (!previousTitle) return;
+    event.preventDefault();
+    titleInput.value = previousTitle;
+    titleInput.setSelectionRange(previousTitle.length, previousTitle.length);
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
   const head = panel.querySelector('.oc-addbar-head');
