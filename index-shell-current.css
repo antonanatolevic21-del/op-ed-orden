@@ -126,7 +126,7 @@
 .oc-entity-form-head h3,.oc-entity-filter-head h3{margin:0;font-size:20px;letter-spacing:-.02em}
 .oc-entity-form-head p,.oc-entity-filter-head p{max-width:390px;margin:0;color:#8f879b;font-size:12px;line-height:1.5;text-align:right}
 .oc-entity-form-fields{display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,1.35fr) auto;gap:12px;align-items:end}
-.oc-entity-filter-fields{display:grid;grid-template-columns:minmax(250px,1.7fr) repeat(4,minmax(120px,.72fr)) auto;gap:12px;align-items:end}
+.oc-entity-filter-fields{display:grid;grid-template-columns:minmax(220px,1.5fr) minmax(105px,.65fr) repeat(4,minmax(105px,.62fr)) minmax(110px,.7fr) auto;gap:12px;align-items:end}
 .oc-entity-field{display:flex;min-width:0;flex-direction:column;gap:7px}
 .oc-entity-field>span{font:10px 'Space Mono',monospace;letter-spacing:.65px;text-transform:uppercase;color:#8e8698}
 .oc-entity-field input,.oc-entity-field select{width:100%;height:48px;min-width:0;padding:0 14px;border:1px solid #3a3046;border-radius:12px;background:rgba(10,8,15,.82);color:#f5f3fa;font:13px 'Inter',sans-serif;transition:border-color .18s ease,box-shadow .18s ease,background .18s ease}
