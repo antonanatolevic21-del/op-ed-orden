@@ -2208,7 +2208,7 @@
 
   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
   const constrained = Boolean(connection?.saveData) || /(^|-)2g$/i.test(String(connection?.effectiveType || ''));
-  const preloadDistance = constrained ? 900 : 2400;
+  const preloadDistance = constrained ? 1200 : Math.max(4200, window.innerHeight * 4);
   const imageSelector = [
     '#opedchart-root img[loading="lazy"]',
     '.ev-root img[loading="lazy"]',
