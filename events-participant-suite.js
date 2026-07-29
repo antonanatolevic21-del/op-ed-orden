@@ -57,7 +57,7 @@ function bindingRows(row) {
 }
 
 function participantMatch(row) {
-  if (!row || row.closed || Number(row.year || CURRENT_EVENT_YEAR) !== CURRENT_EVENT_YEAR) return null;
+  if (!row || row.eventKind === 'ending-year' || row.closed || Number(row.year || CURRENT_EVENT_YEAR) !== CURRENT_EVENT_YEAR) return null;
   const slots = Array.isArray(row.allowedNicknames) ? row.allowedNicknames : [];
   const slotIndex = slots.findIndex(name => normalizeNickname(name) === nicknameKey);
   if (slotIndex < 0 || slotIndex >= 15) return null;
