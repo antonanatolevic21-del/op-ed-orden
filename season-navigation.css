@@ -1,0 +1,39 @@
+.oc-season-years {
+  align-self: start;
+  max-height: calc(100vh - 92px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.oc-season-year-jump {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 1fr 92px;
+  gap: 10px;
+  align-items: center;
+  margin: -2px -2px 10px;
+  padding: 10px;
+  border: 1px solid #392f45;
+  border-radius: 10px;
+  background: rgba(18,14,25,.96);
+  color: #aaa0b5;
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.oc-season-year-jump select {
+  width: 100%;
+  min-height: 36px;
+}
+
+.oc-year-btn {
+  min-height: 44px;
+}
+
+@media (max-width: 760px) {
+  .oc-season-years {
+    max-height: min(48vh, 440px);
+  }
+}

@@ -137,6 +137,9 @@
     const entityImageInput = $('#oc-entity-image');
     const entityFiltersEl = $('#oc-entity-filters');
     const entityFiltersToggle = $('#oc-entity-filters-toggle');
+    const entityAlbumTools = $('#oc-entity-album-tools');
+    const entityAlbumSearchInput = $('#oc-entity-album-search');
+    const entityAlbumSortSelect = $('#oc-entity-album-sort');
     const entitySearchInput = $('#oc-entity-search');
     const entityTrackTypeSelect = $('#oc-entity-track-type');
     const entityFromYearSelect = $('#oc-entity-from-year');
@@ -144,6 +147,7 @@
     const entityToYearSelect = $('#oc-entity-to-year');
     const entityToSeasonSelect = $('#oc-entity-to-season');
     const entityProgressSelect = $('#oc-entity-progress');
+    const entityTrackSortSelect = $('#oc-entity-track-sort');
     const entityRateAllBtn = $('#oc-entity-rate-all');
     const entityGridEl = $('#oc-entity-grid');
     const entityTracksEl = $('#oc-entity-tracks');
@@ -4029,8 +4033,25 @@
     function renderEntityAlbums() {
       if (!entityPanel) return;
       const meta = ENTITY_ALBUM_META[activeEntityType] || ENTITY_ALBUM_META.studios;
+      const albumQuery = normalizedEntityValue(entityAlbumSearchInput?.value);
+      const albumSort = String(entityAlbumSortSelect?.value || 'title');
       const cards = firebaseEntityCards.filter(card => card.type === activeEntityType)
-        .sort((a, b) => String(a.value || '').localeCompare(String(b.value || ''), 'ru'));
+        .filter(card => !albumQuery || normalizedEntityValue(card.value).includes(albumQuery))
+        .map(card => ({ card, progress: entityCardProgress(card) }))
+        .sort((a, b) => {
+          if (albumSort === 'unfinished') {
+            const completeDiff = Number(a.progress.complete) - Number(b.progress.complete);
+            if (completeDiff) return completeDiff;
+          } else if (albumSort === 'progress') {
+            const aRatio = a.progress.related.length ? a.progress.rated / a.progress.related.length : 0;
+            const bRatio = b.progress.related.length ? b.progress.rated / b.progress.related.length : 0;
+            if (aRatio !== bRatio) return aRatio - bRatio;
+          } else if (albumSort === 'tracks' && a.progress.related.length !== b.progress.related.length) {
+            return b.progress.related.length - a.progress.related.length;
+          }
+          return String(a.card.value || '').localeCompare(String(b.card.value || ''), 'ru');
+        })
+        .map(row => row.card);
       const eligible = eligibleEntityValues(activeEntityType);
       const existing = new Set(cards.map(card => normalizedEntityValue(card.value)));
       entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум ' + ENTITY_MIN_TRACKS + ' трека)</option>' +
@@ -4040,6 +4061,7 @@
       entityBackBtn.classList.remove('hidden');
       entityBackBtn.textContent = activeEntityCardId ? '← Ко всем альбомам' : '← На главную';
       entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityAlbumTools?.classList.toggle('hidden', Boolean(activeEntityCardId));
       entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
       entityFiltersEl.classList.toggle('is-expanded', Boolean(activeEntityCardId && entityFiltersExpanded));
       if (entityFiltersToggle) {
@@ -4074,6 +4096,12 @@
         const toPoint = toYear ? Number(toYear) * 4 + (seasonOrder[toSeason] ?? 3) : Number.POSITIVE_INFINITY;
         const rangeStart = Math.min(fromPoint, toPoint);
         const rangeEnd = Math.max(fromPoint, toPoint);
+        const trackSort = String(entityTrackSortSelect?.value || 'title');
+        const pointForEntry = entry => Number(entry.year || 0) * 4 + (seasonOrder[entry.season] ?? 0);
+        const ratingForEntry = entry => {
+          const value = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
+          return value === null ? Number.NEGATIVE_INFINITY : Number(value);
+        };
         const filtered = progress.related.filter(entry => {
           if (search && !normalizedEntityValue([entry.title, ...(entry.performers || []), ...(entry.directors || []), ...(entry.studios || []), ...(entry.franchises || [])].join(' ')).includes(search)) return false;
           if (trackType && entry.type !== trackType) return false;
@@ -4084,7 +4112,19 @@
           if (entryPoint < rangeStart || entryPoint > rangeEnd) return false;
           const rated = entityHasRating(entry);
           return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
-        }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+        }).sort((a, b) => {
+          if (trackSort === 'unrated') {
+            const ratedDiff = Number(entityHasRating(a)) - Number(entityHasRating(b));
+            if (ratedDiff) return ratedDiff;
+          } else if (trackSort === 'newest' || trackSort === 'oldest') {
+            const pointDiff = pointForEntry(a) - pointForEntry(b);
+            if (pointDiff) return trackSort === 'newest' ? -pointDiff : pointDiff;
+          } else if (trackSort === 'rating') {
+            const ratingDiff = ratingForEntry(b) - ratingForEntry(a);
+            if (ratingDiff) return ratingDiff;
+          }
+          return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
+        });
         activeEntityFilteredEntries = filtered;
         entityRateAllBtn.disabled = !filtered.length;
         const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
@@ -4115,7 +4155,7 @@
           (isAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
           (isAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
           '</div></article>';
-      }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : '<div class="oc-empty">Альбомов пока нет.</div>';
+      }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : `<div class="oc-empty">${albumQuery ? 'По этому запросу альбомов не найдено.' : 'Альбомов пока нет.'}</div>`;
       installProgressiveAutoload(entityGridEl, 'entity-cards', () => {
         entityCardRenderLimit += 40;
         renderEntityAlbums();
@@ -6156,6 +6196,18 @@
       entityFiltersExpanded = !entityFiltersExpanded;
       renderEntityAlbums();
     });
+    entityAlbumSearchInput?.addEventListener('input', () => {
+      entityCardRenderLimit = 40;
+      renderEntityAlbums();
+    });
+    entityAlbumSortSelect?.addEventListener('change', () => {
+      entityCardRenderLimit = 40;
+      renderEntityAlbums();
+    });
+    entityTrackSortSelect?.addEventListener('change', () => {
+      entityTrackRenderLimit = 30;
+      renderEntityAlbums();
+    });
     if (entityBackBtn) entityBackBtn.addEventListener('click', () => {
       if (activeEntityCardId) {
         activeEntityCardId = '';
@@ -7151,8 +7203,8 @@
       if (registerError) { registerError.textContent = 'Создаём аккаунт…'; registerError.style.color = '#FFC857'; }
       try {
         if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('Сервис ещё загружается. Попробуй через пару секунд.');
-        const user = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
-        const patch = { authUid: user.uid, authProvider: 'password', passwordEnabled: true };
+        const result = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
+        const patch = { authUid: result?.user?.uid, authProvider: 'password', passwordEnabled: true };
         const row = accountProfile(nickname);
         if (row) Object.assign(row, patch);
         else firebaseUserProfiles.push({ id: normalizedAccountName(nickname), nickname, nicknameKey: normalizedAccountName(nickname), ...patch });
@@ -7162,9 +7214,8 @@
         registerPassConfirmInput.value = '';
         if (registerSaveBtn) { registerSaveBtn.disabled = false; registerSaveBtn.textContent = registerButtonText; }
         hideRegistrationModal();
-        if (authIdentifierInput) authIdentifierInput.value = email;
-        if (authPassInput) authPassInput.value = '';
-        showAuthModal('Аккаунт успешно создан ✓ Теперь введи пароль и войди.');
+        await applyPersonalAccountSession(result, Boolean(registerRememberInput?.checked));
+        setStatus(`Аккаунт «${nickname}» создан, вход выполнен ✓`);
       } catch (error) {
         console.error('Account registration failed', error);
         const code = String(error?.code || '');

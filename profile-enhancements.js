@@ -883,11 +883,23 @@
 
 	const menu = document.createElement('div');
 	menu.className = 'oc-profile-picker-menu hidden';
-	menu.setAttribute('role', 'listbox');
 
 	select.parentNode.insertBefore(picker, select);
 	picker.append(select, toggle, menu);
 	select.classList.add('oc-profile-user-native');
+
+	const search = document.createElement('input');
+	search.type = 'search';
+	search.className = 'oc-profile-picker-search';
+	search.placeholder = 'Найти профиль…';
+	search.autocomplete = 'off';
+	search.setAttribute('aria-label', 'Найти профиль');
+	menu.append(search);
+
+	const optionsHost = document.createElement('div');
+	optionsHost.className = 'oc-profile-picker-options';
+	optionsHost.setAttribute('role', 'listbox');
+	menu.append(optionsHost);
 
 	function closeMenu() {
 		picker.classList.remove('open');
@@ -899,7 +911,9 @@
 		picker.classList.add('open');
 		menu.classList.remove('hidden');
 		toggle.setAttribute('aria-expanded', 'true');
-		menu.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
+		search.value = '';
+		filterOptions();
+		window.setTimeout(() => search.focus(), 0);
 	}
 
 	function syncSelection() {
@@ -911,10 +925,22 @@
 		}
 		toggle.textContent = cleanLabel(selected.textContent);
 		toggle.classList.toggle('is-admin', selected.dataset.admin === '1');
-		menu.querySelectorAll('.oc-profile-picker-option').forEach(button => {
+		optionsHost.querySelectorAll('.oc-profile-picker-option').forEach(button => {
 			button.classList.toggle('selected', button.dataset.value === select.value);
 			button.setAttribute('aria-selected', button.dataset.value === select.value ? 'true' : 'false');
 		});
+	}
+
+	function filterOptions() {
+		const query = String(search.value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
+		let visible = 0;
+		optionsHost.querySelectorAll('.oc-profile-picker-option').forEach(button => {
+			const label = String(button.textContent || '').toLocaleLowerCase('ru').replace(/ё/g, 'е');
+			const matched = !query || label.includes(query);
+			button.hidden = !matched;
+			if (matched) visible += 1;
+		});
+		optionsHost.classList.toggle('is-empty', visible === 0);
 	}
 
 	function renderOptions() {
@@ -926,7 +952,7 @@
 		const signature = rows.map(row => `${row.value}\u0000${row.label}\u0000${row.admin ? 1 : 0}`).join('\u0001');
 		if (signature !== lastSignature) {
 			lastSignature = signature;
-			menu.replaceChildren(...rows.map(row => {
+			optionsHost.replaceChildren(...rows.map(row => {
 				const button = document.createElement('button');
 				button.type = 'button';
 				button.className = `oc-profile-picker-option${row.admin ? ' is-admin' : ''}`;
@@ -950,6 +976,7 @@
 			}));
 		}
 		syncSelection();
+		filterOptions();
 	}
 
 	toggle.addEventListener('click', () => {
@@ -967,6 +994,28 @@
 		syncSelection();
 		closeMenu();
 		toggle.focus();
+	});
+	search.addEventListener('input', filterOptions);
+	search.addEventListener('keydown', event => {
+		if (event.key !== 'ArrowDown') return;
+		const first = optionsHost.querySelector('.oc-profile-picker-option:not([hidden])');
+		if (first) {
+			event.preventDefault();
+			first.focus();
+		}
+	});
+	optionsHost.addEventListener('keydown', event => {
+		if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+		const visible = [...optionsHost.querySelectorAll('.oc-profile-picker-option:not([hidden])')];
+		if (!visible.length) return;
+		event.preventDefault();
+		const current = visible.indexOf(document.activeElement);
+		let next = 0;
+		if (event.key === 'End') next = visible.length - 1;
+		else if (event.key === 'Home') next = 0;
+		else if (event.key === 'ArrowDown') next = Math.min(visible.length - 1, current + 1);
+		else next = Math.max(0, current < 0 ? 0 : current - 1);
+		visible[next]?.focus();
 	});
 
 	select.addEventListener('change', syncSelection);
@@ -995,6 +1044,81 @@
 	window.addEventListener('oped:route-ready', event => {
 		if (event?.detail?.tab === 'profile') renderOptions();
 	});
+})();
+
+/* profile-discovery.js */
+(() => {
+  if (window.__OC_PROFILE_DISCOVERY_READY__) return;
+  window.__OC_PROFILE_DISCOVERY_READY__ = true;
+
+  const normalize = value => String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
+
+  function syncContext() {
+    const context = document.querySelector('#oc-profile-context');
+    const select = document.querySelector('#oc-profile-user');
+    if (!context || !select) return;
+    const viewed = String(select.value || '').trim();
+    const own = String(document.querySelector('#oc-myname')?.value || '').trim();
+    const isOwn = Boolean(viewed && own && normalize(viewed) === normalize(own));
+    context.classList.toggle('is-own', isOwn);
+    let message = '';
+    if (!viewed) message = 'Профиль пока не выбран.';
+    else if (isOwn) message = `Это ваш профиль · ${viewed}`;
+    else if (own) message = `Вы смотрите профиль «${viewed}» · ваш аккаунт: ${own}`;
+    else message = `Вы смотрите профиль «${viewed}»`;
+    if (context.textContent !== message) context.textContent = message;
+  }
+
+  function profileHasRatings() {
+    return Boolean(document.querySelector(
+      '#oc-profile-op .oc-profile-item, #oc-profile-ed .oc-profile-item'
+    ));
+  }
+
+  function syncEmptyCallToAction() {
+    const panel = document.querySelector('#oc-profile-panel');
+    if (!panel || panel.classList.contains('hidden')) return;
+    let callout = panel.querySelector('.oc-profile-empty-cta');
+    if (profileHasRatings()) {
+      callout?.remove();
+      return;
+    }
+    if (callout) return;
+    callout = document.createElement('div');
+    callout.className = 'oc-profile-empty-cta';
+    callout.innerHTML = '<span>В этом профиле пока нет оценок.</span><button type="button" class="oc-secondary-btn" data-profile-start="chart">Открыть каталог</button><button type="button" class="oc-secondary-btn" data-profile-start="season">Выбрать сезон</button>';
+    const anchor = panel.querySelector('.oc-profile-filterbar');
+    anchor?.insertAdjacentElement('afterend', callout);
+  }
+
+  function sync() {
+    syncContext();
+    window.setTimeout(syncEmptyCallToAction, 30);
+  }
+
+  document.addEventListener('change', event => {
+    if (event.target?.id === 'oc-profile-user') sync();
+  });
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-profile-start]');
+    if (!button) return;
+    document.querySelector(`.oc-tab-btn[data-tab="${button.dataset.profileStart}"]`)?.click();
+  });
+  window.addEventListener('oped-account-restored', sync);
+  window.addEventListener('oped:route-ready', event => {
+    if (event?.detail?.tab === 'profile') sync();
+  });
+
+  const init = () => {
+    const panel = document.querySelector('#oc-profile-panel');
+    if (!panel) return;
+    new MutationObserver(() => {
+      if (!panel.classList.contains('hidden')) window.requestAnimationFrame(sync);
+    }).observe(panel, { childList: true, subtree: true });
+    sync();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
 })();
 
 /* my-events-profile.js */

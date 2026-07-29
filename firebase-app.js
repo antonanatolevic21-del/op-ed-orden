@@ -139,10 +139,16 @@
         if (createdNow) await deleteUser(credential.user).catch(deleteError => console.warn('Could not roll back incomplete account', deleteError));
         throw error;
       }
-      const registeredUser = { uid: credential.user.uid };
-      await signOut(auth);
-      await signInAnonymously(auth);
-      return registeredUser;
+      const profile = {
+        id: safeName,
+        nickname: displayName,
+        nicknameKey: safeName,
+        authUid: credential.user.uid,
+        authProvider: 'email-password',
+        passwordEnabled: true
+      };
+      cacheAccountProfile(credential.user.uid, profile, remember);
+      return { user: credential.user, profile };
     }
 
     async function loginAccount(email, password, remember = true) {
@@ -200,7 +206,7 @@
       }
       const profile = await accountProfileByUid(user.uid);
       if (!profile) return null;
-      cacheAccountProfile(user, profile, true);
+      cacheAccountProfile(user.uid, profile, true);
       return { user, profile };
     }
 

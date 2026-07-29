@@ -95,9 +95,11 @@
   function loadSeasonPackage() {
     if (seasonPromise) return seasonPromise;
     addStyle('season-quality-fill.css', seasonFillVersion);
+    addStyle('season-navigation.css', primaryVersion);
     seasonPromise = addScriptsOrdered([
       ['catalog-cache.js', primaryVersion],
-      ['season-quality-fill.js', seasonFillVersion]
+      ['season-quality-fill.js', seasonFillVersion],
+      ['season-navigation.js', primaryVersion]
     ]).catch(error => { console.error('Season package load failed', error); throw error; });
     return seasonPromise;
   }

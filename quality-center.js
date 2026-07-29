@@ -8,9 +8,31 @@
   let loadingPromise = null;
   let triggerButton = null;
   let currentIssues = new Map();
+  const unreachableImages = new Set();
 
   const normalize = value => String(value || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
   const cleanList = value => Array.isArray(value) ? value.filter(item => String(item || '').trim()).length : String(value || '').split(',').filter(item => item.trim()).length;
+  const listValues = value => (Array.isArray(value) ? value : String(value || '').split(',')).map(item => String(item || '').trim()).filter(Boolean);
+
+  function validHttpUrl(value) {
+    try {
+      const url = new URL(String(value || '').trim());
+      return ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function plausibleTrackLink(value) {
+    if (!validHttpUrl(value)) return false;
+    const url = new URL(String(value).trim());
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    if (host === 'youtu.be') return url.pathname.length > 2;
+    if (host.endsWith('youtube.com')) return Boolean(url.searchParams.get('v') || /\/(shorts|embed)\//.test(url.pathname));
+    if (host.endsWith('rutube.ru')) return /\/video\/[\w-]+/i.test(url.pathname);
+    if (host.endsWith('vk.com') || host.endsWith('vkvideo.ru')) return /video|clip/i.test(url.href);
+    return true;
+  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
@@ -40,6 +62,10 @@
     if (!force && loadingPromise) return loadingPromise;
 
     loadingPromise = (async () => {
+      if (window.OC_CATALOG_CACHE?.load) {
+        cachedOpenings = await window.OC_CATALOG_CACHE.load(force);
+        return cachedOpenings;
+      }
       await waitForFirebase();
       const [{ getApp, getApps }, { getFirestore, collection, getDocs }] = await Promise.all([
         import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
@@ -67,12 +93,26 @@
       { id: 'studio', label: 'Без студии', rows: [] },
       { id: 'director', label: 'Без режиссёра', rows: [] },
       { id: 'franchise', label: 'Без франшизы', rows: [] },
+      { id: 'franchise-suspicious', label: 'Подозрительные франшизы', rows: [] },
       { id: 'link', label: 'Без ссылки на видео', rows: [] },
+      { id: 'link-invalid', label: 'Некорректные ссылки на видео', rows: [] },
+      { id: 'image-invalid', label: 'Некорректные ссылки на картинки', rows: [] },
+      { id: 'image-unreachable', label: 'Недоступные картинки', rows: [] },
       { id: 'same-song', label: 'Одинаковая песня без группы', rows: [] },
       { id: 'duplicate', label: 'Возможные дубликаты', rows: [] }
     ];
     const byId = new Map(issues.map(issue => [issue.id, issue]));
     const duplicateMap = new Map();
+    const franchiseVariants = new Map();
+
+    for (const opening of openings) {
+      for (const franchise of listValues(opening.franchises)) {
+        const canonical = normalize(franchise).replace(/[^\p{L}\p{N}]+/gu, '');
+        if (!canonical) continue;
+        if (!franchiseVariants.has(canonical)) franchiseVariants.set(canonical, new Set());
+        franchiseVariants.get(canonical).add(normalize(franchise));
+      }
+    }
 
     for (const opening of openings) {
       const rawTitle = String(opening.title || opening.anime || '').trim();
@@ -83,8 +123,22 @@
       if (!cleanList(opening.performers)) byId.get('performer').rows.push(opening);
       if (!cleanList(opening.studios)) byId.get('studio').rows.push(opening);
       if (!cleanList(opening.directors)) byId.get('director').rows.push(opening);
-      if (!cleanList(opening.franchises)) byId.get('franchise').rows.push(opening);
-      if (!String(opening.link || '').trim()) byId.get('link').rows.push(opening);
+      const franchises = listValues(opening.franchises);
+      if (!franchises.length) byId.get('franchise').rows.push(opening);
+      if (franchises.some(value => /https?:\/\/|www\.|^[,;|]|[,;|]$/i.test(value) || value.length > 120)) {
+        byId.get('franchise-suspicious').rows.push(opening);
+      } else if (franchises.some(value => {
+        const canonical = normalize(value).replace(/[^\p{L}\p{N}]+/gu, '');
+        return (franchiseVariants.get(canonical)?.size || 0) > 1;
+      })) {
+        byId.get('franchise-suspicious').rows.push(opening);
+      }
+      const trackLink = String(opening.link || '').trim();
+      if (!trackLink) byId.get('link').rows.push(opening);
+      else if (!plausibleTrackLink(trackLink)) byId.get('link-invalid').rows.push(opening);
+      const imageUrls = [opening.image, opening.fallbackImage || opening.imageFallback].map(value => String(value || '').trim()).filter(Boolean);
+      if (imageUrls.some(value => !validHttpUrl(value))) byId.get('image-invalid').rows.push(opening);
+      if (imageUrls.some(value => unreachableImages.has(value))) byId.get('image-unreachable').rows.push(opening);
       if (String(opening.sameSongTitle || opening.songGroupTitle || '').trim() && !String(opening.sameSongGroupId || opening.songGroupId || '').trim()) byId.get('same-song').rows.push(opening);
 
       const title = normalize(rawTitle);
@@ -128,6 +182,12 @@
       const refresh = event.target.closest('[data-quality-refresh]');
       if (refresh) {
         void openQualityCenter(true);
+        return;
+      }
+
+      const checkLinks = event.target.closest('[data-quality-check-links]');
+      if (checkLinks) {
+        void checkImageLinks(checkLinks);
         return;
       }
 
@@ -225,6 +285,7 @@
             <p>Пустые поля, одинаковая песня без группы и возможные дубликаты. Списки треков создаются только когда ты раскрываешь нужный раздел.</p>
           </div>
           <div class="oc-quality-head-actions">
+            <button class="oc-quality-refresh" type="button" data-quality-check-links>Проверить картинки</button>
             <button class="oc-quality-refresh" type="button" data-quality-refresh>Обновить</button>
             <button class="oc-quality-close" type="button" data-quality-close aria-label="Закрыть">×</button>
           </div>
@@ -237,6 +298,48 @@
         </div>
         <div class="oc-quality-issues">${issueHtml}</div>
       </div>`;
+  }
+
+  function probeImage(url) {
+    return new Promise(resolve => {
+      const image = new Image();
+      const timer = window.setTimeout(() => {
+        image.src = '';
+        resolve(false);
+      }, 8000);
+      image.onload = () => {
+        window.clearTimeout(timer);
+        resolve(Boolean(image.naturalWidth && image.naturalHeight));
+      };
+      image.onerror = () => {
+        window.clearTimeout(timer);
+        resolve(false);
+      };
+      image.referrerPolicy = 'no-referrer';
+      image.src = url;
+    });
+  }
+
+  async function checkImageLinks(button) {
+    if (!cachedOpenings?.length || button.disabled) return;
+    const urls = [...new Set(cachedOpenings.flatMap(opening => [
+      String(opening.image || '').trim(),
+      String(opening.fallbackImage || opening.imageFallback || '').trim()
+    ]).filter(validHttpUrl))];
+    unreachableImages.clear();
+    button.disabled = true;
+    let completed = 0;
+    const queue = urls.slice();
+    const workers = Array.from({ length: Math.min(8, queue.length) }, async () => {
+      while (queue.length) {
+        const url = queue.shift();
+        if (!await probeImage(url)) unreachableImages.add(url);
+        completed += 1;
+        button.textContent = `Проверено ${completed}/${urls.length}`;
+      }
+    });
+    await Promise.all(workers);
+    render(cachedOpenings);
   }
 
   function fallbackOpenTrack(title) {

@@ -58,8 +58,10 @@
     ratingsSummary.textContent = 'Рейтинги';
     const ratingsMenu = document.createElement('div');
     ratingsMenu.className = 'oc-topbar-ratings-menu';
+    ratingsMenu.setAttribute('role', 'menu');
     if (topBtn) { topBtn.textContent = 'Общий топ-100'; ratingsMenu.append(topBtn); }
     if (statsBtn) { statsBtn.textContent = 'Средние'; ratingsMenu.append(statsBtn); }
+    [...ratingsMenu.children].forEach(button => button.setAttribute('role', 'menuitem'));
     ratings.append(ratingsSummary, ratingsMenu);
     nav.append(ratings);
     if (tierBtn) nav.append(tierBtn);
@@ -210,6 +212,26 @@
       if (mobileRatingsMenu.hidden) openMobileRatings();
       else closeMobileRatings();
     });
+    ratingsSummary.addEventListener('keydown', event => {
+      if (mobileMedia.matches || !['ArrowDown', 'Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      ratings.open = true;
+      ratingsSummary.setAttribute('aria-expanded', 'true');
+      window.setTimeout(() => ratingsMenu.querySelector('[role="menuitem"]')?.focus(), 0);
+    });
+    ratingsMenu.addEventListener('keydown', event => {
+      const items = [...ratingsMenu.querySelectorAll('[role="menuitem"]')];
+      const index = items.indexOf(document.activeElement);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        ratings.open = false;
+        ratingsSummary.focus();
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        items[(index + direction + items.length) % items.length]?.focus();
+      }
+    });
 
     account.addEventListener('toggle', () => {
       if (account.open) {
@@ -224,6 +246,7 @@
         closeMobileRatings();
         account.open = false;
       }
+      ratingsSummary.setAttribute('aria-expanded', ratings.open ? 'true' : 'false');
     });
     document.addEventListener('click', event => {
       if (account.open && !account.contains(event.target)) account.open = false;

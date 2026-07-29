@@ -272,6 +272,7 @@
         <label for="oc-profile-user">Профиль:</label>
         <select id="oc-profile-user"></select>
       </div>
+      <div id="oc-profile-context" class="oc-profile-context" aria-live="polite"></div>
       <div class="oc-filterbar oc-profile-filterbar">
         <div class="oc-section-label">фильтры профиля</div>
         <div class="oc-filtergrid">
@@ -529,6 +530,10 @@
           <button class="oc-addbtn oc-entity-create-btn" type="submit">Создать альбом <i>→</i></button>
         </div>
       </form>
+      <div id="oc-entity-album-tools" class="oc-entity-album-tools">
+        <label class="oc-entity-field oc-entity-search-field"><span>Найти альбом</span><input id="oc-entity-album-search" type="search" placeholder="Название студии, исполнителя…" autocomplete="off" /></label>
+        <label class="oc-entity-field"><span>Сортировка</span><select id="oc-entity-album-sort"><option value="title">По названию</option><option value="unfinished">Сначала неоценённые</option><option value="progress">По прогрессу</option><option value="tracks">По числу треков</option></select></label>
+      </div>
       <div id="oc-entity-filters" class="oc-entity-filters hidden">
         <div class="oc-entity-filter-head">
           <div><div class="oc-section-label">фильтры</div><h3>Найти нужные треки</h3></div>
@@ -542,6 +547,7 @@
           <label class="oc-entity-field"><span>До: год</span><select id="oc-entity-to-year"><option value="">По настоящее время</option></select></label>
           <label class="oc-entity-field"><span>До: сезон</span><select id="oc-entity-to-season"><option value="">До конца года</option><option value="winter">Зима</option><option value="spring">Весна</option><option value="summer">Лето</option><option value="fall">Осень</option></select></label>
           <label class="oc-entity-field"><span>Статус</span><select id="oc-entity-progress"><option value="">Все треки</option><option value="unrated">Не оценены</option><option value="rated">Оценены</option></select></label>
+          <label class="oc-entity-field"><span>Сортировка</span><select id="oc-entity-track-sort"><option value="title">По названию</option><option value="unrated">Сначала неоценённые</option><option value="newest">Сначала новые</option><option value="oldest">Сначала старые</option><option value="rating">По моей оценке</option></select></label>
           <button id="oc-entity-rate-all" class="oc-addbtn oc-entity-rate-btn" type="button">Оценивать по одному <i>→</i></button>
         </div>
       </div>

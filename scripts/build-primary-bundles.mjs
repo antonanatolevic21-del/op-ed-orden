@@ -11,7 +11,8 @@ const coreStyles = [
   'accessibility.css',
   'first-user-test-fixes.css',
   'access-role-badge.css',
-  'catalog-improvements.css'
+  'catalog-improvements.css',
+  'ux-audit-enhancements.css'
 ];
 
 const profileStyles = [
@@ -49,7 +50,8 @@ const coreScripts = [
   'advanced-filters.js',
   'undo-actions.js',
   'accessibility.js',
-  'catalog-improvements.js'
+  'catalog-improvements.js',
+  'ux-audit-enhancements.js'
 ];
 
 const profileScripts = [
@@ -60,6 +62,7 @@ const profileScripts = [
   'profile-events-ownership.js',
   'registered-users-only.js',
   'admin-profile-picker.js',
+  'profile-discovery.js',
   'my-events-profile.js'
 ];
 
