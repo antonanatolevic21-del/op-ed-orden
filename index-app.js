@@ -135,6 +135,7 @@
     const entityValueSelect = $('#oc-entity-value');
     const entityImageInput = $('#oc-entity-image');
     const entityFiltersEl = $('#oc-entity-filters');
+    const entityFiltersToggle = $('#oc-entity-filters-toggle');
     const entitySearchInput = $('#oc-entity-search');
     const entityTrackTypeSelect = $('#oc-entity-track-type');
     const entityYearSelect = $('#oc-entity-year');
@@ -219,6 +220,7 @@
     let firebaseUnsubEntityCards = null;
     let activeEntityType = 'studios';
     let activeEntityCardId = '';
+    let entityFiltersExpanded = false;
     let activeEntityQueueLabel = '';
     let firebaseUnsubOpenings = null;
     let firebaseUnsubRatings = null;
@@ -3711,6 +3713,7 @@
     }
 
     function resetEntityAlbumFilters() {
+      entityFiltersExpanded = false;
       if (entitySearchInput) entitySearchInput.value = '';
       if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
       if (entityYearSelect) entityYearSelect.value = '';
@@ -3734,6 +3737,11 @@
       entityBackBtn.textContent = activeEntityCardId ? '← Ко всем альбомам' : '← На главную';
       entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
       entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
+      entityFiltersEl.classList.toggle('is-expanded', Boolean(activeEntityCardId && entityFiltersExpanded));
+      if (entityFiltersToggle) {
+        entityFiltersToggle.setAttribute('aria-expanded', entityFiltersExpanded ? 'true' : 'false');
+        entityFiltersToggle.innerHTML = (entityFiltersExpanded ? 'Скрыть фильтры <span aria-hidden="true">⌃</span>' : 'Показать фильтры <span aria-hidden="true">⌄</span>');
+      }
       entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
       if (!activeEntityCardId) entityTracksEl.replaceChildren();
 
@@ -5801,6 +5809,10 @@
     });
 
     if (entityCreateForm) entityCreateForm.addEventListener('submit', saveEntityAlbum);
+    if (entityFiltersToggle) entityFiltersToggle.addEventListener('click', () => {
+      entityFiltersExpanded = !entityFiltersExpanded;
+      renderEntityAlbums();
+    });
     if (entityBackBtn) entityBackBtn.addEventListener('click', () => {
       if (activeEntityCardId) {
         activeEntityCardId = '';
@@ -5818,6 +5830,7 @@
       const open = event.target.closest('[data-entity-open]');
       if (open && !event.target.closest('[data-entity-delete]')) {
         activeEntityCardId = open.getAttribute('data-entity-open');
+        entityFiltersExpanded = false;
         renderEntityAlbums();
         return;
       }
