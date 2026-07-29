@@ -3443,6 +3443,10 @@
     }
 
     function basketSeasonKeyForEntry(entry) {
+      if (entry?.type === 'ED') {
+        const period = ['winter', 'spring'].includes(String(entry.season || '')) ? 'h1' : 'h2';
+        return `ending_${Number(entry.year) || ''}_${period}`;
+      }
       return `${Number(entry.year) || ''}_${String(entry.season || '')}`;
     }
 
@@ -3457,8 +3461,8 @@
 
     async function addEntryToEventBasket(entry) {
       if (!entry || !entry.id) return;
-      if (entry.type !== 'OP') { setStatus('В корзину ивентов пока добавляются только OP.', true); return; }
-      if (!entry.year || !entry.season) { setStatus('У OP должен быть год и сезон.', true); return; }
+      if (!['OP', 'ED'].includes(entry.type)) return;
+      if (!entry.year || !entry.season) { setStatus('У трека должны быть указаны год и сезон.', true); return; }
       const data = loadEventBasket();
       const key = basketSeasonKeyForEntry(entry);
       const current = data[key] || {};
@@ -3475,6 +3479,9 @@
         key,
         year: Number(entry.year),
         season: String(entry.season),
+        eventKind: entry.type === 'ED' ? 'ending-year' : 'opening-year',
+        type: entry.type,
+        period: entry.type === 'ED' ? (['winter', 'spring'].includes(String(entry.season)) ? 'h1' : 'h2') : '',
         target: Number(current.target) || 15,
         buckets: nextBuckets,
         updatedAtLocal: new Date().toISOString()
@@ -3652,7 +3659,7 @@
         const myScoreText = myScore !== null ? (isPersonalScale() ? formatFiveScore(myScore) : formatScore(myScore)) : '';
         const scoreText = visibleAverageMarkup(entry, score);
         const extraHtml = myScore !== null ? `<div class="oc-rated-mark">твоя оценка: ${escapeHtml(myScoreText)}</div>` : '';
-        const basketButton = eventBasketCanAdd() && entry.type === 'OP'
+        const basketButton = eventBasketCanAdd() && ['OP', 'ED'].includes(entry.type)
           ? `<button type="button" class="oc-season-re-rate oc-basket-add-btn" data-basket-add="${entry.id}">${eventBasketHas(entry) ? 'В корзине ✓' : 'Добавить в корзину'}</button>`
           : '';
         const controlsHtml = `${basketButton}<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
