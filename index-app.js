@@ -66,6 +66,7 @@
     let globalTopType = 'OP';
     let globalTopMode = 'manual';
     let globalTopScope = 'all';
+    let globalTopRenderLimit = 30;
     const PAGE_SIZE = 50;
     let chartPage = 1;
     let profileTopPage = { OP: 1, ED: 1 };
@@ -216,6 +217,7 @@
     let dailyRefreshTimer = null;
     let firebaseOpenings = [];
     let firebaseRatings = [];
+    let firebaseRatingsScope = 'none';
     let firebaseManualRanks = [];
     let firebaseUserProfiles = [];
     let firebaseEntityCards = [];
@@ -225,6 +227,8 @@
     let entityFiltersExpanded = false;
     let activeEntityQueueLabel = '';
     let activeEntityFilteredEntries = [];
+    let entityCardRenderLimit = 40;
+    let entityTrackRenderLimit = 30;
     let firebaseUnsubOpenings = null;
     let firebaseUnsubRatings = null;
     let firebaseUnsubManualRanks = null;
@@ -233,6 +237,17 @@
     let firebaseUnsubEventBasket = null;
     let firebaseEventBasket = {};
     let firebaseEventBasketLoaded = false;
+    let firebaseDbInstance = null;
+    const remoteDataState = {
+      openings: { started: false, ready: false, promise: null, resolve: null },
+      ratings: { started: false, ready: false, promise: null, resolve: null },
+      manualRanks: { started: false, ready: false, promise: null, resolve: null },
+      userProfiles: { started: false, ready: false, promise: null, resolve: null },
+      entityCards: { started: false, ready: false, promise: null, resolve: null },
+      tier: { started: false, ready: false, promise: null, resolve: null },
+      eventBasket: { started: false, ready: false, promise: null, resolve: null }
+    };
+    let routeDataSyncId = 0;
     let tierOrders = {};
     let tierLabels = {};
     let tierPlacements = {};
@@ -255,10 +270,76 @@
     let profileUsersCache = { key: '', names: [] };
     let filteredCache = { key: '', value: null };
     let sortedCache = { key: '', input: null, value: null };
+    let globalTopCache = new Map();
     let uiRefreshTimer = null;
     let uiRefreshNeedsFilterOptions = false;
     let suppressChartRatingRefreshUntil = 0;
     let lastOpeningsSnapshotKey = '';
+
+    function dispatchAppEvent(name, detail = {}) {
+      const payload = { activeTab, ...detail };
+      window.dispatchEvent(new CustomEvent(name, { detail: payload }));
+      document.dispatchEvent(new CustomEvent(name, { detail: payload }));
+    }
+
+    function markRemoteDataReady(name, detail = {}) {
+      const state = remoteDataState[name];
+      if (!state) return;
+      const firstReady = !state.ready;
+      state.ready = true;
+      if (state.resolve) {
+        state.resolve();
+        state.resolve = null;
+      }
+      dispatchAppEvent('oped:data-ready', { source: name, firstReady, ...detail });
+      if (name === 'openings') dispatchAppEvent('oped:catalog-ready', { firstReady, ...detail });
+    }
+
+    function createRemoteDataPromise(name) {
+      const state = remoteDataState[name];
+      if (!state) return Promise.resolve();
+      if (state.ready) return Promise.resolve();
+      if (!state.promise) {
+        state.promise = new Promise(resolve => {
+          state.resolve = resolve;
+        });
+      }
+      return state.promise;
+    }
+
+    function resetRemoteDataSubscription(name) {
+      const state = remoteDataState[name];
+      if (!state) return;
+      state.started = false;
+      state.promise = null;
+      state.resolve = null;
+    }
+
+    function runWhenBrowserIsIdle(callback, timeout = 1200) {
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => callback(), { timeout });
+        return;
+      }
+      window.setTimeout(callback, Math.min(timeout, 250));
+    }
+
+    function progressiveMoreMarkup(scope, shown, total) {
+      if (shown >= total) return '';
+      return `<button type="button" class="oc-progressive-more" data-progressive-more="${scope}">Показано ${shown} из ${total} · загрузить ещё</button>`;
+    }
+
+    function installProgressiveAutoload(container, scope, callback) {
+      const button = container?.querySelector?.(`[data-progressive-more="${scope}"]`);
+      if (!button) return;
+      button.addEventListener('click', callback, { once: true });
+      if (!('IntersectionObserver' in window)) return;
+      const observer = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return;
+        observer.disconnect();
+        button.click();
+      }, { rootMargin: '500px 0px' });
+      observer.observe(button);
+    }
 
     function waitForFirebaseDb() {
       if (window.OPED_DB) return Promise.resolve(window.OPED_DB);
@@ -312,6 +393,7 @@
     function clearDerivedCaches() {
       filteredCache = { key: '', value: null };
       sortedCache = { key: '', input: null, value: null };
+      globalTopCache.clear();
     }
 
     function touchEntryCache(entry) {
@@ -346,6 +428,7 @@
     function markManualRanksChanged() {
       manualRanksVersion += 1;
       profileUsersCache.key = '';
+      globalTopCache.clear();
       clearDerivedCaches();
     }
 
@@ -600,10 +683,19 @@
     }
 
     async function startTierOrderWatcher() {
+      const state = remoteDataState.tier;
+      if (state.started) return createRemoteDataPromise('tier');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('tier');
       try {
         const ext = await getExtendedDb();
         if (firebaseUnsubTierOrders) firebaseUnsubTierOrders();
         const unsubs = [];
+        const readyParts = new Set();
+        const markPartReady = name => {
+          readyParts.add(name);
+          if (readyParts.size === 3) markRemoteDataReady('tier');
+        };
 
         unsubs.push(ext.onSnapshot(ext.collection(ext.db, 'tierOrders'), snapshot => {
           const next = {};
@@ -613,7 +705,11 @@
           });
           tierOrders = next;
           if (activeTab === 'tier') renderTierList();
-        }, err => console.error('tierOrders watch error', err)));
+          markPartReady('orders');
+        }, err => {
+          console.error('tierOrders watch error', err);
+          markPartReady('orders');
+        }));
 
         unsubs.push(ext.onSnapshot(ext.collection(ext.db, 'tierLabels'), snapshot => {
           const next = {};
@@ -625,7 +721,11 @@
           });
           tierLabels = next;
           if (activeTab === 'tier') renderTierList();
-        }, err => console.error('tierLabels watch error', err)));
+          markPartReady('labels');
+        }, err => {
+          console.error('tierLabels watch error', err);
+          markPartReady('labels');
+        }));
 
         unsubs.push(ext.onSnapshot(ext.collection(ext.db, 'tierPlacements'), snapshot => {
           const next = {};
@@ -636,12 +736,24 @@
           });
           tierPlacements = next;
           if (activeTab === 'tier') renderTierList();
-        }, err => console.error('tierPlacements watch error', err)));
+          markPartReady('placements');
+        }, err => {
+          console.error('tierPlacements watch error', err);
+          markPartReady('placements');
+        }));
 
         firebaseUnsubTierOrders = () => unsubs.forEach(unsub => { if (typeof unsub === 'function') unsub(); });
       } catch (e) {
         console.error('Could not watch tier data', e);
+        markRemoteDataReady('tier', { error: true });
       }
+      return readyPromise;
+    }
+
+    function stopTierOrderWatcher() {
+      if (firebaseUnsubTierOrders) firebaseUnsubTierOrders();
+      firebaseUnsubTierOrders = null;
+      resetRemoteDataSubscription('tier');
     }
 
     async function saveTierOrder(user, type, year, season, score, order) {
@@ -744,6 +856,43 @@
       }
     }
 
+    function aggregateScoreMap(row, prefix = '') {
+      const scores = {};
+      const capitalized = prefix ? prefix[0].toUpperCase() + prefix.slice(1) : '';
+      const countKey = prefix ? `${prefix}RatingCount` : 'ratingCount';
+      const sumKey = prefix ? `${prefix}RatingSum` : 'ratingSum';
+      const averageKey = prefix ? `${prefix}RatingAverage` : 'ratingAverage';
+      const count = Number(row?.[countKey]);
+      const average = Number(row?.[averageKey]);
+      const rawSum = Number(row?.[sumKey]);
+      const sum = Number.isFinite(rawSum) ? rawSum : (Number.isFinite(count) && Number.isFinite(average) ? count * average : 0);
+      const aggregateReady = Number(row?.ratingAggregateVersion) >= 1;
+      if (aggregateReady && Number.isFinite(count) && count >= 0 && Number.isFinite(sum)) {
+        Object.defineProperty(scores, '__oc_aggregate_stats', {
+          value: { keyCount: 0, count, avgAny: count ? sum / count : null, sum, aggregate: true, prefix: capitalized },
+          configurable: true,
+          enumerable: false
+        });
+      }
+      const adminCount = Number(row?.[prefix ? `${prefix}AdminRatingCount` : 'adminRatingCount']);
+      const adminAverage = Number(row?.[prefix ? `${prefix}AdminRatingAverage` : 'adminRatingAverage']);
+      const adminRawSum = Number(row?.[prefix ? `${prefix}AdminRatingSum` : 'adminRatingSum']);
+      const adminSum = Number.isFinite(adminRawSum)
+        ? adminRawSum
+        : (Number.isFinite(adminCount) && Number.isFinite(adminAverage) ? adminCount * adminAverage : 0);
+      if (aggregateReady && Number.isFinite(adminCount) && adminCount >= 0 && Number.isFinite(adminSum)) {
+        Object.defineProperty(scores, '__oc_admin_aggregate_stats', {
+          value: { count: adminCount, avgAny: adminCount ? adminSum / adminCount : null, sum: adminSum, aggregate: true },
+          configurable: true,
+          enumerable: false
+        });
+      }
+      if (aggregateReady && firebaseRatingsScope !== 'all') {
+        Object.defineProperty(scores, '__oc_prefer_aggregate', { value: true, configurable: true, enumerable: false });
+      }
+      return scores;
+    }
+
     function normalizeEntryFromFirebase(row) {
       return {
         id: row.id,
@@ -767,9 +916,10 @@
         isShortened: Boolean(row.isShortened || row.shortened || row.isShort || row.short || row.shortOpening || row.shortenedOpening),
         createdAt: row.createdAt || null,
         updatedAt: row.updatedAt || null,
-        scores: {},
-        songScores: {},
-        visualScores: {},
+        ratingAggregateVersion: Number(row.ratingAggregateVersion || 0),
+        scores: aggregateScoreMap(row),
+        songScores: aggregateScoreMap(row, 'song'),
+        visualScores: aggregateScoreMap(row, 'visual'),
         personalScores: {}
       };
     }
@@ -1237,6 +1387,9 @@
       const keys = Object.keys(scores);
       const cached = scores.__oc_stats;
       if (cached && cached.keyCount === keys.length) return cached;
+      const aggregate = scores.__oc_aggregate_stats;
+      if (scores.__oc_prefer_aggregate && aggregate) return aggregate;
+      if (!keys.length && aggregate && Number(aggregate.count) > 0) return aggregate;
       let sum = 0;
       let count = 0;
       keys.forEach(key => {
@@ -1268,10 +1421,12 @@
     }
 
     function adminScoreStats(scores) {
+      if (scores?.__oc_prefer_aggregate && scores.__oc_admin_aggregate_stats) return scores.__oc_admin_aggregate_stats;
       const values = Object.entries(scores || {})
         .filter(([nickname]) => isAdminNickname(nickname))
         .map(([,value]) => normalizePublicScore(value))
         .filter(value => value !== null);
+      if (!values.length && scores?.__oc_admin_aggregate_stats) return scores.__oc_admin_aggregate_stats;
       return {
         count: values.length,
         avgAny: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
@@ -2245,6 +2400,10 @@
 
 
     async function startEventBasketWatcher() {
+      const state = remoteDataState.eventBasket;
+      if (state.started) return createRemoteDataPromise('eventBasket');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('eventBasket');
       try {
         const ext = await getExtendedDb();
         if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
@@ -2253,118 +2412,241 @@
           snapshot.docs.forEach(d => { firebaseEventBasket[d.id] = { id: d.id, ...d.data() }; });
           firebaseEventBasketLoaded = true;
           if (activeTab === 'season') renderSeasonViews();
+          markRemoteDataReady('eventBasket');
         }, err => {
           console.error('eventBasket watch error', err);
           firebaseEventBasketLoaded = true;
+          markRemoteDataReady('eventBasket', { error: true });
           setStatus('Не удалось загрузить корзину ивентов.', true);
         });
       } catch (e) {
         console.error('eventBasket watcher setup failed', e);
         firebaseEventBasketLoaded = true;
+        markRemoteDataReady('eventBasket', { error: true });
         setStatus('Не удалось загрузить корзину ивентов.', true);
       }
+      return readyPromise;
+    }
+
+    function stopEventBasketWatcher() {
+      if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
+      firebaseUnsubEventBasket = null;
+      resetRemoteDataSubscription('eventBasket');
+    }
+
+    function ensureOpeningsWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.openings;
+      if (state.started) return createRemoteDataPromise('openings');
+      if (!db || typeof db.watchOpenings !== 'function') return Promise.reject(new Error('Каталог недоступен.'));
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('openings');
+      if (firebaseUnsubOpenings) firebaseUnsubOpenings();
+      firebaseUnsubOpenings = db.watchOpenings((rows, meta = {}) => {
+        firebaseOpenings = rows || [];
+        rebuildEntriesFromFirebase();
+        populateFilterOptions(true);
+        markRemoteDataReady('openings', { cached: Boolean(meta.cached), count: firebaseOpenings.length });
+      });
+      return readyPromise;
+    }
+
+    function catalogHasRatingAggregates() {
+      if (!firebaseOpenings.length) return false;
+      const covered = firebaseOpenings.reduce((count, row) => count + (Number(row.ratingAggregateVersion || 0) >= 1 ? 1 : 0), 0);
+      return covered / firebaseOpenings.length >= 0.9;
+    }
+
+    function preferredRatingsScope(tab = activeTab) {
+      if (!catalogHasRatingAggregates()) return 'all';
+      if (tab === 'profile' || tab === 'stats') return 'all';
+      if (myName || authenticatedUid) return 'user';
+      return 'none';
+    }
+
+    function ensureRatingsWatcher(db = firebaseDbInstance, requestedScope = preferredRatingsScope()) {
+      const state = remoteDataState.ratings;
+      const nextScope = requestedScope === 'all' ? 'all' : requestedScope === 'none' ? 'none' : 'user';
+      if (nextScope === 'none') {
+        if (firebaseRatingsScope === 'none' && !firebaseUnsubRatings) return Promise.resolve();
+        if (firebaseUnsubRatings) firebaseUnsubRatings();
+        firebaseUnsubRatings = null;
+        firebaseRatings = [];
+        firebaseRatingsScope = 'none';
+        resetRemoteDataSubscription('ratings');
+        rebuildEntriesFromFirebase();
+        return Promise.resolve();
+      }
+      if (state.started && firebaseRatingsScope === nextScope) return createRemoteDataPromise('ratings');
+      if (!db || typeof db.watchRatings !== 'function') return Promise.reject(new Error('Оценки недоступны.'));
+      if (firebaseUnsubRatings) firebaseUnsubRatings();
+      firebaseUnsubRatings = null;
+      firebaseRatings = [];
+      firebaseRatingsScope = nextScope;
+      resetRemoteDataSubscription('ratings');
+      state.ready = false;
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('ratings');
+      const callback = rows => {
+        firebaseRatings = rows || [];
+        rebuildEntriesFromFirebase();
+        rebuildManualRanksFromRatingDocs();
+        markRemoteDataReady('ratings', { count: firebaseRatings.length, scope: firebaseRatingsScope });
+      };
+      firebaseUnsubRatings = nextScope === 'user' && typeof db.watchRatingsForUser === 'function'
+        ? db.watchRatingsForUser({ uid: currentPersonalUid(), nickname: myName }, callback)
+        : db.watchRatings(callback);
+      return readyPromise;
+    }
+
+    function ensureManualRanksWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.manualRanks;
+      if (state.started) return createRemoteDataPromise('manualRanks');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('manualRanks');
+      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
+      if (db && typeof db.watchManualRanks === 'function') {
+        firebaseUnsubManualRanks = db.watchManualRanks(rows => {
+          firebaseManualRanks = rows || [];
+          rebuildManualRanksFromFirebase();
+          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
+        });
+        return readyPromise;
+      }
+      void getExtendedDb().then(ext => {
+        firebaseUnsubManualRanks = ext.onSnapshot(ext.collection(ext.db, 'manualRanks'), snapshot => {
+          firebaseManualRanks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          rebuildManualRanksFromFirebase();
+          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
+        }, err => {
+          console.error('manualRanks watch error', err);
+          markRemoteDataReady('manualRanks', { error: true });
+        });
+      }).catch(err => {
+        console.error('manualRanks watch setup error', err);
+        markRemoteDataReady('manualRanks', { error: true });
+      });
+      return readyPromise;
+    }
+
+    function ensureUserProfilesWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.userProfiles;
+      if (state.started) return createRemoteDataPromise('userProfiles');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('userProfiles');
+      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
+      if (db && typeof db.watchUserProfiles === 'function') {
+        firebaseUnsubUserProfiles = db.watchUserProfiles(rows => {
+          firebaseUserProfiles = rows || [];
+          window.OC_APP_DATA = window.OC_APP_DATA || {};
+          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
+          rebuildUserProfilesFromFirebase();
+          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
+          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
+        });
+        return readyPromise;
+      }
+      void getExtendedDb().then(ext => {
+        firebaseUnsubUserProfiles = ext.onSnapshot(ext.collection(ext.db, 'userProfiles'), snapshot => {
+          firebaseUserProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          window.OC_APP_DATA = window.OC_APP_DATA || {};
+          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
+          rebuildUserProfilesFromFirebase();
+          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
+          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
+        }, err => {
+          console.error('userProfiles watch error', err);
+          markRemoteDataReady('userProfiles', { error: true });
+        });
+      }).catch(err => {
+        console.error('userProfiles watch setup error', err);
+        markRemoteDataReady('userProfiles', { error: true });
+      });
+      return readyPromise;
+    }
+
+    function ensureEntityCardsWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.entityCards;
+      if (state.started) return createRemoteDataPromise('entityCards');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('entityCards');
+      if (!db || typeof db.watchEntityCards !== 'function') {
+        markRemoteDataReady('entityCards', { error: true });
+        return readyPromise;
+      }
+      if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
+      firebaseUnsubEntityCards = db.watchEntityCards(rows => {
+        firebaseEntityCards = rows || [];
+        window.OC_APP_DATA = window.OC_APP_DATA || {};
+        window.OC_APP_DATA.entityCards = firebaseEntityCards;
+        if (activeTab.startsWith('entity-')) renderEntityAlbums();
+        dispatchAppEvent('oped:entity-cards-updated', { rows: firebaseEntityCards });
+        markRemoteDataReady('entityCards', { count: firebaseEntityCards.length });
+      });
+      return readyPromise;
+    }
+
+    function stopManualRanksWatcher() {
+      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
+      firebaseUnsubManualRanks = null;
+      resetRemoteDataSubscription('manualRanks');
+    }
+
+    function stopUserProfilesWatcher() {
+      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
+      firebaseUnsubUserProfiles = null;
+      resetRemoteDataSubscription('userProfiles');
+    }
+
+    function stopEntityCardsWatcher() {
+      if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
+      firebaseUnsubEntityCards = null;
+      resetRemoteDataSubscription('entityCards');
+    }
+
+    async function syncRouteDataSubscriptions(tab = activeTab) {
+      if (!firebaseDbInstance) return;
+      const syncId = ++routeDataSyncId;
+      const needsProfileData = tab === 'profile' || tab === 'top100';
+      const needsEntityCards = tab.startsWith('entity-');
+      const needsTierData = tab === 'tier';
+      const needsEventBasket = tab === 'season' && Boolean(accessLevel);
+
+      if (!needsProfileData) {
+        stopManualRanksWatcher();
+        stopUserProfilesWatcher();
+      }
+      if (!needsEntityCards) stopEntityCardsWatcher();
+      if (!needsTierData) stopTierOrderWatcher();
+      if (!needsEventBasket) stopEventBasketWatcher();
+
+      const required = [];
+      const ratingsScope = preferredRatingsScope(tab);
+      if (ratingsScope !== 'none') required.push(ensureRatingsWatcher(firebaseDbInstance, ratingsScope));
+      else required.push(ensureRatingsWatcher(firebaseDbInstance, 'none'));
+      if (needsProfileData) {
+        required.push(ensureManualRanksWatcher(firebaseDbInstance));
+        required.push(ensureUserProfilesWatcher(firebaseDbInstance));
+      }
+      if (needsEntityCards) required.push(ensureEntityCardsWatcher(firebaseDbInstance));
+      if (needsTierData) required.push(startTierOrderWatcher());
+      if (needsEventBasket) required.push(startEventBasketWatcher());
+
+      await Promise.allSettled(required);
+      if (syncId !== routeDataSyncId || tab !== activeTab) return;
+      refreshVisiblePanels({ forceFilters: false });
+      dispatchAppEvent('oped:route-ready', { tab });
     }
 
     async function loadEntries() {
       try {
         const db = await waitForFirebaseDb();
+        firebaseDbInstance = db;
         await db.init();
-        await startTierOrderWatcher();
-        await startEventBasketWatcher();
-        if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
-        if (typeof db.watchEntityCards === 'function') {
-          firebaseUnsubEntityCards = db.watchEntityCards(rows => {
-            firebaseEntityCards = rows || [];
-            if (activeTab.startsWith('entity-')) renderEntityAlbums();
-          });
-        }
-
-        let gotOpenings = false;
-        let gotRatings = false;
-        let gotManualRanks = false;
-        let gotUserProfiles = false;
-
-        await new Promise((resolve) => {
-          function maybeResolve() {
-            if (gotOpenings && gotRatings && gotManualRanks && gotUserProfiles) resolve();
-          }
-
-          if (firebaseUnsubOpenings) firebaseUnsubOpenings();
-          if (firebaseUnsubRatings) firebaseUnsubRatings();
-          if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
-          if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
-
-          function rebuildCatalogWhenReady() {
-            if (gotOpenings && gotRatings) rebuildEntriesFromFirebase();
-          }
-
-          firebaseUnsubOpenings = db.watchOpenings((rows) => {
-            firebaseOpenings = rows || [];
-            gotOpenings = true;
-            rebuildCatalogWhenReady();
-            maybeResolve();
-          });
-
-          firebaseUnsubRatings = db.watchRatings((rows) => {
-            firebaseRatings = rows || [];
-            gotRatings = true;
-            rebuildCatalogWhenReady();
-            maybeResolve();
-          });
-
-          if (typeof db.watchManualRanks === 'function') {
-            firebaseUnsubManualRanks = db.watchManualRanks((rows) => {
-              firebaseManualRanks = rows || [];
-              gotManualRanks = true;
-              rebuildManualRanksFromFirebase();
-              maybeResolve();
-            });
-          } else {
-            getExtendedDb().then(ext => {
-              firebaseUnsubManualRanks = ext.onSnapshot(ext.collection(ext.db, 'manualRanks'), snapshot => {
-                firebaseManualRanks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                gotManualRanks = true;
-                rebuildManualRanksFromFirebase();
-                maybeResolve();
-              }, err => {
-                console.error('manualRanks watch error', err);
-                gotManualRanks = true;
-                maybeResolve();
-              });
-            }).catch(err => {
-              console.error('manualRanks watch setup error', err);
-              gotManualRanks = true;
-              maybeResolve();
-            });
-          }
-
-          if (typeof db.watchUserProfiles === 'function') {
-            firebaseUnsubUserProfiles = db.watchUserProfiles((rows) => {
-              firebaseUserProfiles = rows || [];
-              gotUserProfiles = true;
-              rebuildUserProfilesFromFirebase();
-              maybeResolve();
-            });
-          } else {
-            getExtendedDb().then(ext => {
-              firebaseUnsubUserProfiles = ext.onSnapshot(ext.collection(ext.db, 'userProfiles'), snapshot => {
-                firebaseUserProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                gotUserProfiles = true;
-                rebuildUserProfilesFromFirebase();
-                maybeResolve();
-              }, err => {
-                console.error('userProfiles watch error', err);
-                gotUserProfiles = true;
-                maybeResolve();
-              });
-            }).catch(err => {
-              console.error('userProfiles watch setup error', err);
-              gotUserProfiles = true;
-              maybeResolve();
-            });
-          }
+        await ensureOpeningsWatcher(db);
+        dispatchAppEvent('oped:app-ready', { stage: 'catalog' });
+        runWhenBrowserIsIdle(() => {
+          void syncRouteDataSubscriptions(activeTab);
         });
-        populateFilterOptions(true);
       } catch (e) {
         console.error(e);
         setStatus('Не удалось подключиться. Обновите страницу.', true);
@@ -3731,6 +4013,8 @@
 
     function resetEntityAlbumFilters() {
       entityFiltersExpanded = false;
+      entityCardRenderLimit = 40;
+      entityTrackRenderLimit = 30;
       if (entitySearchInput) entitySearchInput.value = '';
       if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
       if (entityFromYearSelect) entityFromYearSelect.value = '';
@@ -3803,19 +4087,25 @@
         }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
         activeEntityFilteredEntries = filtered;
         entityRateAllBtn.disabled = !filtered.length;
-        entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + filtered.map((entry, index) =>
+        const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
+        entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + visibleTracks.map((entry, index) =>
           renderUnifiedEntryCard(entry, {
             rankLabel: index + 1,
             className: entityHasRating(entry) ? 'oc-entity-track-rated' : '',
             controlsHtml: '<button class="oc-secondary-btn" type="button" data-entity-rate="' + escapeHtml(entry.id) + '">' + (entityHasRating(entry) ? 'Изменить оценку' : 'Оценить') + '</button>'
           })
-        ).join('') + '</div>' : '<div class="oc-empty">По этим фильтрам треков нет.</div>';
+        ).join('') + progressiveMoreMarkup('entity-tracks', visibleTracks.length, filtered.length) + '</div>' : '<div class="oc-empty">По этим фильтрам треков нет.</div>';
+        installProgressiveAutoload(entityTracksEl, 'entity-tracks', () => {
+          entityTrackRenderLimit += 30;
+          renderEntityAlbums();
+        });
         return;
       }
 
       entityTitleEl.textContent = meta.title;
       entitySubtitleEl.textContent = 'Альбомы с треками из каталога. Создать новый можно для объекта, у которого есть минимум ' + ENTITY_MIN_TRACKS + ' трека.';
-      entityGridEl.innerHTML = cards.length ? cards.map(card => {
+      const visibleCards = cards.slice(0, entityCardRenderLimit);
+      entityGridEl.innerHTML = cards.length ? visibleCards.map(card => {
         const progress = entityCardProgress(card);
         return '<article class="oc-entity-card' + (progress.complete ? ' complete' : '') + '" data-entity-open="' + escapeHtml(card.id) + '">' +
           '<div class="oc-entity-cover">' + (card.image ? '<img src="' + escapeHtml(normalizeUrl(card.image)) + '" alt="" loading="lazy" />' : '<span>' + meta.icon + '</span>') + '</div>' +
@@ -3825,7 +4115,11 @@
           (isAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
           (isAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
           '</div></article>';
-      }).join('') : '<div class="oc-empty">Альбомов пока нет.</div>';
+      }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : '<div class="oc-empty">Альбомов пока нет.</div>';
+      installProgressiveAutoload(entityGridEl, 'entity-cards', () => {
+        entityCardRenderLimit += 40;
+        renderEntityAlbums();
+      });
     }
 
     function startEntityRating() {
@@ -3884,6 +4178,8 @@
       if (tab === 'top100') renderGlobalTop100();
       if (tab === 'tier') { populateFilterOptions(); renderTierList(); }
       if (tab === 'stats') renderStatsPage();
+      void syncRouteDataSubscriptions(tab);
+      dispatchAppEvent('oped:route-change', { tab });
     }
 
     function clampScore(value) {
@@ -4914,6 +5210,14 @@
       return rows.filter((row, idx) => idx < 100 || Math.abs(row.avgScore - cutoff) < 0.0001);
     }
 
+    function cachedGlobalTop(mode, type, scope) {
+      const key = `${mode}|${type}|${scope}|${dataVersion}|${manualRanksVersion}`;
+      if (globalTopCache.has(key)) return globalTopCache.get(key);
+      const rows = mode === 'score' ? computeGlobalScoreTop(type, scope) : computeGlobalManualTop(type, scope);
+      globalTopCache.set(key, rows);
+      return rows;
+    }
+
     function renderGlobalTop100() {
       const listEl = $('#oc-globaltop-list');
       const summaryEl = $('#oc-globaltop-summary');
@@ -4922,7 +5226,7 @@
       document.querySelectorAll('[data-globaltop-type]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopType === globalTopType));
       document.querySelectorAll('[data-globaltop-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopMode === globalTopMode));
       document.querySelectorAll('[data-globaltop-scope]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopScope === globalTopScope));
-      const rows = globalTopMode === 'score' ? computeGlobalScoreTop(globalTopType, globalTopScope) : computeGlobalManualTop(globalTopType, globalTopScope);
+      const rows = cachedGlobalTop(globalTopMode, globalTopType, globalTopScope);
       const users = usersWithManualTop(globalTopType, globalTopScope);
       const scopeLabel = globalTopScope === 'admins' ? 'Только администраторы.' : 'Все пользователи, включая администраторов.';
       const minVotes = globalTopScope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
@@ -4939,7 +5243,8 @@
           : '<div class="oc-empty">В ручных топах пока нет актуальных треков.</div>';
         return;
       }
-      listEl.innerHTML = `<div class="oc-globaltop-list">${rows.map((row, idx) => {
+      const visibleRows = rows.slice(0, globalTopRenderLimit);
+      listEl.innerHTML = `<div class="oc-globaltop-list">${visibleRows.map((row, idx) => {
         const e = row.entry;
         const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
         const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
@@ -4955,8 +5260,12 @@
           </div>
           ${metric}
         </div>`;
-      }).join('')}</div>`;
+      }).join('')}${progressiveMoreMarkup('global-top', visibleRows.length, rows.length)}</div>`;
       listEl.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
+      installProgressiveAutoload(listEl, 'global-top', () => {
+        globalTopRenderLimit += 30;
+        renderGlobalTop100();
+      });
     }
 
     function ratingStepsDesc() {
@@ -5857,7 +6166,10 @@
       }
     });
     [entitySearchInput, entityTrackTypeSelect, entityFromYearSelect, entityFromSeasonSelect, entityToYearSelect, entityToSeasonSelect, entityProgressSelect].forEach(el => {
-      if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', renderEntityAlbums);
+      if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => {
+        entityTrackRenderLimit = 30;
+        renderEntityAlbums();
+      });
     });
     if (entityRateAllBtn) entityRateAllBtn.addEventListener('click', startEntityRating);
     if (entityPanel) entityPanel.addEventListener('click', async event => {
@@ -5865,6 +6177,7 @@
       if (open && !event.target.closest('[data-entity-delete]')) {
         activeEntityCardId = open.getAttribute('data-entity-open');
         entityFiltersExpanded = false;
+        entityTrackRenderLimit = 30;
         renderEntityAlbums();
         return;
       }
@@ -6745,12 +7058,14 @@
     document.querySelectorAll('[data-globaltop-type]').forEach(btn => {
       btn.addEventListener('click', () => {
         globalTopType = btn.dataset.globaltopType === 'ED' ? 'ED' : 'OP';
+        globalTopRenderLimit = 30;
         renderGlobalTop100();
       });
     });
     document.querySelectorAll('[data-globaltop-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
         globalTopMode = btn.dataset.globaltopMode === 'score' ? 'score' : 'manual';
+        globalTopRenderLimit = 30;
         renderGlobalTop100();
       });
     });
@@ -6758,6 +7073,7 @@
       btn.addEventListener('click', () => {
         if (!isAdmin()) return;
         globalTopScope = btn.dataset.globaltopScope === 'admins' ? 'admins' : 'all';
+        globalTopRenderLimit = 30;
         renderGlobalTop100();
       });
     });

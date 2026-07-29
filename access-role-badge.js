@@ -33,6 +33,6 @@
   });
 
   window.addEventListener('oped-account-restored', () => window.setTimeout(syncRoleBadge, 0));
+  window.addEventListener('oped:route-change', syncRoleBadge);
   syncRoleBadge();
-  [100, 400, 1000].forEach(delay => window.setTimeout(syncRoleBadge, delay));
 })();

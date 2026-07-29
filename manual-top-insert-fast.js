@@ -380,5 +380,11 @@
   });
   window.addEventListener('resize', clearHover, { passive: true });
 
-  [0, 100, 400, 1000].forEach(delay => setTimeout(mountAll, delay));
+  window.addEventListener('oped:route-ready', event => {
+    if (event?.detail?.tab === 'profile') scheduleMount();
+  });
+  window.addEventListener('oped:data-ready', event => {
+    if (event?.detail?.source === 'manualRanks' || event?.detail?.source === 'ratings') scheduleMount();
+  });
+  scheduleMount();
 })();

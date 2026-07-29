@@ -1,0 +1,19 @@
+{
+  "name": "op-ed-orden-functions",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "scripts": {
+    "backfill": "node backfill-rating-aggregates.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.2.0",
+    "firebase-functions": "^7.3.2"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8",
+    "uuid": "^11.1.1"
+  }
+}

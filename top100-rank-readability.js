@@ -37,5 +37,11 @@
 	});
 
 	document.addEventListener('click', () => queueSync(0), true);
-	[0, 100, 400, 1000, 2200].forEach(delay => window.setTimeout(syncRanks, delay));
+	window.addEventListener('oped:route-ready', event => {
+		if (event?.detail?.tab === 'top100' || event?.detail?.tab === 'profile') queueSync(0);
+	});
+	window.addEventListener('oped:data-ready', event => {
+		if (event?.detail?.source === 'manualRanks' || event?.detail?.source === 'ratings') queueSync(0);
+	});
+	queueSync(0);
 })();

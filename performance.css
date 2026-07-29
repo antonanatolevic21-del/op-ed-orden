@@ -1,0 +1,20 @@
+.oc-progressive-more {
+  display: block;
+  width: min(420px, calc(100% - 32px));
+  margin: 22px auto 8px;
+  padding: 12px 18px;
+  border: 1px solid rgba(8, 217, 214, .35);
+  border-radius: 999px;
+  background: rgba(8, 217, 214, .08);
+  color: var(--cyan, #08D9D6);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.oc-progressive-more:hover,
+.oc-progressive-more:focus-visible {
+  border-color: var(--cyan, #08D9D6);
+  background: rgba(8, 217, 214, .14);
+  outline: none;
+}

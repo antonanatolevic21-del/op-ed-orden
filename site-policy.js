@@ -49,5 +49,6 @@
   new MutationObserver(applyPolicy).observe(document.documentElement, { childList: true, subtree: true });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyPolicy, { once: true });
   else applyPolicy();
-  [0, 150, 500, 1200].forEach(delay => window.setTimeout(applyPolicy, delay));
+  window.addEventListener('oped:route-change', applyPolicy);
+  window.addEventListener('oped:data-ready', applyPolicy);
 })();

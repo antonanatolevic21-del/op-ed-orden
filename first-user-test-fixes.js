@@ -127,5 +127,6 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncAll, { once: true });
   else syncAll();
-  [250, 900, 2500, 6000].forEach(delay => window.setTimeout(syncAll, delay));
+  window.addEventListener('oped-account-restored', syncAll);
+  window.addEventListener('oped:route-change', syncAll);
 })();

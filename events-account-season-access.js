@@ -67,7 +67,7 @@ import { adminUids } from './firebase-config.js';
       const snapshot = await getDocs(collection(db, 'eventSeasons'));
       const rows = snapshot.docs
         .map(docSnap => ({ id: docSnap.id, ...docSnap.data() }))
-        .filter(row => Number(row.year || CURRENT_EVENT_YEAR) === CURRENT_EVENT_YEAR && !row.closed)
+        .filter(row => row.eventKind !== 'ending-year' && Number(row.year || CURRENT_EVENT_YEAR) === CURRENT_EVENT_YEAR && !row.closed)
         .sort((a, b) => SEASON_ORDER.indexOf(String(a.season || '')) - SEASON_ORDER.indexOf(String(b.season || '')));
 
       for (const row of rows) {

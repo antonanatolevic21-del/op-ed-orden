@@ -20,6 +20,13 @@
     if (!force && loading) return loading;
 
     loading = (async () => {
+      if (!force) {
+        const cached = await window.OC_CATALOG_STORE?.read?.();
+        if (cached?.rows?.length) {
+          rows = cached.rows;
+          return rows;
+        }
+      }
       await waitForFirebase();
       const [{ getApp, getApps }, { getFirestore, collection, getDocs }] = await Promise.all([
         import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
@@ -28,6 +35,7 @@
       if (!getApps().length) throw new Error('Firebase ещё не инициализирован.');
       const snapshot = await getDocs(collection(getFirestore(getApp()), 'openings'));
       rows = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      void window.OC_CATALOG_STORE?.write?.(rows);
       return rows;
     })();
 
@@ -47,4 +55,8 @@
   }
 
   window.OC_CATALOG_CACHE = { load, peek, invalidate };
+  window.addEventListener('oped:catalog-ready', () => {
+    const cachedRows = window.OC_CATALOG_STORE?.peek?.();
+    if (cachedRows?.length) rows = cachedRows;
+  });
 })();

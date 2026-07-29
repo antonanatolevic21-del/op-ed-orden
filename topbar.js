@@ -236,7 +236,11 @@
     }, { passive: true });
     window.addEventListener('scroll', positionMobileRatings, { passive: true });
 
-    window.setInterval(syncAccount, 1200);
+    window.addEventListener('oped-account-restored', syncAccount);
+    window.addEventListener('oped:route-change', () => {
+      syncAccount();
+      syncRatingsActive();
+    });
     window.__OC_TOPBAR_READY__ = true;
   }
 

@@ -115,7 +115,13 @@
 
     const album = url.searchParams.get('album');
     if (!album) return;
-    const card = await waitUntil(() => dataElement('data-entity-open', album), 4500);
+    if (!window.OC_APP_DATA?.entityCards?.length) {
+      await Promise.race([
+        new Promise(resolve => window.addEventListener('oped:entity-cards-updated', resolve, { once: true })),
+        sleep(8000)
+      ]);
+    }
+    const card = await waitUntil(() => dataElement('data-entity-open', album), 8000);
     card?.click();
   }
 
@@ -299,6 +305,14 @@
     if (window.__OC_DEEP_LINKS_READY__) return;
     bindUrlUpdates();
     window.__OC_DEEP_LINKS_READY__ = true;
+    window.addEventListener('oped:entity-cards-updated', () => {
+      const url = currentUrl();
+      if (url.searchParams.get('album')) void applyUrl();
+    });
+    window.addEventListener('oped:user-profiles-updated', () => {
+      const url = currentUrl();
+      if (url.searchParams.get('view') === 'profile' && url.searchParams.get('profile')) void applyUrl();
+    });
     window.setTimeout(() => { void applyUrl(); }, 120);
   }
 

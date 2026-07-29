@@ -8,7 +8,6 @@
   let knownByKey = new Map();
   let profilesLoaded = false;
   let syncQueued = false;
-  let unsubscribe = null;
 
   const clean = value => String(value || '').trim();
   const normalize = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9_-]+/gi, '_').slice(0, 60);
@@ -151,23 +150,6 @@
     requestAnimationFrame(syncAll);
   }
 
-  async function subscribeProfiles() {
-    if (typeof window.OPED_DB?.watchUserProfiles === 'function') {
-      unsubscribe = window.OPED_DB.watchUserProfiles(setProfiles);
-      return;
-    }
-
-    const [{ getApp, getApps }, { getFirestore, collection, onSnapshot }] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js')
-    ]);
-    for (let attempt = 0; attempt < 120 && !getApps().length; attempt += 1) await new Promise(resolve => setTimeout(resolve, 50));
-    if (!getApps().length) return;
-    unsubscribe = onSnapshot(collection(getFirestore(getApp()), 'userProfiles'), snapshot => {
-      setProfiles(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
-    }, error => console.warn('Known users list load failed', error));
-  }
-
   document.addEventListener('change', event => {
     const input = event.target?.closest?.('.ev-participant-input');
     if (!input || !profilesLoaded) return;
@@ -176,8 +158,11 @@
   }, true);
 
   new MutationObserver(scheduleSync).observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('beforeunload', () => { try { unsubscribe?.(); } catch (_) {} }, { once: true });
-
-  subscribeProfiles().catch(error => console.warn('Known users helper failed', error));
-  [100, 500, 1200, 2500].forEach(delay => window.setTimeout(scheduleSync, delay));
+  window.addEventListener('oped:user-profiles-updated', event => setProfiles(event?.detail?.rows));
+  window.addEventListener('oped:route-ready', event => {
+    if (event?.detail?.tab === 'profile') scheduleSync();
+  });
+  const initialRows = window.OC_APP_DATA?.userProfiles;
+  if (Array.isArray(initialRows)) setProfiles(initialRows);
+  else scheduleSync();
 })();

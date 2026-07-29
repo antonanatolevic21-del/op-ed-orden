@@ -1,4 +1,12 @@
-const CACHE_NAME = 'op-ed-images-v2-20260725-primary1';
+const CACHE_NAME = 'op-ed-images-v3-20260729-performance1';
+const MAX_IMAGE_ENTRIES = 400;
+
+async function trimImageCache(cache) {
+  const keys = await cache.keys();
+  if (keys.length <= MAX_IMAGE_ENTRIES) return;
+  const excess = keys.slice(0, keys.length - MAX_IMAGE_ENTRIES);
+  await Promise.all(excess.map(key => cache.delete(key)));
+}
 
 function isLegacySiteCache(key) {
   const name = String(key || '').toLowerCase();
@@ -28,13 +36,18 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     caches.open(CACHE_NAME).then(async cache => {
       const cached = await cache.match(request);
-      if (cached) return cached;
-
-      const response = await fetch(request);
-      if (response && response.ok) {
-        await cache.put(request, response.clone());
+      const refresh = fetch(request).then(async response => {
+        if (response && response.ok) {
+          await cache.put(request, response.clone());
+          await trimImageCache(cache);
+        }
+        return response;
+      });
+      if (cached) {
+        event.waitUntil(refresh.catch(() => null));
+        return cached;
       }
-      return response;
+      return refresh;
     })
   );
 });

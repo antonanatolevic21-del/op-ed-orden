@@ -125,5 +125,10 @@
 	});
 
 	renderOptions();
-	[100, 400, 1000, 2500].forEach(delay => window.setTimeout(renderOptions, delay));
+	window.addEventListener('oped:data-ready', event => {
+		if (event?.detail?.source === 'userProfiles' || event?.detail?.source === 'ratings') renderOptions();
+	});
+	window.addEventListener('oped:route-ready', event => {
+		if (event?.detail?.tab === 'profile') renderOptions();
+	});
 })();

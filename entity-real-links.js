@@ -82,5 +82,9 @@
 
 	new MutationObserver(() => queueSync(20)).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-tab'] });
 	window.addEventListener('popstate', () => queueSync(0));
-	[0, 100, 400, 1000, 2200].forEach(delay => window.setTimeout(syncLinks, delay));
+	window.addEventListener('oped:route-ready', event => {
+		if (String(event?.detail?.tab || '').startsWith('entity-')) queueSync(0);
+	});
+	window.addEventListener('oped:entity-cards-updated', () => queueSync(0));
+	queueSync(0);
 })();

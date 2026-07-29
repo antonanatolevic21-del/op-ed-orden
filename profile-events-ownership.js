@@ -113,12 +113,15 @@
     }
 
     window.addEventListener('oped-account-restored', () => window.setTimeout(syncEventsTabVisibility, 0));
+    window.addEventListener('oped:user-profiles-updated', syncEventsTabVisibility);
+    window.addEventListener('oped:route-ready', event => {
+      if (event?.detail?.tab === 'profile') syncEventsTabVisibility();
+    });
     window.addEventListener('storage', event => {
       if (['op-ed-primary-account-name', 'my-display-name'].includes(event.key)) syncEventsTabVisibility();
     });
 
     syncEventsTabVisibility();
-    [100, 400, 1000, 2500].forEach(delay => window.setTimeout(syncEventsTabVisibility, delay));
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, { once: true });

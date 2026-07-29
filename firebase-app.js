@@ -264,11 +264,59 @@
       return initPromise;
     }
 
-    function watchOpenings(callback) {
-      return onSnapshot(collection(db, "openings"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => {
-        console.error("watchOpenings error", error);
-        callback([]);
+    function catalogCacheRows(rows) {
+      return rows.map(row => {
+        const next = { ...row };
+        ["createdAt", "updatedAt"].forEach(key => {
+          const value = next[key];
+          if (!value || typeof value !== "object") return;
+          if (typeof value.seconds === "number") {
+            next[key] = { seconds: value.seconds, nanoseconds: Number(value.nanoseconds || 0) };
+          } else if (typeof value.toMillis === "function") {
+            next[key] = { milliseconds: value.toMillis() };
+          }
+        });
+        return next;
       });
+    }
+
+    function watchOpenings(callback) {
+      let active = true;
+      let deliveredCachedRows = false;
+      let cachedRowsById = new Map();
+      let unsubscribe = () => {};
+      const startLiveWatcher = () => {
+        if (!active) return;
+        unsubscribe = onSnapshot(collection(db, "openings"), snapshot => {
+          const rows = snapshot.docs.map(d => {
+            const row = { id: d.id, ...d.data() };
+            const cached = cachedRowsById.get(String(d.id));
+            if (cached && !row.ratingAggregateVersion && cached.ratingAggregateVersion) {
+              Object.keys(cached).filter(key => /rating/i.test(key)).forEach(key => {
+                if (!(key in row)) row[key] = cached[key];
+              });
+            }
+            return row;
+          });
+          callback(rows, { cached: false, fromCache: snapshot.metadata.fromCache });
+          void window.OC_CATALOG_STORE?.write?.(catalogCacheRows(rows));
+        }, error => {
+          console.error("watchOpenings error", error);
+          if (!deliveredCachedRows) callback([], { cached: false, error: true });
+        });
+      };
+
+      Promise.resolve(window.OC_CATALOG_STORE?.read?.()).then(snapshot => {
+        if (!active || !snapshot?.rows?.length) return;
+        deliveredCachedRows = true;
+        cachedRowsById = new Map(snapshot.rows.map(row => [String(row.id || ''), row]));
+        callback(snapshot.rows, { cached: true, stale: Boolean(snapshot.stale) });
+      }).catch(error => console.warn("catalog cache read failed", error)).finally(startLiveWatcher);
+
+      return () => {
+        active = false;
+        unsubscribe();
+      };
     }
 
     function watchRatings(callback) {
@@ -276,6 +324,37 @@
         console.error("watchRatings error", error);
         callback([]);
       });
+    }
+
+    function watchRatingsForUser(user, callback) {
+      const uid = String(user?.uid || '').trim();
+      const nicknameKey = normalizeNickname(user?.nickname || '');
+      const rowsBySource = { uid: [], nickname: [] };
+      const ready = new Set();
+      const unsubs = [];
+      const emit = () => {
+        const merged = new Map();
+        [...rowsBySource.uid, ...rowsBySource.nickname].forEach(row => merged.set(String(row.id || ''), row));
+        callback([...merged.values()]);
+      };
+      const subscribe = (source, constraint) => {
+        unsubs.push(onSnapshot(query(collection(db, "ratings"), constraint), snapshot => {
+          rowsBySource[source] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          ready.add(source);
+          if (ready.size === unsubs.length) emit();
+        }, error => {
+          console.error(`watchRatingsForUser ${source} error`, error);
+          ready.add(source);
+          if (ready.size === unsubs.length) emit();
+        }));
+      };
+      if (uid) subscribe('uid', where('ownerUid', '==', uid));
+      if (nicknameKey) subscribe('nickname', where('nicknameKey', '==', nicknameKey));
+      if (!unsubs.length) {
+        callback([]);
+        return () => {};
+      }
+      return () => unsubs.forEach(unsubscribe => unsubscribe());
     }
 
     function watchManualRanks(callback) {
@@ -436,6 +515,7 @@
       init,
       watchOpenings,
       watchRatings,
+      watchRatingsForUser,
       watchManualRanks,
       watchUserProfiles,
       watchEntityCards,
