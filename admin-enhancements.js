@@ -391,6 +391,7 @@
   let cachedOpenings = null;
   let loadingPromise = null;
   let triggerButton = null;
+  let adminPanelLink = null;
   let currentIssues = new Map();
   const unreachableImages = new Set();
 
@@ -740,7 +741,10 @@
   }
 
   function openTrack(id, title) {
-    closeQualityCenter();
+    closeQualityCenter(true);
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'oped-admin-open-track', id }, window.location.origin);
+    }
     if (window.__OC_DEEP_LINKS_READY__ && id) {
       const url = new URL(window.location.href);
       ['view', 'profile', 'section', 'album'].forEach(key => url.searchParams.delete(key));
@@ -771,14 +775,17 @@
     }
   }
 
-  function closeQualityCenter() {
+  function closeQualityCenter(force = false) {
+    if (!force && document.documentElement.classList.contains('oc-admin-quality-route')) return;
     if (!modal) return;
     modal.classList.add('hidden');
     document.body.classList.remove('oc-quality-open');
   }
 
   function syncTriggerVisibility() {
-    if (triggerButton) triggerButton.hidden = !isAdminUi();
+    const hidden = !isAdminUi();
+    if (triggerButton) triggerButton.hidden = hidden;
+    if (adminPanelLink) adminPanelLink.hidden = hidden;
   }
 
   function mountTrigger(attempt = 0) {
@@ -796,6 +803,11 @@
     triggerButton.textContent = 'Центр качества базы';
     triggerButton.addEventListener('click', () => { void openQualityCenter(false); });
     host.append(triggerButton);
+    adminPanelLink = document.createElement('a');
+    adminPanelLink.className = 'oc-admin-panel-link';
+    adminPanelLink.href = 'admin.html';
+    adminPanelLink.textContent = 'Открыть админ-панель';
+    host.append(adminPanelLink);
     syncTriggerVisibility();
 
     const badge = document.querySelector('#oc-access-badge');
@@ -803,6 +815,7 @@
   }
 
   window.addEventListener('oped-open-quality', () => { void openQualityCenter(false); });
+  window.addEventListener('oped-close-quality', () => closeQualityCenter(true));
   window.__OC_QUALITY_CENTER_READY__ = true;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountTrigger(), { once: true });
   else mountTrigger();

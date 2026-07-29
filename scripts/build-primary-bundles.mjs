@@ -32,7 +32,8 @@ const entityStyles = [
 
 const adminStyles = [
   'quality-center.css',
-  'admin-missing-inline.css'
+  'admin-missing-inline.css',
+  'admin-panel-link.css'
 ];
 
 const coreScripts = [

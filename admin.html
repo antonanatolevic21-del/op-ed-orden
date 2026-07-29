@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <title>АБОБА · Админ-панель</title>
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="stylesheet" href="admin-panel.css?v=20260729-admin-panel1" />
+</head>
+<body>
+  <main class="oc-admin-shell">
+    <header class="oc-admin-shell-head">
+      <a class="oc-admin-shell-brand" href="index.html" aria-label="Вернуться на основную страницу">
+        <strong>АБОБА</strong>
+        <span>админ-панель</span>
+      </a>
+      <nav class="oc-admin-shell-tabs" aria-label="Разделы админ-панели">
+        <button class="active" type="button" data-admin-view="workspace">Главная и альбомы</button>
+        <button type="button" data-admin-view="quality">Контроль качества базы</button>
+      </nav>
+      <div class="oc-admin-shell-meta">
+        <span id="oc-admin-shell-status">Проверяю доступ…</span>
+        <a href="index.html">На сайт ↗</a>
+      </div>
+    </header>
+    <section class="oc-admin-shell-stage" aria-live="polite">
+      <iframe
+        id="oc-admin-workspace"
+        title="Рабочая область администратора"
+        src="index.html?adminWorkspace=1"
+        allow="clipboard-read; clipboard-write"
+      ></iframe>
+      <div id="oc-admin-shell-loading" class="oc-admin-shell-loading hidden">Открываю контроль качества…</div>
+    </section>
+  </main>
+  <script src="admin-panel.js?v=20260729-admin-panel1" defer></script>
+</body>
+</html>

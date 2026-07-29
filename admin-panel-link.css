@@ -1,0 +1,22 @@
+.oc-admin-panel-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #4b3d5a;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(139,92,246,.18), rgba(255,46,99,.10));
+  color: #f5f3fa;
+  font: 700 10px 'Space Mono', monospace;
+  text-decoration: none;
+}
+
+.oc-admin-panel-link:hover {
+  border-color: #8b5cf6;
+  color: #fff;
+}
+
+.oc-admin-panel-link[hidden] {
+  display: none !important;
+}
