@@ -52,6 +52,38 @@
     });
   }
 
+  function ensureCatalogWorkspace(doc) {
+    if (!doc) return;
+    doc.documentElement.classList.add('oc-admin-catalog-route');
+    if (doc.querySelector('#oc-admin-catalog-route-style')) return;
+    const style = doc.createElement('style');
+    style.id = 'oc-admin-catalog-route-style';
+    style.textContent = `
+      html.oc-admin-catalog-route .oc-tabs,
+      html.oc-admin-catalog-route #oc-profile-panel,
+      html.oc-admin-catalog-route #oc-top100-panel,
+      html.oc-admin-catalog-route #oc-season-panel,
+      html.oc-admin-catalog-route #oc-tier-panel,
+      html.oc-admin-catalog-route #oc-stats-panel,
+      html.oc-admin-catalog-route [data-welcome-action="profile"],
+      html.oc-admin-catalog-route [data-welcome-action="season"],
+      html.oc-admin-catalog-route #oc-quality-center-btn,
+      html.oc-admin-catalog-route .oc-admin-panel-link {
+        display: none !important;
+      }
+    `;
+    doc.head.append(style);
+  }
+
+  function showCatalogPage() {
+    const { doc } = frameParts();
+    ensureCatalogWorkspace(doc);
+    const mainPanel = doc?.querySelector('#oc-main-panel');
+    if (mainPanel?.classList.contains('hidden')) {
+      doc.querySelector('.oc-tab-btn[data-tab="chart"]')?.click();
+    }
+  }
+
   function ensureQualityRouteStyle(doc) {
     if (!doc || doc.querySelector('#oc-admin-quality-route-style')) return;
     const style = doc.createElement('style');
@@ -96,6 +128,7 @@
     setActiveButton(activeView);
     loading.classList.add('hidden');
     forceCloseQuality();
+    showCatalogPage();
   }
 
   async function showQuality() {
@@ -148,6 +181,7 @@
 
   function handleFrameLoad() {
     forceCloseQuality();
+    showCatalogPage();
     observeAccess();
     if (activeView === 'quality') void showQuality();
   }
