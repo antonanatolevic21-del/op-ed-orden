@@ -1298,7 +1298,8 @@
     }
 
     function getMyEventRating(key, openingId) {
-      const state = SEASONS.map(season => getSeasonState(season)).find(row => String(row.key) === String(key)) || null;
+      const state = SEASONS.map(season => getSeasonState(season)).find(row => String(row.key) === String(key))
+        || (String(key).startsWith('ending_') ? endingPeriodState(String(key).endsWith('_h2') ? 'h2' : 'h1') : null);
       const myKey = normalizeNickname(eventRatingNickname(state));
       if (!myKey) return null;
       return eventRatings.find(r => String(r.seasonKey || '') === key && String(r.openingId || '') === String(openingId) && String(r.nicknameKey || '') === myKey) || null;
@@ -4487,19 +4488,19 @@
 
     function renderEndingParticipantScores(state) {
       const actor = endingActor(state);
-      if (isAdmin()) return `<div class="ev-status-line warn">Администратор настраивает участников, но не выставляет оценки от их имени.</div>${renderEndingRankTable(state)}`;
-      if (!actor) return '<div class="ev-empty">Твой гостевой слот пока свободен. Администратор должен указать участника в этой строке.</div>';
-      return `<div class="ev-status-line ok">Ты оцениваешь как ${escapeHtml(actor.nickname)} · слот ${actor.slot}.</div>
-        <div class="ev-list ev-ending-score-list">${state.selectedOpeningIds.map((id, index) => {
-          const opening = openingsById.get(String(id));
-          if (!opening) return '';
-          const saved = endingScoreFor(state, id, actor.nicknameKey);
-          return `<div class="ev-opening-row ev-ending-score-row">${endingTrackLabel(opening, index)}
-            <label class="ev-ending-score-field"><span>Оценка</span><input type="number" min="0" max="10" step="1" data-ending-user-score="${escapeHtml(id)}" value="${saved ? escapeHtml(saved.score) : ''}"></label>
-            <label class="ev-ending-comment-field"><span>Комментарий</span><input type="text" data-ending-user-comment="${escapeHtml(id)}" value="${escapeHtml(saved?.comment || '')}" placeholder="Комментарий"></label>
-            <button type="button" class="ev-btn-secondary" data-ending-save-user="${escapeHtml(id)}">Сохранить</button>
-          </div>`;
-        }).join('')}</div>`;
+      const status = isAdmin()
+        ? '<div class="ev-status-line warn">Чтобы поставить оценки за участника, переключись в правом верхнем углу на нужный гостевой слот.</div>'
+        : actor
+          ? `<div class="ev-status-line ok">Ты оцениваешь как ${escapeHtml(actor.nickname)} · слот ${actor.slot}.</div>`
+          : '<div class="ev-status-line warn">Твой гостевой слот пока свободен. Администратор должен указать участника в этой строке.</div>';
+      return `${status}
+        <div class="ev-actions" style="margin:12px 0;">
+          ${!isAdmin() ? `<button class="ev-btn-secondary" id="ev-ending-rate-all" ${!actor || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>` : ''}
+        </div>
+        <div class="ev-mini-title" style="margin:4px 0 10px;">Эндинги полугодия</div>
+        <div class="ev-list">
+          ${state.selectedOpeningIds.length ? state.selectedOpeningIds.map((id, index) => renderOpeningRow(state, id, index)).join('') : '<div class="ev-empty">В этом полугодии пока нет ED для оценки.</div>'}
+        </div>`;
     }
 
     function renderEndingRankTable(state, selectable = false) {
@@ -4577,18 +4578,11 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
       }));
-      appEl.querySelectorAll('[data-ending-save-user]').forEach(button => button.addEventListener('click', async () => {
-        const actor = endingActor(state);
-        const openingId = button.dataset.endingSaveUser;
-        if (!actor) return;
-        const score = Number(appEl.querySelector(`[data-ending-user-score="${CSS.escape(openingId)}"]`)?.value);
-        const comment = String(appEl.querySelector(`[data-ending-user-comment="${CSS.escape(openingId)}"]`)?.value || '').trim();
-        if (!Number.isFinite(score) || score < 0 || score > 10 || !comment) return;
-        await setDoc(doc(db, 'eventRatings', `${state.key}__${actor.nicknameKey}__${openingId}`), {
-          eventKind: 'ending-year', stage: 'first', periodKey: state.key, seasonKey: state.key,
-          year: state.year, period: state.period, openingId, nickname: actor.nickname, nicknameKey: actor.nicknameKey,
-          participantSlot: actor.slot, score, comment, updatedAt: serverTimestamp()
-        }, { merge: true });
+      appEl.querySelector('#ev-ending-rate-all')?.addEventListener('click', () => {
+        if (endingActor(state)) openEvaluator(state, state.selectedOpeningIds, 0);
+      });
+      appEl.querySelectorAll('[data-rate-id]').forEach(button => button.addEventListener('click', () => {
+        openEvaluator(state, state.selectedOpeningIds, state.selectedOpeningIds.indexOf(String(button.dataset.rateId)));
       }));
       appEl.querySelector('#ev-ending-save-semifinal')?.addEventListener('click', async () => {
         const ids = [...appEl.querySelectorAll('[data-ending-semifinal-id]:checked')].map(input => String(input.dataset.endingSemifinalId));
@@ -7179,7 +7173,7 @@
       const guestView = isGuest();
       const avg = guestView ? null : avgForOpeningInSeason(state.key, openingId);
       const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
-      const img = opening.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : 'OP';
+      const img = opening.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : escapeHtml(opening.type || 'OP');
       const thumb = opening.link
         ? `<a class="ev-thumb-link" href="${escapeHtml(opening.link)}" target="_blank" rel="noopener noreferrer" title="Открыть видео"><div class="oc-season-thumb">${img}</div></a>`
         : `<div class="oc-season-thumb">${img}</div>`;
@@ -7665,12 +7659,15 @@
       const comment = existing ? String(existing.comment || '') : '';
       const imageBlock = renderVideoBlock(opening);
       const altLinksBlock = renderAltLinksBlock(opening.id);
+      const eventPeriodLabel = state.eventKind === 'ending-year'
+        ? `${ENDING_PERIOD_META[state.period]?.label || state.period} ${state.year}`
+        : `${SEASON_LABEL[state.season]} ${state.year}`;
       if (isAdmin()) {
         evaluatorEl.innerHTML = `
           <div class="ev-dialog">
             <div class="ev-dialog-top">
               <div>
-                <div class="ev-progress">Редактирование карточки · ${escapeHtml(SEASON_LABEL[state.season])} ${state.year}</div>
+                <div class="ev-progress">Редактирование карточки · ${escapeHtml(eventPeriodLabel)}</div>
                 <div class="ev-modal-title">${escapeHtml(opening.title)}</div>
                 <div class="oc-meta">Админ может редактировать только альтернативные ссылки. Оценки ставятся через гостевой вход.</div>
               </div>
@@ -7693,7 +7690,7 @@
         <div class="ev-dialog">
           <div class="ev-dialog-top">
             <div>
-              <div class="ev-progress">${escapeHtml(SEASON_LABEL[state.season])} ${state.year} · ${evaluatorIndex + 1}/${evaluatorQueue.length}</div>
+              <div class="ev-progress">${escapeHtml(eventPeriodLabel)} · ${evaluatorIndex + 1}/${evaluatorQueue.length}</div>
               <div class="ev-modal-title">${escapeHtml(opening.title)}</div>
               <div class="oc-meta">${escapeHtml([opening.performers?.join(', '), opening.studios?.join(', ')].filter(Boolean).join(' · ') || 'метаданные не заполнены')}</div>
             </div>
@@ -7762,10 +7759,16 @@
       }
       const wasComplete = isUserSeasonComplete(state, myKey);
       const ratingRow = {
+        ...(state.eventKind === 'ending-year' ? {
+          eventKind: 'ending-year',
+          periodKey: state.key,
+          period: state.period,
+          participantSlot: guestSlot
+        } : {}),
         stage: 'first',
         seasonKey: state.key,
         year: state.year,
-        season: state.season,
+        ...(state.season ? { season: state.season } : {}),
         openingId: String(openingId),
         openingTitle: opening.title,
         nickname: ratingNickname,
@@ -7785,7 +7788,7 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
       }
-      await maybeCreateSeasonCompletionNotice(state, myKey, ratingRow, wasComplete);
+      if (state.eventKind !== 'ending-year') await maybeCreateSeasonCompletionNotice(state, myKey, ratingRow, wasComplete);
       if (goNext && evaluatorIndex < evaluatorQueue.length - 1) {
         evaluatorIndex += 1;
         renderEvaluator(state);
