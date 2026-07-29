@@ -393,7 +393,11 @@
   let triggerButton = null;
   let adminPanelLink = null;
   let currentIssues = new Map();
+  let qualityNotice = '';
+  let rejectedFranchisePairs = new Set();
+  let firestoreToolsPromise = null;
   const unreachableImages = new Set();
+  const QUALITY_META_ID = 'qualityCenter';
 
   const normalize = value => String(value || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
   const cleanList = value => Array.isArray(value) ? value.filter(item => String(item || '').trim()).length : String(value || '').split(',').filter(item => item.trim()).length;
@@ -406,6 +410,28 @@
     } catch (_) {
       return false;
     }
+  }
+
+  function imageUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw || /^(?:data|blob|javascript):/i.test(raw)) return null;
+    try {
+      const url = new URL(raw, window.location.href);
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return null;
+      const absolute = /^[a-z][a-z\d+.-]*:/i.test(raw) || raw.startsWith('//');
+      if (!absolute && (
+        /\s/.test(raw)
+        || url.origin !== window.location.origin
+        || !/^(?:\/|\.\.?\/|images\/)/i.test(raw)
+      )) return null;
+      return url.href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function validImageUrl(value) {
+    return Boolean(imageUrl(value));
   }
 
   function plausibleTrackLink(value) {
@@ -442,6 +468,32 @@
     });
   }
 
+  async function getFirestoreTools() {
+    if (firestoreToolsPromise) return firestoreToolsPromise;
+    firestoreToolsPromise = (async () => {
+      await waitForFirebase();
+      const [{ getApp, getApps }, firestore] = await Promise.all([
+        import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
+        import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js')
+      ]);
+      if (!getApps().length) throw new Error('Firebase ещё не инициализирован.');
+      return { app: getApp(), db: firestore.getFirestore(getApp()), ...firestore };
+    })();
+    return firestoreToolsPromise;
+  }
+
+  async function loadRejectedFranchisePairs() {
+    try {
+      const tools = await getFirestoreTools();
+      const snapshot = await tools.getDoc(tools.doc(tools.db, 'meta', QUALITY_META_ID));
+      const values = snapshot.exists() ? snapshot.data()?.rejectedFranchisePairs : [];
+      rejectedFranchisePairs = new Set(Array.isArray(values) ? values.map(String) : []);
+    } catch (error) {
+      console.warn('Could not load rejected franchise pairs', error);
+      rejectedFranchisePairs = new Set();
+    }
+  }
+
   async function loadOpenings(force = false) {
     if (!force && cachedOpenings) return cachedOpenings;
     if (!force && loadingPromise) return loadingPromise;
@@ -469,6 +521,165 @@
     }
   }
 
+  function compactFranchise(value) {
+    return normalize(value)
+      .replace(/&/g, 'and')
+      .replace(/[«»„“”"'’‘`]/g, '')
+      .replace(/[^\p{L}\p{N}]+/gu, '');
+  }
+
+  function franchiseWords(value) {
+    const ignored = new Set(['the', 'a', 'an', 'season', 'сезон', 'tv', 'ova', 'ona', 'movie', 'фильм']);
+    return normalize(value)
+      .replace(/&/g, ' and ')
+      .split(/[^\p{L}\p{N}]+/gu)
+      .filter(word => word && !ignored.has(word));
+  }
+
+  function levenshteinDistance(first, second) {
+    const a = String(first || '');
+    const b = String(second || '');
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+    const current = new Array(b.length + 1);
+    for (let row = 1; row <= a.length; row += 1) {
+      current[0] = row;
+      for (let column = 1; column <= b.length; column += 1) {
+        const cost = a[row - 1] === b[column - 1] ? 0 : 1;
+        current[column] = Math.min(
+          previous[column] + 1,
+          current[column - 1] + 1,
+          previous[column - 1] + cost
+        );
+      }
+      for (let column = 0; column <= b.length; column += 1) previous[column] = current[column];
+    }
+    return previous[b.length];
+  }
+
+  function franchisePairKey(first, second) {
+    return [normalize(first), normalize(second)].sort((a, b) => a.localeCompare(b, 'ru')).join(' ↔ ');
+  }
+
+  function franchiseSimilarity(first, second) {
+    const a = compactFranchise(first);
+    const b = compactFranchise(second);
+    if (!a || !b || String(first).trim() === String(second).trim()) return 0;
+    if (a === b) return 100;
+
+    const maxLength = Math.max(a.length, b.length);
+    const minLength = Math.min(a.length, b.length);
+    if (minLength < 4) return 0;
+
+    let score = 0;
+    if ((a.includes(b) || b.includes(a)) && minLength / maxLength >= 0.58) {
+      score = Math.max(score, 76 + (minLength / maxLength) * 16);
+    }
+
+    const aWords = franchiseWords(first);
+    const bWords = franchiseWords(second);
+    if (aWords.length && bWords.length) {
+      const bSet = new Set(bWords);
+      const common = aWords.filter(word => bSet.has(word)).length;
+      const coverage = common / Math.min(aWords.length, bWords.length);
+      if (common >= 2 && coverage >= 0.66) score = Math.max(score, 76 + coverage * 18);
+    }
+
+    if (Math.abs(a.length - b.length) <= 3) {
+      const distance = levenshteinDistance(a, b);
+      const ratio = 1 - distance / maxLength;
+      const allowedDistance = maxLength <= 8 ? 1 : maxLength <= 14 ? 2 : 3;
+      if (distance <= allowedDistance && ratio >= 0.72) score = Math.max(score, 76 + ratio * 20 - distance);
+      if (ratio >= 0.86) score = Math.max(score, 72 + ratio * 22);
+    }
+
+    return Math.round(score);
+  }
+
+  function buildSimilarFranchisePairs(openings) {
+    const names = new Map();
+    for (const opening of openings) {
+      for (const value of listValues(opening.franchises)) {
+        const key = String(value).trim();
+        if (!key) continue;
+        if (!names.has(key)) {
+          names.set(key, {
+            name: value,
+            compact: compactFranchise(value),
+            words: franchiseWords(value),
+            ids: new Set()
+          });
+        }
+        names.get(key).ids.add(String(opening.id));
+      }
+    }
+
+    const variants = [...names.values()];
+    const tokenIndex = new Map();
+    const compactIndex = new Map();
+    variants.forEach((variant, index) => {
+      if (variant.compact) {
+        if (!compactIndex.has(variant.compact)) compactIndex.set(variant.compact, []);
+        compactIndex.get(variant.compact).push(index);
+      }
+
+      const tokens = new Set(variant.words.filter(word => word.length >= 3).map(word => `w:${word}`));
+      const partLength = variant.compact.length <= 5 ? 2 : 3;
+      for (let offset = 0; offset + partLength <= variant.compact.length; offset += 1) {
+        tokens.add(`p:${variant.compact.slice(offset, offset + partLength)}`);
+      }
+      for (const token of tokens) {
+        if (!tokenIndex.has(token)) tokenIndex.set(token, []);
+        tokenIndex.get(token).push(index);
+      }
+    });
+
+    const candidateKeys = new Set();
+    const addCandidateGroup = indexes => {
+      for (let first = 0; first < indexes.length; first += 1) {
+        for (let second = first + 1; second < indexes.length; second += 1) {
+          const a = Math.min(indexes[first], indexes[second]);
+          const b = Math.max(indexes[first], indexes[second]);
+          candidateKeys.add(`${a}:${b}`);
+        }
+      }
+    };
+    compactIndex.forEach(addCandidateGroup);
+    tokenIndex.forEach(indexes => {
+      if (indexes.length >= 2 && indexes.length <= 80) addCandidateGroup(indexes);
+    });
+
+    const pairs = [];
+    const suggestedKeys = new Set();
+    for (const candidateKey of candidateKeys) {
+      const [firstIndex, secondIndex] = candidateKey.split(':').map(Number);
+      const first = variants[firstIndex];
+      const second = variants[secondIndex];
+      const key = franchisePairKey(first.name, second.name);
+      if (rejectedFranchisePairs.has(key) || suggestedKeys.has(key)) continue;
+      const score = franchiseSimilarity(first.name, second.name);
+      if (score < 84) continue;
+      suggestedKeys.add(key);
+      const defaultName = first.ids.size > second.ids.size
+        ? first.name
+        : second.ids.size > first.ids.size
+          ? second.name
+          : first.name.length <= second.name.length ? first.name : second.name;
+      pairs.push({
+        id: key,
+        key,
+        first: first.name,
+        second: second.name,
+        firstCount: first.ids.size,
+        secondCount: second.ids.size,
+        score,
+        defaultName
+      });
+    }
+    return pairs.sort((a, b) => b.score - a.score || (b.firstCount + b.secondCount) - (a.firstCount + a.secondCount));
+  }
+
   function buildIssues(openings) {
     const issues = [
       { id: 'title', label: 'Без названия', rows: [] },
@@ -479,10 +690,11 @@
       { id: 'director', label: 'Без режиссёра', rows: [] },
       { id: 'franchise', label: 'Без франшизы', rows: [] },
       { id: 'franchise-suspicious', label: 'Подозрительные франшизы', rows: [] },
+      { id: 'franchise-similar', label: 'Похожие названия франшиз', type: 'franchisePairs', rows: buildSimilarFranchisePairs(openings) },
       { id: 'link', label: 'Без ссылки на видео', rows: [] },
       { id: 'link-invalid', label: 'Некорректные ссылки на видео', rows: [] },
-      { id: 'image-invalid', label: 'Некорректные ссылки на картинки', rows: [] },
-      { id: 'image-unreachable', label: 'Недоступные картинки', rows: [] },
+      { id: 'image-invalid', label: 'Некорректный формат ссылок на картинки', rows: [] },
+      { id: 'image-unreachable', label: 'Недоступные картинки после проверки', rows: [] },
       { id: 'same-song', label: 'Одинаковая песня без группы', rows: [] },
       { id: 'duplicate', label: 'Возможные дубликаты', rows: [] }
     ];
@@ -522,7 +734,7 @@
       if (!trackLink) byId.get('link').rows.push(opening);
       else if (!plausibleTrackLink(trackLink)) byId.get('link-invalid').rows.push(opening);
       const imageUrls = [opening.image, opening.fallbackImage || opening.imageFallback].map(value => String(value || '').trim()).filter(Boolean);
-      if (imageUrls.some(value => !validHttpUrl(value))) byId.get('image-invalid').rows.push(opening);
+      if (imageUrls.some(value => !validImageUrl(value))) byId.get('image-invalid').rows.push(opening);
       if (imageUrls.some(value => unreachableImages.has(value))) byId.get('image-unreachable').rows.push(opening);
       if (String(opening.sameSongTitle || opening.songGroupTitle || '').trim() && !String(opening.sameSongGroupId || opening.songGroupId || '').trim()) byId.get('same-song').rows.push(opening);
 
@@ -576,6 +788,30 @@
         return;
       }
 
+      const chooseFranchise = event.target.closest('[data-quality-franchise-choice]');
+      if (chooseFranchise) {
+        const row = chooseFranchise.closest('[data-quality-franchise-pair]');
+        const input = row?.querySelector('[data-quality-franchise-target]');
+        if (input) {
+          input.value = String(chooseFranchise.dataset.qualityFranchiseChoice || '');
+          input.focus();
+          input.select();
+        }
+        return;
+      }
+
+      const mergeFranchisesButton = event.target.closest('[data-quality-franchise-merge]');
+      if (mergeFranchisesButton) {
+        void mergeFranchisePair(mergeFranchisesButton);
+        return;
+      }
+
+      const rejectFranchisesButton = event.target.closest('[data-quality-franchise-reject]');
+      if (rejectFranchisesButton) {
+        void rejectFranchisePair(rejectFranchisesButton);
+        return;
+      }
+
       const summary = event.target.closest('.oc-quality-issue > summary');
       if (summary) {
         const details = summary.parentElement;
@@ -604,12 +840,189 @@
       return;
     }
 
+    if (issue.type === 'franchisePairs') {
+      const visibleRows = issue.rows.slice(0, ISSUE_LIMIT);
+      list.innerHTML = visibleRows.map(pair => `
+        <article class="oc-quality-franchise-pair" data-quality-franchise-pair="${escapeHtml(pair.key)}">
+          <div class="oc-quality-franchise-variants">
+            <button type="button" data-quality-franchise-choice="${escapeHtml(pair.first)}">
+              <strong>${escapeHtml(pair.first)}</strong>
+              <small>${pair.firstCount} ${pair.firstCount === 1 ? 'трек' : 'треков'}</small>
+            </button>
+            <span aria-hidden="true">≈</span>
+            <button type="button" data-quality-franchise-choice="${escapeHtml(pair.second)}">
+              <strong>${escapeHtml(pair.second)}</strong>
+              <small>${pair.secondCount} ${pair.secondCount === 1 ? 'трек' : 'треков'}</small>
+            </button>
+          </div>
+          <label class="oc-quality-franchise-target">
+            <span>Общее название после объединения</span>
+            <input type="text" value="${escapeHtml(pair.defaultName)}" data-quality-franchise-target autocomplete="off" />
+          </label>
+          <div class="oc-quality-franchise-actions">
+            <button type="button" class="oc-quality-franchise-reject" data-quality-franchise-reject="${escapeHtml(pair.key)}">Не объединять</button>
+            <button type="button" class="oc-quality-franchise-merge" data-quality-franchise-merge="${escapeHtml(pair.key)}">Объединить</button>
+          </div>
+        </article>`).join('') + (issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">Показаны первые ${visibleRows.length} из ${issue.rows.length}</div>` : '');
+      return;
+    }
+
     const visibleRows = issue.rows.slice(0, ISSUE_LIMIT);
     list.innerHTML = visibleRows.map(opening => {
       const season = opening.season ? `${SEASON_LABEL[opening.season] || opening.season} ${opening.year || ''}`.trim() : String(opening.year || '—');
       const title = String(opening.title || opening.anime || 'Без названия');
       return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}</small></button>`;
     }).join('') + (issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">Показаны первые ${visibleRows.length} из ${issue.rows.length}</div>` : '');
+  }
+
+  function franchisePairByKey(key) {
+    return currentIssues.get('franchise-similar')?.rows.find(pair => pair.key === key) || null;
+  }
+
+  function showFranchisePairError(row, message) {
+    if (!row) return;
+    row.classList.add('is-error');
+    let error = row.querySelector('.oc-quality-franchise-error');
+    if (!error) {
+      error = document.createElement('div');
+      error.className = 'oc-quality-franchise-error';
+      row.append(error);
+    }
+    error.textContent = message;
+  }
+
+  function refreshFranchiseSection(message) {
+    qualityNotice = message;
+    render(cachedOpenings || []);
+    const details = modal?.querySelector('[data-quality-issue="franchise-similar"]');
+    if (details) {
+      details.open = true;
+      renderIssueRows(details);
+    }
+  }
+
+  async function rejectFranchisePair(button) {
+    if (button.disabled) return;
+    const key = String(button.dataset.qualityFranchiseReject || '');
+    const pair = franchisePairByKey(key);
+    if (!pair) return;
+
+    button.disabled = true;
+    button.textContent = 'Сохраняю…';
+    try {
+      const tools = await getFirestoreTools();
+      await tools.setDoc(tools.doc(tools.db, 'meta', QUALITY_META_ID), {
+        rejectedFranchisePairs: tools.arrayUnion(key),
+        updatedAt: tools.serverTimestamp()
+      }, { merge: true });
+      rejectedFranchisePairs.add(key);
+      refreshFranchiseSection(`Пара «${pair.first}» / «${pair.second}» отклонена и больше не будет предлагаться.`);
+    } catch (error) {
+      console.error('Could not reject franchise pair', error);
+      button.disabled = false;
+      button.textContent = 'Не объединять';
+      showFranchisePairError(
+        button.closest('.oc-quality-franchise-pair'),
+        `Не удалось сохранить отклонение: ${error?.message || 'неизвестная ошибка'}`
+      );
+    }
+  }
+
+  function mergedFranchiseValues(values, pair, targetName) {
+    const replaced = [];
+    const sourceNames = new Set([normalize(pair.first), normalize(pair.second)]);
+    for (const value of listValues(values)) {
+      const next = sourceNames.has(normalize(value)) ? targetName : value;
+      if (!replaced.some(existing => normalize(existing) === normalize(next))) replaced.push(next);
+    }
+    return replaced;
+  }
+
+  async function migrateFranchiseAlbum(pair, targetName, tools) {
+    if (!window.OPED_DB?.saveEntityCard || !window.OPED_DB?.deleteEntityCard) return;
+    const snapshot = await tools.getDocs(tools.collection(tools.db, 'entityCards'));
+    const cards = snapshot.docs
+      .map(cardSnapshot => ({ id: cardSnapshot.id, ...cardSnapshot.data() }))
+      .filter(card => card.type === 'franchises');
+    const sourceNames = new Set([normalize(pair.first), normalize(pair.second)]);
+    const sourceCards = cards.filter(card => sourceNames.has(normalize(card.value)));
+    let targetCard = cards.find(card => String(card.value || '').trim() === targetName) || null;
+
+    if (!targetCard) {
+      const sourceWithImage = cards.find(card =>
+        normalize(card.value) === normalize(targetName) && String(card.image || '').trim()
+      ) || sourceCards.find(card => String(card.image || '').trim());
+      if (sourceWithImage) {
+        const id = await window.OPED_DB.saveEntityCard({
+          type: 'franchises',
+          value: targetName,
+          image: sourceWithImage.image
+        });
+        targetCard = { id, type: 'franchises', value: targetName, image: sourceWithImage.image };
+      }
+    }
+
+    const keepId = String(targetCard?.id || '');
+    const staleCards = sourceCards.filter(card => String(card.id) !== keepId);
+    for (const card of staleCards) await window.OPED_DB.deleteEntityCard(card.id);
+  }
+
+  async function mergeFranchisePair(button) {
+    if (button.disabled) return;
+    const key = String(button.dataset.qualityFranchiseMerge || '');
+    const pair = franchisePairByKey(key);
+    const row = button.closest('[data-quality-franchise-pair]');
+    const input = row?.querySelector('[data-quality-franchise-target]');
+    const targetName = String(input?.value || '').trim();
+    if (!pair || !targetName) {
+      input?.focus();
+      showFranchisePairError(row, 'Укажите общее название.');
+      return;
+    }
+
+    row?.querySelectorAll('button,input').forEach(control => { control.disabled = true; });
+    button.textContent = 'Объединяю…';
+
+    try {
+      const tools = await getFirestoreTools();
+      const affected = (cachedOpenings || []).filter(opening =>
+        listValues(opening.franchises).some(value => [normalize(pair.first), normalize(pair.second)].includes(normalize(value)))
+      );
+
+      for (let offset = 0; offset < affected.length; offset += 400) {
+        const batch = tools.writeBatch(tools.db);
+        for (const opening of affected.slice(offset, offset + 400)) {
+          const franchises = mergedFranchiseValues(opening.franchises, pair, targetName);
+          batch.update(tools.doc(tools.db, 'openings', String(opening.id)), {
+            franchises,
+            updatedAt: tools.serverTimestamp()
+          });
+        }
+        await batch.commit();
+      }
+
+      for (const opening of affected) {
+        opening.franchises = mergedFranchiseValues(opening.franchises, pair, targetName);
+      }
+      window.OC_CATALOG_CACHE?.invalidate?.();
+
+      let albumWarning = '';
+      try {
+        await migrateFranchiseAlbum(pair, targetName, tools);
+      } catch (error) {
+        console.warn('Could not migrate franchise album', error);
+        albumWarning = ' Треки объединены, но обложку альбома проверить не удалось.';
+      }
+
+      refreshFranchiseSection(
+        `Франшизы «${pair.first}» и «${pair.second}» объединены как «${targetName}» в ${affected.length} треках.${albumWarning}`
+      );
+    } catch (error) {
+      console.error('Could not merge franchise pair', error);
+      row?.querySelectorAll('button,input').forEach(control => { control.disabled = false; });
+      button.textContent = 'Объединить';
+      showFranchisePairError(row, `Не удалось объединить: ${error?.message || 'неизвестная ошибка'}`);
+    }
   }
 
   function renderLoading() {
@@ -652,7 +1065,9 @@
     let totalHits = 0;
     for (const issue of issues) {
       totalHits += issue.rows.length;
-      for (const opening of issue.rows) uniqueProblemIds.add(String(opening.id));
+      if (issue.type !== 'franchisePairs') {
+        for (const opening of issue.rows) uniqueProblemIds.add(String(opening.id));
+      }
     }
 
     const issueHtml = issues.map(issue => `
@@ -667,7 +1082,7 @@
           <div>
             <div class="oc-quality-kicker">админ · качество базы</div>
             <h2>Центр качества</h2>
-            <p>Пустые поля, одинаковая песня без группы и возможные дубликаты. Списки треков создаются только когда ты раскрываешь нужный раздел.</p>
+            <p>Пустые поля, похожие франшизы, одинаковая песня без группы и возможные дубликаты. Списки создаются только когда ты раскрываешь нужный раздел.</p>
           </div>
           <div class="oc-quality-head-actions">
             <button class="oc-quality-refresh" type="button" data-quality-check-links>Проверить картинки</button>
@@ -681,6 +1096,7 @@
           <div><strong>${uniqueProblemIds.size}</strong><span>треков с проблемами</span></div>
           <div><strong>${totalHits}</strong><span>срабатываний</span></div>
         </div>
+        ${qualityNotice ? `<div class="oc-quality-notice">${escapeHtml(qualityNotice)}</div>` : ''}
         <div class="oc-quality-issues">${issueHtml}</div>
       </div>`;
   }
@@ -688,6 +1104,11 @@
   function probeImage(url) {
     return new Promise(resolve => {
       const image = new Image();
+      const resolvedUrl = imageUrl(url);
+      if (!resolvedUrl) {
+        resolve(false);
+        return;
+      }
       const timer = window.setTimeout(() => {
         image.src = '';
         resolve(false);
@@ -701,7 +1122,7 @@
         resolve(false);
       };
       image.referrerPolicy = 'no-referrer';
-      image.src = url;
+      image.src = resolvedUrl;
     });
   }
 
@@ -710,7 +1131,7 @@
     const urls = [...new Set(cachedOpenings.flatMap(opening => [
       String(opening.image || '').trim(),
       String(opening.fallbackImage || opening.imageFallback || '').trim()
-    ]).filter(validHttpUrl))];
+    ]).filter(validImageUrl))];
     unreachableImages.clear();
     button.disabled = true;
     let completed = 0;
@@ -765,7 +1186,11 @@
 
     try {
       await yieldToUi();
-      const openings = await loadOpenings(force);
+      if (force) qualityNotice = '';
+      const [openings] = await Promise.all([
+        loadOpenings(force),
+        loadRejectedFranchisePairs()
+      ]);
       if (root.classList.contains('hidden')) return;
       await yieldToUi();
       render(openings);
