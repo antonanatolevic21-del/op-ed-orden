@@ -138,8 +138,10 @@
     const entityFiltersToggle = $('#oc-entity-filters-toggle');
     const entitySearchInput = $('#oc-entity-search');
     const entityTrackTypeSelect = $('#oc-entity-track-type');
-    const entityYearSelect = $('#oc-entity-year');
-    const entitySeasonSelect = $('#oc-entity-season');
+    const entityFromYearSelect = $('#oc-entity-from-year');
+    const entityFromSeasonSelect = $('#oc-entity-from-season');
+    const entityToYearSelect = $('#oc-entity-to-year');
+    const entityToSeasonSelect = $('#oc-entity-to-season');
     const entityProgressSelect = $('#oc-entity-progress');
     const entityRateAllBtn = $('#oc-entity-rate-all');
     const entityGridEl = $('#oc-entity-grid');
@@ -3723,8 +3725,10 @@
       entityFiltersExpanded = false;
       if (entitySearchInput) entitySearchInput.value = '';
       if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
-      if (entityYearSelect) entityYearSelect.value = '';
-      if (entitySeasonSelect) entitySeasonSelect.value = '';
+      if (entityFromYearSelect) entityFromYearSelect.value = '';
+      if (entityFromSeasonSelect) entityFromSeasonSelect.value = '';
+      if (entityToYearSelect) entityToYearSelect.value = '';
+      if (entityToSeasonSelect) entityToSeasonSelect.value = '';
       if (entityProgressSelect) entityProgressSelect.value = '';
       if (entityTracksEl) entityTracksEl.replaceChildren();
     }
@@ -3760,18 +3764,31 @@
         entitySubtitleEl.textContent = progress.rated + ' из ' + progress.related.length + ' оценено';
         const search = normalizedEntityValue(entitySearchInput.value);
         const trackType = entityTrackTypeSelect.value;
-        const year = entityYearSelect.value;
-        const season = entitySeasonSelect.value;
+        const fromYear = entityFromYearSelect.value;
+        const fromSeason = entityFromSeasonSelect.value;
+        const toYear = entityToYearSelect.value;
+        const toSeason = entityToSeasonSelect.value;
         const progressFilter = entityProgressSelect.value;
         const years = uniqueSorted(progress.related.map(entry => entry.year ? String(entry.year) : '')).sort((a, b) => Number(b) - Number(a));
-        entityYearSelect.innerHTML = '<option value="">Все годы</option>' + years.map(value =>
-          '<option value="' + escapeHtml(value) + '"' + (value === year ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
+        entityFromYearSelect.innerHTML = '<option value="">С начала</option>' + years.map(value =>
+          '<option value="' + escapeHtml(value) + '"' + (value === fromYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
         ).join('');
+        entityToYearSelect.innerHTML = '<option value="">По настоящее время</option>' + years.map(value =>
+          '<option value="' + escapeHtml(value) + '"' + (value === toYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
+        ).join('');
+        const seasonOrder = { winter: 0, spring: 1, summer: 2, fall: 3 };
+        const fromPoint = fromYear ? Number(fromYear) * 4 + (seasonOrder[fromSeason] ?? 0) : Number.NEGATIVE_INFINITY;
+        const toPoint = toYear ? Number(toYear) * 4 + (seasonOrder[toSeason] ?? 3) : Number.POSITIVE_INFINITY;
+        const rangeStart = Math.min(fromPoint, toPoint);
+        const rangeEnd = Math.max(fromPoint, toPoint);
         const filtered = progress.related.filter(entry => {
           if (search && !normalizedEntityValue([entry.title, ...(entry.performers || []), ...(entry.directors || []), ...(entry.studios || []), ...(entry.franchises || [])].join(' ')).includes(search)) return false;
           if (trackType && entry.type !== trackType) return false;
-          if (year && String(entry.year || '') !== year) return false;
-          if (season && entry.season !== season) return false;
+          const entryYear = Number(entry.year);
+          const entrySeason = seasonOrder[entry.season];
+          if ((fromYear || toYear) && (!Number.isFinite(entryYear) || entrySeason === undefined)) return false;
+          const entryPoint = entryYear * 4 + entrySeason;
+          if (entryPoint < rangeStart || entryPoint > rangeEnd) return false;
           const rated = entityHasRating(entry);
           return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
         }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
@@ -5829,7 +5846,7 @@
         switchTab('chart');
       }
     });
-    [entitySearchInput, entityTrackTypeSelect, entityYearSelect, entitySeasonSelect, entityProgressSelect].forEach(el => {
+    [entitySearchInput, entityTrackTypeSelect, entityFromYearSelect, entityFromSeasonSelect, entityToYearSelect, entityToSeasonSelect, entityProgressSelect].forEach(el => {
       if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', renderEntityAlbums);
     });
     if (entityRateAllBtn) entityRateAllBtn.addEventListener('click', startEntityRating);
@@ -6460,6 +6477,7 @@
           createdBy: myName
         });
         if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, ...sameSong });
+        try { localStorage.setItem('op-ed-last-added-title-v1', title); } catch (_) {}
 
         const resetAddControl = (id, value, checked) => {
           if (window.OC_ADD_FIELD_PINS?.isPinned?.(id)) return;
