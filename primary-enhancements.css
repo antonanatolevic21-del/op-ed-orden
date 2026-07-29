@@ -311,8 +311,7 @@ button:disabled:hover,
 
 .oc-season-head,
 .oc-globaltop-controls,
-.oc-allratings-head,
-.oc-entity-filter-head {
+.oc-allratings-head {
   position: sticky;
   top: 72px;
   z-index: 35;
@@ -417,8 +416,7 @@ button:disabled:hover,
 @media (max-width: 760px) {
   .oc-season-head,
   .oc-globaltop-controls,
-  .oc-allratings-head,
-  .oc-entity-filter-head {
+  .oc-allratings-head {
     top: 58px;
   }
   .oc-entity-album-tools {

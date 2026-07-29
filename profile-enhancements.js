@@ -1069,17 +1069,18 @@
     if (context.textContent !== message) context.textContent = message;
   }
 
-  function profileHasRatings() {
-    return Boolean(document.querySelector(
-      '#oc-profile-op .oc-profile-item, #oc-profile-ed .oc-profile-item'
-    ));
+  function profileRatingState(panel) {
+    const ready = panel?.dataset.profileRatingsReady === 'true';
+    const count = Number(panel?.dataset.profileRatingCount || 0);
+    return { ready, hasRatings: Number.isFinite(count) && count > 0 };
   }
 
   function syncEmptyCallToAction() {
     const panel = document.querySelector('#oc-profile-panel');
     if (!panel || panel.classList.contains('hidden')) return;
     let callout = panel.querySelector('.oc-profile-empty-cta');
-    if (profileHasRatings()) {
+    const ratingState = profileRatingState(panel);
+    if (!ratingState.ready || ratingState.hasRatings) {
       callout?.remove();
       return;
     }

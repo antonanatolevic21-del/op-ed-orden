@@ -5067,6 +5067,12 @@
       const filtered = applyFilters(entries);
       const topFiltered = applyFiltersIgnoringType(entries);
       const allRatingsFiltered = applyFiltersIgnoringType(entries);
+      if (profilePanel) {
+        profilePanel.dataset.profileRatingsReady = String(
+          firebaseRatingsScope === 'all' && remoteDataState.ratings.ready
+        );
+        profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
+      }
 
       renderProfileStats(computeProfileStats(profileUser, filtered));
 
