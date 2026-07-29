@@ -4,7 +4,7 @@
 
 	const MAIN_VIEWS = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
-	const EVENT_MODES = new Set(['rating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
+	const EVENT_MODES = new Set(['rating', 'endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
 	const EVENT_STAGES = new Set(['basket', 'first', 'semi', 'final']);
 	const MAIN_ACCESS_KEY = 'op-ed-access-level';
 	const EVENT_ACCESS_KEY = 'event-access-level';
@@ -39,7 +39,9 @@
 	}
 
 	function eventStageHref(stage) {
-		return relativeUrl('events.html', { mode: 'rating', stage: EVENT_STAGES.has(stage) ? stage : 'basket' });
+		const activeMode = String(document.querySelector('.ev-mode-tab.active[data-mode]')?.dataset.mode || params().get('mode') || 'rating');
+		const mode = activeMode === 'endingrating' ? 'endingrating' : 'rating';
+		return relativeUrl('events.html', { mode, stage: EVENT_STAGES.has(stage) ? stage : 'basket' });
 	}
 
 	function fastMainAccess() {
@@ -124,7 +126,9 @@
 					return;
 				}
 				if (host.matches('.ev-tab[data-stage]')) {
-					previewEventRoute('rating', String(host.dataset.stage || 'basket'));
+					const mode = String(document.querySelector('.ev-mode-tab.active[data-mode]')?.dataset.mode || 'rating');
+					replaceCurrentUrl(eventStageHref(String(host.dataset.stage || 'basket')), true);
+					previewEventRoute(mode === 'endingrating' ? 'endingrating' : 'rating', String(host.dataset.stage || 'basket'));
 					if (canActivateEventRoute()) host.click();
 					else scheduleRouteSync();
 				}
@@ -187,7 +191,7 @@
 	function previewEventRoute(mode, stage) {
 		document.querySelectorAll('.ev-mode-tab.oc-route-preview-active,.ev-tab.oc-route-preview-active').forEach(element => element.classList.remove('oc-route-preview-active'));
 		if (EVENT_MODES.has(mode)) document.querySelector(`.ev-mode-tab[data-mode="${CSS.escape(mode)}"]`)?.classList.add('oc-route-preview-active');
-		if ((mode || 'rating') === 'rating' && EVENT_STAGES.has(stage)) document.querySelector(`.ev-tab[data-stage="${CSS.escape(stage)}"]`)?.classList.add('oc-route-preview-active');
+		if (['rating', 'endingrating'].includes(mode || 'rating') && EVENT_STAGES.has(stage)) document.querySelector(`.ev-tab[data-stage="${CSS.escape(stage)}"]`)?.classList.add('oc-route-preview-active');
 	}
 
 	function requestedMainView() {
@@ -238,7 +242,7 @@
 		if (!canActivateEventRoute()) return;
 		const modeButton = document.querySelector(`.ev-mode-tab[data-mode="${CSS.escape(mode)}"]`);
 		if (modeButton && !modeButton.classList.contains('active')) modeButton.click();
-		if (mode === 'rating' && stage) {
+		if (['rating', 'endingrating'].includes(mode) && stage) {
 			const stageButton = document.querySelector(`.ev-tab[data-stage="${CSS.escape(stage)}"]`);
 			if (stageButton && !stageButton.classList.contains('active')) stageButton.click();
 		}
