@@ -116,6 +116,12 @@
 .oc-entity-create,.oc-entity-filters{display:block;margin:0 0 24px;padding:22px;border:1px solid #342b40;border-radius:20px;background:radial-gradient(circle at 100% 0,rgba(139,92,246,.11),transparent 33%),linear-gradient(145deg,rgba(24,19,33,.98),rgba(13,11,18,.98));box-shadow:0 18px 44px rgba(4,3,8,.18);overflow:hidden}
 .oc-entity-create.hidden,.oc-entity-filters.hidden{display:none}
 .oc-entity-form-head,.oc-entity-filter-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:18px;padding-bottom:15px;border-bottom:1px solid rgba(255,255,255,.07)}
+.oc-entity-filters:not(.is-expanded){padding-bottom:0}
+.oc-entity-filters:not(.is-expanded) .oc-entity-filter-head{margin-bottom:0;border-bottom:0}
+.oc-entity-filters:not(.is-expanded) .oc-entity-filter-fields{display:none}
+.oc-entity-filters-toggle{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:42px;padding:0 15px;border:1px solid #493b58;border-radius:11px;background:rgba(13,10,19,.72);color:#d7d1df;font:700 11px 'Space Mono',monospace;cursor:pointer;white-space:nowrap}
+.oc-entity-filters-toggle:hover{border-color:#7b6194;background:rgba(29,22,39,.9)}
+.oc-entity-filters-toggle span{color:#b673e8;font-size:17px;line-height:1}
 .oc-entity-form-head .oc-section-label,.oc-entity-filter-head .oc-section-label{margin-bottom:5px}
 .oc-entity-form-head h3,.oc-entity-filter-head h3{margin:0;font-size:20px;letter-spacing:-.02em}
 .oc-entity-form-head p,.oc-entity-filter-head p{max-width:390px;margin:0;color:#8f879b;font-size:12px;line-height:1.5;text-align:right}
