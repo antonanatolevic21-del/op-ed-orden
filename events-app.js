@@ -180,6 +180,7 @@
     let activeMode = String(savedEventUiPreferences.activeMode || 'rating');
     let activeStage = String(savedEventUiPreferences.activeStage || 'basket');
     let activeSeason = SEASONS.includes(savedEventUiPreferences.activeSeason) ? savedEventUiPreferences.activeSeason : 'winter';
+    let activeEndingPeriod = savedEventUiPreferences.activeEndingPeriod === 'h2' ? 'h2' : 'h1';
     let openings = [];
     let openingsById = new Map();
     let mainRatings = [];
@@ -922,7 +923,7 @@
     function hasAccess() { return isUser() || accessLevel === 'guest' || isAdmin(); }
     function canAccessMode(mode) {
       const requested = String(mode || 'rating');
-      if (requested === 'rating') return isGuest() || isAdmin();
+      if (requested === 'rating' || requested === 'endingrating') return isGuest() || isAdmin();
       if (requested === 'predictions') return isAdmin();
       return !isGuest();
     }
@@ -4295,6 +4296,7 @@
           activeMode,
           activeStage,
           activeSeason,
+          activeEndingPeriod,
           predictionYear,
           predictionSeason,
           guessFilters,
@@ -4306,15 +4308,266 @@
       } catch (_) {}
     }
 
+    const ENDING_PERIOD_META = {
+      h1: { label: 'I полугодие', seasons: ['winter', 'spring'] },
+      h2: { label: 'II полугодие', seasons: ['summer', 'fall'] }
+    };
+
+    function endingPeriodKey(period = activeEndingPeriod) {
+      return `ending_${CURRENT_EVENT_YEAR}_${period}`;
+    }
+
+    function endingPeriodPool(period = activeEndingPeriod) {
+      const seasons = ENDING_PERIOD_META[period]?.seasons || ENDING_PERIOD_META.h1.seasons;
+      return openings
+        .filter(row => row.type === 'ED' && Number(row.year) === CURRENT_EVENT_YEAR && seasons.includes(row.season))
+        .sort((a, b) => String(getOpeningTitle(a)).localeCompare(String(getOpeningTitle(b)), 'ru'));
+    }
+
+    function endingPeriodState(period = activeEndingPeriod) {
+      const key = endingPeriodKey(period);
+      const source = seasonDocs.get(key) || {};
+      const allIds = endingPeriodPool(period).map(row => String(row.id));
+      const hasSavedSelection = Array.isArray(source.selectedOpeningIds);
+      return {
+        ...source,
+        key,
+        eventKind: 'ending-year',
+        type: 'ED',
+        year: CURRENT_EVENT_YEAR,
+        period,
+        selectedOpeningIds: (hasSavedSelection ? source.selectedOpeningIds : allIds).map(String).filter(id => allIds.includes(id)),
+        allowedNicknames: cleanParticipantSlots(source.allowedNicknames || []),
+        semifinalOpeningIds: Array.isArray(source.semifinalOpeningIds) ? source.semifinalOpeningIds.map(String) : []
+      };
+    }
+
+    function endingRatingsFor(state, openingId = '') {
+      return eventRatings.filter(row =>
+        row.eventKind === 'ending-year' &&
+        String(row.periodKey || row.seasonKey || '') === state.key &&
+        (!openingId || String(row.openingId || '') === String(openingId))
+      );
+    }
+
+    function endingManualPeriod(state) {
+      return state.year === 2026 && state.period === 'h1';
+    }
+
+    function endingActor(state) {
+      if (isAdmin()) return null;
+      const slot = Math.max(0, Math.min(14, guestSlot - 1));
+      const nickname = String(state.allowedNicknames[slot] || myName || '').trim();
+      if (!nickname) return null;
+      return { nickname, nicknameKey: normalizeNickname(nickname), slot: slot + 1 };
+    }
+
+    function endingScoreFor(state, openingId, nicknameKey = '') {
+      const rows = endingRatingsFor(state, openingId);
+      if (nicknameKey) return rows.find(row => normalizeNickname(row.nicknameKey || row.nickname) === normalizeNickname(nicknameKey)) || null;
+      return rows.find(row => row.manualTotal === true) || null;
+    }
+
+    function endingTotalFor(state, openingId) {
+      if (endingManualPeriod(state)) return Number(endingScoreFor(state, openingId)?.score || 0);
+      return endingRatingsFor(state, openingId).reduce((sum, row) => sum + (Number.isFinite(Number(row.score)) ? Number(row.score) : 0), 0);
+    }
+
+    function endingRankedRows(state) {
+      return state.selectedOpeningIds.map(id => ({
+        id,
+        opening: openingsById.get(String(id)),
+        total: endingTotalFor(state, id),
+        votes: endingRatingsFor(state, id).filter(row => Number.isFinite(Number(row.score))).length
+      })).filter(row => row.opening).sort((a, b) => b.total - a.total || getOpeningTitle(a.opening).localeCompare(getOpeningTitle(b.opening), 'ru'));
+    }
+
+    function endingPeriodSwitchMarkup(state) {
+      return `<section class="ev-stage-layout ev-ending-layout">
+        <aside class="ev-years">
+          <div class="ev-year-title">${CURRENT_EVENT_YEAR}</div>
+          <div class="ev-season-buttons">
+            ${Object.entries(ENDING_PERIOD_META).map(([key, meta]) => {
+              const row = endingPeriodState(key);
+              return `<button type="button" class="ev-season-btn ${key === state.period ? 'active' : ''}" data-ending-period="${key}">
+                <span>${meta.label}</span><span class="ev-season-meta">${meta.seasons.map(value => SEASON_LABEL[value]).join(' + ')}<br>${row.selectedOpeningIds.length} ED</span>
+              </button>`;
+            }).join('')}
+          </div>
+        </aside>
+        <section class="ev-content" id="ev-ending-content"></section>
+      </section>`;
+    }
+
+    function endingTrackLabel(opening, index) {
+      const season = SEASON_LABEL[opening.season] || opening.season || '—';
+      return `<span class="oc-profile-rank">${index + 1}</span><span class="ev-winner-name"><strong>${escapeHtml(getOpeningTitle(opening))}</strong><small>${escapeHtml(season)} ${opening.year} · ${escapeHtml((opening.performers || []).join(', ') || 'исполнитель не указан')}</small></span>`;
+    }
+
+    function renderEndingBasket(state) {
+      const pool = endingPeriodPool(state.period);
+      const chosen = new Set(state.selectedOpeningIds);
+      const lockedAll = endingManualPeriod(state);
+      return `<div class="ev-content-head"><div><div class="ev-content-title">${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
+        <div class="ev-content-sub">Корзина эндингов · ${pool.length} ED</div></div>
+        ${isAdmin() ? `<button class="ev-btn-main" type="button" id="ev-ending-save-basket">${lockedAll ? 'Сохранить все ED' : 'Сохранить корзину'}</button>` : ''}</div>
+        ${lockedAll ? '<div class="ev-status-line warn">Для I полугодия 2026 в ручной ввод включаются все эндинги. Исключать отдельные ED нельзя.</div>' : ''}
+        <div class="ev-list ev-ending-list">${pool.map((opening, index) => `<label class="ev-opening-row ev-ending-select-row">
+          <input type="checkbox" data-ending-basket-id="${escapeHtml(opening.id)}" ${lockedAll || chosen.has(String(opening.id)) ? 'checked' : ''} ${!isAdmin() || lockedAll ? 'disabled' : ''}>
+          ${endingTrackLabel(opening, index)}
+        </label>`).join('') || '<div class="ev-empty">В этом полугодии пока нет ED.</div>'}</div>`;
+    }
+
+    function renderEndingParticipants(state) {
+      if (endingManualPeriod(state)) return '';
+      return `<section class="ev-ending-participants"><div class="ev-mini-title">15 свободных слотов участников</div>
+        <div class="ev-ending-slot-grid">${Array.from({ length: 15 }, (_, index) => `<label class="ev-ending-slot"><span>${String(index + 1).padStart(2, '0')}</span>
+          <input type="text" data-ending-slot="${index}" value="${escapeHtml(state.allowedNicknames[index] || '')}" placeholder="Свободный слот" ${isAdmin() ? '' : 'disabled'}>
+        </label>`).join('')}</div>
+        ${isAdmin() ? '<button class="ev-btn-secondary" type="button" id="ev-ending-save-participants">Сохранить участников</button>' : ''}</section>`;
+    }
+
+    function renderEndingManualScores(state) {
+      return `<div class="ev-status-line warn">Специальный режим I полугодия 2026: вводятся готовые итоговые баллы без пользователей и комментариев.</div>
+        <div class="ev-list ev-ending-score-list">${state.selectedOpeningIds.map((id, index) => {
+          const opening = openingsById.get(String(id));
+          if (!opening) return '';
+          const saved = endingScoreFor(state, id);
+          return `<div class="ev-opening-row ev-ending-score-row">${endingTrackLabel(opening, index)}
+            <label class="ev-ending-score-field"><span>Итоговые баллы</span><input type="number" min="0" step="0.01" data-ending-manual-score="${escapeHtml(id)}" value="${saved ? escapeHtml(saved.score) : ''}" ${isAdmin() ? '' : 'disabled'}></label>
+            ${isAdmin() ? `<button type="button" class="ev-btn-secondary" data-ending-save-manual="${escapeHtml(id)}">Сохранить</button>` : ''}
+          </div>`;
+        }).join('')}</div>`;
+    }
+
+    function renderEndingParticipantScores(state) {
+      const actor = endingActor(state);
+      if (isAdmin()) return `<div class="ev-status-line warn">Администратор настраивает участников, но не выставляет оценки от их имени.</div>${renderEndingRankTable(state)}`;
+      if (!actor) return '<div class="ev-empty">Твой гостевой слот пока свободен. Администратор должен указать участника в этой строке.</div>';
+      return `<div class="ev-status-line ok">Ты оцениваешь как ${escapeHtml(actor.nickname)} · слот ${actor.slot}.</div>
+        <div class="ev-list ev-ending-score-list">${state.selectedOpeningIds.map((id, index) => {
+          const opening = openingsById.get(String(id));
+          if (!opening) return '';
+          const saved = endingScoreFor(state, id, actor.nicknameKey);
+          return `<div class="ev-opening-row ev-ending-score-row">${endingTrackLabel(opening, index)}
+            <label class="ev-ending-score-field"><span>Оценка</span><input type="number" min="0" max="10" step="1" data-ending-user-score="${escapeHtml(id)}" value="${saved ? escapeHtml(saved.score) : ''}"></label>
+            <label class="ev-ending-comment-field"><span>Комментарий</span><input type="text" data-ending-user-comment="${escapeHtml(id)}" value="${escapeHtml(saved?.comment || '')}" placeholder="Комментарий"></label>
+            <button type="button" class="ev-btn-secondary" data-ending-save-user="${escapeHtml(id)}">Сохранить</button>
+          </div>`;
+        }).join('')}</div>`;
+    }
+
+    function renderEndingRankTable(state, selectable = false) {
+      const selected = new Set(state.semifinalOpeningIds);
+      const rows = endingRankedRows(state);
+      return `<div class="ev-mini-title">Результаты полугодия</div><div class="ev-list ev-ending-results">${rows.map((row, index) =>
+        `<label class="ev-opening-row ev-ending-result-row">${selectable ? `<input type="checkbox" data-ending-semifinal-id="${escapeHtml(row.id)}" ${selected.has(row.id) ? 'checked' : ''} ${isAdmin() ? '' : 'disabled'}>` : ''}
+          ${endingTrackLabel(row.opening, index)}<span class="ev-ending-total">${row.total} б.${endingManualPeriod(state) ? '' : ` · ${row.votes}/15`}</span></label>`
+      ).join('') || '<div class="ev-empty">Результатов пока нет.</div>'}</div>`;
+    }
+
+    function renderEndingFirst(state) {
+      return `<div class="ev-content-head"><div><div class="ev-content-title">${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
+        <div class="ev-content-sub">Первый этап · ${state.selectedOpeningIds.length} ED</div></div></div>
+        ${renderEndingParticipants(state)}
+        ${endingManualPeriod(state) ? renderEndingManualScores(state) : renderEndingParticipantScores(state)}`;
+    }
+
+    function renderEndingSemi(state) {
+      return `<div class="ev-content-head"><div><div class="ev-content-title">Полуфинал · ${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
+        <div class="ev-content-sub">Выбери эндинги, которые проходят в финал.</div></div>
+        ${isAdmin() ? '<button class="ev-btn-main" type="button" id="ev-ending-save-semifinal">Сохранить финалистов</button>' : ''}</div>
+        ${renderEndingRankTable(state, true)}`;
+    }
+
+    function renderEndingFinal(state) {
+      const ids = state.semifinalOpeningIds.length ? state.semifinalOpeningIds : endingRankedRows(state).slice(0, 10).map(row => row.id);
+      const rows = ids.map(id => ({ id, opening: openingsById.get(String(id)), total: endingTotalFor(state, id) }))
+        .filter(row => row.opening).sort((a, b) => b.total - a.total);
+      return `<div class="ev-content-head"><div><div class="ev-content-title">Финал · ${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
+        <div class="ev-content-sub">${state.semifinalOpeningIds.length ? 'Сохранённые финалисты' : 'Предварительный топ-10 по баллам'}</div></div></div>
+        <div class="ev-list">${rows.map((row, index) => `<div class="ev-opening-row">${endingTrackLabel(row.opening, index)}<span class="ev-ending-total">${row.total} б.</span></div>`).join('') || '<div class="ev-empty">Финалисты пока не выбраны.</div>'}</div>`;
+    }
+
+    async function saveEndingPeriodPatch(state, patch) {
+      await setDoc(doc(db, 'eventSeasons', state.key), {
+        eventKind: 'ending-year', type: 'ED', year: state.year, period: state.period, periodKey: state.key,
+        ...patch, updatedAt: serverTimestamp()
+      }, { merge: true });
+    }
+
+    function bindEndingYearEvents(state) {
+      appEl.querySelectorAll('[data-ending-period]').forEach(button => button.addEventListener('click', () => {
+        activeEndingPeriod = button.dataset.endingPeriod === 'h2' ? 'h2' : 'h1';
+        render();
+      }));
+      appEl.querySelector('#ev-ending-save-basket')?.addEventListener('click', async () => {
+        const ids = endingManualPeriod(state)
+          ? endingPeriodPool(state.period).map(row => String(row.id))
+          : [...appEl.querySelectorAll('[data-ending-basket-id]:checked')].map(input => String(input.dataset.endingBasketId));
+        await saveEndingPeriodPatch(state, { selectedOpeningIds: ids });
+      });
+      appEl.querySelector('#ev-ending-save-participants')?.addEventListener('click', async () => {
+        const slots = Array.from({ length: 15 }, (_, index) => String(appEl.querySelector(`[data-ending-slot="${index}"]`)?.value || '').trim());
+        await saveEndingPeriodPatch(state, { allowedNicknames: slots });
+      });
+      appEl.querySelectorAll('[data-ending-save-manual]').forEach(button => button.addEventListener('click', async () => {
+        const openingId = button.dataset.endingSaveManual;
+        const input = appEl.querySelector(`[data-ending-manual-score="${CSS.escape(openingId)}"]`);
+        const score = Number(input?.value);
+        if (!Number.isFinite(score) || score < 0) return;
+        await setDoc(doc(db, 'eventRatings', `${state.key}__manual__${openingId}`), {
+          eventKind: 'ending-year', manualTotal: true, stage: 'first', periodKey: state.key, seasonKey: state.key,
+          year: state.year, period: state.period, openingId, nickname: '', nicknameKey: '__manual__', score, comment: '',
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }));
+      appEl.querySelectorAll('[data-ending-save-user]').forEach(button => button.addEventListener('click', async () => {
+        const actor = endingActor(state);
+        const openingId = button.dataset.endingSaveUser;
+        if (!actor) return;
+        const score = Number(appEl.querySelector(`[data-ending-user-score="${CSS.escape(openingId)}"]`)?.value);
+        const comment = String(appEl.querySelector(`[data-ending-user-comment="${CSS.escape(openingId)}"]`)?.value || '').trim();
+        if (!Number.isFinite(score) || score < 0 || score > 10 || !comment) return;
+        await setDoc(doc(db, 'eventRatings', `${state.key}__${actor.nicknameKey}__${openingId}`), {
+          eventKind: 'ending-year', stage: 'first', periodKey: state.key, seasonKey: state.key,
+          year: state.year, period: state.period, openingId, nickname: actor.nickname, nicknameKey: actor.nicknameKey,
+          participantSlot: actor.slot, score, comment, updatedAt: serverTimestamp()
+        }, { merge: true });
+      }));
+      appEl.querySelector('#ev-ending-save-semifinal')?.addEventListener('click', async () => {
+        const ids = [...appEl.querySelectorAll('[data-ending-semifinal-id]:checked')].map(input => String(input.dataset.endingSemifinalId));
+        await saveEndingPeriodPatch(state, { semifinalOpeningIds: ids });
+      });
+    }
+
+    function renderEndingYearEvent() {
+      const state = endingPeriodState();
+      appEl.innerHTML = `<section class="ev-panel-head"><div><div class="ev-section-label">Оценка эндингов года</div>
+        <h2>${CURRENT_EVENT_YEAR} · отбор по полугодиям</h2>
+        <div class="ev-hint">Только ED. I полугодие: Зима + Весна. II полугодие: Лето + Осень. Все 15 мест участников изначально свободны.</div></div></section>
+        ${endingPeriodSwitchMarkup(state)}`;
+      const content = appEl.querySelector('#ev-ending-content');
+      if (activeStage === 'basket') content.innerHTML = renderEndingBasket(state);
+      else if (activeStage === 'first') content.innerHTML = renderEndingFirst(state);
+      else if (activeStage === 'semi') content.innerHTML = renderEndingSemi(state);
+      else content.innerHTML = renderEndingFinal(state);
+      bindEndingYearEvents(state);
+    }
+
     function render() {
       saveEventUiPreferences();
       if (!canAccessMode(activeMode)) activeMode = defaultAccessibleMode();
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
       document.querySelectorAll('.ev-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.stage === activeStage));
-      stageTabs?.classList.toggle('hidden', activeMode !== 'rating');
+      stageTabs?.classList.toggle('hidden', !['rating', 'endingrating'].includes(activeMode));
       if (!hasAccess()) {
         appEl.innerHTML = '<div class="ev-empty">Введите пароль, чтобы открыть страницу ивентов.</div>';
+        return;
+      }
+      if (activeMode === 'endingrating') {
+        renderEndingYearEvent();
         return;
       }
       if (activeMode === 'guess') {
@@ -7492,7 +7745,7 @@
     function bindShell() {
       document.querySelectorAll('.ev-mode-tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          const requestedMode = ['guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
+          const requestedMode = ['endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami'].includes(btn.dataset.mode) ? btn.dataset.mode : 'rating';
           if (!canAccessMode(requestedMode)) {
             activeMode = defaultAccessibleMode();
             render();
