@@ -4336,10 +4336,45 @@
         type: 'ED',
         year: CURRENT_EVENT_YEAR,
         period,
-        selectedOpeningIds: (hasSavedSelection ? source.selectedOpeningIds : allIds).map(String).filter(id => allIds.includes(id)),
+        selectedOpeningIds: (hasSavedSelection ? source.selectedOpeningIds : []).map(String).filter(id => allIds.includes(id)),
         allowedNicknames: cleanParticipantSlots(source.allowedNicknames || []),
         semifinalOpeningIds: Array.isArray(source.semifinalOpeningIds) ? source.semifinalOpeningIds.map(String) : []
       };
+    }
+
+    function endingBasketState(period = activeEndingPeriod) {
+      const key = endingPeriodKey(period);
+      const raw = eventBasket[key] || {};
+      return {
+        key,
+        eventKind: 'ending-year',
+        type: 'ED',
+        year: CURRENT_EVENT_YEAR,
+        period,
+        target: [10, 15, 20].includes(Number(raw.target)) ? Number(raw.target) : 15,
+        buckets: normalizeBasketBuckets(raw.buckets)
+      };
+    }
+
+    function saveEndingBasketState(period, patch = {}) {
+      const current = endingBasketState(period);
+      eventBasket[current.key] = {
+        ...eventBasket[current.key],
+        ...current,
+        ...patch,
+        buckets: normalizeBasketBuckets(patch.buckets || current.buckets),
+        updatedAtLocal: new Date().toISOString()
+      };
+      saveEventBasket();
+    }
+
+    function moveEndingBasketItem(period, openingId, bucket) {
+      if (!['unassigned', 'guaranteed', 'variable'].includes(bucket)) return;
+      const state = endingBasketState(period);
+      const buckets = normalizeBasketBuckets(state.buckets);
+      Object.keys(buckets).forEach(key => { buckets[key] = buckets[key].filter(id => id !== String(openingId)); });
+      buckets[bucket].push(String(openingId));
+      saveEndingBasketState(period, { buckets });
     }
 
     function endingRatingsFor(state, openingId = '') {
@@ -4405,17 +4440,27 @@
     }
 
     function renderEndingBasket(state) {
-      const pool = endingPeriodPool(state.period);
-      const chosen = new Set(state.selectedOpeningIds);
-      const lockedAll = endingManualPeriod(state);
+      if (!isAdmin()) return '<div class="ev-empty">Корзина доступна только админу.</div>';
+      const basket = endingBasketState(state.period);
+      const unassigned = basket.buckets.unassigned.length;
+      const guaranteed = basket.buckets.guaranteed.length;
+      const canConfirm = unassigned === 0 && guaranteed === basket.target;
+      const column = (bucket, title) => `<section class="ev-basket-col"><div class="ev-basket-col-head"><div class="ev-basket-col-title">${title}</div><div class="ev-basket-count">${basket.buckets[bucket].length} ED</div></div>
+        <div class="ev-basket-list">${basket.buckets[bucket].map(id => {
+          const opening = openingsById.get(String(id));
+          if (!opening) return '';
+          const buttons = [];
+          if (bucket !== 'guaranteed') buttons.push(`<button class="ev-basket-move" data-ending-basket-move="guaranteed" data-id="${escapeHtml(id)}">в гарант</button>`);
+          if (bucket !== 'variable') buttons.push(`<button class="ev-basket-move" data-ending-basket-move="variable" data-id="${escapeHtml(id)}">в вариатив</button>`);
+          if (bucket !== 'unassigned') buttons.push(`<button class="ev-basket-move" data-ending-basket-move="unassigned" data-id="${escapeHtml(id)}">назад</button>`);
+          return `<article class="ev-basket-card"><div class="ev-basket-card-title">${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-basket-card-meta">${escapeHtml(SEASON_LABEL[opening.season] || opening.season)} · ${escapeHtml((opening.performers || []).join(', ') || 'исполнитель —')}</div><div class="ev-basket-actions">${buttons.join('')}</div></article>`;
+        }).join('') || '<div class="ev-empty" style="padding:20px 10px;">Пусто</div>'}</div></section>`;
       return `<div class="ev-content-head"><div><div class="ev-content-title">${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
-        <div class="ev-content-sub">Корзина эндингов · ${pool.length} ED</div></div>
-        ${isAdmin() ? `<button class="ev-btn-main" type="button" id="ev-ending-save-basket">${lockedAll ? 'Сохранить все ED' : 'Сохранить корзину'}</button>` : ''}</div>
-        ${lockedAll ? '<div class="ev-status-line warn">Для I полугодия 2026 в ручной ввод включаются все эндинги. Исключать отдельные ED нельзя.</div>' : ''}
-        <div class="ev-list ev-ending-list">${pool.map((opening, index) => `<label class="ev-opening-row ev-ending-select-row">
-          <input type="checkbox" data-ending-basket-id="${escapeHtml(opening.id)}" ${lockedAll || chosen.has(String(opening.id)) ? 'checked' : ''} ${!isAdmin() || lockedAll ? 'disabled' : ''}>
-          ${endingTrackLabel(opening, index)}
-        </label>`).join('') || '<div class="ev-empty">В этом полугодии пока нет ED.</div>'}</div>`;
+        <div class="ev-content-sub">Корзина полугодия · ${basketAllIds(basket).length} ED</div>
+        <div class="ev-status-line ${canConfirm ? 'ok' : 'warn'}">${canConfirm ? 'Можно подтверждать набор.' : `Нужно: нераспределённых 0, гарантированных ${basket.target}. Сейчас ${unassigned} и ${guaranteed}.`}</div></div></div>
+        <div class="ev-target-row"><span class="ev-hint">Количество гарантированных:</span>${[10,15,20].map(value => `<button class="ev-target-btn ${basket.target === value ? 'active' : ''}" data-ending-basket-target="${value}">${value}</button>`).join('')}</div>
+        <div class="ev-basket-grid">${column('unassigned', 'Нераспределённая')}${column('guaranteed', 'Гарантированная')}${column('variable', 'Вариативная')}</div>
+        <div class="ev-basket-confirm-row"><div class="ev-basket-status">После подтверждения гарантированные ED попадут в первый этап.</div><button class="ev-btn-main" id="ev-ending-confirm-basket" ${canConfirm ? '' : 'disabled'}>Подтвердить полугодие</button></div>`;
     }
 
     function renderEndingParticipants(state) {
@@ -4501,11 +4546,21 @@
         activeEndingPeriod = button.dataset.endingPeriod === 'h2' ? 'h2' : 'h1';
         render();
       }));
-      appEl.querySelector('#ev-ending-save-basket')?.addEventListener('click', async () => {
-        const ids = endingManualPeriod(state)
-          ? endingPeriodPool(state.period).map(row => String(row.id))
-          : [...appEl.querySelectorAll('[data-ending-basket-id]:checked')].map(input => String(input.dataset.endingBasketId));
-        await saveEndingPeriodPatch(state, { selectedOpeningIds: ids });
+      appEl.querySelectorAll('[data-ending-basket-target]').forEach(button => button.addEventListener('click', () => {
+        saveEndingBasketState(state.period, { target: Number(button.dataset.endingBasketTarget) });
+      }));
+      appEl.querySelectorAll('[data-ending-basket-move]').forEach(button => button.addEventListener('click', () => {
+        moveEndingBasketItem(state.period, button.dataset.id, button.dataset.endingBasketMove);
+      }));
+      appEl.querySelector('#ev-ending-confirm-basket')?.addEventListener('click', async () => {
+        const basket = endingBasketState(state.period);
+        if (basket.buckets.unassigned.length || basket.buckets.guaranteed.length !== basket.target) return;
+        await saveEndingPeriodPatch(state, {
+          selectedOpeningIds: basket.buckets.guaranteed.slice(0, basket.target),
+          basketTarget: basket.target,
+          semifinalOpeningIds: []
+        });
+        activeStage = 'first';
       });
       appEl.querySelector('#ev-ending-save-participants')?.addEventListener('click', async () => {
         const slots = Array.from({ length: 15 }, (_, index) => String(appEl.querySelector(`[data-ending-slot="${index}"]`)?.value || '').trim());
