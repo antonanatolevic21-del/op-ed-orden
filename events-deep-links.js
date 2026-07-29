@@ -1,7 +1,7 @@
 (() => {
   if (window.__OC_EVENTS_DEEP_LINKS_READY__) return;
 
-  const MODES = new Set(['rating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
+  const MODES = new Set(['rating', 'endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
   const STAGES = new Set(['basket', 'first', 'semi', 'final']);
   const SEASONS = new Set(['winter', 'spring', 'summer', 'fall']);
   const SEASON_LABEL = { winter: 'зима', spring: 'весна', summer: 'лето', fall: 'осень' };
@@ -44,7 +44,7 @@
     const nextMode = MODES.has(mode) ? mode : 'rating';
 
     params.set('mode', nextMode);
-    if (nextMode === 'rating' && STAGES.has(stage)) params.set('stage', stage);
+    if (['rating', 'endingrating'].includes(nextMode) && STAGES.has(stage)) params.set('stage', stage);
     else params.delete('stage');
 
     if (nextMode === 'rating' && SEASONS.has(season)) params.set('season', season);
@@ -112,7 +112,7 @@
 
     applying = true;
     clickSelector(`.ev-mode-tab[data-mode="${requestedMode}"]`);
-    if (requestedMode === 'rating') clickSelector(`.ev-tab[data-stage="${requestedStage}"]`);
+    if (['rating', 'endingrating'].includes(requestedMode)) clickSelector(`.ev-tab[data-stage="${requestedStage}"]`);
     if (requestedSeason) applySeason(requestedSeason, requestedYear);
     if (requestedRoom) applyRoom(requestedRoom, requestedMode);
 
