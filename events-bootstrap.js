@@ -154,7 +154,7 @@ async function clickRequestedMode(mode) {
 async function loadFull(mode = '', profile = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260729-ending-year1');
+  await import('./events-app.js?v=20260729-ending-basket2');
   if (mode) void clickRequestedMode(mode);
 
   document.addEventListener('click', event => {
@@ -220,7 +220,7 @@ async function start() {
     prepareRegisteredFullAccess(user, profile);
     location.assign(fullUrl(modeName));
   };
-  await import('./events-participant-suite.js?v=20260729-ending-year1');
+  await import('./events-participant-suite.js?v=20260729-ending-basket2');
 }
 
 start().catch(error => {
