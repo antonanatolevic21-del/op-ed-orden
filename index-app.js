@@ -224,6 +224,7 @@
     let activeEntityCardId = '';
     let entityFiltersExpanded = false;
     let activeEntityQueueLabel = '';
+    let activeEntityFilteredEntries = [];
     let firebaseUnsubOpenings = null;
     let firebaseUnsubRatings = null;
     let firebaseUnsubManualRanks = null;
@@ -3730,6 +3731,7 @@
       if (entityToYearSelect) entityToYearSelect.value = '';
       if (entityToSeasonSelect) entityToSeasonSelect.value = '';
       if (entityProgressSelect) entityProgressSelect.value = '';
+      activeEntityFilteredEntries = [];
       if (entityTracksEl) entityTracksEl.replaceChildren();
     }
 
@@ -3792,7 +3794,8 @@
           const rated = entityHasRating(entry);
           return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
         }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
-        entityRateAllBtn.disabled = !progress.related.length;
+        activeEntityFilteredEntries = filtered;
+        entityRateAllBtn.disabled = !filtered.length;
         entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + filtered.map((entry, index) =>
           renderUnifiedEntryCard(entry, {
             rankLabel: index + 1,
@@ -3821,7 +3824,7 @@
     function startEntityRating() {
       const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
       if (!card || !ensureNickname()) return;
-      const related = entriesForEntity(card.type, card.value);
+      const related = activeEntityFilteredEntries.slice();
       const remaining = related.filter(entry => !entityHasRating(entry));
       evaluatorMode = 'entity';
       activeEntityQueueLabel = card.value;
