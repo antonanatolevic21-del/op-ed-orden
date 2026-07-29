@@ -51,7 +51,6 @@ const coreScripts = [
   'undo-actions.js',
   'accessibility.js',
   'catalog-improvements.js',
-  'image-ahead-loader.js',
   'ux-audit-enhancements.js'
 ];
 
