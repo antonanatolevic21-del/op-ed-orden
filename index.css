@@ -1,4 +1,4 @@
-@import url('./index-shell-current.css?v=20260729-album-filters1');
+@import url('./index-shell-current.css?v=20260729-album-date-range1');
 
 /* Keep the neutral page background visible until the final UI bundle has
  * applied. This prevents the legacy base layout from flashing for one frame. */
