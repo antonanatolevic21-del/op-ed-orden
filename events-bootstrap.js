@@ -84,7 +84,7 @@ function bindingRows(row) {
 }
 
 function participantMatch(row, profile) {
-  if (!row || row.closed || Number(row.year || CURRENT_EVENT_YEAR) !== CURRENT_EVENT_YEAR) return null;
+  if (!row || row.eventKind === 'ending-year' || row.closed || Number(row.year || CURRENT_EVENT_YEAR) !== CURRENT_EVENT_YEAR) return null;
   const key = normalizeNickname(profile.nicknameKey || profile.nickname);
   const slots = Array.isArray(row.allowedNicknames) ? row.allowedNicknames : [];
   const slotIndex = slots.findIndex(name => normalizeNickname(name) === key);
@@ -154,7 +154,7 @@ async function clickRequestedMode(mode) {
 async function loadFull(mode = '', profile = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260727-participant-review-close1');
+  await import('./events-app.js?v=20260729-ending-year1');
   if (mode) void clickRequestedMode(mode);
 
   document.addEventListener('click', event => {
@@ -220,7 +220,7 @@ async function start() {
     prepareRegisteredFullAccess(user, profile);
     location.assign(fullUrl(modeName));
   };
-  await import('./events-participant-suite.js?v=20260725-participant-suite2');
+  await import('./events-participant-suite.js?v=20260729-ending-year1');
 }
 
 start().catch(error => {
