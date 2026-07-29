@@ -60,6 +60,9 @@
     style.id = 'oc-admin-catalog-route-style';
     style.textContent = `
       html.oc-admin-catalog-route .oc-tabs,
+      html.oc-admin-catalog-route .oc-header,
+      html.oc-admin-catalog-route .oc-topbar,
+      html.oc-admin-catalog-route .oc-topbar-mobile-ratings-menu,
       html.oc-admin-catalog-route #oc-profile-panel,
       html.oc-admin-catalog-route #oc-top100-panel,
       html.oc-admin-catalog-route #oc-season-panel,
