@@ -3462,7 +3462,7 @@
       return ['unassigned', 'guaranteed', 'variable'].some(name => Array.isArray(buckets[name]) && buckets[name].map(String).includes(id));
     }
 
-    async function addEntryToEventBasket(entry) {
+    async function toggleEntryInEventBasket(entry) {
       if (!entry || !entry.id) return;
       if (!['OP', 'ED'].includes(entry.type)) return;
       if (!entry.year || !entry.season) { setStatus('У трека должны быть указаны год и сезон.', true); return; }
@@ -3476,7 +3476,14 @@
         guaranteed: Array.isArray(buckets.guaranteed) ? buckets.guaranteed.map(String).filter(Boolean) : [],
         variable: Array.isArray(buckets.variable) ? buckets.variable.map(String).filter(Boolean) : []
       };
-      if (!['unassigned','guaranteed','variable'].some(name => nextBuckets[name].includes(id))) nextBuckets.unassigned.push(id);
+      const wasInBasket = ['unassigned','guaranteed','variable'].some(name => nextBuckets[name].includes(id));
+      if (wasInBasket) {
+        Object.keys(nextBuckets).forEach(name => {
+          nextBuckets[name] = nextBuckets[name].filter(openingId => openingId !== id);
+        });
+      } else {
+        nextBuckets.unassigned.push(id);
+      }
       data[key] = {
         ...current,
         key,
@@ -3492,7 +3499,7 @@
       const savedToFirebase = await saveEventBasketSeasonToFirebase(key, data[key]);
       if (savedToFirebase) {
         saveEventBasket(data);
-        setStatus(`Добавлено в корзину ивентов: ${entry.title}`);
+        setStatus(`${wasInBasket ? 'Убрано из' : 'Добавлено в'} корзину ивентов: ${entry.title}`);
       }
       renderSeasonViews();
     }
@@ -5927,7 +5934,7 @@
       const basketBtn = e.target.closest('[data-basket-add]');
       if (basketBtn) {
         const entry = entriesById.get(String(basketBtn.getAttribute('data-basket-add')));
-        addEntryToEventBasket(entry);
+        toggleEntryInEventBasket(entry);
         return;
       }
       const btn = e.target.closest('[data-op-rate]');
