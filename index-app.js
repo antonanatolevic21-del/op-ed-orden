@@ -3414,7 +3414,7 @@
     }
 
     function eventBasketCanAdd() {
-      return !!myName && EVENT_BASKET_ALLOWED.has(eventBasketAccessKey(myName));
+      return isAdmin();
     }
 
     function loadEventBasket() {
