@@ -147,7 +147,6 @@
     const entityToYearSelect = $('#oc-entity-to-year');
     const entityToSeasonSelect = $('#oc-entity-to-season');
     const entityProgressSelect = $('#oc-entity-progress');
-    const entityTrackSortSelect = $('#oc-entity-track-sort');
     const entityRateAllBtn = $('#oc-entity-rate-all');
     const entityGridEl = $('#oc-entity-grid');
     const entityTracksEl = $('#oc-entity-tracks');
@@ -4096,12 +4095,6 @@
         const toPoint = toYear ? Number(toYear) * 4 + (seasonOrder[toSeason] ?? 3) : Number.POSITIVE_INFINITY;
         const rangeStart = Math.min(fromPoint, toPoint);
         const rangeEnd = Math.max(fromPoint, toPoint);
-        const trackSort = String(entityTrackSortSelect?.value || 'title');
-        const pointForEntry = entry => Number(entry.year || 0) * 4 + (seasonOrder[entry.season] ?? 0);
-        const ratingForEntry = entry => {
-          const value = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
-          return value === null ? Number.NEGATIVE_INFINITY : Number(value);
-        };
         const filtered = progress.related.filter(entry => {
           if (search && !normalizedEntityValue([entry.title, ...(entry.performers || []), ...(entry.directors || []), ...(entry.studios || []), ...(entry.franchises || [])].join(' ')).includes(search)) return false;
           if (trackType && entry.type !== trackType) return false;
@@ -4112,19 +4105,7 @@
           if (entryPoint < rangeStart || entryPoint > rangeEnd) return false;
           const rated = entityHasRating(entry);
           return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
-        }).sort((a, b) => {
-          if (trackSort === 'unrated') {
-            const ratedDiff = Number(entityHasRating(a)) - Number(entityHasRating(b));
-            if (ratedDiff) return ratedDiff;
-          } else if (trackSort === 'newest' || trackSort === 'oldest') {
-            const pointDiff = pointForEntry(a) - pointForEntry(b);
-            if (pointDiff) return trackSort === 'newest' ? -pointDiff : pointDiff;
-          } else if (trackSort === 'rating') {
-            const ratingDiff = ratingForEntry(b) - ratingForEntry(a);
-            if (ratingDiff) return ratingDiff;
-          }
-          return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
-        });
+        }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
         activeEntityFilteredEntries = filtered;
         entityRateAllBtn.disabled = !filtered.length;
         const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
@@ -6202,10 +6183,6 @@
     });
     entityAlbumSortSelect?.addEventListener('change', () => {
       entityCardRenderLimit = 40;
-      renderEntityAlbums();
-    });
-    entityTrackSortSelect?.addEventListener('change', () => {
-      entityTrackRenderLimit = 30;
       renderEntityAlbums();
     });
     if (entityBackBtn) entityBackBtn.addEventListener('click', () => {

@@ -13,7 +13,7 @@
     '#oc-p-to-season', '#oc-p-missing', '#oc-entity-album-search', '#oc-entity-album-sort',
     '#oc-entity-search', '#oc-entity-track-type', '#oc-entity-from-year',
     '#oc-entity-from-season', '#oc-entity-to-year', '#oc-entity-to-season',
-    '#oc-entity-progress', '#oc-entity-track-sort'
+    '#oc-entity-progress'
   ];
   let saveDepth = 0;
   let saveTimer = 0;

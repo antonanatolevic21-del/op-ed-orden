@@ -147,7 +147,7 @@
         authProvider: 'email-password',
         passwordEnabled: true
       };
-      cacheAccountProfile(credential.user.uid, profile, remember);
+      cacheAccountProfile(credential.user, profile, remember);
       return { user: credential.user, profile };
     }
 
@@ -200,13 +200,37 @@
       const user = auth.currentUser;
       if (!user || user.isAnonymous) return null;
       const cachedProfile = cachedAccountProfile(user.uid);
-      if (cachedProfile) return { user, profile: cachedProfile };
+      if (cachedProfile) {
+        const cachedName = String(cachedProfile.nickname || cachedProfile.nicknameKey || cachedProfile.id || '').trim();
+        const freshProfile = cachedName
+          ? await getAccountProfile(cachedName).catch(error => {
+              console.warn('Could not refresh cached account profile', error);
+              return null;
+            })
+          : null;
+        if (freshProfile) {
+          cacheAccountProfile(user, freshProfile, Boolean(localStorage.getItem(ACCOUNT_PROFILE_CACHE_KEY)));
+          return { user, profile: freshProfile };
+        }
+        return { user, profile: cachedProfile };
+      }
       if (user.displayName) {
-        return { user, profile: { nickname: user.displayName, nicknameKey: normalizeNickname(user.displayName), authUid: user.uid } };
+        const freshProfile = await getAccountProfile(user.displayName).catch(error => {
+          console.warn('Could not load current account profile', error);
+          return null;
+        });
+        return {
+          user,
+          profile: freshProfile || {
+            nickname: user.displayName,
+            nicknameKey: normalizeNickname(user.displayName),
+            authUid: user.uid
+          }
+        };
       }
       const profile = await accountProfileByUid(user.uid);
       if (!profile) return null;
-      cacheAccountProfile(user.uid, profile, true);
+      cacheAccountProfile(user, profile, true);
       return { user, profile };
     }
 
