@@ -61,7 +61,7 @@
 
   if (document.querySelector('.oc-addbar')) {
     addStyle('track-add-panel.css');
-    void addScript('track-add-panel.js', primaryVersion, true);
+    void addScript('track-add-panel.js', '20260729-last-title1', true);
   }
 
   function loadTop100Package() {
