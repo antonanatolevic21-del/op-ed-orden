@@ -1064,6 +1064,13 @@
       const index = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(nickname));
       if (index >= 0) firebaseUserProfiles[index] = { ...firebaseUserProfiles[index], ...profile };
       else firebaseUserProfiles.push(profile);
+      const profileAvatar = String(profile?.avatar || '').trim();
+      if (profileAvatar) {
+        myAvatar = profileAvatar;
+        avatarBtn.textContent = profileAvatar;
+        try { await window.storage.set(AVATAR_KEY, profileAvatar, false); }
+        catch (e) { console.error('Could not cache profile avatar', e); }
+      }
       await saveName(nickname);
       localStorage.setItem(PRIMARY_NAME_KEY, nickname);
       nameInput.value = nickname;
@@ -2083,10 +2090,17 @@
     }
 
     async function loadAvatar() {
+      let storedAvatar = '';
       try {
         const res = await window.storage.get(AVATAR_KEY, false);
-        if (res && res.value) myAvatar = res.value;
+        storedAvatar = String(res?.value || '').trim();
       } catch (e) { }
+      const profileAvatar = String(accountProfile(myName)?.avatar || '').trim();
+      myAvatar = profileAvatar || storedAvatar || myAvatar;
+      if (profileAvatar && profileAvatar !== storedAvatar) {
+        try { await window.storage.set(AVATAR_KEY, profileAvatar, false); }
+        catch (e) { console.error('Could not refresh cached profile avatar', e); }
+      }
       avatarBtn.textContent = myAvatar;
     }
 
