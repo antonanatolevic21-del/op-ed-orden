@@ -10,7 +10,7 @@
     const active = years.querySelector('[data-season-year].active')?.dataset.seasonYear || buttons[0]?.dataset.seasonYear;
     const wrap = document.createElement('label');
     wrap.className = 'oc-season-year-jump';
-    wrap.innerHTML = '<span>Быстрый переход</span>';
+    wrap.innerHTML = '<span>Перейти к году</span>';
     const select = document.createElement('select');
     select.setAttribute('aria-label', 'Перейти к году');
     for (const button of buttons) {

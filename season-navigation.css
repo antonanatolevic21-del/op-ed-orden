@@ -9,23 +9,62 @@
   position: sticky;
   top: 0;
   z-index: 6;
-  display: grid;
-  grid-template-columns: 1fr 92px;
-  gap: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  margin: -2px -2px 10px;
-  padding: 10px;
-  border: 1px solid #392f45;
-  border-radius: 10px;
-  background: rgba(18,14,25,.96);
-  color: #aaa0b5;
-  font-size: 12px;
+  margin: -2px -2px 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(139,92,246,.24);
+  border-radius: 12px;
+  background: linear-gradient(135deg,rgba(139,92,246,.10),rgba(8,217,214,.035)),rgba(17,13,24,.97);
+  color: #8f859b;
+  font: 700 10px 'Space Mono',monospace;
+  letter-spacing: .2px;
   backdrop-filter: blur(12px);
 }
 
 .oc-season-year-jump select {
-  width: 100%;
-  min-height: 36px;
+  width: 88px;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid #4a3b5b;
+  border-radius: 9px;
+  outline: 0;
+  appearance: none;
+  background: #1b1524;
+  color: #f4eff8;
+  font: 800 11px 'Space Mono',monospace;
+  cursor: pointer;
+  transition: border-color .15s ease,box-shadow .15s ease,background .15s ease;
+}
+
+.oc-season-year-jump::after {
+  content: '⌄';
+  position: absolute;
+  right: 19px;
+  top: 50%;
+  color: #a992c2;
+  font-size: 15px;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-57%);
+}
+
+.oc-season-year-jump select:hover {
+  border-color: #765c92;
+  background: #21182d;
+}
+
+.oc-season-year-jump select:focus-visible {
+  border-color: #9b72cf;
+  box-shadow: 0 0 0 3px rgba(139,92,246,.18);
+}
+
+.oc-season-year-jump select option {
+  background: #17111f;
+  color: #f4eff8;
 }
 
 .oc-year-btn {
