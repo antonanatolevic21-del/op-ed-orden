@@ -413,6 +413,18 @@
         manualED: cleanRanks.ED,
         updatedAt: serverTimestamp()
       };
+      ['candidatesOP', 'candidatesED'].forEach(field => {
+        if (Array.isArray(ranks && ranks[field])) {
+          payload[field] = Array.from(new Set(ranks[field].map(String).filter(Boolean)));
+        }
+      });
+      ['pinsOP', 'pinsED'].forEach(field => {
+        if (Array.isArray(ranks && ranks[field])) {
+          payload[field] = ranks[field]
+            .map(pin => ({ id: String(pin?.id || ''), rank: Math.round(Number(pin?.rank) || 0) }))
+            .filter(pin => pin.id && pin.rank >= 1 && pin.rank <= 100);
+        }
+      });
       const results = await Promise.allSettled([
         setDoc(doc(db, "manualRanks", safeName), payload, { merge: true }),
         setDoc(doc(db, "userProfiles", safeName), payload, { merge: true })
