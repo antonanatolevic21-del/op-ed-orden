@@ -10,6 +10,7 @@
   const top100DragVersion = '20260726-top100-drag2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
+  const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
   let top100Promise = null;
   let seasonPromise = null;
   let statsPromise = null;
@@ -17,6 +18,8 @@
   let entityPromise = null;
   let discoveryPromise = null;
   let adminPromise = null;
+  let preserveNextTierRoute = false;
+  let tierDefaultTimer = 0;
 
   document.documentElement.classList.remove('oc-primary-booting');
   document.documentElement.classList.add('oc-primary-ready', 'oc-primary-progressive');
@@ -172,6 +175,50 @@
     if (route === 'discovery') void loadDiscoveryPackage();
   }
 
+  function currentTierSeason() {
+    const now = new Date();
+    return {
+      year: String(now.getFullYear()),
+      season: seasonOrder[Math.max(0, Math.min(3, Math.floor(now.getMonth() / 3)))]
+    };
+  }
+
+  function tierViewIsOpen() {
+    const panel = document.querySelector('#oc-tier-panel');
+    const activeButton = document.querySelector('.oc-tab-btn.active[data-tab="tier"]');
+    const route = new URL(window.location.href).searchParams.get('view') || '';
+    return Boolean(activeButton || (panel && !panel.classList.contains('hidden')) || route === 'tier');
+  }
+
+  function applyCurrentTierSeason() {
+    if (!tierViewIsOpen()) return true;
+    const yearSelect = document.querySelector('#oc-tier-year');
+    const seasonSelect = document.querySelector('#oc-tier-season');
+    if (!yearSelect || !seasonSelect) return false;
+
+    const current = currentTierSeason();
+    const hasCurrentYear = Array.from(yearSelect.options).some(option => option.value === current.year);
+    if (!hasCurrentYear) return false;
+
+    if (yearSelect.value !== current.year) {
+      yearSelect.value = current.year;
+      yearSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (seasonSelect.value !== current.season) {
+      seasonSelect.value = current.season;
+      seasonSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return true;
+  }
+
+  function scheduleCurrentTierSeason(attempt = 0) {
+    window.clearTimeout(tierDefaultTimer);
+    tierDefaultTimer = window.setTimeout(() => {
+      if (applyCurrentTierSeason() || attempt >= 20) return;
+      scheduleCurrentTierSeason(attempt + 1);
+    }, attempt ? 100 : 0);
+  }
+
   function routeLazyModules(target) {
     if (target?.closest?.('[data-profile-view="top100"]')) void loadTop100Package();
     if (target?.closest?.('.oc-tab-btn[data-tab="season"]')) void loadSeasonPackage();
@@ -181,7 +228,11 @@
     if (target?.closest?.('[data-entity-home]')) loadRoutePackage(`entity-${target.closest('[data-entity-home]').getAttribute('data-entity-home') || ''}`);
   }
 
-  document.addEventListener('click', event => routeLazyModules(event.target), true);
+  document.addEventListener('click', event => {
+    routeLazyModules(event.target);
+    if (event.target?.closest?.('#oc-season-tier-btn')) preserveNextTierRoute = true;
+    if (event.target?.closest?.('.oc-tab-btn[data-tab="tier"]')) preserveNextTierRoute = false;
+  }, true);
   const profile = document.querySelector('#oc-profile-panel');
   if (profile) {
     new MutationObserver(() => { if (profile.dataset.profileView === 'top100') void loadTop100Package(); })
@@ -194,10 +245,21 @@
     if (document.querySelector('.oc-tab-btn[data-tab="stats"]')?.classList.contains('active')) void loadStatsPackage();
     const view = new URL(window.location.href).searchParams.get('view') || 'chart';
     loadRoutePackage(view);
+    if (view === 'tier') scheduleCurrentTierSeason();
     maybeLoadAdminPackage();
   }
+
   window.setTimeout(detectCurrentLazyView, 100);
-  window.addEventListener('oped:route-change', event => loadRoutePackage(event?.detail?.tab));
+  window.addEventListener('oped:route-change', event => {
+    const tab = String(event?.detail?.tab || '');
+    loadRoutePackage(tab);
+    if (tab !== 'tier') return;
+    if (preserveNextTierRoute) {
+      preserveNextTierRoute = false;
+      return;
+    }
+    scheduleCurrentTierSeason();
+  });
   window.addEventListener('oped-account-restored', () => window.setTimeout(maybeLoadAdminPackage, 0));
   const accessBadge = document.querySelector('#oc-access-badge');
   if (accessBadge) new MutationObserver(maybeLoadAdminPackage).observe(accessBadge, { attributes: true, attributeFilter: ['class'] });
