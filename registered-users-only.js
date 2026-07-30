@@ -35,7 +35,7 @@
       if (rankB < 0) return -1;
       return rankA - rankB;
     }
-    return profileName(a).localeCompare(profileName(b), 'ru', { sensitivity: 'base' });
+    return profileName(a).localeCompare(profileName(b), 'ru', { numeric: true, sensitivity: 'base' });
   }
 
   function knownRows(rows) {
