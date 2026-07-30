@@ -22,14 +22,14 @@
   overflow:hidden;
 }
 
-/* Preserve the original proportions and always show the complete image. */
+/* Fill the whole square without distortion; excess edges are cropped. */
 .oc-entity-cover img{
   display:block;
   width:100%!important;
   height:100%!important;
   max-width:none!important;
   max-height:none!important;
-  object-fit:contain!important;
+  object-fit:cover!important;
   object-position:center!important;
   flex:none;
   transition:filter .2s ease,opacity .2s ease;
