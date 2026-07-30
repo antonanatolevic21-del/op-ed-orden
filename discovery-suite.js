@@ -24,7 +24,6 @@
 
   const TAB_META = [
     ['recommendations', 'Для тебя'],
-    ['duel', 'Дуэльный топ'],
     ['research', 'Исследования'],
     ['collections', 'Подборки']
   ];
@@ -693,7 +692,7 @@
         <label class="oc-discovery-meta">Чьи подборки <select class="oc-discovery-control" id="oc-collection-owner">${userOptions(state.collectionOwner, 'Выберите пользователя')}</select></label>
       </div>
       ${state.collectionMessage ? `<div class="oc-collection-message">${esc(state.collectionMessage)}</div>` : ''}
-      <div class="oc-collections-layout">
+      <div class="oc-collections-layout${draft ? ' editing' : ''}">
         <div class="oc-collection-list">
           ${(visibleGroup?.rows || []).length ? visibleGroup.rows.map(collection => `<article class="oc-collection-item ${String(draft?.id) === String(collection.id) ? 'active' : ''}">
             <h4>${esc(collection.title)}</h4><p>${esc(collection.description || 'Без описания')} · ${(collection.trackIds || []).length} треков</p>
@@ -718,7 +717,7 @@
             }).join('')}</div>
             <button class="oc-discovery-button primary" id="oc-collection-save" type="button" ${draft.title.trim() ? '' : 'disabled'}>Сохранить подборку</button>
           </div>
-        </div>` : '<div class="oc-discovery-empty">Открой существующую подборку или создай новую.</div>'}
+        </div>` : ''}
       </div>
     </section>`;
   }
@@ -727,7 +726,7 @@
     const data = snapshot();
     return `<div class="oc-discovery-shell">
       <section class="oc-discovery-hero">
-        <div><div class="oc-section-label">данные превращаются в открытия</div><h2>Открытия</h2><p>Персональные рекомендации, дуэльный топ, исследования и пользовательские подборки.</p></div>
+        <div><div class="oc-section-label">данные превращаются в открытия</div><h2>Открытия</h2><p>Персональные рекомендации, исследования и пользовательские подборки.</p></div>
         <div class="oc-discovery-data-badge"><strong>${(data.entries || []).length}</strong><span>карточек · ${(data.ratings || []).length} загруженных оценок</span></div>
       </section>
       <nav class="oc-discovery-tabs" aria-label="Разделы открытий">${TAB_META.map(([id, label]) => `<button type="button" class="oc-discovery-tab ${state.active === id ? 'active' : ''}" data-discovery-tab="${id}">${label}</button>`).join('')}</nav>
@@ -736,7 +735,6 @@
   }
 
   function activeMarkup() {
-    if (state.active === 'duel') return renderDuel();
     if (state.active === 'research') return renderResearch();
     if (state.active === 'collections') return renderCollections();
     return renderRecommendations();
@@ -757,6 +755,14 @@
     content.innerHTML = activeMarkup();
     panel.querySelectorAll('[data-discovery-tab]').forEach(button => button.classList.toggle('active', button.dataset.discoveryTab === state.active));
     mountImageFallbacks(content);
+  }
+
+  function renderCollectionSearchResults() {
+    const root = panel.querySelector('.oc-collection-search-results');
+    if (!root) return;
+    root.innerHTML = collectionSearchRows().map(entry =>
+      `<div class="oc-collection-track"><span>${esc(entry.title)} · ${esc(entryMeta(entry))}</span><button type="button" data-collection-add-track="${esc(entry.id)}">добавить</button></div>`
+    ).join('');
   }
 
   function queueRender() {
@@ -878,7 +884,7 @@
     } else if (event.target.matches('#oc-collection-search')) {
       state.collectionSearch = event.target.value;
       window.clearTimeout(state.collectionSearchTimer);
-      state.collectionSearchTimer = window.setTimeout(renderActive, 180);
+      state.collectionSearchTimer = window.setTimeout(renderCollectionSearchResults, 120);
     }
   });
 
