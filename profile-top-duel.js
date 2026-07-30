@@ -33,12 +33,23 @@
 
   function pool() {
     const candidateIds = meta().candidates.map(String);
+    const map = byId();
     const rated = entries()
       .filter(entry => entry.type === state.type && score(entry) !== null)
       .sort((a, b) => score(b) - score(a) || compareNatural(a.title, b.title))
       .map(entry => String(entry.id));
     const pins = new Set(meta().pins.map(pin => String(pin.id)));
-    return Array.from(new Set([...candidateIds, ...rated])).filter(id => !pins.has(id)).slice(0, 100);
+    const selected = Array.from(new Set([...candidateIds, ...rated])).filter(id => !pins.has(id)).slice(0, 100);
+    return selected.sort((leftId, rightId) => {
+      const left = map.get(leftId);
+      const right = map.get(rightId);
+      const leftScore = score(left);
+      const rightScore = score(right);
+      if (leftScore === null && rightScore !== null) return 1;
+      if (rightScore === null && leftScore !== null) return -1;
+      if (leftScore !== rightScore) return rightScore - leftScore;
+      return compareNatural(left?.title, right?.title);
+    });
   }
 
   function existingOrder() {
@@ -73,7 +84,13 @@
     if (state.mode === 'refine' && old.length >= 2) {
       state.duel = { mode:'refine', order:[...old, ...candidates.filter(id => !old.includes(id))], pairIndex:0, comparisons:0 };
     } else {
-      state.duel = { mode:'new', candidates, order:[candidates[0]], candidateIndex:1, candidate:candidates[1], low:0, high:1, comparisons:0 };
+      state.duel = {
+        mode: 'new',
+        order: candidates.slice(),
+        pairIndex: 0,
+        totalPairs: Math.floor(candidates.length / 2),
+        comparisons: 0
+      };
     }
     render();
   }
@@ -89,30 +106,18 @@
       render();
       return;
     }
-    const mid = Math.floor((duel.low + duel.high) / 2);
-    if (choice === 'left') duel.high = mid;
-    else if (choice === 'right') duel.low = mid + 1;
-    else if (choice === 'tie') duel.low = duel.high = Math.min(duel.order.length, mid + 1);
-    else duel.low = duel.high = duel.order.length;
-    if (duel.low < duel.high) return render();
-    duel.order.splice(duel.low, 0, duel.candidate);
-    duel.candidateIndex += 1;
-    if (duel.candidateIndex >= duel.candidates.length) duel.complete = true;
-    else {
-      duel.candidate = duel.candidates[duel.candidateIndex];
-      duel.low = 0;
-      duel.high = duel.order.length;
-    }
+    const leftIndex = duel.pairIndex * 2;
+    const rightIndex = leftIndex + 1;
+    if (choice === 'right') [duel.order[leftIndex], duel.order[rightIndex]] = [duel.order[rightIndex], duel.order[leftIndex]];
+    duel.pairIndex += 1;
+    if (duel.pairIndex >= duel.totalPairs) duel.complete = true;
     render();
   }
 
   function finalOrder() {
     const duel = state.duel;
     if (!duel?.order) return existingOrder();
-    const unfinished = duel.mode === 'new'
-      ? [...duel.order, ...(duel.candidate && !duel.order.includes(duel.candidate) ? [duel.candidate] : []), ...(duel.candidates || []).slice(duel.candidateIndex + 1)]
-      : duel.order;
-    return applyPins(unfinished);
+    return applyPins(duel.order);
   }
 
   function card(id, side) {
@@ -143,12 +148,13 @@
     if (duel.error) return `<div class="oc-discovery-empty">${esc(duel.error)}</div>`;
     if (duel.complete) {
       const map = byId();
-      return `<div class="oc-discovery-list"><h4>Черновой порядок готов · ${finalOrder().length} позиций</h4>${finalOrder().slice(0, 20).map((id, i) => `<div class="oc-discovery-row"><button type="button" data-profile-duel-open="${esc(id)}">${i + 1}. ${esc(map.get(id)?.title || id)}</button><span>${meta().pins.some(pin => String(pin.id) === id) ? 'закреплено' : ''}</span></div>`).join('')}</div>`;
+      return `<div class="oc-discovery-list"><h4>Черновой порядок готов · ${finalOrder().length} позиций</h4>${finalOrder().slice(0, 100).map((id, i) => `<div class="oc-discovery-row"><button type="button" data-profile-duel-open="${esc(id)}">${i + 1}. ${esc(map.get(id)?.title || id)}</button><span>${meta().pins.some(pin => String(pin.id) === id) ? 'закреплено' : ''}</span></div>`).join('')}</div>`;
     }
-    const progress = duel.mode === 'new' ? Math.round(duel.candidateIndex / duel.candidates.length * 100) : Math.round(duel.pairIndex / Math.max(1, duel.order.length - 1) * 100);
-    const left = duel.mode === 'new' ? duel.candidate : duel.order[duel.pairIndex];
-    const right = duel.mode === 'new' ? duel.order[Math.floor((duel.low + duel.high) / 2)] : duel.order[duel.pairIndex + 1];
-    return `<div class="oc-duel-progress"><i style="width:${progress}%"></i></div><div class="oc-discovery-meta">${progress}% · сравнений ${duel.comparisons}</div>
+    const total = duel.mode === 'new' ? duel.totalPairs : Math.max(1, duel.order.length - 1);
+    const progress = Math.round(duel.pairIndex / Math.max(1, total) * 100);
+    const left = duel.mode === 'new' ? duel.order[duel.pairIndex * 2] : duel.order[duel.pairIndex];
+    const right = duel.mode === 'new' ? duel.order[duel.pairIndex * 2 + 1] : duel.order[duel.pairIndex + 1];
+    return `<div class="oc-duel-progress"><i style="width:${progress}%"></i></div><div class="oc-discovery-meta">${progress}% · сравнений ${duel.comparisons} из ${total}</div>
       <div class="oc-duel-stage">${card(left, 'left')}<div class="oc-duel-vs">VS</div>${card(right, 'right')}</div>
       <div class="oc-duel-secondary"><button class="oc-discovery-button" data-profile-duel-choice="tie">Примерно равны</button><button class="oc-discovery-button" data-profile-duel-choice="skip">Пропустить</button></div>`;
   }
@@ -179,7 +185,7 @@
     const map = byId();
     const pins = meta().pins;
     const candidates = meta().candidates;
-    root.innerHTML = `<div class="oc-discovery-head"><div><div class="oc-section-label">мой топ‑100</div><h3>Дуэльное ранжирование</h3><p>Закреплённые треки остаются на точных местах и не участвуют в сравнениях. Кандидаты всегда получают приоритет.</p></div></div>
+    root.innerHTML = `<div class="oc-discovery-head"><div><div class="oc-section-label">мой топ‑100</div><h3>Дуэльное ранжирование</h3><p>«Собрать заново» даст приблизительный порядок примерно за 50 сравнений. Закреплённые треки останутся на точных местах.</p></div></div>
       <div class="oc-duel-controls">
         <div><select class="oc-discovery-control" id="oc-profile-duel-type"><option value="OP" ${state.type === 'OP' ? 'selected' : ''}>OP</option><option value="ED" ${state.type === 'ED' ? 'selected' : ''}>ED</option></select>
         <select class="oc-discovery-control" id="oc-profile-duel-mode"><option value="new" ${state.mode === 'new' ? 'selected' : ''}>Собрать заново</option><option value="refine" ${state.mode === 'refine' ? 'selected' : ''}>Уточнить текущий</option></select></div>
