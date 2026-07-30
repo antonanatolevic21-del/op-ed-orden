@@ -39,6 +39,8 @@
     const LOCAL_EVENT_RATINGS_KEY = 'aboba-events-local-ratings-v1';
     const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
     const EVENT_UI_PREFS_KEY = 'aboba-events-ui-preferences-v1';
+    const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
+    const compareNatural = (left, right) => NATURAL_COLLATOR.compare(String(left ?? ''), String(right ?? ''));
 
     function readEventUiPreferences() {
       try {
@@ -1263,7 +1265,7 @@
     function seasonDefaultOpeningIds(season) {
       return openings
         .filter(o => o.type === 'OP' && Number(o.year) === CURRENT_EVENT_YEAR && o.season === season)
-        .sort((a, b) => getOpeningTitle(a).localeCompare(getOpeningTitle(b), 'ru', { sensitivity: 'base' }))
+        .sort((a, b) => compareNatural(getOpeningTitle(a), getOpeningTitle(b)))
         .slice(0, 15)
         .map(o => String(o.id));
     }
@@ -1482,7 +1484,7 @@
           const score = sumForOpeningInSeason(state.key, id);
           return { id: String(id), title: opening?.title || String(id), total: score.total, count: score.count };
         })
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }))
+        .sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title))
         .slice(0, winnerCount);
       return { completedParticipants, winnerCount, rows };
     }
@@ -1572,7 +1574,7 @@
             count: sum.count
           };
         })
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+        .sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title));
       if (!ranked.length) return { winnerCount, ranked: [], auto: [], candidates: [], chosen: [], finalIds: [], needManual: 0, ready: false, complete: false, progress };
       if (!progress.complete) {
         const saved = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
@@ -1684,7 +1686,7 @@
           };
         }))
         .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
-        .sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+        .sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title));
 
       const effectiveEarnedSlots = Math.min(earnedSlots, completedPool.length);
       const displayLimit = Math.min(slots, completedPool.length);
@@ -1826,8 +1828,8 @@
       });
       candidates.sort((a, b) =>
         (Number(b.total) || 0) - (Number(a.total) || 0) ||
-        a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }) ||
-        String(a.id).localeCompare(String(b.id))
+        compareNatural(a.title, b.title) ||
+        compareNatural(a.id, b.id)
       );
       const candidateIds = new Set(candidates.map(row => row.id));
       const selectedIds = (Array.isArray(meta.egortosSelectedIds) ? meta.egortosSelectedIds : [])
@@ -2764,7 +2766,7 @@
         if (scoreDiff) return scoreDiff;
         const randomDiff = bwTieOrderValue(seed, a.key || a.name) - bwTieOrderValue(seed, b.key || b.name);
         if (randomDiff) return randomDiff;
-        return String(a.name || '').localeCompare(String(b.name || ''), 'ru', { sensitivity: 'base' });
+        return compareNatural(a.name, b.name);
       });
     }
 
@@ -3244,7 +3246,7 @@
     function predictionCandidates() {
       return openings
         .filter(opening => opening.type === 'OP' && Number(opening.year) === Number(predictionYear) && opening.season === predictionSeason)
-        .sort((a, b) => getOpeningTitle(a).localeCompare(getOpeningTitle(b), 'ru'));
+        .sort((a, b) => compareNatural(getOpeningTitle(a), getOpeningTitle(b)));
     }
 
     function predictionSummary(draft = ensurePredictionDraft()) {
@@ -4322,7 +4324,7 @@
       const seasons = ENDING_PERIOD_META[period]?.seasons || ENDING_PERIOD_META.h1.seasons;
       return openings
         .filter(row => row.type === 'ED' && Number(row.year) === CURRENT_EVENT_YEAR && seasons.includes(row.season))
-        .sort((a, b) => String(getOpeningTitle(a)).localeCompare(String(getOpeningTitle(b)), 'ru'));
+        .sort((a, b) => compareNatural(getOpeningTitle(a), getOpeningTitle(b)));
     }
 
     function endingPeriodState(period = activeEndingPeriod) {
@@ -4415,7 +4417,7 @@
         opening: openingsById.get(String(id)),
         total: endingTotalFor(state, id),
         votes: endingRatingsFor(state, id).filter(row => Number.isFinite(Number(row.score))).length
-      })).filter(row => row.opening).sort((a, b) => b.total - a.total || getOpeningTitle(a.opening).localeCompare(getOpeningTitle(b.opening), 'ru'));
+      })).filter(row => row.opening).sort((a, b) => b.total - a.total || compareNatural(getOpeningTitle(a.opening), getOpeningTitle(b.opening)));
     }
 
     function endingPeriodSwitchMarkup(state) {
@@ -4683,7 +4685,7 @@
           values.push(text);
         });
       });
-      return values.sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+      return values.sort(compareNatural);
     }
 
     function guessUserOptions() {
@@ -4701,7 +4703,7 @@
       };
       userProfiles.forEach(profile => add(profile.nickname || profile.displayName || profile.id, profile.nicknameKey || profile.id, profile.avatar));
       mainRatings.forEach(rating => add(rating.nickname || rating.nicknameKey, rating.nicknameKey, rating.avatar));
-      return [...byKey.values()].sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru', { sensitivity: 'base' }));
+      return [...byKey.values()].sort((a, b) => compareNatural(a.nickname, b.nickname));
     }
 
     function guessSelectOptions(values, selected, allLabel = 'Все') {
@@ -4938,7 +4940,7 @@
         if (!title || !key || byKey.has(key)) return;
         byKey.set(key, title);
       });
-      return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+      return [...byKey.values()].sort(compareNatural);
     }
 
     function guessSongSuggestionCatalog() {
@@ -4970,7 +4972,7 @@
           byKey.set(key, title);
         });
       });
-      return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'ru', { sensitivity: 'base' }));
+      return [...byKey.values()].sort(compareNatural);
     }
 
     function guessAnswerCatalog() {
@@ -5616,7 +5618,7 @@
         .sort((a, b) => {
           const aStarts = a.searchLabels.some(label => normalizeGuessAnswer(label).startsWith(needle)) ? 0 : 1;
           const bStarts = b.searchLabels.some(label => normalizeGuessAnswer(label).startsWith(needle)) ? 0 : 1;
-          return aStarts - bStarts || a.value.localeCompare(b.value, 'ru', { sensitivity: 'base' });
+          return aStarts - bStarts || compareNatural(a.value, b.value);
         })
         .slice(0, 8);
       box.innerHTML = matches.map((item, index) => `<button type="button" class="ev-guess-suggestion" role="option" aria-selected="false" data-guess-suggestion-index="${index}" data-guess-suggestion="${escapeHtml(item.value)}">${escapeHtml(item.value)}</button>`).join('');
@@ -5921,7 +5923,7 @@
     }
 
     function renderSavedGuessCollections() {
-      const rows = [...guessCollections].sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru', { sensitivity: 'base' }));
+      const rows = [...guessCollections].sort((a, b) => compareNatural(a.title, b.title));
       return `
         <section class="ev-guess-results-card">
           <div class="ev-guess-card-head">
@@ -5964,7 +5966,7 @@
             .join(' ');
           return normalizeGuessAnswer(haystack).includes(needle);
         })
-        .sort((a, b) => getOpeningTitle(a).localeCompare(getOpeningTitle(b), 'ru', { sensitivity: 'base' }))
+        .sort((a, b) => compareNatural(getOpeningTitle(a), getOpeningTitle(b)))
         .slice(0, 10);
     }
 
@@ -7235,7 +7237,7 @@
       });
       const rest = Array.from(byKey.entries())
         .map(([key, name]) => ({ key, name }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }));
+        .sort((a, b) => compareNatural(a.name, b.name));
       return [...priority, ...rest];
     }
 
@@ -7250,7 +7252,7 @@
           total: sum.total,
           count: sum.count
         };
-      }).sort((a, b) => (b.total - a.total) || a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+      }).sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title));
 
       let place = 0;
       let prevTotal = null;
@@ -7278,7 +7280,7 @@
 
       const lines = [];
       groups.forEach(group => {
-        const items = group.items.slice().sort((a, b) => a.title.localeCompare(b.title, 'ru', { sensitivity: 'base' }));
+        const items = group.items.slice().sort((a, b) => compareNatural(a.title, b.title));
         const ids = new Set(items.map(item => item.id));
         const titles = items.map(item => item.title).join(', ');
         const score = items[0]?.total || 0;
