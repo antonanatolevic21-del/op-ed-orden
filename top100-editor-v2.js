@@ -452,7 +452,7 @@
     body.innerHTML = '<h2>Сравнение топов</h2><p class="oc-top100-muted">Загружаю профили…</p>';
     try {
       const rows = await loadManualRows();
-      const users = [...new Set(rows.map(rowUser).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+      const users = [...new Set(rows.map(rowUser).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' }));
       if (users.length < 2) throw new Error('Для сравнения нужно хотя бы два сохранённых топа.');
       const byUser = user => rows.find(row => normalize(row.nicknameKey || rowUser(row)) === normalize(user));
       const current = users.find(user => normalize(user) === normalize(viewedUser())) || users[0];
