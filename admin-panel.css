@@ -45,7 +45,6 @@ body {
 }
 
 body.oc-admin-auth-pending .oc-admin-shell {
-  visibility: hidden;
   opacity: 0;
   pointer-events: none;
 }

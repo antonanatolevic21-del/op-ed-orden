@@ -867,7 +867,7 @@
       adminLink = document.createElement('a');
       adminLink.id = 'oc-admin-panel-link';
       adminLink.className = 'oc-admin-panel-link';
-      adminLink.href = 'admin.html';
+      adminLink.href = 'admin.html?v=20260730-auth-gate2';
       adminLink.textContent = 'Открыть админ-панель';
       host.append(adminLink);
     }

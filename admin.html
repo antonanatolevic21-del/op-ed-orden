@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>АБОБА · Админ-панель</title>
   <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="stylesheet" href="admin-panel.css?v=20260730-auth-gate1" />
+  <link rel="stylesheet" href="admin-panel.css?v=20260730-auth-gate2" />
 </head>
 <body class="oc-admin-auth-pending">
   <div id="oc-admin-auth-gate" class="oc-admin-auth-gate" role="status" aria-label="Проверяем права администратора">
@@ -32,12 +32,12 @@
       <iframe
         id="oc-admin-workspace"
         title="Рабочая область администратора"
-        src="index.html?adminWorkspace=1"
+        src="index.html?adminWorkspace=1&v=20260730-auth-gate2"
         allow="clipboard-read; clipboard-write"
       ></iframe>
       <div id="oc-admin-shell-loading" class="oc-admin-shell-loading hidden">Открываю контроль качества…</div>
     </section>
   </main>
-  <script src="admin-panel.js?v=20260730-auth-gate1" defer></script>
+  <script src="admin-panel.js?v=20260730-auth-gate2" defer></script>
 </body>
 </html>
