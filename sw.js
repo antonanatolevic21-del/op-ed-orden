@@ -1,4 +1,4 @@
-const CACHE_NAME = 'op-ed-images-v3-20260730-admin-journal-profile1';
+const CACHE_NAME = 'op-ed-images-v3-20260730-top100-candidates1';
 const MAX_IMAGE_ENTRIES = 400;
 
 async function trimImageCache(cache) {
