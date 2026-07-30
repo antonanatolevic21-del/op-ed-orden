@@ -1,6 +1,6 @@
 (() => {
   const primaryVersion = '20260730-natural-sort1';
-  const discoveryVersion = '20260730-staged-duel1';
+  const discoveryVersion = '20260730-staged-duel-blocks1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -124,7 +124,8 @@
     profilePromise = addScriptsOrdered([
       ['profile-enhancements.js', primaryVersion],
       ['profile-taste-comparison.js', discoveryVersion],
-      ['profile-top-duel.js', discoveryVersion]
+      ['profile-top-duel.js', discoveryVersion],
+      ['profile-top-duel-blocks.js', discoveryVersion]
     ])
       .catch(error => {
         console.error('Profile package load failed', error);
