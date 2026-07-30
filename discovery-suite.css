@@ -1,0 +1,602 @@
+#oc-discovery-panel {
+  --discover-card: #15111d;
+  --discover-card-2: #1b1525;
+  --discover-line: #2b2437;
+  --discover-soft: #938ba0;
+  padding: 22px;
+}
+
+.oc-discovery-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.oc-discovery-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 180px;
+  padding: 30px;
+  border: 1px solid var(--discover-line);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 88% 20%, rgba(8, 217, 214, .2), transparent 32%),
+    radial-gradient(circle at 14% 110%, rgba(255, 46, 99, .2), transparent 38%),
+    linear-gradient(135deg, #171020, #10151d);
+}
+
+.oc-discovery-hero h2 {
+  margin: 7px 0 8px;
+  font-size: clamp(28px, 4vw, 46px);
+}
+
+.oc-discovery-hero p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.oc-discovery-data-badge {
+  flex: 0 0 auto;
+  min-width: 190px;
+  padding: 16px 18px;
+  border: 1px solid rgba(8, 217, 214, .3);
+  border-radius: 16px;
+  background: rgba(8, 217, 214, .08);
+}
+
+.oc-discovery-data-badge strong,
+.oc-discovery-data-badge span {
+  display: block;
+}
+
+.oc-discovery-data-badge strong {
+  font-size: 23px;
+}
+
+.oc-discovery-data-badge span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.oc-discovery-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 5px;
+  border: 1px solid var(--discover-line);
+  border-radius: 16px;
+  background: #100d16;
+  scrollbar-width: thin;
+}
+
+.oc-discovery-tab {
+  flex: 0 0 auto;
+  padding: 11px 15px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.oc-discovery-tab:hover {
+  color: var(--text);
+  background: #1c1724;
+}
+
+.oc-discovery-tab.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 46, 99, .28), rgba(8, 217, 214, .19));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07);
+}
+
+.oc-discovery-view {
+  display: grid;
+  gap: 16px;
+}
+
+.oc-discovery-view.hidden {
+  display: none !important;
+}
+
+.oc-discovery-head,
+.oc-research-controls,
+.oc-compare-controls,
+.oc-duel-controls,
+.oc-collection-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.oc-discovery-head h3,
+.oc-collection-editor h3 {
+  margin: 3px 0 0;
+  font-size: 24px;
+}
+
+.oc-discovery-head p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.oc-discovery-control,
+.oc-discovery-button {
+  min-height: 42px;
+  border: 1px solid var(--discover-line);
+  border-radius: 11px;
+  background: #100d16;
+  color: var(--text);
+}
+
+.oc-discovery-control {
+  min-width: 150px;
+  padding: 0 12px;
+}
+
+.oc-discovery-button {
+  padding: 0 16px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.oc-discovery-button:hover:not(:disabled) {
+  border-color: rgba(8, 217, 214, .55);
+  background: #1a1621;
+}
+
+.oc-discovery-button.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #ff2e63, #8b4dff);
+  color: #fff;
+}
+
+.oc-discovery-button.danger {
+  border-color: rgba(255, 46, 99, .35);
+  color: #ff7597;
+}
+
+.oc-discovery-button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.oc-discovery-metrics,
+.oc-compare-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.oc-discovery-metric {
+  padding: 17px;
+  border: 1px solid var(--discover-line);
+  border-radius: 15px;
+  background: var(--discover-card);
+}
+
+.oc-discovery-metric span,
+.oc-discovery-metric small {
+  display: block;
+  color: var(--muted);
+}
+
+.oc-discovery-metric strong {
+  display: block;
+  margin: 6px 0 3px;
+  font-size: 27px;
+}
+
+.oc-discovery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.oc-discovery-card {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  border: 1px solid var(--discover-line);
+  border-radius: 17px;
+  background: var(--discover-card);
+}
+
+.oc-discovery-card-media {
+  position: relative;
+  aspect-ratio: 16 / 8.5;
+  overflow: hidden;
+  background: #0d0b12;
+}
+
+.oc-discovery-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.oc-discovery-card-media::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 45%;
+  background: linear-gradient(transparent, rgba(10, 8, 14, .9));
+}
+
+.oc-discovery-score {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  z-index: 1;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(8, 217, 214, .9);
+  color: #071314;
+  font-weight: 900;
+}
+
+.oc-discovery-card-body {
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+}
+
+.oc-discovery-card h4 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oc-discovery-meta,
+.oc-discovery-reason {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.oc-discovery-reason {
+  min-height: 36px;
+}
+
+.oc-discovery-card-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.oc-discovery-card-actions button {
+  flex: 1;
+  min-height: 34px;
+  border: 1px solid var(--discover-line);
+  border-radius: 9px;
+  background: #100d16;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.oc-discovery-empty {
+  padding: 34px;
+  border: 1px dashed #383043;
+  border-radius: 17px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.oc-collection-message {
+  padding: 10px 12px;
+  border: 1px solid rgba(8, 217, 214, .3);
+  border-radius: 11px;
+  background: rgba(8, 217, 214, .08);
+  color: #baf7f5;
+}
+
+.oc-compare-columns,
+.oc-research-columns,
+.oc-collections-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.oc-discovery-list {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--discover-line);
+  border-radius: 17px;
+  background: var(--discover-card);
+}
+
+.oc-discovery-list h4 {
+  margin: 0 0 13px;
+}
+
+.oc-discovery-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+
+.oc-discovery-row:first-of-type {
+  border-top: 0;
+}
+
+.oc-discovery-row button {
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.oc-discovery-row span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.oc-duel-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.oc-duel-card {
+  display: grid;
+  overflow: hidden;
+  min-height: 380px;
+  border: 1px solid var(--discover-line);
+  border-radius: 20px;
+  background: var(--discover-card);
+  cursor: pointer;
+}
+
+.oc-duel-card:hover {
+  border-color: rgba(8, 217, 214, .5);
+  transform: translateY(-1px);
+}
+
+.oc-duel-card img {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  background: #0c0a10;
+}
+
+.oc-duel-card-copy {
+  align-self: end;
+  padding: 18px;
+}
+
+.oc-duel-card h4 {
+  margin: 0 0 7px;
+  font-size: 20px;
+}
+
+.oc-duel-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.oc-duel-vs {
+  align-self: center;
+  color: #ff668d;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.oc-duel-secondary {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.oc-duel-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #211b2b;
+}
+
+.oc-duel-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff2e63, #08d9d6);
+}
+
+.oc-collection-list {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.oc-collection-item {
+  padding: 15px;
+  border: 1px solid var(--discover-line);
+  border-radius: 14px;
+  background: var(--discover-card);
+}
+
+.oc-collection-item.active {
+  border-color: rgba(8, 217, 214, .52);
+}
+
+.oc-collection-item h4,
+.oc-collection-item p {
+  margin: 0;
+}
+
+.oc-collection-item p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.oc-collection-item-actions {
+  display: flex;
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.oc-collection-editor {
+  padding: 18px;
+  border: 1px solid var(--discover-line);
+  border-radius: 17px;
+  background: var(--discover-card);
+}
+
+.oc-collection-fields {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.oc-collection-fields input,
+.oc-collection-fields textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--discover-line);
+  border-radius: 11px;
+  background: #100d16;
+  color: var(--text);
+  resize: vertical;
+}
+
+.oc-collection-search-results,
+.oc-collection-selected {
+  display: grid;
+  gap: 7px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.oc-collection-track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 9px;
+  background: #120f18;
+}
+
+.oc-collection-track span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oc-collection-track button {
+  border: 0;
+  background: transparent;
+  color: #08d9d6;
+  cursor: pointer;
+}
+
+.oc-journal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.oc-journal-entry {
+  padding: 15px 17px;
+  border: 1px solid var(--discover-line);
+  border-radius: 14px;
+  background: var(--discover-card);
+}
+
+.oc-journal-entry-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.oc-journal-entry h4 {
+  margin: 0;
+}
+
+.oc-journal-entry time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.oc-journal-changes {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.oc-journal-change {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #100d16;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.oc-journal-change strong {
+  color: var(--text);
+}
+
+@media (max-width: 1050px) {
+  .oc-discovery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .oc-discovery-metrics,
+  .oc-compare-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  #oc-discovery-panel {
+    padding: 12px;
+  }
+  .oc-discovery-hero {
+    display: grid;
+    min-height: 0;
+    padding: 21px;
+  }
+  .oc-discovery-data-badge {
+    min-width: 0;
+  }
+  .oc-discovery-grid,
+  .oc-compare-columns,
+  .oc-research-columns,
+  .oc-collections-layout,
+  .oc-duel-stage {
+    grid-template-columns: 1fr;
+  }
+  .oc-duel-vs {
+    justify-self: center;
+  }
+  .oc-duel-card {
+    min-height: 300px;
+  }
+  .oc-duel-card img {
+    height: 210px;
+  }
+}
