@@ -160,7 +160,7 @@ service cloud.firestore {
     }
 
     match /meta/{metaId} {
-      allow read: if true;
+      allow read: if metaId != 'catalogJournal' || isAdmin();
       allow create, update, delete: if isAdmin();
     }
 
