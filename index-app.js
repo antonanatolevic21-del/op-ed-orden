@@ -125,6 +125,7 @@
     const filterStatEl = $('#oc-filterstat');
     const mainPanel = $('#oc-main-panel');
     const profilePanel = $('#oc-profile-panel');
+    const discoveryPanel = $('#oc-discovery-panel');
     const top100Panel = $('#oc-top100-panel');
     const seasonPanel = $('#oc-season-panel');
     const tierPanel = $('#oc-tier-panel');
@@ -285,6 +286,66 @@
       window.dispatchEvent(new CustomEvent(name, { detail: payload }));
       document.dispatchEvent(new CustomEvent(name, { detail: payload }));
     }
+
+    function appDataSnapshot() {
+      return {
+        entries,
+        ratings: firebaseRatings,
+        manualRanks,
+        userProfiles: firebaseUserProfiles,
+        currentUser: {
+          nickname: myName,
+          uid: currentPersonalUid(),
+          avatar: myAvatar,
+          accessLevel,
+          authenticated: Boolean(accessLevel && currentPersonalUid() && myName)
+        },
+        activeTab
+      };
+    }
+
+    function publishAppData(reason = 'update') {
+      const snapshot = appDataSnapshot();
+      window.OC_APP_DATA = window.OC_APP_DATA || {};
+      Object.assign(window.OC_APP_DATA, snapshot);
+      dispatchAppEvent('oped:app-data-updated', { reason, snapshot });
+      return snapshot;
+    }
+
+    window.OC_APP_BRIDGE = {
+      snapshot: appDataSnapshot,
+      openTrack: id => openCardModal(String(id || '')),
+      rateTrack: id => startOpeningRating(String(id || '')),
+      async saveDuelRanks(type, order) {
+        if (!myName || !currentPersonalUid()) throw new Error('Для сохранения войди в личный аккаунт.');
+        const cleanType = type === 'ED' ? 'ED' : 'OP';
+        const current = getManualRanksForUser(myName) || {};
+        const next = {
+          ...current,
+          [cleanType]: Array.from(new Set((order || []).map(String).filter(Boolean))).slice(0, 100)
+        };
+        rememberManualRanksForUser(myName, next);
+        await saveManualRanks();
+        manualDirty = false;
+        publishAppData('manual-ranks-saved');
+        return next;
+      },
+      async saveCollections(collections) {
+        if (!window.OPED_DB?.saveUserCollections) throw new Error('Хранилище подборок ещё не подключено.');
+        const rows = await window.OPED_DB.saveUserCollections(myName, collections);
+        const profileIndex = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(myName));
+        if (profileIndex >= 0) firebaseUserProfiles[profileIndex] = { ...firebaseUserProfiles[profileIndex], collections: rows };
+        publishAppData('collections-saved');
+        return rows;
+      },
+      watchJournal(callback) {
+        if (!window.OPED_DB?.watchCatalogJournal) {
+          callback([]);
+          return null;
+        }
+        return window.OPED_DB.watchCatalogJournal(callback);
+      }
+    };
 
     function markRemoteDataReady(name, detail = {}) {
       const state = remoteDataState[name];
@@ -451,6 +512,7 @@
       else if (activeTab === 'season') renderSeasonViews();
       else if (activeTab === 'tier') renderTierList();
       else if (activeTab === 'stats') renderStatsPage();
+      else if (activeTab === 'discovery') publishAppData('visible-refresh');
     }
 
     function scheduleVisibleRefresh(options = {}) {
@@ -993,6 +1055,7 @@
       lastOpeningsSnapshotKey = snapshotKey;
       entries = next;
       rebuildFastIndexes({ catalogChanged });
+      publishAppData(catalogChanged ? 'catalog-updated' : 'ratings-updated');
       if (avatarChanged) markAvatarsChanged();
       if (activeTab === 'chart' && !catalogChanged && Date.now() < suppressChartRatingRefreshUntil) {
         updateAccountDashboard();
@@ -1086,6 +1149,7 @@
       manualRanks = next;
       persistManualRanksCache();
       refreshAfterManualRankCacheChange();
+      publishAppData('manual-ranks-updated');
     }
 
     function rebuildManualRanksFromRatingDocs() {
@@ -1100,6 +1164,7 @@
       manualRanks = next;
       persistManualRanksCache();
       refreshAfterManualRankCacheChange();
+      publishAppData('manual-ranks-updated');
     }
 
     function rebuildUserProfilesFromFirebase() {
@@ -1122,6 +1187,7 @@
       try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
       scheduleVisibleRefresh();
       refreshDailyUi();
+      publishAppData('user-profiles-updated');
     }
 
     function setStatus(msg, isError) {
@@ -1158,6 +1224,7 @@
         accessBadge.classList.toggle('admin', isAdmin());
       }
       updateAccountDashboard();
+      publishAppData('account-updated');
     }
 
     function welcomeStorageKey() {
@@ -2520,7 +2587,7 @@
 
     function preferredRatingsScope(tab = activeTab) {
       if (!catalogHasRatingAggregates()) return 'all';
-      if (tab === 'profile' || tab === 'stats') return 'all';
+      if (tab === 'profile' || tab === 'stats' || tab === 'discovery') return 'all';
       if (myName || authenticatedUid) return 'user';
       return 'none';
     }
@@ -2668,7 +2735,7 @@
     async function syncRouteDataSubscriptions(tab = activeTab) {
       if (!firebaseDbInstance) return;
       const syncId = ++routeDataSyncId;
-      const needsProfileData = tab === 'profile' || tab === 'top100';
+      const needsProfileData = tab === 'profile' || tab === 'top100' || tab === 'discovery';
       const needsEntityCards = tab.startsWith('entity-');
       const needsTierData = tab === 'tier';
       const needsEventBasket = tab === 'season' && Boolean(accessLevel);
@@ -4237,6 +4304,7 @@
       document.querySelectorAll('.oc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
       mainPanel.classList.toggle('hidden', tab !== 'chart');
       profilePanel.classList.toggle('hidden', tab !== 'profile');
+      if (discoveryPanel) discoveryPanel.classList.toggle('hidden', tab !== 'discovery');
       if (top100Panel) top100Panel.classList.toggle('hidden', tab !== 'top100');
       seasonPanel.classList.toggle('hidden', tab !== 'season');
       if (tierPanel) tierPanel.classList.toggle('hidden', tab !== 'tier');
@@ -4258,6 +4326,7 @@
       if (tab === 'top100') renderGlobalTop100();
       if (tab === 'tier') { populateFilterOptions(); renderTierList(); }
       if (tab === 'stats') renderStatsPage();
+      if (tab === 'discovery') publishAppData('discovery-opened');
       void syncRouteDataSubscriptions(tab);
       dispatchAppEvent('oped:route-change', { tab });
     }
