@@ -1,6 +1,6 @@
 (() => {
   const primaryVersion = '20260730-natural-sort1';
-  const discoveryVersion = '20260730-duel-coarse1';
+  const discoveryVersion = '20260730-collections-album1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -147,11 +147,14 @@
   function loadDiscoveryPackage() {
     if (discoveryPromise) return discoveryPromise;
     addStyle('discovery-suite.css', discoveryVersion);
-    discoveryPromise = addScript('discovery-suite.js', discoveryVersion, true)
-      .catch(error => {
-        console.error('Discovery package load failed', error);
-        throw error;
-      });
+    addStyle('discovery-collections-album.css', discoveryVersion);
+    discoveryPromise = addScriptsOrdered([
+      ['discovery-suite.js', discoveryVersion],
+      ['discovery-collections-album.js', discoveryVersion]
+    ]).catch(error => {
+      console.error('Discovery package load failed', error);
+      throw error;
+    });
     return discoveryPromise;
   }
 
