@@ -6,10 +6,35 @@
   const shell = document.querySelector('.oc-admin-shell');
   const buttons = [...document.querySelectorAll('[data-admin-view]')];
   const qualityButton = buttons.find(button => button.dataset.adminView === 'quality');
+  const journalButton = buttons.find(button => button.dataset.adminView === 'journal');
+  const journalPanel = document.querySelector('#oc-admin-journal');
+  const journalList = document.querySelector('#oc-admin-journal-list');
   let activeView = 'workspace';
   let qualityRequest = 0;
   let accessObserver = null;
   let accessTimer = 0;
+  let journalUnsubscribe = null;
+
+  const JOURNAL_FIELDS = {
+    title: 'Название',
+    type: 'Тип',
+    year: 'Год',
+    season: 'Сезон',
+    studios: 'Студии',
+    directors: 'Режиссёры',
+    performers: 'Исполнители',
+    franchises: 'Франшизы',
+    alternativeTitles: 'Альтернативные названия',
+    sameSongGroupId: 'Группа одной песни',
+    sameSongTitle: 'Общее название песни',
+    image: 'Основная картинка',
+    fallbackImage: 'Запасная картинка',
+    link: 'Видео',
+    notes: 'Заметки',
+    isChinese: 'Китайский OP/ED',
+    isMovie: 'Фильм',
+    isShortened: 'Укороченная версия'
+  };
 
   function frameParts() {
     try {
@@ -47,11 +72,15 @@
     syncAuthGate(admin);
     qualityButton.disabled = !admin;
     qualityButton.title = admin ? '' : 'Сначала войдите под админским аккаунтом в рабочей области';
+    if (journalButton) {
+      journalButton.disabled = !admin;
+      journalButton.title = admin ? '' : 'Сначала войдите под админским аккаунтом в рабочей области';
+    }
     setStatus(
       admin ? 'Админский доступ подтверждён' : 'Войдите под админским аккаунтом в рабочей области',
       admin ? 'admin' : ''
     );
-    if (!admin && activeView === 'quality') void showWorkspace();
+    if (!admin && (activeView === 'quality' || activeView === 'journal')) void showWorkspace();
   }
 
   function setActiveButton(view) {
@@ -124,6 +153,71 @@
     if (win) win.dispatchEvent(new win.CustomEvent('oped-close-quality'));
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function journalValue(value) {
+    if (Array.isArray(value)) return value.join(', ') || '—';
+    if (value === true) return 'да';
+    if (value === false) return 'нет';
+    if (value === null || value === undefined || value === '') return '—';
+    return String(value);
+  }
+
+  function journalDate(value) {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.toLocaleString('ru-RU') : 'время не указано';
+  }
+
+  function renderJournal(rows) {
+    if (!journalList) return;
+    const list = Array.isArray(rows) ? rows : [];
+    journalList.innerHTML = list.length ? list.map(row => {
+      const action = row.action === 'create' ? 'Добавлена' : row.action === 'delete' ? 'Удалена' : 'Изменена';
+      const changes = (row.changes || []).map(change =>
+        `<div class="oc-admin-journal-change"><strong>${escapeHtml(JOURNAL_FIELDS[change.field] || change.field)}</strong>: ${escapeHtml(journalValue(change.before))} → ${escapeHtml(journalValue(change.after))}</div>`
+      ).join('') || '<div class="oc-admin-journal-change">Карточка целиком.</div>';
+      return `<article class="oc-admin-journal-entry">
+        <div class="oc-admin-journal-entry-head">
+          <div><h2>${action}: ${escapeHtml(row.title || 'Без названия')}</h2><small>${escapeHtml(row.actorName || 'админ')} · ${escapeHtml(row.type || '')}</small></div>
+          <time>${escapeHtml(journalDate(row.at))}</time>
+        </div>
+        ${changes}
+      </article>`;
+    }).join('') : '<div class="oc-admin-journal-empty">Журнал пока пуст. Новые изменения карточек появятся здесь автоматически.</div>';
+  }
+
+  async function waitForJournalStorage() {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 10000) {
+      const { win } = frameParts();
+      if (typeof win?.OPED_DB?.watchCatalogJournal === 'function') return win.OPED_DB;
+      await new Promise(resolve => window.setTimeout(resolve, 120));
+    }
+    return null;
+  }
+
+  async function connectJournal(force = false) {
+    if (force && journalUnsubscribe) {
+      journalUnsubscribe();
+      journalUnsubscribe = null;
+    }
+    if (journalUnsubscribe) return;
+    if (journalList) journalList.innerHTML = '<div class="oc-admin-journal-empty">Загружаю журнал…</div>';
+    const storage = await waitForJournalStorage();
+    if (!storage) {
+      if (journalList) journalList.innerHTML = '<div class="oc-admin-journal-empty">Не удалось подключить журнал. Обновите страницу.</div>';
+      return;
+    }
+    journalUnsubscribe = storage.watchCatalogJournal(renderJournal);
+  }
+
   async function waitForQualityModule(requestId) {
     const startedAt = Date.now();
     while (requestId === qualityRequest && Date.now() - startedAt < 10000) {
@@ -140,6 +234,8 @@
     activeView = 'workspace';
     setActiveButton(activeView);
     loading.classList.add('hidden');
+    frame.hidden = false;
+    journalPanel?.classList.add('hidden');
     forceCloseQuality();
     showCatalogPage();
   }
@@ -152,6 +248,8 @@
     const requestId = ++qualityRequest;
     activeView = 'quality';
     setActiveButton(activeView);
+    frame.hidden = false;
+    journalPanel?.classList.add('hidden');
     loading.classList.remove('hidden');
     const { doc } = frameParts();
     ensureQualityRouteStyle(doc);
@@ -161,6 +259,21 @@
     if (!win || requestId !== qualityRequest) return;
     loading.classList.add('hidden');
     win.dispatchEvent(new win.CustomEvent('oped-open-quality'));
+  }
+
+  async function showJournal() {
+    if (!isAdmin()) {
+      syncAccess();
+      return;
+    }
+    qualityRequest += 1;
+    activeView = 'journal';
+    setActiveButton(activeView);
+    loading.classList.add('hidden');
+    forceCloseQuality();
+    frame.hidden = true;
+    journalPanel?.classList.remove('hidden');
+    await connectJournal(false);
   }
 
   function observeAccess() {
@@ -184,8 +297,13 @@
 
   buttons.forEach(button => button.addEventListener('click', () => {
     if (button.dataset.adminView === 'quality') void showQuality();
+    else if (button.dataset.adminView === 'journal') void showJournal();
     else void showWorkspace();
   }));
+
+  document.querySelector('[data-admin-journal-refresh]')?.addEventListener('click', () => {
+    if (isAdmin()) void connectJournal(true);
+  });
 
   window.addEventListener('message', event => {
     if (event.origin !== window.location.origin || event.source !== frame.contentWindow) return;
@@ -197,6 +315,7 @@
     showCatalogPage();
     observeAccess();
     if (activeView === 'quality') void showQuality();
+    if (activeView === 'journal') void showJournal();
   }
 
   frame.addEventListener('load', handleFrameLoad);
