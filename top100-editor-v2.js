@@ -610,6 +610,13 @@
 
   window.addEventListener('oped-db-ready', () => { if (isTopView()) void loadSaved(viewedUser(), !state.loaded); });
   window.addEventListener('oped-account-restored', () => { if (isTopView()) void loadSaved(viewedUser(), true); });
+  window.addEventListener('oped:app-data-updated', event => {
+    const reason = clean(event.detail?.reason);
+    if (!isTopView() || (state.editing && dirty())) return;
+    if (reason === 'manual-ranks-saved' || reason === 'top100-candidates-added' || reason === 'top100-pins-saved') {
+      void loadSaved(viewedUser(), true);
+    }
+  });
   window.addEventListener('beforeunload', event => { if (!dirty()) return; event.preventDefault(); event.returnValue = ''; });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void init(), { once:true });
