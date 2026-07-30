@@ -1110,6 +1110,14 @@
         if (nickname && avatar) next[nickname] = avatar;
       });
       avatarsMap = next;
+      const currentProfile = accountProfile(myName);
+      const currentAvatar = String(currentProfile?.avatar || '').trim();
+      if (currentAvatar && String(currentProfile?.authUid || '') === String(authenticatedUid || '')) {
+        myAvatar = currentAvatar;
+        avatarBtn.textContent = currentAvatar;
+        try { window.storage && window.storage.set(AVATAR_KEY, currentAvatar, false); }
+        catch (e) { console.error('Could not cache watched profile avatar', e); }
+      }
       markAvatarsChanged();
       try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
       scheduleVisibleRefresh();
@@ -2280,11 +2288,34 @@
     }
 
     async function saveAvatar(emoji) {
-      myAvatar = emoji;
-      avatarBtn.textContent = emoji;
-      try { await window.storage.set(AVATAR_KEY, emoji, false); }
-      catch (e) { console.error('Could not save avatar', e); }
-      await syncMyAvatarIntoMap();
+      const nextAvatar = String(emoji || '').trim();
+      if (!nextAvatar) return false;
+      if (!authenticatedUid || !accessLevel) {
+        showAuthModal('Войди в аккаунт, чтобы сохранить аватар.');
+        return false;
+      }
+      const previousAvatar = myAvatar;
+      myAvatar = nextAvatar;
+      avatarBtn.textContent = nextAvatar;
+      try {
+        await window.storage.set(AVATAR_KEY, nextAvatar, false);
+        await syncMyAvatarIntoMap(true);
+        return true;
+      } catch (e) {
+        console.error('Could not persist avatar', e);
+        myAvatar = previousAvatar;
+        avatarBtn.textContent = previousAvatar;
+        if (myName) avatarsMap[myName] = previousAvatar;
+        try {
+          await window.storage.set(AVATAR_KEY, previousAvatar, false);
+          await window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true);
+        } catch (_) {}
+        render();
+        if (activeTab === 'profile') renderProfile();
+        if (activeTab === 'top100') renderGlobalTop100();
+        setStatus('Не удалось сохранить аватар в аккаунте.', true);
+        return false;
+      }
     }
 
     async function loadAvatarsMap() {
@@ -2390,23 +2421,39 @@
       }
     }
 
-    async function syncMyAvatarIntoMap() {
-      if (!myName) return;
+    async function syncMyAvatarIntoMap(requireRemote = false) {
+      if (!myName) return false;
       avatarsMap[myName] = myAvatar;
       try { await window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); }
       catch (e) { console.error('Could not sync avatar map', e); }
+      let remoteSaved = false;
+      let remoteError = null;
       try {
-        if (window.OPED_DB && typeof window.OPED_DB.saveUserProfile === 'function') await window.OPED_DB.saveUserProfile(myName, myAvatar);
-        else {
+        let savedProfile = null;
+        if (window.OPED_DB && typeof window.OPED_DB.saveUserProfile === 'function') {
+          savedProfile = await window.OPED_DB.saveUserProfile(myName, myAvatar);
+        } else {
           const ext = await getExtendedDb();
           const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function' ? window.OPED_DB.normalizeNickname(myName) : safeDocPart(myName);
           const uid = requirePersonalUid();
           await ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), { nickname: myName, nicknameKey: safeName, authUid: uid, avatar: myAvatar, updatedAt: ext.serverTimestamp() }, { merge: true });
+          savedProfile = { id: safeName, nickname: myName, nicknameKey: safeName, authUid: uid, avatar: myAvatar };
         }
-      } catch (e) { console.error('Could not sync avatar to Firebase', e); }
+        if (savedProfile) {
+          const profileIndex = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(myName));
+          if (profileIndex >= 0) firebaseUserProfiles[profileIndex] = { ...firebaseUserProfiles[profileIndex], ...savedProfile };
+          else firebaseUserProfiles.push(savedProfile);
+        }
+        remoteSaved = true;
+      } catch (e) {
+        remoteError = e;
+        console.error('Could not sync avatar to Firebase', e);
+      }
       render();
       if (activeTab === 'profile') renderProfile();
       if (activeTab === 'top100') renderGlobalTop100();
+      if (requireRemote && !remoteSaved) throw remoteError || new Error('Avatar was not saved remotely');
+      return remoteSaved;
     }
 
     function avatarFor(name) {
@@ -6378,8 +6425,7 @@
       const btn = e.target.closest('button[data-emoji]');
       if (!btn) return;
       avatarPicker.classList.add('hidden');
-      await saveAvatar(btn.getAttribute('data-emoji'));
-      setStatus('Аватарка обновлена ✓');
+      if (await saveAvatar(btn.getAttribute('data-emoji'))) setStatus('Аватар сохранён в аккаунте ✓');
     });
 
     async function applyCustomAvatar() {
@@ -6388,8 +6434,7 @@
       if (!val) return;
       avatarPicker.classList.add('hidden');
       input.value = '';
-      await saveAvatar(val);
-      setStatus('Аватарка обновлена ✓');
+      if (await saveAvatar(val)) setStatus('Аватар сохранён в аккаунте ✓');
     }
 
     avatarPicker.addEventListener('click', (e) => { if (e.target.id === 'oc-avatar-custom-btn') applyCustomAvatar(); });

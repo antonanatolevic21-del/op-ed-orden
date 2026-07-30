@@ -467,13 +467,26 @@
       const displayName = String(nickname || "").trim();
       const safeName = normalizeNickname(displayName);
       if (!safeName) throw new Error("Никнейм обязателен");
-      return setDoc(doc(db, "userProfiles", safeName), {
+      const user = auth.currentUser;
+      const uid = requirePersonalUid();
+      const cleanAvatar = String(avatar || "🙂").trim() || "🙂";
+      await setDoc(doc(db, "userProfiles", safeName), {
         nickname: displayName,
         nicknameKey: safeName,
-        authUid: requirePersonalUid(),
-        avatar: String(avatar || "🙂").trim() || "🙂",
+        authUid: uid,
+        avatar: cleanAvatar,
         updatedAt: serverTimestamp()
       }, { merge: true });
+      const profile = {
+        ...(cachedAccountProfile(uid) || {}),
+        id: safeName,
+        nickname: displayName,
+        nicknameKey: safeName,
+        authUid: uid,
+        avatar: cleanAvatar
+      };
+      cacheAccountProfile(user, profile, Boolean(localStorage.getItem(ACCOUNT_PROFILE_CACHE_KEY)));
+      return profile;
     }
 
     async function acknowledgeWelcome(nickname) {
