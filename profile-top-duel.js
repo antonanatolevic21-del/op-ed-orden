@@ -156,8 +156,10 @@
       root = document.createElement('section');
       root.id = 'oc-profile-top-duel';
       root.className = 'oc-profile-top-duel oc-profile-section-hidden';
-      profile.append(root);
     }
+    const columns = profile.querySelector('.oc-profile-columns');
+    if (columns) columns.before(root);
+    else profile.append(root);
     return root;
   }
 
