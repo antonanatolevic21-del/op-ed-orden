@@ -60,6 +60,7 @@
     <div class="oc-tabs">
       <button class="oc-tab-btn active" data-tab="chart">Общий чарт</button>
       <button class="oc-tab-btn" data-tab="profile">Профиль</button>
+      <button class="oc-tab-btn" data-tab="discovery">Открытия</button>
       <button class="oc-tab-btn" data-tab="top100">Общий топ-100</button>
       <button class="oc-tab-btn" data-tab="season">Сезоны OP/ED</button>
       <button class="oc-tab-btn" data-tab="tier">Тир-лист</button>
@@ -418,6 +419,12 @@
       </div>
     </div>
 
+    <div id="oc-discovery-panel" class="oc-tab-panel hidden">
+      <div class="oc-inline-loader" role="status" aria-label="Загрузка раздела открытий">
+        <img src="https://www.image2url.com/r2/default/gifs/1785398081496-70cb3d2d-c6f9-49e7-9840-d635f8c2157e.gif" alt="Загрузка раздела открытий" referrerpolicy="no-referrer" />
+      </div>
+    </div>
+
 
     <div id="oc-top100-panel" class="oc-tab-panel hidden">
       <div class="oc-tier-head">
@@ -663,8 +670,8 @@
   </div>
 
   <script src="catalog-store.js?v=20260729-performance1" defer></script>
-  <script type="module" src="index-app.js?v=20260730-avatar-profile1"></script>
-  <script type="module" src="firebase-app.js?v=20260730-avatar-profile1"></script>
-  <script src="sw-register.js?v=20260730-inline-loader1" defer></script>
+  <script type="module" src="index-app.js?v=20260730-discovery-suite1"></script>
+  <script type="module" src="firebase-app.js?v=20260730-discovery-suite1"></script>
+  <script src="sw-register.js?v=20260730-discovery-suite1" defer></script>
 </body>
 </html>
