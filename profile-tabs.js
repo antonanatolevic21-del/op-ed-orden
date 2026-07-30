@@ -193,6 +193,7 @@
     setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns', currentView === 'top100');
     setVisible('.oc-allratings', currentView === 'ratings');
     setVisible('#oc-profile-taste-comparison', currentView === 'comparison');
+    setVisible('#oc-profile-top-duel', currentView === 'top100');
     setVisible('#oc-daily-panel', currentView === 'daily');
     setVisible('#oc-my-events-panel', currentView === 'events');
     setVisible('.oc-profile-filterbar', currentView === 'top100' || currentView === 'ratings');
@@ -202,6 +203,9 @@
     if (currentView === 'comparison') {
       ensureComparisonPanel();
       window.dispatchEvent(new CustomEvent('oped:profile-comparison-open'));
+    }
+    if (currentView === 'top100') {
+      window.dispatchEvent(new CustomEvent('oped:profile-top-open'));
     }
 
     if (persist) {
