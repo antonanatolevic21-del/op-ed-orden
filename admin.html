@@ -7,10 +7,13 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>АБОБА · Админ-панель</title>
   <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="stylesheet" href="admin-panel.css?v=20260730-catalog-only2" />
+  <link rel="stylesheet" href="admin-panel.css?v=20260730-auth-gate1" />
 </head>
-<body>
-  <main class="oc-admin-shell">
+<body class="oc-admin-auth-pending">
+  <div id="oc-admin-auth-gate" class="oc-admin-auth-gate" role="status" aria-label="Проверяем права администратора">
+    <img src="rikka-takanashi-loading.gif?v=20260730-auth-gate1" alt="" />
+  </div>
+  <main class="oc-admin-shell" aria-hidden="true">
     <header class="oc-admin-shell-head">
       <a class="oc-admin-shell-brand" href="index.html" aria-label="Вернуться на основную страницу">
         <strong>АБОБА</strong>
@@ -35,6 +38,6 @@
       <div id="oc-admin-shell-loading" class="oc-admin-shell-loading hidden">Открываю контроль качества…</div>
     </section>
   </main>
-  <script src="admin-panel.js?v=20260730-catalog-only2" defer></script>
+  <script src="admin-panel.js?v=20260730-auth-gate1" defer></script>
 </body>
 </html>

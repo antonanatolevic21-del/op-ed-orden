@@ -2,6 +2,8 @@
   const frame = document.querySelector('#oc-admin-workspace');
   const status = document.querySelector('#oc-admin-shell-status');
   const loading = document.querySelector('#oc-admin-shell-loading');
+  const authGate = document.querySelector('#oc-admin-auth-gate');
+  const shell = document.querySelector('.oc-admin-shell');
   const buttons = [...document.querySelectorAll('[data-admin-view]')];
   const qualityButton = buttons.find(button => button.dataset.adminView === 'quality');
   let activeView = 'workspace';
@@ -33,8 +35,16 @@
     status.classList.toggle('is-error', state === 'error');
   }
 
+  function syncAuthGate(admin) {
+    document.body.classList.toggle('oc-admin-auth-pending', !admin);
+    document.body.classList.toggle('oc-admin-authorized', admin);
+    if (authGate) authGate.hidden = admin;
+    if (shell) shell.setAttribute('aria-hidden', String(!admin));
+  }
+
   function syncAccess() {
     const admin = isAdmin();
+    syncAuthGate(admin);
     qualityButton.disabled = !admin;
     qualityButton.title = admin ? '' : 'Сначала войдите под админским аккаунтом в рабочей области';
     setStatus(
