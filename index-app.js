@@ -41,6 +41,8 @@
     const CATALOG_ADMIN_WORKSPACE = window.OC_CATALOG_ADMIN_WORKSPACE === true;
     const DAILY_MSK_OFFSET_HOURS = 3;
     const DAILY_RELEASE_HOUR = 18;
+    const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
+    const compareNatural = (left, right) => NATURAL_COLLATOR.compare(String(left ?? ''), String(right ?? ''));
 
     const EVENT_BASKET_ALLOWED = new Set(['пескошачий', 'egortos']);
     const MIN_PUBLIC_VOTES = 3;
@@ -142,6 +144,7 @@
     const entityAlbumTools = $('#oc-entity-album-tools');
     const entityAlbumSearchInput = $('#oc-entity-album-search');
     const entityAlbumSortSelect = $('#oc-entity-album-sort');
+    const entityTrackSortSelect = $('#oc-entity-track-sort');
     const entitySearchInput = $('#oc-entity-search');
     const entityTrackTypeSelect = $('#oc-entity-track-type');
     const entityFromYearSelect = $('#oc-entity-from-year');
@@ -2867,7 +2870,7 @@
     }
 
     function uniqueSorted(values) {
-      return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ru'));
+      return Array.from(new Set(values.filter(Boolean))).sort(compareNatural);
     }
 
     function buildCategoryCache(force = false) {
@@ -3108,7 +3111,7 @@
       });
       Object.keys(avatarsMap || {}).forEach(n => names.add(n));
       if (myName) names.add(myName);
-      return Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));
+      return Array.from(names).sort(compareNatural);
     }
 
     function populateProfileUsers(force = false) {
@@ -3318,10 +3321,10 @@
       };
       withScore.sort((a, b) => {
         if (searchQuery && a.relevance !== b.relevance) return a.relevance - b.relevance;
-        if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || b.e.title.localeCompare(a.e.title, 'ru');
+        if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || compareNatural(b.e.title, a.e.title);
         if (sortMode === 'year_desc') return (b.e.year || 0) - (a.e.year || 0) || compareSeason(a.e.season, b.e.season, -1) || (b.ts || 0) - (a.ts || 0);
         if (sortMode === 'year_asc') return (a.e.year || 0) - (b.e.year || 0) || compareSeason(a.e.season, b.e.season, 1) || (b.ts || 0) - (a.ts || 0);
-        if (sortMode === 'title') return a.e.title.localeCompare(b.e.title, 'ru');
+        if (sortMode === 'title') return compareNatural(a.e.title, b.e.title);
         if (sortMode === 'score_asc') {
           if (a.score === null && b.score === null) return (b.ts || 0) - (a.ts || 0);
           if (a.score === null) return 1;
@@ -3827,20 +3830,20 @@
           if (av === null && bv !== null) return 1;
           if (av !== null && bv === null) return -1;
           if (av !== null && bv !== null && bv !== av) return bv - av;
-          return a.title.localeCompare(b.title, 'ru');
+          return compareNatural(a.title, b.title);
         });
     }
 
     function openingQueueForSeason(year, season, type = seasonType) {
       return entries
         .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e) && !hasRated(e, myName))
-        .sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+        .sort((a, b) => compareNatural(a.title, b.title));
     }
 
     function personalOpeningQueueForSeason(year, season, type = seasonType) {
       return entries
         .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e) && !hasPersonalRated(e, myName))
-        .sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+        .sort((a, b) => compareNatural(a.title, b.title));
     }
 
     function previousSeasonFor(year, season) {
@@ -4195,6 +4198,43 @@
       return isPersonalScale() ? hasPersonalRated(entry, myName) : hasRated(entry, myName);
     }
 
+    function entityOwnScore(entry) {
+      const value = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
+      if (value === null || value === undefined || value === '') return null;
+      return Number.isFinite(Number(value)) ? Number(value) : null;
+    }
+
+    function entityReleasePoint(entry) {
+      const seasonOrder = { winter: 0, spring: 1, summer: 2, fall: 3 };
+      const year = Number(entry?.year);
+      const season = seasonOrder[entry?.season];
+      return Number.isFinite(year) && season !== undefined ? year * 4 + season : null;
+    }
+
+    function compareEntityTracks(a, b, mode) {
+      const titleDiff = compareNatural(a?.title, b?.title);
+      if (mode === 'title_desc') return -titleDiff;
+      if (mode === 'date_desc' || mode === 'date_asc') {
+        const aPoint = entityReleasePoint(a);
+        const bPoint = entityReleasePoint(b);
+        if (aPoint === null && bPoint !== null) return 1;
+        if (bPoint === null && aPoint !== null) return -1;
+        if (aPoint !== bPoint) return mode === 'date_desc' ? bPoint - aPoint : aPoint - bPoint;
+      }
+      if (mode === 'score_desc' || mode === 'score_asc') {
+        const aScore = entityOwnScore(a);
+        const bScore = entityOwnScore(b);
+        if (aScore === null && bScore !== null) return 1;
+        if (bScore === null && aScore !== null) return -1;
+        if (aScore !== bScore) return mode === 'score_desc' ? bScore - aScore : aScore - bScore;
+      }
+      if (mode === 'unrated') {
+        const ratingDiff = Number(entityHasRating(a)) - Number(entityHasRating(b));
+        if (ratingDiff) return ratingDiff;
+      }
+      return titleDiff;
+    }
+
     function entityCardProgress(card) {
       const related = entriesForEntity(card.type, card.value);
       const rated = related.filter(entityHasRating).length;
@@ -4213,7 +4253,7 @@
         names.get(key).ids.add(String(entry.id));
       }));
       return Array.from(names.values()).filter(item => item.ids.size >= ENTITY_MIN_TRACKS)
-        .sort((a, b) => a.value.localeCompare(b.value, 'ru')).map(item => ({ value: item.value, count: item.ids.size }));
+        .sort((a, b) => compareNatural(a.value, b.value)).map(item => ({ value: item.value, count: item.ids.size }));
     }
 
     function resetEntityAlbumFilters() {
@@ -4222,6 +4262,7 @@
       entityTrackRenderLimit = 30;
       if (entitySearchInput) entitySearchInput.value = '';
       if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
+      if (entityTrackSortSelect) entityTrackSortSelect.value = 'title_asc';
       if (entityFromYearSelect) entityFromYearSelect.value = '';
       if (entityFromSeasonSelect) entityFromSeasonSelect.value = '';
       if (entityToYearSelect) entityToYearSelect.value = '';
@@ -4250,7 +4291,7 @@
           } else if (albumSort === 'tracks' && a.progress.related.length !== b.progress.related.length) {
             return b.progress.related.length - a.progress.related.length;
           }
-          return String(a.card.value || '').localeCompare(String(b.card.value || ''), 'ru');
+          return compareNatural(a.card.value, b.card.value);
         })
         .map(row => row.card);
       const eligible = eligibleEntityValues(activeEntityType);
@@ -4285,6 +4326,7 @@
         const toYear = entityToYearSelect.value;
         const toSeason = entityToSeasonSelect.value;
         const progressFilter = entityProgressSelect.value;
+        const trackSort = String(entityTrackSortSelect?.value || 'title_asc');
         const years = uniqueSorted(progress.related.map(entry => entry.year ? String(entry.year) : '')).sort((a, b) => Number(b) - Number(a));
         entityFromYearSelect.innerHTML = '<option value="">С начала</option>' + years.map(value =>
           '<option value="' + escapeHtml(value) + '"' + (value === fromYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
@@ -4307,7 +4349,7 @@
           if (entryPoint < rangeStart || entryPoint > rangeEnd) return false;
           const rated = entityHasRating(entry);
           return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
-        }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+        }).sort((a, b) => compareEntityTracks(a, b, trackSort));
         activeEntityFilteredEntries = filtered;
         entityRateAllBtn.disabled = !filtered.length;
         const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
@@ -4352,7 +4394,7 @@
       const remaining = related.filter(entry => !entityHasRating(entry));
       evaluatorMode = 'entity';
       activeEntityQueueLabel = card.value;
-      seasonQueue = (remaining.length ? remaining : related).slice().sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+      seasonQueue = (remaining.length ? remaining : related).slice();
       seasonQueueIndex = 0;
       if (!seasonQueue.length) return;
       renderEvaluator();
@@ -4421,7 +4463,7 @@
       if (!ensureNickname()) return;
       evaluatorMode = includeAll ? 'season-all' : 'season';
       seasonQueue = includeAll
-        ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType).slice().sort((a, b) => a.title.localeCompare(b.title, 'ru'))
+        ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType).slice().sort((a, b) => compareNatural(a.title, b.title))
         : (isPersonalScale()
           ? personalOpeningQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType)
           : openingQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType));
@@ -4829,7 +4871,7 @@
         .sort((a, b) => {
           const scoreDiff = (scoreFor(b, user) || 0) - (scoreFor(a, user) || 0);
           if (scoreDiff !== 0) return scoreDiff;
-          return a.title.localeCompare(b.title, 'ru');
+          return compareNatural(a.title, b.title);
         })
         .map(e => e.id);
     }
@@ -4992,8 +5034,8 @@
         const rows = Object.entries(groups)
           .map(([key, scores]) => ({ key, mean: scores.reduce((a, b) => a + b, 0) / scores.length, count: scores.length }))
           .filter(row => row.count >= MIN_PUBLIC_VOTES);
-        rows.sort((a, b) => b.mean - a.mean || b.count - a.count || a.key.localeCompare(b.key, 'ru'));
-        const worstRows = rows.slice().sort((a, b) => a.mean - b.mean || b.count - a.count || a.key.localeCompare(b.key, 'ru'));
+        rows.sort((a, b) => b.mean - a.mean || b.count - a.count || compareNatural(a.key, b.key));
+        const worstRows = rows.slice().sort((a, b) => a.mean - b.mean || b.count - a.count || compareNatural(a.key, b.key));
         return { top: rows.slice(0, 5), worst: worstRows[0] ? [worstRows[0]] : [] };
       }
 
@@ -5082,7 +5124,7 @@
         rated.sort((a, b) => {
           const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
           if (scoreDiff !== 0) return scoreDiff;
-          return a.entry.title.localeCompare(b.entry.title, 'ru');
+          return compareNatural(a.entry.title, b.entry.title);
         });
 
         if (!rated.length) {
@@ -5316,7 +5358,7 @@
           const ai = manualIndex.has(a.entry.id) ? manualIndex.get(a.entry.id) : Number.POSITIVE_INFINITY;
           const bi = manualIndex.has(b.entry.id) ? manualIndex.get(b.entry.id) : Number.POSITIVE_INFINITY;
           if (ai !== bi) return ai - bi;
-          return a.entry.title.localeCompare(b.entry.title, 'ru');
+          return compareNatural(a.entry.title, b.entry.title);
         });
         return list.slice(0, 100);
       }
@@ -5414,7 +5456,7 @@
         seenKeys.add(safe);
         users.push(display);
       });
-      return users.sort((a, b) => a.localeCompare(b, 'ru'));
+      return users.sort(compareNatural);
     }
 
     function computeGlobalManualTop(type, scope = 'all') {
@@ -5444,7 +5486,7 @@
         b.count - a.count ||
         a.avgPlace - b.avgPlace ||
         a.bestPlace - b.bestPlace ||
-        a.entry.title.localeCompare(b.entry.title, 'ru')
+        compareNatural(a.entry.title, b.entry.title)
       ).slice(0, 100);
     }
 
@@ -5459,7 +5501,7 @@
           mode: 'score'
         }))
         .filter(r => r.avgScore !== null)
-        .sort((a, b) => b.avgScore - a.avgScore || b.count - a.count || a.entry.title.localeCompare(b.entry.title, 'ru'));
+        .sort((a, b) => b.avgScore - a.avgScore || b.count - a.count || compareNatural(a.entry.title, b.entry.title));
       if (rows.length <= 100) return rows;
       const cutoff = rows[99].avgScore;
       return rows.filter((row, idx) => idx < 100 || Math.abs(row.avgScore - cutoff) < 0.0001);
@@ -5614,7 +5656,7 @@
       const byId = new Map(items.map(e => [e.id, e]));
       const ordered = saved.filter(id => byId.has(id)).map(id => byId.get(id));
       const used = new Set(ordered.map(e => e.id));
-      const rest = items.filter(e => !used.has(e.id)).sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+      const rest = items.filter(e => !used.has(e.id)).sort((a, b) => compareNatural(a.title, b.title));
       return ordered.concat(rest);
     }
 
@@ -5841,7 +5883,7 @@
       return Object.entries(groups)
         .map(([key, vals]) => ({ key, count: vals.length, mean: vals.reduce((a, b) => a + b, 0) / vals.length }))
         .filter(row => row.count >= MIN_PUBLIC_VOTES)
-        .sort((a, b) => b.mean - a.mean || b.count - a.count || a.key.localeCompare(b.key, 'ru'))
+        .sort((a, b) => b.mean - a.mean || b.count - a.count || compareNatural(a.key, b.key))
         .slice(0, 50);
     }
 
@@ -5859,7 +5901,7 @@
       return Object.entries(groups)
         .map(([key, vals]) => ({ key, count: vals.length, mean: vals.reduce((a, b) => a + b, 0) / vals.length }))
         .filter(row => row.count >= MIN_PUBLIC_VOTES)
-        .sort((a, b) => b.mean - a.mean || b.count - a.count || a.key.localeCompare(b.key, 'ru'))
+        .sort((a, b) => b.mean - a.mean || b.count - a.count || compareNatural(a.key, b.key))
         .slice(0, 50);
     }
 
@@ -6442,7 +6484,7 @@
         switchTab('chart');
       }
     });
-    [entitySearchInput, entityTrackTypeSelect, entityFromYearSelect, entityFromSeasonSelect, entityToYearSelect, entityToSeasonSelect, entityProgressSelect].forEach(el => {
+    [entitySearchInput, entityTrackTypeSelect, entityTrackSortSelect, entityFromYearSelect, entityFromSeasonSelect, entityToYearSelect, entityToSeasonSelect, entityProgressSelect].forEach(el => {
       if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => {
         entityTrackRenderLimit = 30;
         renderEntityAlbums();
