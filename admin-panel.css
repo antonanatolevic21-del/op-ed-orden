@@ -188,6 +188,113 @@ body.oc-admin-auth-pending .oc-admin-shell {
 
 .oc-admin-shell-loading.hidden { display: none; }
 
+.oc-admin-journal {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 24px;
+  background: var(--admin-bg);
+}
+
+.oc-admin-journal.hidden { display: none; }
+
+.oc-admin-journal-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  max-width: 1240px;
+  margin: 0 auto 18px;
+  padding: 22px;
+  border: 1px solid var(--admin-border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 90% 0, rgba(8, 217, 214, .13), transparent 35%),
+    var(--admin-panel);
+}
+
+.oc-admin-journal-head span {
+  color: var(--admin-cyan);
+  font: 700 9px "Space Mono", monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.oc-admin-journal-head h1 {
+  margin: 6px 0;
+  font-size: 28px;
+}
+
+.oc-admin-journal-head p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--admin-muted);
+  line-height: 1.5;
+}
+
+.oc-admin-journal-head button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid #4b4058;
+  border-radius: 10px;
+  background: #100d16;
+  color: var(--admin-text);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.oc-admin-journal-list {
+  display: grid;
+  gap: 10px;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.oc-admin-journal-entry {
+  padding: 16px;
+  border: 1px solid var(--admin-border);
+  border-radius: 14px;
+  background: var(--admin-panel);
+}
+
+.oc-admin-journal-entry-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.oc-admin-journal-entry h2 {
+  margin: 0 0 3px;
+  font-size: 16px;
+}
+
+.oc-admin-journal-entry small,
+.oc-admin-journal-entry time {
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+
+.oc-admin-journal-change {
+  padding: 7px 0;
+  border-top: 1px solid rgba(255, 255, 255, .055);
+  color: #d8d2df;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.oc-admin-journal-change strong { color: var(--admin-cyan); }
+
+.oc-admin-journal-empty {
+  padding: 34px;
+  border: 1px dashed var(--admin-border);
+  border-radius: 14px;
+  color: var(--admin-muted);
+  text-align: center;
+}
+
 @media (max-width: 900px) {
   .oc-admin-shell-head {
     grid-template-columns: 1fr auto;
@@ -209,4 +316,7 @@ body.oc-admin-auth-pending .oc-admin-shell {
   .oc-admin-shell-brand span { display: none; }
   .oc-admin-shell-meta a { font-size: 9px; }
   .oc-admin-shell-tabs button { padding: 0 8px; font-size: 9px; }
+  .oc-admin-journal { padding: 12px; }
+  .oc-admin-journal-head { align-items: flex-start; flex-direction: column; padding: 16px; }
+  .oc-admin-journal-entry-head { flex-direction: column; gap: 4px; }
 }
