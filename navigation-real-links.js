@@ -2,7 +2,7 @@
 	if (window.__OC_NAVIGATION_REAL_LINKS_READY__) return;
 	window.__OC_NAVIGATION_REAL_LINKS_READY__ = true;
 
-	const MAIN_VIEWS = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+	const MAIN_VIEWS = new Set(['chart', 'profile', 'discovery', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const EVENT_MODES = new Set(['rating', 'endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
 	const EVENT_STAGES = new Set(['basket', 'first', 'semi', 'final']);
