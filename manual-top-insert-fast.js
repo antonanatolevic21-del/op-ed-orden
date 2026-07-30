@@ -4,6 +4,8 @@
 
   const clean = value => String(value ?? '').trim();
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+  const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
+  const compareNatural = (left, right) => NATURAL_COLLATOR.compare(clean(left), clean(right));
   const normalize = value => {
     try { return window.OPED_DB?.normalizeNickname?.(value) || clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9_-]+/gi, '_').slice(0, 60); }
     catch (_) { return clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9_-]+/gi, '_').slice(0, 60); }
@@ -117,7 +119,7 @@
       return (catalog || [])
         .filter(entry => entry?.type === type && (scores.has(String(entry.id)) || prioritized.has(String(entry.id))))
         .map(entry => ({ ...entry, score: scores.get(String(entry.id)), isTopCandidate: prioritized.has(String(entry.id)) }))
-        .sort((a, b) => Number(b.isTopCandidate) - Number(a.isTopCandidate) || (Number(b.score) || 0) - (Number(a.score) || 0) || clean(a.title).localeCompare(clean(b.title), 'ru'));
+        .sort((a, b) => Number(b.isTopCandidate) - Number(a.isTopCandidate) || (Number(b.score) || 0) - (Number(a.score) || 0) || compareNatural(a.title, b.title));
     })();
     cache.set(key, promise);
     promise.catch(() => cache.delete(key));
