@@ -502,29 +502,156 @@
       }, { merge: true });
     }
 
+    function cleanUserCollections(rows) {
+      return (Array.isArray(rows) ? rows : []).slice(0, 40).map((row, index) => ({
+        id: String(row?.id || `collection_${Date.now()}_${index}`).replace(/[^a-z0-9_-]+/gi, "_").slice(0, 80),
+        title: String(row?.title || "").trim().slice(0, 100),
+        description: String(row?.description || "").trim().slice(0, 500),
+        trackIds: Array.from(new Set((Array.isArray(row?.trackIds) ? row.trackIds : []).map(String).filter(Boolean))).slice(0, 200),
+        createdAtLocal: String(row?.createdAtLocal || new Date().toISOString()),
+        updatedAtLocal: new Date().toISOString()
+      })).filter(row => row.title);
+    }
+
+    async function saveUserCollections(nickname, collections) {
+      const displayName = String(nickname || "").trim();
+      const safeName = normalizeNickname(displayName);
+      const uid = requirePersonalUid();
+      if (!safeName) throw new Error("Никнейм обязателен");
+      const profileRef = doc(db, "userProfiles", safeName);
+      const profile = await getDoc(profileRef);
+      if (!profile.exists()) throw new Error("Профиль не найден");
+      if (String(profile.data()?.authUid || "") !== uid && !adminUids.includes(uid)) throw new Error("Нельзя менять подборки другого пользователя");
+      const rows = cleanUserCollections(collections);
+      await setDoc(profileRef, {
+        collections: rows,
+        collectionsUpdatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      return rows;
+    }
+
+    const JOURNAL_FIELDS = [
+      "title", "type", "year", "season", "studios", "directors", "performers",
+      "franchises", "alternativeTitles", "sameSongGroupId", "sameSongTitle",
+      "image", "fallbackImage", "link", "notes", "isChinese", "isMovie", "isShortened"
+    ];
+
+    function journalValue(value) {
+      if (Array.isArray(value)) {
+        return value
+          .slice(0, 30)
+          .map(item => String(item || "").trim().slice(0, 180))
+          .filter(Boolean);
+      }
+      if (typeof value === "string") return value.slice(0, 800);
+      if (value === undefined) return null;
+      return value;
+    }
+
+    function journalChanges(before, after) {
+      const changes = [];
+      JOURNAL_FIELDS.forEach(field => {
+        const oldValue = journalValue(before?.[field]);
+        const newValue = journalValue(after?.[field]);
+        if (JSON.stringify(oldValue) === JSON.stringify(newValue)) return;
+        changes.push({ field, before: oldValue, after: newValue });
+      });
+      return changes;
+    }
+
+    async function appendCatalogJournal(action, openingId, before, after) {
+      try {
+        const uid = requirePersonalUid();
+        if (!adminUids.includes(uid)) return;
+        const changes = journalChanges(before, after);
+        if (action === "update" && !changes.length) return;
+        const journalRef = doc(db, "meta", "catalogJournal");
+        const snapshot = await getDoc(journalRef);
+        const current = Array.isArray(snapshot.data()?.entries) ? snapshot.data().entries : [];
+        const actorName = String(auth.currentUser?.displayName || after?.updatedByName || before?.updatedByName || after?.createdBy || "админ").trim() || "админ";
+        const row = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          action,
+          openingId: String(openingId || ""),
+          title: String(after?.title || before?.title || "Без названия"),
+          type: String(after?.type || before?.type || ""),
+          actorName,
+          actorUid: uid,
+          at: new Date().toISOString(),
+          changes: changes.slice(0, 20)
+        };
+        await setDoc(journalRef, {
+          entries: [row, ...current].slice(0, 300),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (error) {
+        console.warn("Catalog journal write failed", error);
+      }
+    }
+
+    function watchCatalogJournal(callback) {
+      return onSnapshot(doc(db, "meta", "catalogJournal"), snapshot => {
+        callback(Array.isArray(snapshot.data()?.entries) ? snapshot.data().entries : []);
+      }, error => {
+        console.error("watchCatalogJournal error", error);
+        callback([]);
+      });
+    }
+
     async function addOpening(opening) {
-      return addDoc(collection(db, "openings"), cleanOpening(opening, true));
+      const payload = {
+        ...cleanOpening(opening, true),
+        updatedByUid: requirePersonalUid(),
+        updatedByName: String(auth.currentUser?.displayName || opening?.createdBy || "").trim()
+      };
+      const created = await addDoc(collection(db, "openings"), payload);
+      await appendCatalogJournal("create", created.id, null, { ...opening, ...payload });
+      return created;
     }
 
     async function updateOpening(openingId, opening) {
       const safeOpeningId = String(openingId || "").trim();
       if (!safeOpeningId) throw new Error("Не найден id трека");
-      return updateDoc(doc(db, "openings", safeOpeningId), cleanOpening(opening, false));
+      const openingRef = doc(db, "openings", safeOpeningId);
+      const beforeSnapshot = await getDoc(openingRef);
+      const before = beforeSnapshot.exists() ? beforeSnapshot.data() : {};
+      const payload = {
+        ...cleanOpening(opening, false),
+        updatedByUid: requirePersonalUid(),
+        updatedByName: String(auth.currentUser?.displayName || "").trim()
+      };
+      await updateDoc(openingRef, payload);
+      await appendCatalogJournal("update", safeOpeningId, before, { ...before, ...opening, ...payload });
+      return true;
     }
 
     async function updateOpeningFallbackImage(openingId, fallbackImage) {
       const safeOpeningId = String(openingId || "").trim();
       if (!safeOpeningId) throw new Error("Не найден id трека");
-      return updateDoc(doc(db, "openings", safeOpeningId), {
+      const openingRef = doc(db, "openings", safeOpeningId);
+      const beforeSnapshot = await getDoc(openingRef);
+      const before = beforeSnapshot.exists() ? beforeSnapshot.data() : {};
+      const payload = {
         fallbackImage: String(fallbackImage || "").trim(),
+        updatedByUid: requirePersonalUid(),
+        updatedByName: String(auth.currentUser?.displayName || "").trim(),
         updatedAt: serverTimestamp()
-      });
+      };
+      await updateDoc(openingRef, payload);
+      await appendCatalogJournal("update", safeOpeningId, before, { ...before, ...payload });
+      return true;
     }
 
     async function deleteOpening(openingId) {
       const safeOpeningId = String(openingId || "").trim();
       if (!safeOpeningId) throw new Error("Не найден id трека");
-      return deleteDoc(doc(db, "openings", safeOpeningId));
+      const openingRef = doc(db, "openings", safeOpeningId);
+      const beforeSnapshot = await getDoc(openingRef);
+      const before = beforeSnapshot.exists() ? beforeSnapshot.data() : {};
+      await deleteDoc(openingRef);
+      await appendCatalogJournal("delete", safeOpeningId, before, null);
+      return true;
     }
 
     async function saveRating(openingId, nickname, score) {
@@ -566,6 +693,8 @@
       deleteEntityCard,
       saveManualRanks,
       saveUserProfile,
+      saveUserCollections,
+      watchCatalogJournal,
       acknowledgeWelcome,
       addOpening,
       updateOpening,
