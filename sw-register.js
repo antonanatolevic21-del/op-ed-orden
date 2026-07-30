@@ -1,6 +1,6 @@
 (() => {
   const primaryVersion = '20260730-natural-sort1';
-  const discoveryVersion = '20260730-collections-links1';
+  const discoveryVersion = '20260730-staged-duel1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
