@@ -5,6 +5,8 @@
   const state = { type: 'OP', mode: 'new', duel: null, query: '', busy: false };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
   const norm = value => String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
+  const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
+  const compareNatural = (left, right) => NATURAL_COLLATOR.compare(String(left ?? ''), String(right ?? ''));
   const bridge = () => window.OC_APP_BRIDGE;
   const snap = () => bridge()?.snapshot?.() || window.OC_APP_DATA || {};
   const entries = () => Array.isArray(snap().entries) ? snap().entries : [];
@@ -33,7 +35,7 @@
     const candidateIds = meta().candidates.map(String);
     const rated = entries()
       .filter(entry => entry.type === state.type && score(entry) !== null)
-      .sort((a, b) => score(b) - score(a) || String(a.title).localeCompare(String(b.title), 'ru'))
+      .sort((a, b) => score(b) - score(a) || compareNatural(a.title, b.title))
       .map(entry => String(entry.id));
     const pins = new Set(meta().pins.map(pin => String(pin.id)));
     return Array.from(new Set([...candidateIds, ...rated])).filter(id => !pins.has(id)).slice(0, 100);
@@ -128,7 +130,7 @@
     if (query.length < 2) return [];
     const candidateSet = new Set(meta().candidates.map(String));
     return entries().filter(entry => entry.type === state.type && norm([entry.title, ...(entry.alternativeTitles || [])].join(' ')).includes(query))
-      .sort((a, b) => Number(candidateSet.has(String(b.id))) - Number(candidateSet.has(String(a.id))) || String(a.title).localeCompare(String(b.title), 'ru'))
+      .sort((a, b) => Number(candidateSet.has(String(b.id))) - Number(candidateSet.has(String(a.id))) || compareNatural(a.title, b.title))
       .slice(0, 10);
   }
 
