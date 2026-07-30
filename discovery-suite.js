@@ -9,8 +9,6 @@
   const state = {
     active: 'recommendations',
     recommendationType: '',
-    comparisonA: '',
-    comparisonB: '',
     researchMode: 'polarizing',
     researchType: '',
     researchMinVotes: 3,
@@ -21,41 +19,16 @@
     collectionDraft: null,
     collectionSearch: '',
     collectionMessage: '',
-    journal: [],
-    journalUnsubscribe: null,
     renderQueued: false
   };
 
   const TAB_META = [
     ['recommendations', 'Для тебя'],
     ['duel', 'Дуэльный топ'],
-    ['comparison', 'Сравнить вкусы'],
     ['research', 'Исследования'],
-    ['collections', 'Подборки'],
-    ['journal', 'Журнал']
+    ['collections', 'Подборки']
   ];
   const SEASON_LABELS = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
-  const FIELD_LABELS = {
-    title: 'Название',
-    type: 'Тип',
-    year: 'Год',
-    season: 'Сезон',
-    studios: 'Студии',
-    directors: 'Режиссёры',
-    performers: 'Исполнители',
-    franchises: 'Франшизы',
-    alternativeTitles: 'Альтернативные названия',
-    sameSongGroupId: 'Группа одной песни',
-    sameSongTitle: 'Общее название песни',
-    image: 'Основная картинка',
-    fallbackImage: 'Запасная картинка',
-    link: 'Видео',
-    notes: 'Заметки',
-    isChinese: 'Китайский OP/ED',
-    isMovie: 'Фильм',
-    isShortened: 'Укороченная версия'
-  };
-
   function esc(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -522,68 +495,6 @@
     </section>`;
   }
 
-  function comparisonData(a, b) {
-    const shared = [];
-    const onlyA = [];
-    const onlyB = [];
-    entries().forEach(entry => {
-      const left = score(entry, a);
-      const right = score(entry, b);
-      if (left !== null && right !== null) shared.push({ entry, a: left, b: right, diff: Math.abs(left - right) });
-      else if (left !== null && left >= 8 && right === null) onlyA.push({ entry, value: left });
-      else if (right !== null && right >= 8 && left === null) onlyB.push({ entry, value: right });
-    });
-    shared.sort((x, y) => y.diff - x.diff);
-    const correlation = shared.length >= 2 ? pearson(shared) : 0;
-    const averageDiff = mean(shared.map(row => row.diff));
-    const agreements = shared.filter(row => row.diff <= .5).sort((x, y) => (y.a + y.b) - (x.a + x.b));
-    const topEntities = user => {
-      const counts = new Map();
-      userRatings(user).filter(row => row.value >= 8).forEach(({ entry }) => {
-        [...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])].forEach(name => {
-          counts.set(normalize(name), { name, count: (counts.get(normalize(name))?.count || 0) + 1 });
-        });
-      });
-      return [...counts.values()].filter(row => row.count >= 2).sort((x, y) => y.count - x.count).slice(0, 15);
-    };
-    const entitiesA = topEntities(a);
-    const entityKeysB = new Set(topEntities(b).map(row => normalize(row.name)));
-    const commonEntities = entitiesA.filter(row => entityKeysB.has(normalize(row.name))).slice(0, 8);
-    return { shared, onlyA, onlyB, correlation, averageDiff, agreements, commonEntities };
-  }
-
-  function comparisonRows(title, rows, mapper) {
-    return `<div class="oc-discovery-list"><h4>${esc(title)}</h4>${rows.length ? rows.slice(0, 12).map(mapper).join('') : '<div class="oc-discovery-meta">Пока нет подходящих треков.</div>'}</div>`;
-  }
-
-  function renderComparison() {
-    const users = allUsers();
-    if (!state.comparisonA) state.comparisonA = currentName() || users[0] || '';
-    if (!state.comparisonB) state.comparisonB = users.find(name => normalize(name) !== normalize(state.comparisonA)) || '';
-    const data = state.comparisonA && state.comparisonB ? comparisonData(state.comparisonA, state.comparisonB) : null;
-    const compatibility = data ? Math.max(0, Math.min(100, Math.round((data.correlation + 1) * 50))) : 0;
-    return `<section class="oc-discovery-view" data-discovery-view="comparison">
-      <div class="oc-discovery-head"><div><div class="oc-section-label">все оценки</div><h3>Сравнение вкусов</h3><p>В отличие от сравнения топ‑100, здесь учитывается вся общая история оценок.</p></div></div>
-      <div class="oc-compare-controls">
-        <select class="oc-discovery-control" id="oc-compare-a">${userOptions(state.comparisonA, 'Первый пользователь')}</select>
-        <span>и</span>
-        <select class="oc-discovery-control" id="oc-compare-b">${userOptions(state.comparisonB, 'Второй пользователь')}</select>
-      </div>
-      ${data ? `<div class="oc-compare-summary">
-        <div class="oc-discovery-metric"><span>Совместимость</span><strong>${compatibility}%</strong><small>корреляция оценок</small></div>
-        <div class="oc-discovery-metric"><span>Общих оценок</span><strong>${data.shared.length}</strong><small>для сравнения</small></div>
-        <div class="oc-discovery-metric"><span>Среднее расхождение</span><strong>${data.averageDiff === null ? '—' : data.averageDiff.toFixed(2)}</strong><small>балла</small></div>
-        <div class="oc-discovery-metric"><span>Почти одинаково</span><strong>${data.agreements.length}</strong><small>разница не больше 0.5</small></div>
-      </div>
-      <div class="oc-compare-columns">
-        ${comparisonRows('Самые большие расхождения', data.shared, row => `<div class="oc-discovery-row"><button data-discovery-open="${esc(row.entry.id)}">${esc(row.entry.title)}</button><span>${row.a} ↔ ${row.b} · Δ ${row.diff.toFixed(1)}</span></div>`)}
-        ${comparisonRows('Общие любимые связи', data.commonEntities, row => `<div class="oc-discovery-row"><button type="button">${esc(row.name)}</button><span>любят оба</span></div>`)}
-        ${comparisonRows(`${state.comparisonA} рекомендует`, data.onlyA.sort((x, y) => y.value - x.value), row => `<div class="oc-discovery-row"><button data-discovery-open="${esc(row.entry.id)}">${esc(row.entry.title)}</button><span>${row.value} · у второго нет оценки</span></div>`)}
-        ${comparisonRows(`${state.comparisonB} рекомендует`, data.onlyB.sort((x, y) => y.value - x.value), row => `<div class="oc-discovery-row"><button data-discovery-open="${esc(row.entry.id)}">${esc(row.entry.title)}</button><span>${row.value} · у первого нет оценки</span></div>`)}
-      </div>` : '<div class="oc-discovery-empty">Выбери двух пользователей.</div>'}
-    </section>`;
-  }
-
   function filteredResearchEntries() {
     return entries().filter(entry => !state.researchType || entry.type === state.researchType);
   }
@@ -812,37 +723,11 @@
     </section>`;
   }
 
-  function formatJournalValue(value) {
-    if (Array.isArray(value)) return value.join(', ') || '—';
-    if (value === true) return 'да';
-    if (value === false) return 'нет';
-    if (value === null || value === undefined || value === '') return '—';
-    return String(value);
-  }
-
-  function formatJournalDate(value) {
-    const date = new Date(value);
-    return Number.isFinite(date.getTime()) ? date.toLocaleString('ru-RU') : 'время не указано';
-  }
-
-  function renderJournal() {
-    return `<section class="oc-discovery-view" data-discovery-view="journal">
-      <div class="oc-discovery-head"><div><div class="oc-section-label">без автоматического отката</div><h3>Журнал каталога</h3><p>Добавления, удаления и изменения полей карточек. Если что-то внесено неправильно, администратор исправляет карточку вручную.</p></div></div>
-      <div class="oc-journal-list">${state.journal.length ? state.journal.map(row => {
-        const action = row.action === 'create' ? 'Добавлена' : row.action === 'delete' ? 'Удалена' : 'Изменена';
-        return `<article class="oc-journal-entry">
-          <div class="oc-journal-entry-head"><div><h4>${action}: ${esc(row.title)}</h4><div class="oc-discovery-meta">${esc(row.actorName || 'админ')} · ${esc(row.type || '')}</div></div><time>${esc(formatJournalDate(row.at))}</time></div>
-          <div class="oc-journal-changes">${(row.changes || []).map(change => `<div class="oc-journal-change"><strong>${esc(FIELD_LABELS[change.field] || change.field)}</strong>: ${esc(formatJournalValue(change.before))} → ${esc(formatJournalValue(change.after))}</div>`).join('') || '<div class="oc-journal-change">Карточка целиком.</div>'}</div>
-        </article>`;
-      }).join('') : '<div class="oc-discovery-empty">Журнал пока пуст. Новые изменения карточек начнут появляться здесь автоматически.</div>'}</div>
-    </section>`;
-  }
-
   function shellMarkup(content) {
     const data = snapshot();
     return `<div class="oc-discovery-shell">
       <section class="oc-discovery-hero">
-        <div><div class="oc-section-label">данные превращаются в открытия</div><h2>Открытия</h2><p>Персональные рекомендации, сравнение вкусов, дуэльный топ, исследования, подборки и история развития каталога.</p></div>
+        <div><div class="oc-section-label">данные превращаются в открытия</div><h2>Открытия</h2><p>Персональные рекомендации, дуэльный топ, исследования и пользовательские подборки.</p></div>
         <div class="oc-discovery-data-badge"><strong>${(data.entries || []).length}</strong><span>карточек · ${(data.ratings || []).length} загруженных оценок</span></div>
       </section>
       <nav class="oc-discovery-tabs" aria-label="Разделы открытий">${TAB_META.map(([id, label]) => `<button type="button" class="oc-discovery-tab ${state.active === id ? 'active' : ''}" data-discovery-tab="${id}">${label}</button>`).join('')}</nav>
@@ -852,10 +737,8 @@
 
   function activeMarkup() {
     if (state.active === 'duel') return renderDuel();
-    if (state.active === 'comparison') return renderComparison();
     if (state.active === 'research') return renderResearch();
     if (state.active === 'collections') return renderCollections();
-    if (state.active === 'journal') return renderJournal();
     return renderRecommendations();
   }
 
@@ -882,19 +765,10 @@
     window.setTimeout(render, 60);
   }
 
-  function ensureJournalWatcher() {
-    if (state.journalUnsubscribe) return;
-    state.journalUnsubscribe = bridge()?.watchJournal?.(rows => {
-      state.journal = Array.isArray(rows) ? rows : [];
-      if (state.active === 'journal') queueRender();
-    }) || null;
-  }
-
   panel.addEventListener('click', event => {
     const tab = event.target.closest('[data-discovery-tab]');
     if (tab) {
       state.active = String(tab.dataset.discoveryTab || 'recommendations');
-      if (state.active === 'journal') ensureJournalWatcher();
       render();
       return;
     }
@@ -977,12 +851,6 @@
       state.duelMode = event.target.value === 'refine' ? 'refine' : 'new';
       state.duel = null;
       renderActive();
-    } else if (event.target.matches('#oc-compare-a')) {
-      state.comparisonA = event.target.value;
-      renderActive();
-    } else if (event.target.matches('#oc-compare-b')) {
-      state.comparisonB = event.target.value;
-      renderActive();
     } else if (event.target.matches('#oc-research-mode')) {
       state.researchMode = event.target.value;
       renderActive();
@@ -1014,19 +882,14 @@
     }
   });
 
-  window.addEventListener('oped:app-data-updated', () => {
-    ensureJournalWatcher();
-    queueRender();
-  });
+  window.addEventListener('oped:app-data-updated', queueRender);
   window.addEventListener('oped:route-change', event => {
     if (event.detail?.tab === 'discovery') {
-      ensureJournalWatcher();
       render();
     }
   });
 
   if (document.querySelector('.oc-tab-btn[data-tab="discovery"]')?.classList.contains('active')) {
-    ensureJournalWatcher();
     render();
   }
 })();
