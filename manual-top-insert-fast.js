@@ -112,10 +112,12 @@
         if (id && score !== undefined) scores.set(id, Number(score));
       }));
       const catalog = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
+      const topMeta = window.OC_APP_BRIDGE?.top100Meta?.(type) || {};
+      const prioritized = new Set((topMeta.candidates || []).map(String));
       return (catalog || [])
-        .filter(entry => entry?.type === type && scores.has(String(entry.id)))
-        .map(entry => ({ ...entry, score: scores.get(String(entry.id)) }))
-        .sort((a, b) => b.score - a.score || clean(a.title).localeCompare(clean(b.title), 'ru'));
+        .filter(entry => entry?.type === type && (scores.has(String(entry.id)) || prioritized.has(String(entry.id))))
+        .map(entry => ({ ...entry, score: scores.get(String(entry.id)), isTopCandidate: prioritized.has(String(entry.id)) }))
+        .sort((a, b) => Number(b.isTopCandidate) - Number(a.isTopCandidate) || (Number(b.score) || 0) - (Number(a.score) || 0) || clean(a.title).localeCompare(clean(b.title), 'ru'));
     })();
     cache.set(key, promise);
     promise.catch(() => cache.delete(key));
@@ -139,10 +141,14 @@
     list.innerHTML = filtered.map(row => {
       const rank = currentRank(type, row.id);
       const image = clean(row.fallbackImage || row.image);
-      return `<button type="button" class="oc-manual-insert-result${String(selectedId) === String(row.id) ? ' selected' : ''}" data-id="${esc(row.id)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span class="oc-manual-insert-noimage">—</span>'}<span class="oc-manual-insert-result-main"><span class="oc-manual-insert-result-title">${esc(row.title || row.id)}</span><span class="oc-manual-insert-result-meta">${rank ? `сейчас №${rank}` : 'сейчас вне топ-100'}</span></span><span class="oc-manual-insert-result-score">${esc(row.score)}</span></button>`;
+      return `<button type="button" class="oc-manual-insert-result${String(selectedId) === String(row.id) ? ' selected' : ''}${row.isTopCandidate ? ' candidate' : ''}" data-id="${esc(row.id)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span class="oc-manual-insert-noimage">—</span>'}<span class="oc-manual-insert-result-main"><span class="oc-manual-insert-result-title">${row.isTopCandidate ? '<b class="oc-top-candidate-badge">кандидат</b>' : ''}${esc(row.title || row.id)}</span><span class="oc-manual-insert-result-meta">${rank ? `сейчас №${rank}` : 'сейчас вне топ-100'}</span></span><span class="oc-manual-insert-result-score">${Number.isFinite(Number(row.score)) ? esc(row.score) : '—'}</span></button>`;
     }).join('');
     list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
   }
+
+  window.addEventListener('oped:app-data-updated', event => {
+    if (String(event.detail?.reason || '').includes('top100')) cache.clear();
+  });
 
   function dispatchPlacement(type, id, place, row) {
     document.dispatchEvent(new CustomEvent('oc:top100-place', {
