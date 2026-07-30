@@ -174,7 +174,7 @@
   }
 
   function franchisePairKey(first, second) {
-    return [normalize(first), normalize(second)].sort((a, b) => a.localeCompare(b, 'ru')).join(' ↔ ');
+    return [normalize(first), normalize(second)].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' })).join(' ↔ ');
   }
 
   function franchiseSimilarity(first, second, firstPrepared = null, secondPrepared = null) {
