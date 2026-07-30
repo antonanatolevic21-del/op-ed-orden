@@ -28,6 +28,8 @@
     ['collections', 'Подборки']
   ];
   const SEASON_LABELS = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
+  const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
+  const compareNatural = (left, right) => NATURAL_COLLATOR.compare(String(left ?? ''), String(right ?? ''));
   function esc(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -99,7 +101,7 @@
         });
       });
     });
-    return [...names.values()].sort((a, b) => a.localeCompare(b, 'ru'));
+    return [...names.values()].sort(compareNatural);
   }
 
   function entryMeta(entry) {
@@ -337,7 +339,7 @@
   function startDuel() {
     const user = currentName();
     const rated = userRatings(user, state.duelType)
-      .sort((a, b) => b.value - a.value || String(a.entry.title).localeCompare(String(b.entry.title), 'ru'))
+      .sort((a, b) => b.value - a.value || compareNatural(a.entry.title, b.entry.title))
       .map(row => String(row.entry.id))
       .slice(0, 100);
     if (rated.length < 2) {
