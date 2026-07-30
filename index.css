@@ -1,4 +1,4 @@
-@import url('./index-shell-current.css?v=20260730-top100-candidates1');
+@import url('./index-shell-current.css?v=20260730-natural-sort1');
 
 /* Keep the neutral page background visible until the final UI bundle has
  * applied. This prevents the legacy base layout from flashing for one frame. */
