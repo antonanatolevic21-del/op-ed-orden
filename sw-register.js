@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260730-album-cover1';
+  const primaryVersion = '20260730-album-gif1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -182,6 +182,7 @@
     loadRoutePackage(view);
     maybeLoadAdminPackage();
   }
+
   window.setTimeout(detectCurrentLazyView, 100);
   window.addEventListener('oped:route-change', event => loadRoutePackage(event?.detail?.tab));
   window.addEventListener('oped-account-restored', () => window.setTimeout(maybeLoadAdminPackage, 0));
