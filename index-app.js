@@ -316,6 +316,64 @@
       snapshot: appDataSnapshot,
       openTrack: id => openCardModal(String(id || '')),
       rateTrack: id => startOpeningRating(String(id || '')),
+      top100Meta(type) {
+        const cleanType = type === 'ED' ? 'ED' : 'OP';
+        const row = getManualRanksForUser(myName) || {};
+        return {
+          candidates: Array.from(new Set((row[`candidates${cleanType}`] || []).map(String).filter(Boolean))),
+          pins: sanitizeTopPins(row[`pins${cleanType}`])
+        };
+      },
+      isTopCandidate(id, type) {
+        const cleanType = type === 'ED' ? 'ED' : 'OP';
+        const row = getManualRanksForUser(myName) || {};
+        return (row[`candidates${cleanType}`] || []).map(String).includes(String(id));
+      },
+      async toggleTopCandidate(id, type) {
+        if (!myName || !currentPersonalUid()) throw new Error('Для кандидатов войди в личный аккаунт.');
+        const cleanType = type === 'ED' ? 'ED' : 'OP';
+        const openingId = String(id || '');
+        const current = getManualRanksForUser(myName) || {};
+        const field = `candidates${cleanType}`;
+        const candidates = new Set((current[field] || []).map(String));
+        if (candidates.has(openingId)) candidates.delete(openingId);
+        else candidates.add(openingId);
+        const next = { ...current, [field]: [...candidates] };
+        rememberManualRanksForUser(myName, next);
+        await saveManualRanks();
+        publishAppData('top100-candidates-saved');
+        return candidates.has(openingId);
+      },
+      async addTopCandidates(type) {
+        if (!myName || !currentPersonalUid()) throw new Error('Для изменения топа войди в личный аккаунт.');
+        const cleanType = type === 'ED' ? 'ED' : 'OP';
+        const current = getManualRanksForUser(myName) || {};
+        const candidates = (current[`candidates${cleanType}`] || []).map(String);
+        const order = applyTopPins(
+          Array.from(new Set([...candidates, ...(current[cleanType] || []).map(String)])),
+          current[`pins${cleanType}`]
+        );
+        const next = { ...current, [cleanType]: order };
+        rememberManualRanksForUser(myName, next);
+        await saveManualRanks();
+        publishAppData('top100-candidates-added');
+        return next;
+      },
+      async saveTopPins(type, pins) {
+        if (!myName || !currentPersonalUid()) throw new Error('Для закрепления войди в личный аккаунт.');
+        const cleanType = type === 'ED' ? 'ED' : 'OP';
+        const current = getManualRanksForUser(myName) || {};
+        const cleanPins = sanitizeTopPins(pins);
+        const next = {
+          ...current,
+          [cleanType]: applyTopPins(current[cleanType] || [], cleanPins),
+          [`pins${cleanType}`]: cleanPins
+        };
+        rememberManualRanksForUser(myName, next);
+        await saveManualRanks();
+        publishAppData('top100-pins-saved');
+        return next;
+      },
       async saveDuelRanks(type, order) {
         if (!myName || !currentPersonalUid()) throw new Error('Для сохранения войди в личный аккаунт.');
         const cleanType = type === 'ED' ? 'ED' : 'OP';
@@ -1069,7 +1127,9 @@
         Array.isArray(row.OP) || Array.isArray(row.ED) ||
         Array.isArray(row.op) || Array.isArray(row.ed) ||
         Array.isArray(row.manualOP) || Array.isArray(row.manualED) ||
-        Array.isArray(row.excludedOP) || Array.isArray(row.excludedED)
+        Array.isArray(row.excludedOP) || Array.isArray(row.excludedED) ||
+        Array.isArray(row.candidatesOP) || Array.isArray(row.candidatesED) ||
+        Array.isArray(row.pinsOP) || Array.isArray(row.pinsED)
       ));
     }
 
@@ -1115,6 +1175,10 @@
       const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []));
       const excludedOP = hasExcludedOP ? row.excludedOP.map(String) : [];
       const excludedED = hasExcludedED ? row.excludedED.map(String) : [];
+      const candidatesOP = Array.isArray(row.candidatesOP) ? row.candidatesOP.map(String) : null;
+      const candidatesED = Array.isArray(row.candidatesED) ? row.candidatesED.map(String) : null;
+      const pinsOP = Array.isArray(row.pinsOP) ? sanitizeTopPins(row.pinsOP) : null;
+      const pinsED = Array.isArray(row.pinsED) ? sanitizeTopPins(row.pinsED) : null;
       const prev = { ...(target[display] || {}), ...(safeKey ? (target[safeKey] || {}) : {}) };
       const profileRow = {
         ...prev,
@@ -1129,6 +1193,10 @@
       else if (!Array.isArray(profileRow.excludedOP)) profileRow.excludedOP = [];
       if (hasExcludedED) profileRow.excludedED = Array.from(new Set(excludedED));
       else if (!Array.isArray(profileRow.excludedED)) profileRow.excludedED = [];
+      if (candidatesOP) profileRow.candidatesOP = Array.from(new Set(candidatesOP));
+      if (candidatesED) profileRow.candidatesED = Array.from(new Set(candidatesED));
+      if (pinsOP) profileRow.pinsOP = pinsOP;
+      if (pinsED) profileRow.pinsED = pinsED;
       target[display] = profileRow;
       if (profileRow.nicknameKey && profileRow.nicknameKey !== display) target[profileRow.nicknameKey] = profileRow;
     }
@@ -2438,7 +2506,11 @@
         OP: Array.isArray(ranks.OP) ? ranks.OP.map(String).filter(id => !excludedOP.includes(id)).slice(0, 100) : [],
         ED: Array.isArray(ranks.ED) ? ranks.ED.map(String).filter(id => !excludedED.includes(id)).slice(0, 100) : [],
         excludedOP,
-        excludedED
+        excludedED,
+        candidatesOP: Array.from(new Set((ranks.candidatesOP || []).map(String).filter(Boolean))),
+        candidatesED: Array.from(new Set((ranks.candidatesED || []).map(String).filter(Boolean))),
+        pinsOP: sanitizeTopPins(ranks.pinsOP),
+        pinsED: sanitizeTopPins(ranks.pinsED)
       };
       rememberManualRanksForUser(myName, cleanRanks);
       const errors = [];
@@ -2446,7 +2518,7 @@
 
       if (window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
         try {
-          await window.OPED_DB.saveManualRanks(myName, { OP: cleanRanks.OP, ED: cleanRanks.ED });
+          await window.OPED_DB.saveManualRanks(myName, cleanRanks);
           savedRemote = true;
         } catch (e) {
           console.error('Could not save manual ranks through OPED_DB', e);
@@ -2467,6 +2539,10 @@
           manualED: cleanRanks.ED,
           excludedOP: cleanRanks.excludedOP,
           excludedED: cleanRanks.excludedED,
+          candidatesOP: cleanRanks.candidatesOP,
+          candidatesED: cleanRanks.candidatesED,
+          pinsOP: cleanRanks.pinsOP,
+          pinsED: cleanRanks.pinsED,
           avatar: myAvatar,
           updatedAt: ext.serverTimestamp()
         };
@@ -4441,6 +4517,7 @@
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? 'Отмена' : 'Пропустить'}</button>
           ${existingScore !== null ? `<button class="oc-secondary-btn" data-eval-action="delete-current">${isPersonalScale() ? 'Удалить отметку' : 'Удалить оценку'}</button>` : ''}
+          <button class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" data-eval-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100'}</button>
           <button class="oc-addbtn" data-eval-action="save-next">${evaluatorMode === 'single' ? 'Сохранить' : 'Сохранить и дальше'}</button>
         </div>
       </div>`;
@@ -4553,6 +4630,29 @@
     }
 
     // ---------- manual (user-curated) top-100 ----------
+    function sanitizeTopPins(values) {
+      const byRank = new Map();
+      (Array.isArray(values) ? values : []).forEach(value => {
+        const id = String(value?.id || '').trim();
+        const rank = Math.round(Number(value?.rank) || 0);
+        if (id && rank >= 1 && rank <= 100) byRank.set(rank, { id, rank });
+      });
+      return [...byRank.values()].sort((a, b) => a.rank - b.rank);
+    }
+
+    function applyTopPins(values, pins) {
+      const cleanPins = sanitizeTopPins(pins);
+      const pinnedIds = new Set(cleanPins.map(pin => pin.id));
+      const remaining = Array.from(new Set((values || []).map(String).filter(id => id && !pinnedIds.has(id))));
+      const result = Array(100).fill(null);
+      cleanPins.forEach(pin => { result[pin.rank - 1] = pin.id; });
+      let cursor = 0;
+      for (let index = 0; index < result.length && cursor < remaining.length; index += 1) {
+        if (!result[index]) result[index] = remaining[cursor++];
+      }
+      return result.filter(Boolean).slice(0, 100);
+    }
+
     function manualUserSafeKey(user) {
       const raw = String(user || '').trim();
       if (!raw) return '';
@@ -5880,6 +5980,7 @@
           </div>
           <div class="oc-opening-rate-actions">
             ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
+            <button type="button" class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" data-card-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100'}</button>
             <button type="button" class="oc-addbtn" data-card-action="save-rating">Сохранить оценку</button>
           </div>
         </div>
@@ -5906,6 +6007,19 @@
       }
       const saveBtn = openingModal.querySelector('[data-card-action="save-rating"]');
       if (saveBtn) saveBtn.addEventListener('click', () => saveCardModalRating(entry.id));
+      const candidateBtn = openingModal.querySelector('[data-card-action="toggle-candidate"]');
+      if (candidateBtn) candidateBtn.addEventListener('click', async () => {
+        candidateBtn.disabled = true;
+        try {
+          const active = await window.OC_APP_BRIDGE?.toggleTopCandidate?.(entry.id, entry.type);
+          candidateBtn.classList.toggle('active', Boolean(active));
+          candidateBtn.textContent = active ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100';
+        } catch (error) {
+          setStatus(error?.message || 'Не удалось изменить кандидата.', true);
+        } finally {
+          candidateBtn.disabled = false;
+        }
+      });
       const deleteBtn = openingModal.querySelector('[data-card-action="delete-rating"]');
       if (deleteBtn) deleteBtn.addEventListener('click', async () => {
         if (!ensureNickname()) return;
@@ -6432,6 +6546,21 @@
           await deleteCurrentRating(entry.id, myName, isPersonalScale() ? 'personal' : 'public');
           if (evaluatorMode === 'single') closeEvaluator();
           else { seasonQueueIndex += 1; renderEvaluator(); }
+        }
+      }
+      if (action === 'toggle-candidate') {
+        const entry = seasonQueue[seasonQueueIndex];
+        const button = e.target.closest('[data-eval-action="toggle-candidate"]');
+        if (!entry || !button) return;
+        button.disabled = true;
+        try {
+          const active = await window.OC_APP_BRIDGE?.toggleTopCandidate?.(entry.id, entry.type);
+          button.classList.toggle('active', Boolean(active));
+          button.textContent = active ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100';
+        } catch (error) {
+          setStatus(error?.message || 'Не удалось изменить кандидата.', true);
+        } finally {
+          button.disabled = false;
         }
       }
       if (action === 'save-next') await saveEvaluatorScore();
