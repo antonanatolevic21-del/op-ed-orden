@@ -1,12 +1,12 @@
 (() => {
-  const primaryVersion = '20260730-top100-candidates1';
-  const discoveryVersion = '20260730-top100-duel-placement2';
+  const primaryVersion = '20260730-natural-sort1';
+  const discoveryVersion = '20260730-natural-sort1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
-  const seasonFillVersion = '20260725-season-fill2';
+  const seasonFillVersion = '20260730-natural-sort1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
-  const top100EditorVersion = '20260727-top100-editor-v2-6';
+  const top100EditorVersion = '20260730-natural-sort1';
   const top100DragVersion = '20260726-top100-drag2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
