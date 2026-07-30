@@ -4,7 +4,7 @@
 	if (window.__OC_NAVIGATION_REAL_LINKS_READY__) return;
 	window.__OC_NAVIGATION_REAL_LINKS_READY__ = true;
 
-	const MAIN_VIEWS = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+	const MAIN_VIEWS = new Set(['chart', 'profile', 'discovery', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const EVENT_MODES = new Set(['rating', 'endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
 	const EVENT_STAGES = new Set(['basket', 'first', 'semi', 'final']);
@@ -571,6 +571,7 @@
     const tab = name => legacyTabs.querySelector(`.oc-tab-btn[data-tab="${name}"]`);
     const chartBtn = tab('chart');
     const profileBtn = tab('profile');
+    const discoveryBtn = tab('discovery');
     const topBtn = tab('top100');
     const seasonBtn = tab('season');
     const tierBtn = tab('tier');
@@ -605,12 +606,14 @@
 
     chartBtn.textContent = 'Каталог';
     profileBtn.textContent = 'Профиль';
+    if (discoveryBtn) discoveryBtn.textContent = 'Открытия';
     if (tierBtn) tierBtn.textContent = 'Тир-лист';
     seasonBtn.textContent = 'Сезоны';
     eventsLink.textContent = 'Ивенты';
     eventsLink.classList.add('oc-topbar-events');
 
     nav.append(chartBtn, profileBtn);
+    if (discoveryBtn) nav.append(discoveryBtn);
 
     const ratings = document.createElement('details');
     ratings.className = 'oc-topbar-ratings';
@@ -755,7 +758,7 @@
     nameInput?.addEventListener('input', syncAccount);
     nameInput?.addEventListener('change', syncAccount);
     if (avatarBtn) new MutationObserver(syncAccount).observe(avatarBtn, { childList: true, characterData: true, subtree: true });
-    [chartBtn, profileBtn, topBtn, seasonBtn, tierBtn, statsBtn].filter(Boolean).forEach(button => {
+    [chartBtn, profileBtn, discoveryBtn, topBtn, seasonBtn, tierBtn, statsBtn].filter(Boolean).forEach(button => {
       new MutationObserver(syncRatingsActive).observe(button, { attributes: true, attributeFilter: ['class'] });
       button.addEventListener('click', () => {
         ratings.open = false;
