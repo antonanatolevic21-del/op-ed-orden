@@ -1,9 +1,17 @@
-#oc-discovery-panel {
+#oc-discovery-panel,
+#oc-profile-taste-comparison {
   --discover-card: #15111d;
   --discover-card-2: #1b1525;
   --discover-line: #2b2437;
   --discover-soft: #938ba0;
+}
+
+#oc-discovery-panel {
   padding: 22px;
+}
+
+#oc-profile-taste-comparison {
+  padding: 18px 0 4px;
 }
 
 .oc-discovery-shell {
