@@ -455,7 +455,7 @@
       const value = clean(option.value);
       if (value) rows.set(value.toLocaleLowerCase('ru'), value);
     });
-    return [...rows.values()].sort((a, b) => a.localeCompare(b, 'ru'));
+    return [...rows.values()].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' }));
   }
 
   function ensureModal() {
@@ -757,7 +757,7 @@
   }
 
   function franchisePairKey(first, second) {
-    return [normalize(first), normalize(second)].sort((a, b) => a.localeCompare(b, 'ru')).join(' ↔ ');
+    return [normalize(first), normalize(second)].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' })).join(' ↔ ');
   }
 
   function franchiseSimilarity(first, second, firstPrepared = null, secondPrepared = null) {
