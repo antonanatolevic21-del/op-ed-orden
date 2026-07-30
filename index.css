@@ -55,8 +55,8 @@ html body::before {
 	user-select: none;
 }
 
-/* Album artwork always lives in a square frame. Wide images and GIFs are
- * fitted inside it without cropping or distortion. */
+/* Album artwork always fills a square frame. Wide images and GIFs may be
+ * cropped at the sides, but never leave empty edges or become distorted. */
 #opedchart-root .oc-entity-cover {
 	aspect-ratio: 1 / 1;
 }
@@ -64,6 +64,6 @@ html body::before {
 #opedchart-root .oc-entity-cover img {
 	width: 100%;
 	height: 100%;
-	object-fit: contain;
+	object-fit: cover;
 	object-position: center;
 }
