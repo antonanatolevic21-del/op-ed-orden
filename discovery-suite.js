@@ -358,12 +358,9 @@
     } else {
       state.duel = {
         mode: 'new',
-        candidates: rated,
-        order: [rated[0]],
-        candidateIndex: 1,
-        candidate: rated[1],
-        low: 0,
-        high: 1,
+        order: rated.slice(),
+        pairIndex: 0,
+        totalPairs: Math.floor(rated.length / 2),
         comparisons: 0
       };
     }
@@ -378,25 +375,11 @@
     const duel = state.duel;
     if (!duel || duel.mode !== 'new' || duel.complete) return;
     duel.comparisons += 1;
-    const mid = Math.floor((duel.low + duel.high) / 2);
-    if (choice === 'left') duel.high = mid;
-    else if (choice === 'right') duel.low = mid + 1;
-    else if (choice === 'tie') duel.low = duel.high = Math.min(duel.order.length, mid + 1);
-    else if (choice === 'skip') duel.low = duel.high = duel.order.length;
-    if (duel.low < duel.high) {
-      renderActive();
-      return;
-    }
-    duel.order.splice(duel.low, 0, duel.candidate);
-    duel.candidateIndex += 1;
-    if (duel.candidateIndex >= duel.candidates.length) {
-      duel.complete = true;
-      renderActive();
-      return;
-    }
-    duel.candidate = duel.candidates[duel.candidateIndex];
-    duel.low = 0;
-    duel.high = duel.order.length;
+    const leftIndex = duel.pairIndex * 2;
+    const rightIndex = leftIndex + 1;
+    if (choice === 'right') [duel.order[leftIndex], duel.order[rightIndex]] = [duel.order[rightIndex], duel.order[leftIndex]];
+    duel.pairIndex += 1;
+    if (duel.pairIndex >= duel.totalPairs) duel.complete = true;
     renderActive();
   }
 
@@ -417,10 +400,6 @@
   function duelFinalOrder() {
     const duel = state.duel;
     if (!duel?.order) return [];
-    if (duel.mode === 'new') {
-      const remaining = (duel.candidates || []).slice(duel.candidateIndex).filter(id => id !== duel.candidate);
-      return [...duel.order, ...(duel.candidate && !duel.order.includes(duel.candidate) ? [duel.candidate] : []), ...remaining].slice(0, 100);
-    }
     return duel.order.slice(0, 100);
   }
 
@@ -459,23 +438,21 @@
     let body = `<div class="oc-discovery-empty">Выбери тип и режим. «Собрать заново» построит порядок последовательными сравнениями, а «Уточнить текущий» пройдёт по соседним позициям сохранённого топа.</div>`;
     if (duel?.error) body = `<div class="oc-discovery-empty">${esc(duel.error)}</div>`;
     else if (duel?.order) {
-      const progress = duel.mode === 'new'
-        ? Math.round((duel.candidateIndex / duel.candidates.length) * 100)
-        : Math.round((duel.pairIndex / Math.max(1, duel.order.length - 1)) * 100);
+      const total = duel.mode === 'new' ? duel.totalPairs : Math.max(1, duel.order.length - 1);
+      const progress = Math.round(duel.pairIndex / Math.max(1, total) * 100);
       if (duel.complete) {
         const rows = duelFinalOrder();
         body = `<div class="oc-discovery-list"><h4>Готовый порядок · ${rows.length} позиций</h4>
-          ${rows.slice(0, 30).map((id, index) => {
+          ${rows.slice(0, 100).map((id, index) => {
             const entry = byId.get(id);
             return `<div class="oc-discovery-row"><button data-discovery-open="${esc(id)}">${index + 1}. ${esc(entry?.title || id)}</button><span>${esc(entry ? entryMeta(entry) : '')}</span></div>`;
           }).join('')}
-          ${rows.length > 30 ? `<div class="oc-discovery-meta">И ещё ${rows.length - 30} позиций.</div>` : ''}
         </div>`;
       } else {
-        const leftId = duel.mode === 'new' ? duel.candidate : duel.order[duel.pairIndex];
-        const rightId = duel.mode === 'new' ? duel.order[Math.floor((duel.low + duel.high) / 2)] : duel.order[duel.pairIndex + 1];
+        const leftId = duel.mode === 'new' ? duel.order[duel.pairIndex * 2] : duel.order[duel.pairIndex];
+        const rightId = duel.mode === 'new' ? duel.order[duel.pairIndex * 2 + 1] : duel.order[duel.pairIndex + 1];
         body = `<div class="oc-duel-progress"><i style="width:${progress}%"></i></div>
-          <div class="oc-discovery-meta">${progress}% · сравнений: ${duel.comparisons} · нажми на трек, который должен стоять выше</div>
+          <div class="oc-discovery-meta">${progress}% · сравнений: ${duel.comparisons} из ${total} · нажми на трек, который должен стоять выше</div>
           <div class="oc-duel-stage">${duelCard(byId.get(leftId), 'left')}<div class="oc-duel-vs">VS</div>${duelCard(byId.get(rightId), 'right')}</div>
           <div class="oc-duel-secondary">
             <button class="oc-discovery-button" type="button" data-duel-choice="tie">Примерно равны</button>
@@ -484,7 +461,7 @@
       }
     }
     return `<section class="oc-discovery-view" data-discovery-view="duel">
-      <div class="oc-discovery-head"><div><div class="oc-section-label">попарное ранжирование</div><h3>Дуэльный топ</h3><p>Выбирай лучший из двух треков. Результат можно сохранить прямо в ручной топ‑100.</p></div></div>
+      <div class="oc-discovery-head"><div><div class="oc-section-label">попарное ранжирование</div><h3>Дуэльный топ</h3><p>Приблизительно расставь топ примерно за 50 сравнений, а точные места при желании поправь вручную.</p></div></div>
       <div class="oc-duel-controls">
         <div>
           <select class="oc-discovery-control" id="oc-duel-type"><option value="OP" ${state.duelType === 'OP' ? 'selected' : ''}>OP</option><option value="ED" ${state.duelType === 'ED' ? 'selected' : ''}>ED</option></select>
