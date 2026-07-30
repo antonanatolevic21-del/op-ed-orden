@@ -35,6 +35,51 @@
   transition:filter .2s ease,opacity .2s ease;
 }
 
+/* Main-site album empty/load-more states use the shared loading GIF. */
+.oc-entity-gif-placeholder{
+  grid-column:1 / -1;
+  min-height:180px!important;
+  border:0!important;
+  background:transparent!important;
+}
+
+.oc-entity-gif-placeholder img{
+  width:min(160px,70vw)!important;
+  height:auto!important;
+  object-fit:contain!important;
+}
+
+#oc-entity-grid .oc-progressive-more.oc-progressive-more-gif{
+  grid-column:1 / -1;
+  display:grid;
+  place-items:center;
+  width:100%;
+  min-height:180px;
+  margin:10px 0 0;
+  padding:8px;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  cursor:pointer;
+}
+
+#oc-entity-grid .oc-progressive-more.oc-progressive-more-gif:hover,
+#oc-entity-grid .oc-progressive-more.oc-progressive-more-gif:focus-visible{
+  border:0;
+  background:transparent;
+  box-shadow:none;
+  outline:none;
+}
+
+#oc-entity-grid .oc-progressive-more.oc-progressive-more-gif img{
+  display:block;
+  width:min(160px,70vw);
+  max-width:100%;
+  height:auto;
+  pointer-events:none;
+}
+
 .oc-entity-card-body{
   position:absolute;
   z-index:2;
