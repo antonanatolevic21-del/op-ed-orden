@@ -1,5 +1,38 @@
 @import url('./index-base.css?v=20260726-cleanup2');
 
+/* Fixed header must never cover the modal title or its close action. */
+.oc-evaluator,
+.oc-modal {
+  align-items: flex-start;
+  padding-top: calc(88px + env(safe-area-inset-top));
+  overflow-y: auto;
+}
+
+.oc-eval-modal,
+.oc-opening-detail-modal,
+.oc-modal-card {
+  max-height: calc(100dvh - 108px - env(safe-area-inset-top));
+}
+
+.oc-top-candidate-btn.active {
+  border-color: rgba(8, 217, 214, .72);
+  background: rgba(8, 217, 214, .11);
+  color: var(--cyan);
+}
+
+@media (max-width: 720px) {
+  .oc-evaluator,
+  .oc-modal {
+    padding-top: calc(76px + env(safe-area-inset-top));
+  }
+
+  .oc-eval-modal,
+  .oc-opening-detail-modal,
+  .oc-modal-card {
+    max-height: calc(100dvh - 86px - env(safe-area-inset-top));
+  }
+}
+
 /* Four-digit positions keep their own grid column and never overlap previews. */
 .oc-rank {
   white-space: nowrap;
