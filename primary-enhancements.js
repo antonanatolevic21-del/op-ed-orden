@@ -2278,7 +2278,7 @@
     '#oc-p-search', '#oc-p-type', '#oc-p-score-cmp', '#oc-p-score-value',
     '#oc-p-from-year', '#oc-p-from-season', '#oc-p-to-year',
     '#oc-p-to-season', '#oc-p-missing', '#oc-entity-album-search', '#oc-entity-album-sort',
-    '#oc-entity-search', '#oc-entity-track-type', '#oc-entity-from-year',
+    '#oc-entity-search', '#oc-entity-track-type', '#oc-entity-track-sort', '#oc-entity-from-year',
     '#oc-entity-from-season', '#oc-entity-to-year', '#oc-entity-to-season',
     '#oc-entity-progress'
   ];
