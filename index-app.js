@@ -38,6 +38,7 @@
     const DAILY_DISMISSED_KEY = 'op-ed-daily-dismissed-v1';
     const CATALOG_VIEW_KEY = 'op-ed-catalog-view-v1';
     const WELCOME_ACK_KEY = 'op-ed-welcome-ack-v1';
+    const CATALOG_ADMIN_WORKSPACE = window.OC_CATALOG_ADMIN_WORKSPACE === true;
     const DAILY_MSK_OFFSET_HOURS = 3;
     const DAILY_RELEASE_HOUR = 18;
 
@@ -1137,8 +1138,13 @@
       return accessLevel === 'admin' && isAdminUid();
     }
 
+    function isCatalogAdmin() {
+      return isAdmin() && CATALOG_ADMIN_WORKSPACE;
+    }
+
     function updateAccessUi() {
       document.querySelectorAll('.oc-admin-only').forEach(el => el.classList.toggle('oc-locked', !isAdmin()));
+      document.querySelectorAll('.oc-catalog-admin-only').forEach(el => el.classList.toggle('oc-locked', !isCatalogAdmin()));
       if (accessBadge) {
         accessBadge.textContent = isAdmin() ? 'админ' : (accessLevel ? 'вход' : 'гость');
         accessBadge.classList.toggle('admin', isAdmin());
@@ -1268,6 +1274,12 @@
     function ensureAdmin() {
       if (isAdmin()) return true;
       setStatus('Нужен админ-пароль: добавление, редактирование и удаление доступны только админу.', true);
+      return false;
+    }
+
+    function ensureCatalogAdmin() {
+      if (isCatalogAdmin()) return true;
+      setStatus('Редактирование каталога доступно только в админ-панели.', true);
       return false;
     }
 
@@ -1978,7 +1990,7 @@
     }
 
     function repairBrokenFranchises() {
-      if (!ensureAdmin()) return;
+      if (!ensureCatalogAdmin()) return;
       const repairs = buildFranchiseRepairPlan();
       if (!repairs.length) {
         setStatus('Подозрительных франшиз по названию не найдено ✓');
@@ -1988,7 +2000,7 @@
     }
 
     async function applyFranchiseRepairsFromModal() {
-      if (!ensureAdmin() || !franchiseRepairModal) return;
+      if (!ensureCatalogAdmin() || !franchiseRepairModal) return;
       const selectedRows = Array.from(franchiseRepairModal.querySelectorAll('.oc-franchise-repair-row'))
         .filter(row => {
           const checkbox = row.querySelector('.oc-franchise-repair-check');
@@ -4133,8 +4145,8 @@
           '<div class="oc-entity-card-body"><h3>' + escapeHtml(card.value) + '</h3><p>' + progress.rated + ' из ' + progress.related.length + ' оценено</p>' +
           '<div class="oc-entity-progressbar"><i style="width:' + (progress.related.length ? Math.round(progress.rated / progress.related.length * 100) : 0) + '%"></i></div>' +
           (progress.complete ? '<span class="oc-entity-done">Всё просмотрено ✓</span>' : '') +
-          (isAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
-          (isAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
+          (isCatalogAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
+          (isCatalogAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
           '</div></article>';
       }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : `<div class="oc-empty">${albumQuery ? 'По этому запросу альбомов не найдено.' : 'Альбомов пока нет.'}</div>`;
       installProgressiveAutoload(entityGridEl, 'entity-cards', () => {
@@ -4158,7 +4170,7 @@
 
     async function saveEntityAlbum(event) {
       event.preventDefault();
-      if (!isAdmin()) return;
+      if (!isCatalogAdmin()) return;
       const value = entityValueSelect.value;
       const image = String(entityImageInput.value || '').trim();
       if (!value || !image) { setStatus('Выберите объект и добавьте ссылку на обложку.', true); return; }
@@ -5889,7 +5901,7 @@
           <button type="button" class="oc-rate-btn" data-action="rate" data-id="${entry.id}">${hasSavedScore ? 'Изменить оценку' : 'Оценить'}</button>
           <button type="button" class="oc-open-btn" data-action="open-card" data-id="${entry.id}">Карточка</button>
           <button type="button" class="oc-secondary-btn${hasSavedScore ? '' : ' hidden'}" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? 'удалить отметку' : 'удалить оценку'}</button>
-          ${isAdmin() ? `<button type="button" class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
+          ${isCatalogAdmin() ? `<button type="button" class="oc-edit-btn" data-action="edit" data-id="${entry.id}">✎ редактировать</button>
           <button type="button" class="oc-del" data-action="delete" data-id="${entry.id}">удалить трек</button>` : ''}`;
         return renderUnifiedEntryCard(entry, {
           rankLabel,
@@ -5990,7 +6002,7 @@
 
       listContainer.querySelectorAll('[data-action="edit"]').forEach(btn => {
         btn.addEventListener('click', (e) => {
-          if (!ensureAdmin()) return;
+          if (!ensureCatalogAdmin()) return;
           editingId = e.target.getAttribute('data-id');
           render();
         });
@@ -6005,7 +6017,7 @@
 
       listContainer.querySelectorAll('[data-action="save-edit"]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-          if (!ensureAdmin()) return;
+          if (!ensureCatalogAdmin()) return;
           const id = e.target.getAttribute('data-id');
           const card = listContainer.querySelector(`.oc-editcard[data-id="${id}"]`);
           const entry = entriesById.get(String(id));
@@ -6107,7 +6119,7 @@
 
       listContainer.querySelectorAll('[data-action="delete"]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-          if (!ensureAdmin()) return;
+          if (!ensureCatalogAdmin()) return;
           const target = e.target;
           const id = target.getAttribute('data-id');
           if (target.getAttribute('data-confirm') !== '1') {
@@ -6219,7 +6231,7 @@
       const rate = event.target.closest('[data-entity-rate]');
       if (rate) { startOpeningRating(rate.getAttribute('data-entity-rate')); return; }
       const remove = event.target.closest('[data-entity-delete]');
-      if (remove && isAdmin() && confirm('Удалить этот альбом?')) {
+      if (remove && isCatalogAdmin() && confirm('Удалить этот альбом?')) {
         try { await window.OPED_DB.deleteEntityCard(remove.getAttribute('data-entity-delete')); setStatus('Альбом удалён.'); }
         catch (error) { console.error(error); setStatus('Не удалось удалить альбом.', true); }
       }
@@ -6682,7 +6694,7 @@
     }
 
     function openImageMigrationModal() {
-      if (!ensureAdmin()) return;
+      if (!ensureCatalogAdmin()) return;
       const remaining = existingImageMigrationCandidates().length;
       imageMigrationStatus('Осталось без резервной копии: ' + remaining);
       imageMigrationModal.classList.remove('hidden');
@@ -6698,7 +6710,7 @@
     }
 
     async function runExistingImageMigrationBatch() {
-      if (imageMigrationRunning || !ensureAdmin()) return;
+      if (imageMigrationRunning || !ensureCatalogAdmin()) return;
       const candidates = existingImageMigrationCandidates().slice(0, 50);
       if (!candidates.length) {
         imageMigrationStatus('Все существующие картинки уже обработаны ✓');
@@ -6779,7 +6791,7 @@
     });
 
     $('#oc-add-btn').addEventListener('click', async () => {
-      if (!ensureAdmin()) return;
+      if (!ensureCatalogAdmin()) return;
       if (!ensureNickname()) return;
 
       const title = $('#oc-add-title').value.trim();

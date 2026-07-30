@@ -11,6 +11,7 @@ const coreStyles = [
   'accessibility.css',
   'first-user-test-fixes.css',
   'access-role-badge.css',
+  'admin-panel-link.css',
   'catalog-improvements.css',
   'ux-audit-enhancements.css'
 ];
@@ -25,7 +26,6 @@ const profileStyles = [
 
 const entityStyles = [
   'entity-album-cards.css',
-  'entity-album-editor.css',
   'entity-real-links.css',
   'navigation-real-links.css'
 ];
@@ -33,7 +33,7 @@ const entityStyles = [
 const adminStyles = [
   'quality-center.css',
   'admin-missing-inline.css',
-  'admin-panel-link.css'
+  'entity-album-editor.css'
 ];
 
 const coreScripts = [
@@ -41,6 +41,7 @@ const coreScripts = [
   'account-sync.js',
   'site-policy.js',
   'topbar.js',
+  'quality-center-user-route.js',
   'active-filter-chips.js',
   'access-role-badge.js',
   'first-user-test-fixes.js',
@@ -68,12 +69,12 @@ const profileScripts = [
 ];
 
 const entityScripts = [
-  'entity-album-editor.js',
   'entity-real-links.js'
 ];
 
 const adminScripts = [
   'admin-missing-inline.js',
+  'entity-album-editor.js',
   'quality-center.js'
 ];
 

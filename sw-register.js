@@ -1,5 +1,6 @@
 (() => {
-  const primaryVersion = '20260730-quality-franchises1';
+  const primaryVersion = '20260730-admin-catalog1';
+  const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
@@ -62,7 +63,7 @@
     if (option) option.textContent = '>=';
   });
 
-  if (document.querySelector('.oc-addbar')) {
+  if (catalogAdminWorkspace && document.querySelector('.oc-addbar')) {
     addStyle('track-add-panel.css');
     void addScript('track-add-panel.js', '20260729-last-title1', true);
   }
@@ -145,7 +146,7 @@
   }
 
   function maybeLoadAdminPackage() {
-    if (document.querySelector('#oc-access-badge')?.classList.contains('admin')) void loadAdminPackage();
+    if (catalogAdminWorkspace && document.querySelector('#oc-access-badge')?.classList.contains('admin')) void loadAdminPackage();
   }
 
   function loadRoutePackage(view) {

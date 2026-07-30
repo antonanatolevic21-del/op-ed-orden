@@ -31,6 +31,12 @@ html:not(.oc-enhancements-loading) body #opedchart-root {
 	opacity: 1 !important;
 }
 
+/* Catalog editors only belong to the embedded admin workspace. Keeping this
+ * rule in the synchronous shell prevents them from flashing on the main site. */
+html:not(.oc-catalog-admin-workspace) .oc-catalog-admin-only {
+	display: none !important;
+}
+
 /* Overrides both the old stylesheet guard and the boot node injected by a
  * cached copy of sw-register.js. */
 html body #oc-primary-boot,

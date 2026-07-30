@@ -7,7 +7,6 @@
   let cachedOpenings = null;
   let loadingPromise = null;
   let triggerButton = null;
-  let adminPanelLink = null;
   let currentIssues = new Map();
   let qualityNotice = '';
   let rejectedFranchisePairs = new Set();
@@ -828,10 +827,10 @@
   function syncTriggerVisibility() {
     const hidden = !isAdminUi();
     if (triggerButton) triggerButton.hidden = hidden;
-    if (adminPanelLink) adminPanelLink.hidden = hidden;
   }
 
   function mountTrigger(attempt = 0) {
+    if (window.OC_CATALOG_ADMIN_WORKSPACE !== true) return;
     if (triggerButton?.isConnected) return;
     const host = document.querySelector('.oc-topbar-admin');
     if (!host) {
@@ -846,11 +845,6 @@
     triggerButton.textContent = 'Центр качества базы';
     triggerButton.addEventListener('click', () => { void openQualityCenter(false); });
     host.append(triggerButton);
-    adminPanelLink = document.createElement('a');
-    adminPanelLink.className = 'oc-admin-panel-link';
-    adminPanelLink.href = 'admin.html';
-    adminPanelLink.textContent = 'Открыть админ-панель';
-    host.append(adminPanelLink);
     syncTriggerVisibility();
 
     const badge = document.querySelector('#oc-access-badge');

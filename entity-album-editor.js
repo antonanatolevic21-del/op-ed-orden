@@ -6,7 +6,9 @@
   let syncTimer = 0;
 
   const clean = value => String(value || '').trim();
-  const isAdmin = () => clean(document.querySelector('#oc-access-badge')?.textContent).toLocaleLowerCase('ru') === 'админ';
+  const isCatalogAdmin = () =>
+    window.OC_CATALOG_ADMIN_WORKSPACE === true
+    && clean(document.querySelector('#oc-access-badge')?.textContent).toLocaleLowerCase('ru') === 'админ';
 
   function cardById(id) {
     return cards.find(card => String(card?.id || '') === String(id || '')) || null;
@@ -26,7 +28,7 @@
 
   function ensureEditButton(article, card) {
     let button = article.querySelector('.oc-entity-edit');
-    if (!isAdmin()) {
+    if (!isCatalogAdmin()) {
       button?.remove();
       return;
     }
@@ -97,7 +99,7 @@
   }
 
   function openModal(card) {
-    if (!card || !isAdmin()) return;
+    if (!card || !isCatalogAdmin()) return;
     const modal = ensureModal();
     const options = optionRowsForCard(card).map(value => `<option value="${escapeHtml(value)}"${value === clean(card.value) ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('');
     modal.innerHTML = `<div class="oc-entity-edit-dialog" data-entity-edit-id="${escapeHtml(card.id)}">
