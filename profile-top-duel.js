@@ -119,10 +119,13 @@
     const entry = byId().get(String(id));
     if (!entry) return '';
     const image = String(entry.fallbackImage || entry.image || '');
-    return `<button class="oc-duel-card" type="button" data-profile-duel-choice="${side}">
-      ${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span></span>'}
-      <span class="oc-duel-card-copy"><h4>${esc(entry.title)}</h4><p>${esc(entry.type)} · твоя оценка ${score(entry) ?? '—'}</p></span>
-    </button>`;
+    return `<div class="oc-duel-card-wrap">
+      <button class="oc-duel-card" type="button" data-profile-duel-choice="${side}">
+        ${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span></span>'}
+        <span class="oc-duel-card-copy"><h4>${esc(entry.title)}</h4><p>${esc(entry.type)} · твоя оценка ${score(entry) ?? '—'}</p></span>
+      </button>
+      <button class="oc-duel-watch" type="button" data-profile-duel-open="${esc(entry.id)}" aria-label="Посмотреть ${esc(entry.title)}">▶ Посмотреть</button>
+    </div>`;
   }
 
   function pinSearch() {
@@ -140,7 +143,7 @@
     if (duel.error) return `<div class="oc-discovery-empty">${esc(duel.error)}</div>`;
     if (duel.complete) {
       const map = byId();
-      return `<div class="oc-discovery-list"><h4>Черновой порядок готов · ${finalOrder().length} позиций</h4>${finalOrder().slice(0, 20).map((id, i) => `<div class="oc-discovery-row"><button type="button">${i + 1}. ${esc(map.get(id)?.title || id)}</button><span>${meta().pins.some(pin => String(pin.id) === id) ? 'закреплено' : ''}</span></div>`).join('')}</div>`;
+      return `<div class="oc-discovery-list"><h4>Черновой порядок готов · ${finalOrder().length} позиций</h4>${finalOrder().slice(0, 20).map((id, i) => `<div class="oc-discovery-row"><button type="button" data-profile-duel-open="${esc(id)}">${i + 1}. ${esc(map.get(id)?.title || id)}</button><span>${meta().pins.some(pin => String(pin.id) === id) ? 'закреплено' : ''}</span></div>`).join('')}</div>`;
     }
     const progress = duel.mode === 'new' ? Math.round(duel.candidateIndex / duel.candidates.length * 100) : Math.round(duel.pairIndex / Math.max(1, duel.order.length - 1) * 100);
     const left = duel.mode === 'new' ? duel.candidate : duel.order[duel.pairIndex];
@@ -200,6 +203,11 @@
     const root = event.target.closest('#oc-profile-top-duel');
     if (!root || state.busy) return;
     if (event.target.closest('#oc-profile-duel-start')) return start();
+    const open = event.target.closest('[data-profile-duel-open]');
+    if (open) {
+      bridge()?.openTrack?.(open.dataset.profileDuelOpen);
+      return;
+    }
     if (event.target.closest('#oc-profile-duel-save')) {
       state.busy = true;
       try { await bridge()?.saveDuelRanks?.(state.type, finalOrder()); state.duel = null; }
