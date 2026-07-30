@@ -8,6 +8,7 @@
   const top100SuiteVersion = '20260725-top100-suite2';
   const top100EditorVersion = '20260730-natural-sort1';
   const top100DragVersion = '20260726-top100-drag2';
+  const top100ExportVersion = '20260730-top100-export1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
@@ -86,7 +87,7 @@
     addStyle('top100-rank-readability.css', primaryVersion);
     top100Promise = addScriptsOrdered([
       ['catalog-cache.js', primaryVersion],
-      ['top100-rank-readability.js', primaryVersion],
+      ['top100-rank-readability.js', top100ExportVersion],
       ['profile-top-single.js', top100SuiteVersion],
       ['top100-editor-v2.js', top100EditorVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion]
