@@ -444,10 +444,13 @@
 
   function duelCard(entry, side) {
     if (!entry) return '';
-    return `<button class="oc-duel-card" type="button" data-duel-choice="${side}">
-      ${imageFor(entry) ? `<img data-discovery-image src="${esc(imageFor(entry))}" data-fallback="${esc(entry.image || '')}" alt="" />` : '<span></span>'}
-      <span class="oc-duel-card-copy"><h4>${esc(entry.title)}</h4><p>${esc(entryMeta(entry))} · твоя оценка ${score(entry, currentName()) ?? '—'}</p></span>
-    </button>`;
+    return `<div class="oc-duel-card-wrap">
+      <button class="oc-duel-card" type="button" data-duel-choice="${side}">
+        ${imageFor(entry) ? `<img data-discovery-image src="${esc(imageFor(entry))}" data-fallback="${esc(entry.image || '')}" alt="" />` : '<span></span>'}
+        <span class="oc-duel-card-copy"><h4>${esc(entry.title)}</h4><p>${esc(entryMeta(entry))} · твоя оценка ${score(entry, currentName()) ?? '—'}</p></span>
+      </button>
+      <button class="oc-duel-watch" type="button" data-discovery-open="${esc(entry.id)}" aria-label="Посмотреть ${esc(entry.title)}">▶ Посмотреть</button>
+    </div>`;
   }
 
   function renderDuel() {
