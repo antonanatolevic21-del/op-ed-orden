@@ -71,7 +71,7 @@
       const value = clean(option.value);
       if (value) rows.set(value.toLocaleLowerCase('ru'), value);
     });
-    return [...rows.values()].sort((a, b) => a.localeCompare(b, 'ru'));
+    return [...rows.values()].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' }));
   }
 
   function ensureModal() {
