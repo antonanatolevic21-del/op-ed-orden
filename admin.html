@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>АБОБА · Админ-панель</title>
   <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="stylesheet" href="admin-panel.css?v=20260730-auth-gate2" />
+  <link rel="stylesheet" href="admin-panel.css?v=20260730-admin-journal1" />
 </head>
 <body class="oc-admin-auth-pending">
   <div id="oc-admin-auth-gate" class="oc-admin-auth-gate" role="status" aria-label="Проверяем права администратора">
@@ -22,6 +22,7 @@
       <nav class="oc-admin-shell-tabs" aria-label="Разделы админ-панели">
         <button class="active" type="button" data-admin-view="workspace">Каталог</button>
         <button type="button" data-admin-view="quality">Контроль качества базы</button>
+        <button type="button" data-admin-view="journal">Журнал каталога</button>
       </nav>
       <div class="oc-admin-shell-meta">
         <span id="oc-admin-shell-status">Проверяю доступ…</span>
@@ -36,8 +37,21 @@
         allow="clipboard-read; clipboard-write"
       ></iframe>
       <div id="oc-admin-shell-loading" class="oc-admin-shell-loading hidden">Открываю контроль качества…</div>
+      <section id="oc-admin-journal" class="oc-admin-journal hidden" aria-label="Журнал каталога">
+        <div class="oc-admin-journal-head">
+          <div>
+            <span>только администраторы</span>
+            <h1>Журнал каталога</h1>
+            <p>Добавления, удаления и изменения карточек. Откат не выполняется — ошибку можно исправить вручную в каталоге.</p>
+          </div>
+          <button type="button" data-admin-journal-refresh>Обновить</button>
+        </div>
+        <div id="oc-admin-journal-list" class="oc-admin-journal-list">
+          <div class="oc-admin-journal-empty">Загружаю журнал…</div>
+        </div>
+      </section>
     </section>
   </main>
-  <script src="admin-panel.js?v=20260730-auth-gate2" defer></script>
+  <script src="admin-panel.js?v=20260730-admin-journal1" defer></script>
 </body>
 </html>
