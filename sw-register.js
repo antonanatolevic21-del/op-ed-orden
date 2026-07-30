@@ -1,6 +1,6 @@
 (() => {
-  const primaryVersion = '20260730-discovery-suite1';
-  const discoveryVersion = '20260730-discovery-suite1';
+  const primaryVersion = '20260730-admin-journal-profile1';
+  const discoveryVersion = '20260730-admin-journal-profile1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -120,7 +120,11 @@
   function loadProfilePackage() {
     if (profilePromise) return profilePromise;
     addStyle('profile-enhancements.css', primaryVersion);
-    profilePromise = addScript('profile-enhancements.js', primaryVersion, true)
+    addStyle('discovery-suite.css', discoveryVersion);
+    profilePromise = addScriptsOrdered([
+      ['profile-enhancements.js', primaryVersion],
+      ['profile-taste-comparison.js', discoveryVersion]
+    ])
       .catch(error => {
         console.error('Profile package load failed', error);
         throw error;
@@ -267,7 +271,7 @@
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
       try {
-        const registration = await navigator.serviceWorker.register('./sw.js?v=20260730-discovery-suite1', { updateViaCache: 'none' });
+        const registration = await navigator.serviceWorker.register('./sw.js?v=20260730-admin-journal-profile1', { updateViaCache: 'none' });
         await registration.update();
       } catch (error) { console.warn('Image cache service worker registration failed', error); }
     });
