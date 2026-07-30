@@ -5864,7 +5864,7 @@
       updateAccountDashboard();
 
       if (!entries.length) {
-        listContainer.innerHTML = '<div class="oc-empty">Пока пусто. Добавьте первый опенинг или эндинг выше ☝</div>';
+        listContainer.innerHTML = '<div class="oc-inline-loader" role="status" aria-label="Загрузка данных"><img src="https://www.image2url.com/r2/default/gifs/1785398081496-70cb3d2d-c6f9-49e7-9840-d635f8c2157e.gif" alt="Загрузка данных" referrerpolicy="no-referrer" /></div>';
         return;
       }
       if (!sorted.length) {
