@@ -300,7 +300,7 @@
       .filter(row => missingDefs(row).length > 0)
       .sort((a, b) => queuePriority(a) - queuePriority(b)
         || missingDefs(b).length - missingDefs(a).length
-        || String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+        || String(a.title || '').localeCompare(String(b.title || ''), 'ru', { numeric: true, sensitivity: 'base' }));
   }
 
   async function startWorkflow(forceReload = false) {
