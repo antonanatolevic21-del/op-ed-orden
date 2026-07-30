@@ -179,7 +179,7 @@
 (() => {
   if (window.__OC_PROFILE_TABS_READY__) return;
 
-  const VIEWS = new Set(['overview', 'top100', 'ratings', 'daily', 'events']);
+  const VIEWS = new Set(['overview', 'top100', 'ratings', 'comparison', 'daily', 'events']);
   const STORAGE_KEY = 'oc-profile-subtab';
   let currentView = 'overview';
   let statsEnhanceScheduled = false;
@@ -208,6 +208,7 @@
       <button type="button" role="tab" data-profile-view="overview">Обзор</button>
       <button type="button" role="tab" data-profile-view="top100">Мой топ-100</button>
       <button type="button" role="tab" data-profile-view="ratings">Все оценки</button>
+      <button type="button" role="tab" data-profile-view="comparison">Сравнение вкусов</button>
       <button type="button" role="tab" data-profile-view="daily">Дейлики</button>
       <button type="button" role="tab" data-profile-view="events">Мои ивенты</button>`;
     anchor.insertAdjacentElement('afterend', tabs);
@@ -330,6 +331,20 @@
     return placeholder;
   }
 
+  function ensureComparisonPanel() {
+    const root = panel();
+    if (!root) return null;
+    let comparison = root.querySelector('#oc-profile-taste-comparison');
+    if (!comparison) {
+      comparison = document.createElement('section');
+      comparison.id = 'oc-profile-taste-comparison';
+      comparison.className = 'oc-profile-taste-comparison oc-profile-section-hidden';
+      comparison.innerHTML = '<div class="oc-empty">Загружаю сравнение вкусов…</div>';
+      root.append(comparison);
+    }
+    return comparison;
+  }
+
   function syncDailyPlaceholder() {
     const root = panel();
     const daily = root?.querySelector('#oc-daily-panel');
@@ -355,12 +370,17 @@
     setVisible('#oc-profile-stats', currentView === 'overview');
     setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns', currentView === 'top100');
     setVisible('.oc-allratings', currentView === 'ratings');
+    setVisible('#oc-profile-taste-comparison', currentView === 'comparison');
     setVisible('#oc-daily-panel', currentView === 'daily');
     setVisible('#oc-my-events-panel', currentView === 'events');
     setVisible('.oc-profile-filterbar', currentView === 'top100' || currentView === 'ratings');
     syncDailyPlaceholder();
     scheduleManualOwnershipSync();
     if (currentView === 'overview') scheduleOverviewStats();
+    if (currentView === 'comparison') {
+      ensureComparisonPanel();
+      window.dispatchEvent(new CustomEvent('oped:profile-comparison-open'));
+    }
 
     if (persist) {
       try { sessionStorage.setItem(STORAGE_KEY, currentView); } catch (_) {}
@@ -373,6 +393,7 @@
     if (!root) return;
 
     ensureTabs();
+    ensureComparisonPanel();
     let saved = 'overview';
     try { saved = sessionStorage.getItem(STORAGE_KEY) || 'overview'; } catch (_) {}
     setView(saved, false);
