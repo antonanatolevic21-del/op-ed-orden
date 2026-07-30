@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 92906)
-Total output lines: 7390
-
   import { adminUids } from './firebase-config.js';
 
   (function() {
@@ -2275,7 +2272,3174 @@ Total output lines: 7390
       } catch (e) { }
       const profileAvatar = String(accountProfile(myName)?.avatar || '').trim();
       myAvatar = profileAvatar || storedAvatar || myAvatar;
-      if (profileAvatar && profileAvatar !=…42906 tokens truncated…ир. Пустое название сбросит его обратно.">
+      if (profileAvatar && profileAvatar !== storedAvatar) {
+        try { await window.storage.set(AVATAR_KEY, profileAvatar, false); }
+        catch (e) { console.error('Could not refresh cached profile avatar', e); }
+      }
+      avatarBtn.textContent = myAvatar;
+    }
+
+    async function saveAvatar(emoji) {
+      myAvatar = emoji;
+      avatarBtn.textContent = emoji;
+      try { await window.storage.set(AVATAR_KEY, emoji, false); }
+      catch (e) { console.error('Could not save avatar', e); }
+      await syncMyAvatarIntoMap();
+    }
+
+    async function loadAvatarsMap() {
+      try {
+        const res = await window.storage.get(AVATARS_MAP_KEY, true);
+        avatarsMap = res && res.value ? JSON.parse(res.value) : {};
+      } catch (e) { avatarsMap = {}; }
+    }
+
+    async function loadScale() {
+      try {
+        const res = await window.storage.get(SCALE_KEY, false);
+        if (res && ['int', 'half', 'five'].includes(res.value)) ratingScale = res.value;
+      } catch (e) { /* default scale stays */ }
+      if (scaleSelect) scaleSelect.value = ratingScale;
+    }
+
+    async function saveScale(val) {
+      ratingScale = val;
+      try { await window.storage.set(SCALE_KEY, val, false); }
+      catch (e) { console.error('Could not save rating scale', e); }
+    }
+
+    async function loadContentFilterMode() {
+      try {
+        const res = await window.storage.get(CONTENT_FILTER_KEY, false);
+        if (res && res.value) setContentFilterMode(res.value, false, false);
+      } catch (e) { /* default visibility stays */ }
+      syncContentFilterSelect();
+    }
+
+    async function saveContentFilterMode(mode) {
+      try { await window.storage.set(CONTENT_FILTER_KEY, normalizeContentFilterMode(mode), false); }
+      catch (e) { console.error('Could not save content filter mode', e); }
+    }
+
+    async function loadManualRanks() {
+      try {
+        const res = await window.storage.get(MANUAL_RANKS_KEY, true);
+        manualRanks = res && res.value ? JSON.parse(res.value) : {};
+      } catch (e) { manualRanks = {}; }
+    }
+
+    async function saveManualRanks() {
+      try { await window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); }
+      catch (e) { console.error('Could not save manual ranks locally', e); }
+
+      if (!myName) return;
+      const ranks = getManualRanksForUser(myName) || {};
+      const excludedOP = Array.from(new Set((Array.isArray(ranks.excludedOP) ? ranks.excludedOP : []).map(String).filter(Boolean)));
+      const excludedED = Array.from(new Set((Array.isArray(ranks.excludedED) ? ranks.excludedED : []).map(String).filter(Boolean)));
+      const cleanRanks = {
+        OP: Array.isArray(ranks.OP) ? ranks.OP.map(String).filter(id => !excludedOP.includes(id)).slice(0, 100) : [],
+        ED: Array.isArray(ranks.ED) ? ranks.ED.map(String).filter(id => !excludedED.includes(id)).slice(0, 100) : [],
+        excludedOP,
+        excludedED
+      };
+      rememberManualRanksForUser(myName, cleanRanks);
+      const errors = [];
+      let savedRemote = false;
+
+      if (window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
+        try {
+          await window.OPED_DB.saveManualRanks(myName, { OP: cleanRanks.OP, ED: cleanRanks.ED });
+          savedRemote = true;
+        } catch (e) {
+          console.error('Could not save manual ranks through OPED_DB', e);
+          errors.push(e);
+        }
+      }
+
+      try {
+        const ext = await getExtendedDb();
+        const safeName = manualUserSafeKey(myName);
+        const payload = {
+          nickname: myName,
+          nicknameKey: safeName,
+          ownerUid: requirePersonalUid(),
+          OP: cleanRanks.OP,
+          ED: cleanRanks.ED,
+          manualOP: cleanRanks.OP,
+          manualED: cleanRanks.ED,
+          excludedOP: cleanRanks.excludedOP,
+          excludedED: cleanRanks.excludedED,
+          avatar: myAvatar,
+          updatedAt: ext.serverTimestamp()
+        };
+        await Promise.allSettled([
+          ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
+          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true })
+        ]).then(results => {
+          if (results.some(r => r.status === 'fulfilled')) savedRemote = true;
+          results.filter(r => r.status === 'rejected').forEach(r => { console.error('Manual rank mirror save failed', r.reason); errors.push(r.reason); });
+        });
+      } catch (e) {
+        console.error('Could not mirror manual ranks to Firebase', e);
+        errors.push(e);
+      }
+
+      if (!savedRemote) {
+        setStatus('Не удалось сохранить ручной топ.', true);
+        if (errors.length) throw errors[0];
+      }
+    }
+
+    async function syncMyAvatarIntoMap() {
+      if (!myName) return;
+      avatarsMap[myName] = myAvatar;
+      try { await window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); }
+      catch (e) { console.error('Could not sync avatar map', e); }
+      try {
+        if (window.OPED_DB && typeof window.OPED_DB.saveUserProfile === 'function') await window.OPED_DB.saveUserProfile(myName, myAvatar);
+        else {
+          const ext = await getExtendedDb();
+          const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function' ? window.OPED_DB.normalizeNickname(myName) : safeDocPart(myName);
+          const uid = requirePersonalUid();
+          await ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), { nickname: myName, nicknameKey: safeName, authUid: uid, avatar: myAvatar, updatedAt: ext.serverTimestamp() }, { merge: true });
+        }
+      } catch (e) { console.error('Could not sync avatar to Firebase', e); }
+      render();
+      if (activeTab === 'profile') renderProfile();
+      if (activeTab === 'top100') renderGlobalTop100();
+    }
+
+    function avatarFor(name) {
+      return avatarsMap[name] || (name === 'Иван' ? '🐺' : '🙂');
+    }
+
+
+    async function startEventBasketWatcher() {
+      const state = remoteDataState.eventBasket;
+      if (state.started) return createRemoteDataPromise('eventBasket');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('eventBasket');
+      try {
+        const ext = await getExtendedDb();
+        if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
+        firebaseUnsubEventBasket = ext.onSnapshot(ext.collection(ext.db, 'eventBasket'), snapshot => {
+          firebaseEventBasket = {};
+          snapshot.docs.forEach(d => { firebaseEventBasket[d.id] = { id: d.id, ...d.data() }; });
+          firebaseEventBasketLoaded = true;
+          if (activeTab === 'season') renderSeasonViews();
+          markRemoteDataReady('eventBasket');
+        }, err => {
+          console.error('eventBasket watch error', err);
+          firebaseEventBasketLoaded = true;
+          markRemoteDataReady('eventBasket', { error: true });
+          setStatus('Не удалось загрузить корзину ивентов.', true);
+        });
+      } catch (e) {
+        console.error('eventBasket watcher setup failed', e);
+        firebaseEventBasketLoaded = true;
+        markRemoteDataReady('eventBasket', { error: true });
+        setStatus('Не удалось загрузить корзину ивентов.', true);
+      }
+      return readyPromise;
+    }
+
+    function stopEventBasketWatcher() {
+      if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
+      firebaseUnsubEventBasket = null;
+      resetRemoteDataSubscription('eventBasket');
+    }
+
+    function ensureOpeningsWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.openings;
+      if (state.started) return createRemoteDataPromise('openings');
+      if (!db || typeof db.watchOpenings !== 'function') return Promise.reject(new Error('Каталог недоступен.'));
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('openings');
+      if (firebaseUnsubOpenings) firebaseUnsubOpenings();
+      firebaseUnsubOpenings = db.watchOpenings((rows, meta = {}) => {
+        firebaseOpenings = rows || [];
+        rebuildEntriesFromFirebase();
+        populateFilterOptions(true);
+        markRemoteDataReady('openings', { cached: Boolean(meta.cached), count: firebaseOpenings.length });
+      });
+      return readyPromise;
+    }
+
+    function catalogHasRatingAggregates() {
+      if (!firebaseOpenings.length) return false;
+      const covered = firebaseOpenings.reduce((count, row) => count + (Number(row.ratingAggregateVersion || 0) >= 1 ? 1 : 0), 0);
+      return covered / firebaseOpenings.length >= 0.9;
+    }
+
+    function preferredRatingsScope(tab = activeTab) {
+      if (!catalogHasRatingAggregates()) return 'all';
+      if (tab === 'profile' || tab === 'stats') return 'all';
+      if (myName || authenticatedUid) return 'user';
+      return 'none';
+    }
+
+    function ensureRatingsWatcher(db = firebaseDbInstance, requestedScope = preferredRatingsScope()) {
+      const state = remoteDataState.ratings;
+      const nextScope = requestedScope === 'all' ? 'all' : requestedScope === 'none' ? 'none' : 'user';
+      if (nextScope === 'none') {
+        if (firebaseRatingsScope === 'none' && !firebaseUnsubRatings) return Promise.resolve();
+        if (firebaseUnsubRatings) firebaseUnsubRatings();
+        firebaseUnsubRatings = null;
+        firebaseRatings = [];
+        firebaseRatingsScope = 'none';
+        resetRemoteDataSubscription('ratings');
+        rebuildEntriesFromFirebase();
+        return Promise.resolve();
+      }
+      if (state.started && firebaseRatingsScope === nextScope) return createRemoteDataPromise('ratings');
+      if (!db || typeof db.watchRatings !== 'function') return Promise.reject(new Error('Оценки недоступны.'));
+      if (firebaseUnsubRatings) firebaseUnsubRatings();
+      firebaseUnsubRatings = null;
+      firebaseRatings = [];
+      firebaseRatingsScope = nextScope;
+      resetRemoteDataSubscription('ratings');
+      state.ready = false;
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('ratings');
+      const callback = rows => {
+        firebaseRatings = rows || [];
+        rebuildEntriesFromFirebase();
+        rebuildManualRanksFromRatingDocs();
+        markRemoteDataReady('ratings', { count: firebaseRatings.length, scope: firebaseRatingsScope });
+      };
+      firebaseUnsubRatings = nextScope === 'user' && typeof db.watchRatingsForUser === 'function'
+        ? db.watchRatingsForUser({ uid: currentPersonalUid(), nickname: myName }, callback)
+        : db.watchRatings(callback);
+      return readyPromise;
+    }
+
+    function ensureManualRanksWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.manualRanks;
+      if (state.started) return createRemoteDataPromise('manualRanks');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('manualRanks');
+      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
+      if (db && typeof db.watchManualRanks === 'function') {
+        firebaseUnsubManualRanks = db.watchManualRanks(rows => {
+          firebaseManualRanks = rows || [];
+          rebuildManualRanksFromFirebase();
+          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
+        });
+        return readyPromise;
+      }
+      void getExtendedDb().then(ext => {
+        firebaseUnsubManualRanks = ext.onSnapshot(ext.collection(ext.db, 'manualRanks'), snapshot => {
+          firebaseManualRanks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          rebuildManualRanksFromFirebase();
+          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
+        }, err => {
+          console.error('manualRanks watch error', err);
+          markRemoteDataReady('manualRanks', { error: true });
+        });
+      }).catch(err => {
+        console.error('manualRanks watch setup error', err);
+        markRemoteDataReady('manualRanks', { error: true });
+      });
+      return readyPromise;
+    }
+
+    function ensureUserProfilesWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.userProfiles;
+      if (state.started) return createRemoteDataPromise('userProfiles');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('userProfiles');
+      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
+      if (db && typeof db.watchUserProfiles === 'function') {
+        firebaseUnsubUserProfiles = db.watchUserProfiles(rows => {
+          firebaseUserProfiles = rows || [];
+          window.OC_APP_DATA = window.OC_APP_DATA || {};
+          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
+          rebuildUserProfilesFromFirebase();
+          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
+          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
+        });
+        return readyPromise;
+      }
+      void getExtendedDb().then(ext => {
+        firebaseUnsubUserProfiles = ext.onSnapshot(ext.collection(ext.db, 'userProfiles'), snapshot => {
+          firebaseUserProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          window.OC_APP_DATA = window.OC_APP_DATA || {};
+          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
+          rebuildUserProfilesFromFirebase();
+          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
+          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
+        }, err => {
+          console.error('userProfiles watch error', err);
+          markRemoteDataReady('userProfiles', { error: true });
+        });
+      }).catch(err => {
+        console.error('userProfiles watch setup error', err);
+        markRemoteDataReady('userProfiles', { error: true });
+      });
+      return readyPromise;
+    }
+
+    function ensureEntityCardsWatcher(db = firebaseDbInstance) {
+      const state = remoteDataState.entityCards;
+      if (state.started) return createRemoteDataPromise('entityCards');
+      state.started = true;
+      const readyPromise = createRemoteDataPromise('entityCards');
+      if (!db || typeof db.watchEntityCards !== 'function') {
+        markRemoteDataReady('entityCards', { error: true });
+        return readyPromise;
+      }
+      if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
+      firebaseUnsubEntityCards = db.watchEntityCards(rows => {
+        firebaseEntityCards = rows || [];
+        window.OC_APP_DATA = window.OC_APP_DATA || {};
+        window.OC_APP_DATA.entityCards = firebaseEntityCards;
+        if (activeTab.startsWith('entity-')) renderEntityAlbums();
+        dispatchAppEvent('oped:entity-cards-updated', { rows: firebaseEntityCards });
+        markRemoteDataReady('entityCards', { count: firebaseEntityCards.length });
+      });
+      return readyPromise;
+    }
+
+    function stopManualRanksWatcher() {
+      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
+      firebaseUnsubManualRanks = null;
+      resetRemoteDataSubscription('manualRanks');
+    }
+
+    function stopUserProfilesWatcher() {
+      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
+      firebaseUnsubUserProfiles = null;
+      resetRemoteDataSubscription('userProfiles');
+    }
+
+    function stopEntityCardsWatcher() {
+      if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
+      firebaseUnsubEntityCards = null;
+      resetRemoteDataSubscription('entityCards');
+    }
+
+    async function syncRouteDataSubscriptions(tab = activeTab) {
+      if (!firebaseDbInstance) return;
+      const syncId = ++routeDataSyncId;
+      const needsProfileData = tab === 'profile' || tab === 'top100';
+      const needsEntityCards = tab.startsWith('entity-');
+      const needsTierData = tab === 'tier';
+      const needsEventBasket = tab === 'season' && Boolean(accessLevel);
+
+      if (!needsProfileData) {
+        stopManualRanksWatcher();
+        stopUserProfilesWatcher();
+      }
+      if (!needsEntityCards) stopEntityCardsWatcher();
+      if (!needsTierData) stopTierOrderWatcher();
+      if (!needsEventBasket) stopEventBasketWatcher();
+
+      const required = [];
+      const ratingsScope = preferredRatingsScope(tab);
+      if (ratingsScope !== 'none') required.push(ensureRatingsWatcher(firebaseDbInstance, ratingsScope));
+      else required.push(ensureRatingsWatcher(firebaseDbInstance, 'none'));
+      if (needsProfileData) {
+        required.push(ensureManualRanksWatcher(firebaseDbInstance));
+        required.push(ensureUserProfilesWatcher(firebaseDbInstance));
+      }
+      if (needsEntityCards) required.push(ensureEntityCardsWatcher(firebaseDbInstance));
+      if (needsTierData) required.push(startTierOrderWatcher());
+      if (needsEventBasket) required.push(startEventBasketWatcher());
+
+      await Promise.allSettled(required);
+      if (syncId !== routeDataSyncId || tab !== activeTab) return;
+      refreshVisiblePanels({ forceFilters: false });
+      dispatchAppEvent('oped:route-ready', { tab });
+    }
+
+    async function loadEntries() {
+      try {
+        const db = await waitForFirebaseDb();
+        firebaseDbInstance = db;
+        await db.init();
+        await ensureOpeningsWatcher(db);
+        dispatchAppEvent('oped:app-ready', { stage: 'catalog' });
+        runWhenBrowserIsIdle(() => {
+          void syncRouteDataSubscriptions(activeTab);
+        });
+      } catch (e) {
+        console.error(e);
+        setStatus('Не удалось подключиться. Обновите страницу.', true);
+        entries = [];
+        populateFilterOptions();
+        render();
+      }
+    }
+
+    async function saveEntries() {
+      console.warn('saveEntries() больше не используется для треков. Треки и оценки сохраняются через Firebase.');
+      return true;
+    }
+
+    function uniqueSorted(values) {
+      return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ru'));
+    }
+
+    function buildCategoryCache(force = false) {
+      if (!force && categoryCacheVersion === catalogVersion) return categoryCache;
+      const years = uniqueSorted(entries.map(e => e.year ? String(e.year) : '')).sort((a, b) => b - a);
+      categoryCache = {
+        years,
+        studios: uniqueSorted(entries.flatMap(e => e.studios || [])),
+        directors: uniqueSorted(entries.flatMap(e => e.directors || [])),
+        performers: uniqueSorted(entries.flatMap(e => e.performers || [])),
+        franchises: uniqueSorted(entries.flatMap(e => e.franchises || []))
+      };
+      categoryCacheVersion = catalogVersion;
+      return categoryCache;
+    }
+
+    function populateFilterOptions(force = false) {
+      const groups = buildCategoryCache(force);
+      if (!force && filterOptionsVersion === catalogVersion) {
+        syncFilterControls();
+        return;
+      }
+      fillRangeYearSelect('#oc-f-from-year', groups.years, 'fromYear', 'С самого раннего');
+      fillRangeYearSelect('#oc-f-to-year', groups.years, 'toYear', 'По самый поздний');
+      fillRangeYearSelect('#oc-p-from-year', groups.years, 'fromYear', 'С самого раннего');
+      fillRangeYearSelect('#oc-p-to-year', groups.years, 'toYear', 'По самый поздний');
+      fillTierYearSelect(groups.years);
+
+      fillMultiSelect('#oc-f-studio', groups.studios, filters.studios);
+      fillMultiSelect('#oc-f-director', groups.directors, filters.directors);
+      fillMultiSelect('#oc-f-performer', groups.performers, filters.performers);
+      fillMultiSelect('#oc-f-franchise', groups.franchises, filters.franchises);
+      fillMultiSelect('#oc-p-studio', groups.studios, filters.studios);
+      fillMultiSelect('#oc-p-director', groups.directors, filters.directors);
+      fillMultiSelect('#oc-p-performer', groups.performers, filters.performers);
+      fillMultiSelect('#oc-p-franchise', groups.franchises, filters.franchises);
+      refreshDatalists(groups);
+      filterOptionsVersion = catalogVersion;
+      syncFilterControls();
+    }
+
+    function fillRangeYearSelect(selector, years, filterKey, emptyLabel) {
+      const yearSel = $(selector);
+      if (!yearSel) return;
+      const prevYear = String(filters[filterKey] || yearSel.value || '');
+      yearSel.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>` + years.map(y => `<option value="${y}">${y}</option>`).join('');
+      yearSel.value = years.includes(prevYear) ? prevYear : '';
+      if (prevYear && !years.includes(prevYear)) filters[filterKey] = '';
+    }
+
+    function fillTierYearSelect(years) {
+      const sel = $('#oc-tier-year');
+      if (!sel) return;
+      const allYears = years.length ? years : [String(currentYear())];
+      const current = String(tierSelection.year || allYears[0]);
+      sel.innerHTML = allYears.map(y => `<option value="${y}">${y}</option>`).join('');
+      if (!allYears.includes(current)) tierSelection.year = Number(allYears[0]);
+      sel.value = String(tierSelection.year);
+    }
+
+    function syncFilterControls() {
+      const pairs = [
+        ['#oc-f-search', filters.search], ['#oc-p-search', filters.search],
+        ['#oc-f-type', filters.type], ['#oc-p-type', filters.type],
+        ['#oc-f-from-year', filters.fromYear], ['#oc-p-from-year', filters.fromYear],
+        ['#oc-f-from-season', filters.fromSeason], ['#oc-p-from-season', filters.fromSeason],
+        ['#oc-f-to-year', filters.toYear], ['#oc-p-to-year', filters.toYear],
+        ['#oc-f-to-season', filters.toSeason], ['#oc-p-to-season', filters.toSeason],
+        ['#oc-f-score-cmp', filters.scoreCmp], ['#oc-p-score-cmp', filters.scoreCmp],
+        ['#oc-f-score-value', filters.scoreValue], ['#oc-p-score-value', filters.scoreValue]
+      ];
+      pairs.forEach(([selector, value]) => { const el = $(selector); if (el) el.value = value; });
+      ['#oc-f-missing', '#oc-p-missing'].forEach(selector => { const el = $(selector); if (el) el.checked = Boolean(filters.missingOnly); });
+      const multiPairs = [
+        ['#oc-f-studio', filters.studios], ['#oc-p-studio', filters.studios],
+        ['#oc-f-director', filters.directors], ['#oc-p-director', filters.directors],
+        ['#oc-f-performer', filters.performers], ['#oc-p-performer', filters.performers],
+        ['#oc-f-franchise', filters.franchises], ['#oc-p-franchise', filters.franchises]
+      ];
+      syncContentFilterSelect();
+      multiPairs.forEach(([selector, selected]) => {
+        const el = $(selector);
+        if (!el) return;
+        const selectedSet = new Set(selected || []);
+        Array.from(el.options).forEach(opt => { opt.selected = selectedSet.has(opt.value); });
+      });
+    }
+
+    function fillMultiSelect(selector, values, currentSelection) {
+      const el = $(selector);
+      if (!el) return;
+      el.innerHTML = values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+      Array.from(el.options).forEach(opt => { opt.selected = currentSelection.includes(opt.value); });
+    }
+
+    function fillDatalist(selector, values) {
+      const el = $(selector);
+      if (!el) return;
+      el.innerHTML = uniqueSorted(values).slice(0, 80).map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
+    }
+
+    const DATALIST_CATEGORY = {
+      'oc-dl-studios': 'studios',
+      'oc-dl-directors': 'directors',
+      'oc-dl-performers': 'performers',
+      'oc-dl-franchises': 'franchises'
+    };
+
+    function sameSongGroupIdForTitle(value) {
+      const normalized = String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
+      if (!normalized) return '';
+      let hash = 2166136261;
+      for (let i = 0; i < normalized.length; i++) {
+        hash ^= normalized.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return 'song-' + (hash >>> 0).toString(36);
+    }
+
+    function sameSongFields(value) {
+      const title = String(value || '').trim();
+      return { sameSongGroupId: sameSongGroupIdForTitle(title), sameSongTitle: title };
+    }
+
+    function normalizeSuggestionText(value) {
+      return String(value || '').trim().toLowerCase().replace(/ё/g, 'е');
+    }
+
+    function refreshDynamicDatalist(input) {
+      if (!input) return;
+      const listId = input.getAttribute('list') || '';
+      const category = DATALIST_CATEGORY[listId];
+      const datalist = category ? document.getElementById(listId) : null;
+      if (!category || !datalist) return;
+
+      const raw = String(input.value || '');
+      const commaAt = raw.lastIndexOf(',');
+      const prefix = commaAt >= 0 ? raw.slice(0, commaAt + 1) : '';
+      const query = normalizeSuggestionText(commaAt >= 0 ? raw.slice(commaAt + 1) : raw);
+      const values = allCategoryValues(category);
+      const starts = [];
+      const contains = [];
+
+      values.forEach(value => {
+        const normalized = normalizeSuggestionText(value);
+        if (!query || normalized.startsWith(query)) starts.push(value);
+        else if (normalized.includes(query)) contains.push(value);
+      });
+
+      const matches = starts.concat(contains).slice(0, 80);
+      datalist.innerHTML = matches.map(value => {
+        const optionValue = prefix ? `${prefix} ${value}` : value;
+        return `<option value="${escapeHtml(optionValue)}"></option>`;
+      }).join('');
+    }
+
+    function refreshDatalists(groups) {
+      // Подсказки обновляются динамически по введённому тексту, чтобы список не зависал
+      // и варианты за пределами первых 500 значений тоже всегда находились.
+      fillDatalist('#oc-dl-titles', []);
+      fillDatalist('#oc-dl-search', []);
+      fillDatalist('#oc-dl-studios', groups.studios || []);
+      fillDatalist('#oc-dl-directors', groups.directors || []);
+      fillDatalist('#oc-dl-performers', groups.performers || []);
+      fillDatalist('#oc-dl-franchises', groups.franchises || []);
+      fillDatalist('#oc-dl-same-songs', entries.map(entry => entry.sameSongTitle).filter(Boolean));
+    }
+
+    function allCategoryValues(key) {
+      const groups = buildCategoryCache(false);
+      return groups[key] || [];
+    }
+
+    function entrySearchText(entry) {
+      if (!entry) return '';
+      if (entry.__ocSearchText) return entry.__ocSearchText;
+      const text = [
+        entry.title, ...(entry.alternativeTitles || []), entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
+        entry.image || '', ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
+      ].join(' ').toLowerCase();
+      try { Object.defineProperty(entry, '__ocSearchText', { value: text, configurable: true, enumerable: false }); }
+      catch (e) { entry.__ocSearchText = text; }
+      return text;
+    }
+
+    function filtersCacheKey() {
+      return [
+        dataVersion, filters.search, filters.type, filters.fromYear, filters.fromSeason, filters.toYear, filters.toSeason,
+        filters.scoreCmp, filters.scoreValue, filters.missingOnly ? 'missing' : 'allfields', filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie', filters.hideShortened ? 'hideShort' : 'showShort',
+        filters.studios.join('¦'), filters.directors.join('¦'), filters.performers.join('¦'), filters.franchises.join('¦')
+      ].join('|');
+    }
+
+    function entryInMainFilterSeasonRange(entry) {
+      const year = Number(entry?.year);
+      const seasonIndex = SEASON_ORDER.indexOf(String(entry?.season || ''));
+      if (!Number.isFinite(year) || seasonIndex < 0) return !filters.fromYear && !filters.toYear;
+      const point = year * 4 + seasonIndex;
+      let start = filters.fromYear ? Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason) : null;
+      let end = filters.toYear ? Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason) : null;
+      if (start !== null && end !== null && start > end) [start, end] = [end, start];
+      return (start === null || point >= start) && (end === null || point <= end);
+    }
+
+    function addFilterValueFromInput(input) {
+      const key = input.getAttribute('data-filter-suggest');
+      const raw = String(input.value || '').trim();
+      if (!key || raw.length < 2) return;
+      const values = allCategoryValues(key);
+      const exact = values.find(v => v.toLowerCase() === raw.toLowerCase());
+      const partial = values.find(v => v.toLowerCase().includes(raw.toLowerCase()));
+      const chosen = exact || partial || raw;
+      filters[key] = filters[key] || [];
+      if (filters[key].includes(chosen)) {
+        filters[key] = filters[key].filter(v => v !== chosen);
+      } else {
+        filters[key].push(chosen);
+      }
+      input.value = '';
+      populateFilterOptions();
+      applyFilterChange();
+    }
+
+    function allVoterNames() {
+      const names = new Set();
+      entries.forEach(e => {
+        Object.keys(e.scores || {}).forEach(n => names.add(n));
+        Object.keys(e.songScores || {}).forEach(n => names.add(n));
+        Object.keys(e.visualScores || {}).forEach(n => names.add(n));
+        Object.keys(e.personalScores || {}).forEach(n => names.add(n));
+      });
+      Object.keys(manualRanks || {}).forEach(n => {
+        const row = manualRanks[n] || {};
+        const display = String(row.nickname || row.displayName || row.name || '').trim();
+        const key = String(row.nicknameKey || '').trim();
+        const looksLikeTechnicalAlias = key && key === n && display;
+        names.add(looksLikeTechnicalAlias ? display : (display || n));
+      });
+      Object.keys(avatarsMap || {}).forEach(n => names.add(n));
+      if (myName) names.add(myName);
+      return Array.from(names).sort((a, b) => a.localeCompare(b, 'ru'));
+    }
+
+    function populateProfileUsers(force = false) {
+      if (!profileUserSelect) return;
+      const key = `${dataVersion}|${manualRanksVersion}|${avatarsVersion}|${myName}`;
+      const prev = profileUserSelect.value;
+      let names;
+      if (!force && profileUsersCache.key === key && profileUsersCache.names.length) {
+        names = profileUsersCache.names;
+      } else {
+        names = allVoterNames();
+        profileUsersCache = { key, names };
+      }
+      if (!names.length) {
+        profileUserSelect.innerHTML = '<option value="">нет оценивших</option>';
+        profileUser = '';
+        return;
+      }
+      const currentOptionsKey = profileUserSelect.getAttribute('data-options-key') || '';
+      const nextOptionsKey = key + '|' + names.join('¦');
+      if (force || currentOptionsKey !== nextOptionsKey) {
+        profileUserSelect.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">${avatarFor(n)} ${escapeHtml(n)}</option>`).join('');
+        profileUserSelect.setAttribute('data-options-key', nextOptionsKey);
+      }
+      let next = prev && names.includes(prev) ? prev : (myName && names.includes(myName) ? myName : names[0]);
+      profileUserSelect.value = next;
+      profileUser = next;
+    }
+
+    function titleMatchesAnySearch(entry, query) {
+      if (!entry) return false;
+      if (titleMatchesFuzzySearch(entry.title, query)) return true;
+      return (entry.alternativeTitles || []).some(title => titleMatchesFuzzySearch(title, query));
+    }
+
+    function normalizedSearchValue(value) {
+      return String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
+    }
+
+    function fuzzySearchPosition(value, query) {
+      const text = normalizedSearchValue(value);
+      const target = normalizedSearchValue(query);
+      if (!target || target.includes(' ') || target.length < 4) return null;
+      const words = [...text.matchAll(/[a-zа-я0-9]+/giu)];
+      let best = null;
+      words.forEach(match => {
+        const word = match[0];
+        if (!word || word[0] !== target[0] || Math.abs(word.length - target.length) > 2) return;
+        const distance = levenshteinDistance(target, word);
+        const allowed = target.length <= 8 ? 1 : 2;
+        const ratio = 1 - distance / Math.max(target.length, word.length);
+        if (distance > allowed || ratio < .78) return;
+        const candidate = { distance, position: match.index || 0 };
+        if (!best || candidate.distance < best.distance || (candidate.distance === best.distance && candidate.position < best.position)) best = candidate;
+      });
+      return best;
+    }
+
+    function entrySearchRelevance(entry, query) {
+      const target = normalizedSearchValue(query);
+      if (!entry || !target) return 0;
+      const title = normalizedSearchValue(entry.title);
+      const titlePosition = title.indexOf(target);
+      if (titlePosition >= 0) return titlePosition;
+
+      let bestAlternative = Infinity;
+      (entry.alternativeTitles || []).forEach(value => {
+        const position = normalizedSearchValue(value).indexOf(target);
+        if (position >= 0) bestAlternative = Math.min(bestAlternative, position);
+      });
+      if (bestAlternative < Infinity) return 100000 + bestAlternative;
+
+      const titleFuzzy = fuzzySearchPosition(entry.title, target);
+      if (titleFuzzy) return 200000 + titleFuzzy.distance * 1000 + titleFuzzy.position;
+
+      const metadata = [
+        entry.type, entry.year, SEASON_LABEL[entry.season], entry.image,
+        entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
+        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
+      ].map(normalizedSearchValue).filter(Boolean);
+      let bestMetadata = Infinity;
+      if (target.length >= 3) {
+        metadata.forEach(value => {
+          const position = value.indexOf(target);
+          if (position >= 0) bestMetadata = Math.min(bestMetadata, position);
+        });
+      }
+      if (bestMetadata < Infinity) return 300000 + bestMetadata;
+
+      let bestFuzzyAlternative = null;
+      (entry.alternativeTitles || []).forEach(value => {
+        const candidate = fuzzySearchPosition(value, target);
+        if (!candidate) return;
+        if (!bestFuzzyAlternative || candidate.distance < bestFuzzyAlternative.distance || (candidate.distance === bestFuzzyAlternative.distance && candidate.position < bestFuzzyAlternative.position)) bestFuzzyAlternative = candidate;
+      });
+      return bestFuzzyAlternative ? 400000 + bestFuzzyAlternative.distance * 1000 + bestFuzzyAlternative.position : Infinity;
+    }
+
+    function missingRequiredFields(entry) {
+      const missing = [];
+      if (!String(entry.title || '').trim()) missing.push('название');
+      if (!String(entry.type || '').trim()) missing.push('тип');
+      if (entry.year === null || entry.year === undefined || entry.year === '' || Number.isNaN(Number(entry.year))) missing.push('год');
+      if (!String(entry.season || '').trim()) missing.push('сезон');
+      if (!(entry.studios || []).length) missing.push('студии');
+      if (!(entry.directors || []).length) missing.push('режиссёры');
+      if (!(entry.performers || []).length) missing.push('исполнители');
+      if (!(entry.franchises || []).length) missing.push('франшизы');
+      if (!String(entry.image || '').trim()) missing.push('картинка');
+      if (!String(entry.link || '').trim()) missing.push('ссылка');
+      return missing;
+    }
+
+    function missingAddFormFields(entry) {
+      const missing = [];
+      const hasYear = entry.year !== null && entry.year !== undefined && entry.year !== '' && !Number.isNaN(Number(entry.year));
+      const hasSeason = Boolean(String(entry.season || '').trim());
+      if (!String(entry.title || '').trim()) missing.push('название');
+      if (!String(entry.type || '').trim()) missing.push('тип');
+      if (!hasYear) missing.push('год');
+      if (!hasSeason) missing.push('сезон');
+      if (!(entry.directors || []).length) missing.push('режиссёр');
+
+      const now = new Date();
+      const currentOpenSeasonPoint = now.getFullYear() * 4 + Math.floor(now.getMonth() / 3);
+      const seasonPoint = hasYear && hasSeason ? Number(entry.year) * 4 + SEASON_ORDER.indexOf(entry.season) : null;
+      if (seasonPoint !== null && seasonPoint > currentOpenSeasonPoint) {
+        return missing.length === 1 && missing[0] === 'режиссёр' ? [] : missing;
+      }
+
+      if (!(entry.studios || []).length) missing.push('студия');
+      if (!(entry.performers || []).length) missing.push('исполнитель');
+      if (!(entry.franchises || []).length) missing.push('франшиза');
+      if (seasonPoint === null || seasonPoint < currentOpenSeasonPoint) {
+        if (!String(entry.image || '').trim()) missing.push('картинка');
+        if (!String(entry.link || '').trim()) missing.push('ссылка на видео');
+      }
+      return missing.length === 1 && missing[0] === 'режиссёр' ? [] : missing;
+    }
+
+    function entryHasMissingRequiredFields(entry) {
+      return missingRequiredFields(entry).length > 0;
+    }
+
+    function applyFilters(list) {
+      const q = normalizedSearchValue(filters.search);
+      const cacheKey = list === entries ? filtersCacheKey() : '';
+      if (cacheKey && filteredCache.key === cacheKey && Array.isArray(filteredCache.value)) return filteredCache.value;
+      const result = list.filter(e => {
+        if (q) {
+          if (!Number.isFinite(entrySearchRelevance(e, q))) return false;
+        }
+        if (filters.type && e.type !== filters.type) return false;
+        if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie, filters.hideShortened)) return false;
+        if (filters.missingOnly && !entryHasMissingRequiredFields(e)) return false;
+        if (!entryInMainFilterSeasonRange(e)) return false;
+        if (filters.scoreCmp && String(filters.scoreValue || '').trim() !== '') {
+          const score = avgAny(e.scores);
+          const target = Number(String(filters.scoreValue).replace(',', '.'));
+          if (score === null || !Number.isFinite(target)) return false;
+          if (filters.scoreCmp === '>=' && !(score >= target)) return false;
+          if (filters.scoreCmp === '>' && !(score > target)) return false;
+          if (filters.scoreCmp === '<=' && !(score <= target)) return false;
+          if (filters.scoreCmp === '<' && !(score < target)) return false;
+          if (filters.scoreCmp === '=' && !(Math.abs(score - target) < 0.05)) return false;
+        }
+        if (filters.studios.length && !filters.studios.some(s => (e.studios || []).includes(s))) return false;
+        if (filters.directors.length && !filters.directors.some(s => (e.directors || []).includes(s))) return false;
+        if (filters.performers.length && !filters.performers.some(s => (e.performers || []).includes(s))) return false;
+        if (filters.franchises.length && !filters.franchises.some(s => (e.franchises || []).includes(s))) return false;
+        return true;
+      });
+      if (cacheKey) filteredCache = { key: cacheKey, value: result };
+      return result;
+    }
+
+    function applyFiltersIgnoringType(list) {
+      const oldType = filters.type;
+      filters.type = '';
+      const out = applyFilters(list);
+      filters.type = oldType;
+      return out;
+    }
+
+    function entryTimestamp(entry, fallbackIndex = 0) {
+      const raw = entry ? (entry.createdAt || entry.updatedAt || '') : '';
+      if (raw && typeof raw.toMillis === 'function') return raw.toMillis();
+      if (raw && typeof raw.seconds === 'number') return raw.seconds * 1000;
+      if (raw instanceof Date) return raw.getTime();
+      const parsed = Date.parse(raw);
+      if (Number.isFinite(parsed)) return parsed;
+      return fallbackIndex;
+    }
+
+    function applySort(list) {
+      const cacheKey = `${dataVersion}|${sortMode}|${list.length}|${list === filteredCache.value ? filteredCache.key : ''}`;
+      if (sortedCache.input === list && sortedCache.key === cacheKey && Array.isArray(sortedCache.value)) return sortedCache.value;
+      const searchQuery = normalizedSearchValue(filters.search);
+      const withScore = list.map((e, idx) => ({ e, score: avg(e.scores), ts: entryTimestamp(e, idx), relevance: searchQuery ? entrySearchRelevance(e, searchQuery) : 0 }));
+      const compareSeason = (left, right, direction) => {
+        const leftIndex = SEASON_ORDER.indexOf(String(left || ''));
+        const rightIndex = SEASON_ORDER.indexOf(String(right || ''));
+        if (leftIndex < 0 && rightIndex < 0) return 0;
+        if (leftIndex < 0) return 1;
+        if (rightIndex < 0) return -1;
+        return (leftIndex - rightIndex) * direction;
+      };
+      withScore.sort((a, b) => {
+        if (searchQuery && a.relevance !== b.relevance) return a.relevance - b.relevance;
+        if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || b.e.title.localeCompare(a.e.title, 'ru');
+        if (sortMode === 'year_desc') return (b.e.year || 0) - (a.e.year || 0) || compareSeason(a.e.season, b.e.season, -1) || (b.ts || 0) - (a.ts || 0);
+        if (sortMode === 'year_asc') return (a.e.year || 0) - (b.e.year || 0) || compareSeason(a.e.season, b.e.season, 1) || (b.ts || 0) - (a.ts || 0);
+        if (sortMode === 'title') return a.e.title.localeCompare(b.e.title, 'ru');
+        if (sortMode === 'score_asc') {
+          if (a.score === null && b.score === null) return (b.ts || 0) - (a.ts || 0);
+          if (a.score === null) return 1;
+          if (b.score === null) return -1;
+          return a.score - b.score || (b.ts || 0) - (a.ts || 0);
+        }
+        if (a.score === null && b.score === null) return (b.ts || 0) - (a.ts || 0);
+        if (a.score === null) return 1;
+        if (b.score === null) return -1;
+        return b.score - a.score || (b.ts || 0) - (a.ts || 0);
+      });
+      const result = withScore.map(x => x.e);
+      sortedCache = { key: cacheKey, input: list, value: result };
+      return result;
+    }
+
+    function clampPage(page, totalItems) {
+      const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+      const n = Number(page);
+      return Math.max(1, Math.min(totalPages, Number.isFinite(n) ? Math.round(n) : 1));
+    }
+
+    function pageSlice(list, page) {
+      const safePage = clampPage(page, list.length);
+      const start = (safePage - 1) * PAGE_SIZE;
+      return { safePage, start, items: list.slice(start, start + PAGE_SIZE), totalPages: Math.max(1, Math.ceil(list.length / PAGE_SIZE)) };
+    }
+
+    function paginationHtml(scope, page, totalItems) {
+      if (totalItems <= 0) return '';
+      const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+      const safePage = clampPage(page, totalItems);
+      const from = (safePage - 1) * PAGE_SIZE + 1;
+      const to = Math.min(totalItems, safePage * PAGE_SIZE);
+      return `<div class="oc-pagination" data-page-scope="${scope}">
+        <button type="button" class="oc-page-btn" data-page-dir="prev" ${safePage <= 1 ? 'disabled' : ''}>← назад</button>
+        <span>${from}–${to} из ${totalItems} · стр. ${safePage}/${totalPages}</span>
+        <button type="button" class="oc-page-btn" data-page-dir="next" ${safePage >= totalPages ? 'disabled' : ''}>вперёд →</button>
+      </div>`;
+    }
+
+    function bindPagination(container, scope, getPage, setPage, rerender) {
+      if (!container) return;
+      container.querySelectorAll(`[data-page-scope="${scope}"] [data-page-dir]`).forEach(btn => {
+        btn.addEventListener('click', () => {
+          const delta = btn.getAttribute('data-page-dir') === 'next' ? 1 : -1;
+          setPage(getPage() + delta);
+          rerender();
+        });
+      });
+    }
+
+    function renderFilterStat(filteredList) {
+      if (!filterStatEl) return;
+      const filterActive = filters.search || filters.type || filters.fromYear || filters.toYear || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
+      if (!filterActive) {
+        filterStatEl.classList.remove('show');
+        filterStatEl.textContent = '';
+        return;
+      }
+      const scored = filteredList.map(e => avg(e.scores)).filter(s => s !== null);
+      if (!scored.length) {
+        filterStatEl.textContent = `★ Средняя оценка по фильтру: нет оценок пока (${filteredList.length} трек(ов) без оценок)`;
+      } else {
+        const mean = scored.reduce((a, b) => a + b, 0) / scored.length;
+        filterStatEl.textContent = `★ Средняя оценка по фильтру: ${formatScore(mean)} (оценено ${scored.length} из ${filteredList.length})`;
+      }
+      filterStatEl.classList.add('show');
+    }
+
+
+    function currentYear() {
+      return new Date().getFullYear();
+    }
+
+    function seasonHasStarted(year, season) {
+      const start = new Date(year, SEASON_START_MONTH[season], 1, 0, 0, 0, 0);
+      return start <= new Date();
+    }
+
+    function isOp(entry) {
+      return String(entry.type || '').toUpperCase() === 'OP';
+    }
+
+    function entryTypeMatches(entry, type) {
+      return String(entry.type || '').toUpperCase() === String(type || seasonType || 'OP').toUpperCase();
+    }
+
+    function typeLabel(type) {
+      return String(type || seasonType) === 'ED' ? 'ED' : 'OP';
+    }
+
+    function typeLabelRu(type) {
+      return String(type || seasonType) === 'ED' ? 'эндингов' : 'опенингов';
+    }
+
+    function scoreFor(entry, name) {
+      const val = valueForUserMap(entry && entry.scores, name);
+      return val !== undefined ? normalizePublicScore(val) : null;
+    }
+
+    function personalScoreFor(entry, name) {
+      const val = valueForUserMap(entry && entry.personalScores, name);
+      return val !== undefined ? Math.max(1, Math.min(5, Math.round(Number(val)))) : null;
+    }
+
+    function songScoreFor(entry, name) {
+      const val = valueForUserMap(entry && entry.songScores, name);
+      return val !== undefined ? normalizePublicScore(val) : null;
+    }
+
+    function visualScoreFor(entry, name) {
+      const val = valueForUserMap(entry && entry.visualScores, name);
+      return val !== undefined ? normalizePublicScore(val) : null;
+    }
+
+    function hasRated(entry, name) {
+      return scoreFor(entry, name) !== null;
+    }
+
+    function hasPersonalRated(entry, name) {
+      return personalScoreFor(entry, name) !== null;
+    }
+
+    function entryIsChinese(entry) {
+      return Boolean(entry && (entry.isChinese || entry.chinese || entry.isChina || entry.chineseOpening));
+    }
+
+    function entryIsMovie(entry) {
+      return Boolean(entry && (entry.isMovie || entry.movie || entry.isFilm || entry.filmOpening));
+    }
+
+    function entryIsShortened(entry) {
+      return Boolean(entry && (entry.isShortened || entry.shortened || entry.isShort || entry.short || entry.shortOpening || entry.shortenedOpening));
+    }
+
+    function normalizeContentFilterMode(mode) {
+      return ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(mode) ? mode : 'default';
+    }
+
+    function contentFilterModeToFlags(mode) {
+      const normalized = normalizeContentFilterMode(mode);
+      const showChinese = normalized === 'chinese' || normalized === 'chinese-movie' || normalized === 'chinese-shortened' || normalized === 'all';
+      const showMovie = normalized === 'movie' || normalized === 'chinese-movie' || normalized === 'movie-shortened' || normalized === 'all';
+      const showShortened = normalized === 'shortened' || normalized === 'chinese-shortened' || normalized === 'movie-shortened' || normalized === 'all';
+      return { hideChinese: !showChinese, hideMovie: !showMovie, hideShortened: !showShortened };
+    }
+
+    function contentFilterModeFromFlags(hideChinese, hideMovie, hideShortened) {
+      const showChinese = !hideChinese;
+      const showMovie = !hideMovie;
+      const showShortened = !hideShortened;
+      if (showChinese && showMovie && showShortened) return 'all';
+      if (showChinese && showMovie) return 'chinese-movie';
+      if (showChinese && showShortened) return 'chinese-shortened';
+      if (showMovie && showShortened) return 'movie-shortened';
+      if (showChinese) return 'chinese';
+      if (showMovie) return 'movie';
+      if (showShortened) return 'shortened';
+      return 'default';
+    }
+
+    function currentContentFilterMode() {
+      return contentFilterModeFromFlags(filters.hideChinese, filters.hideMovie, filters.hideShortened);
+    }
+
+    function syncContentFilterSelect() {
+      if (contentFilterSelect) contentFilterSelect.value = currentContentFilterMode();
+    }
+
+    function setContentFilterMode(mode, shouldRender = true, shouldSave = true) {
+      const normalizedMode = normalizeContentFilterMode(mode);
+      const flags = contentFilterModeToFlags(normalizedMode);
+      filters.hideChinese = flags.hideChinese;
+      filters.hideMovie = flags.hideMovie;
+      filters.hideShortened = flags.hideShortened;
+      seasonHideChinese = flags.hideChinese;
+      seasonHideMovie = flags.hideMovie;
+      seasonHideShortened = flags.hideShortened;
+      syncContentFilterSelect();
+      if (shouldSave) saveContentFilterMode(normalizedMode);
+      if (!shouldRender) return;
+      chartPage = 1;
+      profileTopPage = { OP: 1, ED: 1 };
+      allRatingsPage = { OP: 1, ED: 1 };
+      render();
+      if (activeTab === 'profile') renderProfile();
+      if (activeTab === 'season') renderSeasonViews();
+    }
+
+    function entryPassesHiddenFlags(entry, hideChinese, hideMovie, hideShortened) {
+      if (hideChinese && entryIsChinese(entry)) return false;
+      if (hideMovie && entryIsMovie(entry)) return false;
+      if (hideShortened && entryIsShortened(entry)) return false;
+      return true;
+    }
+
+    function dailyDateKeyFromDate(date) {
+      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+    }
+
+    function dailyDateFromKey(key) {
+      const parts = String(key || '').split('-').map(Number);
+      return parts.length === 3 && parts.every(Number.isFinite) ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
+    }
+
+    function dailyShiftKey(key, days) {
+      const date = dailyDateFromKey(key);
+      if (!date) return '';
+      date.setUTCDate(date.getUTCDate() + Number(days || 0));
+      return dailyDateKeyFromDate(date);
+    }
+
+    function dailyClock(now = new Date()) {
+      const msk = new Date(now.getTime() + DAILY_MSK_OFFSET_HOURS * 3600000);
+      const today = dailyDateKeyFromDate(msk);
+      const released = msk.getUTCHours() >= DAILY_RELEASE_HOUR;
+      return { msk, today, released, key: released ? today : dailyShiftKey(today, -1), nextKey: released ? dailyShiftKey(today, 1) : today };
+    }
+
+    function dailyProfileFor(name = myName) {
+      const safe = manualUserSafeKey(name);
+      return firebaseUserProfiles.find(row => {
+        const display = String(row.nickname || row.displayName || row.name || '').trim();
+        const key = String(row.nicknameKey || row.id || '').trim();
+        return manualSameUser(display, name) || key === safe;
+      }) || null;
+    }
+
+    function normalizeDailySettings(raw = {}) {
+      return {
+        enabled: Boolean(raw.enabled),
+        type: ['OP', 'ED', 'both'].includes(raw.type) ? raw.type : 'both',
+        fromYear: String(raw.fromYear || ''),
+        fromSeason: SEASON_ORDER.includes(raw.fromSeason) ? raw.fromSeason : 'winter',
+        toYear: String(raw.toYear || ''),
+        toSeason: SEASON_ORDER.includes(raw.toSeason) ? raw.toSeason : 'fall',
+        enabledAt: String(raw.enabledAt || ''),
+        firstRequiredKey: String(raw.firstRequiredKey || ''),
+        optionalKey: String(raw.optionalKey || ''),
+        publicCalendar: Boolean(raw.publicCalendar)
+      };
+    }
+
+    function dailySeasonPoint(entry) {
+      const year = Number(entry?.year);
+      const season = SEASON_ORDER.indexOf(String(entry?.season || ''));
+      return Number.isFinite(year) && season >= 0 ? year * 4 + season : null;
+    }
+
+    function dailyEntryHasUserScore(entry, name) {
+      return hasRated(entry, name) || hasPersonalRated(entry, name);
+    }
+
+    function dailyEligibleEntries(settings, name = myName, includeRated = false) {
+      const from = settings.fromYear ? Number(settings.fromYear) * 4 + SEASON_ORDER.indexOf(settings.fromSeason) : null;
+      const to = settings.toYear ? Number(settings.toYear) * 4 + SEASON_ORDER.indexOf(settings.toSeason) : null;
+      return entries.filter(entry => {
+        if (settings.type !== 'both' && entry.type !== settings.type) return false;
+        const point = dailySeasonPoint(entry);
+        if (point === null) return false;
+        if (from !== null && point < from) return false;
+        if (to !== null && point > to) return false;
+        if (!includeRated && dailyEntryHasUserScore(entry, name)) return false;
+        return true;
+      });
+    }
+
+    function dailyHash(text) {
+      let hash = 2166136261;
+      const source = String(text || '');
+      for (let i = 0; i < source.length; i += 1) { hash ^= source.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+      return hash >>> 0;
+    }
+
+    function dailyAssignmentFor(name, key, settings, savedIds = null) {
+      if (Array.isArray(savedIds) && savedIds.length) return savedIds.map(String).filter(id => entriesById.has(id));
+      const candidates = dailyEligibleEntries(settings, name);
+      if (candidates.length < 10) return [];
+      const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}`;
+      const shuffled = candidates.slice().sort((a, b) => dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`));
+      const count = Math.min(candidates.length, 10 + dailyHash(seed) % 6);
+      return shuffled.slice(0, count).map(entry => String(entry.id));
+    }
+
+    async function saveDailyProfilePatch(patch) {
+      if (!myName) return;
+      const ext = await getExtendedDb();
+      const safe = manualUserSafeKey(myName);
+      await ext.setDoc(ext.doc(ext.db, 'userProfiles', safe), {
+        nickname: myName,
+        nicknameKey: safe,
+        avatar: myAvatar,
+        ...patch,
+        updatedAt: ext.serverTimestamp()
+      }, { merge: true });
+      const existing = dailyProfileFor(myName);
+      if (existing) Object.assign(existing, patch);
+      else firebaseUserProfiles.push({ id: safe, nickname: myName, nicknameKey: safe, avatar: myAvatar, ...patch });
+    }
+
+    function dailyCurrentState(name = myName) {
+      const profile = dailyProfileFor(name);
+      const settings = normalizeDailySettings(profile?.dailySettings || {});
+      const clock = dailyClock();
+      const assignments = profile?.dailyAssignments && typeof profile.dailyAssignments === 'object' ? profile.dailyAssignments : {};
+      const completed = profile?.dailyCompleted && typeof profile.dailyCompleted === 'object' ? profile.dailyCompleted : {};
+      const ids = settings.enabled ? dailyAssignmentFor(name, clock.key, settings, assignments[clock.key]) : [];
+      const required = Boolean(settings.enabled && settings.firstRequiredKey && clock.key >= settings.firstRequiredKey);
+      const offered = required || settings.optionalKey === clock.key;
+      return { profile, settings, clock, assignments, completed, ids, required, offered, available: offered && ids.length >= 10, done: Boolean(completed[clock.key]) };
+    }
+
+    async function saveDailySettingsFromPanel() {
+      if (!ensureNickname()) return;
+      const old = normalizeDailySettings(dailyProfileFor(myName)?.dailySettings || {});
+      const clock = dailyClock();
+      let fromYear = String($('#oc-daily-from-year')?.value || '');
+      let toYear = String($('#oc-daily-to-year')?.value || '');
+      let fromSeason = String($('#oc-daily-from-season')?.value || 'winter');
+      let toSeason = String($('#oc-daily-to-season')?.value || 'fall');
+      if (fromYear && toYear && Number(fromYear) * 4 + SEASON_ORDER.indexOf(fromSeason) > Number(toYear) * 4 + SEASON_ORDER.indexOf(toSeason)) {
+        [fromYear, toYear] = [toYear, fromYear];
+        [fromSeason, toSeason] = [toSeason, fromSeason];
+      }
+      const firstStart = !old.enabled;
+      const settings = {
+        enabled: true,
+        type: String($('#oc-daily-type')?.value || 'both'),
+        fromYear, fromSeason, toYear, toSeason,
+        enabledAt: old.enabledAt || new Date().toISOString(),
+        firstRequiredKey: old.firstRequiredKey || clock.nextKey,
+        optionalKey: old.optionalKey || (clock.released ? clock.key : ''),
+        publicCalendar: Boolean($('#oc-daily-public')?.checked)
+      };
+      await saveDailyProfilePatch({ dailySettings: settings });
+      setStatus(firstStart ? 'Ежедневная оценка подключена ✓' : 'Настройки ежедневной оценки сохранены ✓');
+      renderDailyProfilePanel();
+      refreshDailyUi();
+    }
+
+    async function unsubscribeFromDaily() {
+      if (!ensureNickname()) return;
+      const old = normalizeDailySettings(dailyProfileFor(myName)?.dailySettings || {});
+      if (!old.enabled) return;
+      if (!window.confirm('Отписаться от ежедневной оценки? Новые дейлики и уведомления больше не будут появляться.')) return;
+      await saveDailyProfilePatch({
+        dailySettings: {
+          ...old,
+          enabled: false,
+          enabledAt: '',
+          firstRequiredKey: '',
+          optionalKey: ''
+        }
+      });
+      dailyActiveKey = '';
+      if (dailyToast) dailyToast.classList.add('hidden');
+      setStatus('Ежедневная оценка отключена.');
+      renderDailyProfilePanel();
+      refreshDailyUi();
+    }
+
+    async function startDailyRating(key = dailyClock().key) {
+      if (!ensureNickname()) return;
+      const profile = dailyProfileFor(myName);
+      const settings = normalizeDailySettings(profile?.dailySettings || {});
+      if (!settings.enabled) { switchTab('profile'); setStatus('Сначала подключи ежедневную оценку в своём профиле.', true); return; }
+      const assignments = { ...(profile?.dailyAssignments || {}) };
+      let ids = dailyAssignmentFor(myName, key, settings, assignments[key]);
+      if (ids.length < 10) { setStatus('Под выбранные критерии нашлось меньше 10 песен — дейлик сегодня не сформировался.', true); return; }
+      if (!Array.isArray(assignments[key]) || !assignments[key].length) {
+        assignments[key] = ids;
+        await saveDailyProfilePatch({ dailyAssignments: assignments });
+      }
+      const progressMap = { ...(profile?.dailyProgress || {}) };
+      const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
+      ids.forEach(id => {
+        const entry = entriesById.get(String(id));
+        if (entry && dailyEntryHasUserScore(entry, myName)) progressed.add(String(id));
+      });
+      progressMap[key] = [...progressed];
+      await saveDailyProfilePatch({ dailyProgress: progressMap });
+      seasonQueue = ids.filter(id => !progressed.has(String(id))).map(id => entriesById.get(String(id))).filter(Boolean);
+      if (!seasonQueue.length) { await finalizeDaily(key); return; }
+      dailyActiveKey = key;
+      evaluatorMode = 'daily';
+      seasonQueueIndex = 0;
+      localStorage.setItem(DAILY_DISMISSED_KEY, `${manualUserSafeKey(myName)}|${key}`);
+      if (dailyToast) dailyToast.classList.add('hidden');
+      renderEvaluator();
+    }
+
+    async function markDailyEntryDone(entryId) {
+      if (!dailyActiveKey) return;
+      const profile = dailyProfileFor(myName) || {};
+      const progress = { ...(profile.dailyProgress || {}) };
+      const ids = new Set(Array.isArray(progress[dailyActiveKey]) ? progress[dailyActiveKey].map(String) : []);
+      ids.add(String(entryId));
+      progress[dailyActiveKey] = [...ids];
+      await saveDailyProfilePatch({ dailyProgress: progress });
+    }
+
+    async function finalizeDaily(key) {
+      const profile = dailyProfileFor(myName) || {};
+      const assigned = Array.isArray(profile.dailyAssignments?.[key]) ? profile.dailyAssignments[key].map(String) : [];
+      const progressed = new Set(Array.isArray(profile.dailyProgress?.[key]) ? profile.dailyProgress[key].map(String) : []);
+      if (!assigned.length || !assigned.every(id => progressed.has(id))) {
+        setStatus('Дейлик пока не завершён: пропущенные песни можно оценить через колокольчик.', true);
+        refreshDailyUi();
+        return;
+      }
+      const completed = { ...(profile.dailyCompleted || {}), [key]: new Date().toISOString() };
+      await saveDailyProfilePatch({ dailyCompleted: completed });
+      setStatus('Ежедневная оценка завершена ✓');
+      refreshDailyUi();
+      if (activeTab === 'profile') renderDailyProfilePanel();
+    }
+
+    function dailyYearOptions(selected, emptyText) {
+      const years = Array.from(new Set(entries.map(entry => Number(entry.year)).filter(Number.isFinite))).sort((a, b) => a - b);
+      return `<option value="">${escapeHtml(emptyText)}</option>${years.map(year => `<option value="${year}" ${String(selected) === String(year) ? 'selected' : ''}>${year}</option>`).join('')}`;
+    }
+
+    function dailySeasonOptions(selected) {
+      return SEASON_ORDER.map(season => `<option value="${season}" ${season === selected ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('');
+    }
+
+    function dailyCalendarHtml(name, settings, profile) {
+      const now = dailyClock();
+      const currentMsk = now.msk;
+      if (!dailyCalendarMonth) dailyCalendarMonth = new Date(Date.UTC(currentMsk.getUTCFullYear(), currentMsk.getUTCMonth(), 1));
+      const year = dailyCalendarMonth.getUTCFullYear();
+      const month = dailyCalendarMonth.getUTCMonth();
+      const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+      const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+      const completed = profile?.dailyCompleted || {};
+      const assignments = profile?.dailyAssignments || {};
+      const eligible = dailyEligibleEntries(settings, name, true).length >= 10;
+      const cells = Array.from({ length:firstWeekday }, () => '<div class="oc-daily-day empty"></div>');
+      for (let day = 1; day <= days; day += 1) {
+        const key = dailyDateKeyFromDate(new Date(Date.UTC(year, month, day)));
+        let cls = '';
+        let mark = '';
+        if (completed[key]) { cls = 'done'; mark = '✓'; }
+        else if (settings.firstRequiredKey && key >= settings.firstRequiredKey && key < now.key && (Array.isArray(assignments[key]) ? assignments[key].length >= 10 : eligible)) { cls = 'missed'; mark = '×'; }
+        else if (key === now.key && settings.firstRequiredKey && key >= settings.firstRequiredKey && eligible) { cls = 'pending'; mark = '•'; }
+        cells.push(`<div class="oc-daily-day ${cls}"><span>${day}</span><strong>${mark}</strong></div>`);
+      }
+      const monthName = new Intl.DateTimeFormat('ru-RU', { month:'long', year:'numeric', timeZone:'UTC' }).format(dailyCalendarMonth);
+      return `<div class="oc-daily-calendar-wrap"><div class="oc-daily-calendar-head"><button class="oc-daily-calendar-nav" data-daily-month="-1">←</button><strong>${escapeHtml(monthName)}</strong><button class="oc-daily-calendar-nav" data-daily-month="1">→</button></div><div class="oc-daily-calendar">${['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(day => `<div class="oc-daily-calendar-weekday">${day}</div>`).join('')}${cells.join('')}</div></div>`;
+    }
+
+    function renderDailyProfilePanel() {
+      if (!dailyPanel) return;
+      const viewed = profileUser || myName;
+      const profile = dailyProfileFor(viewed);
+      const settings = normalizeDailySettings(profile?.dailySettings || {});
+      const own = Boolean(myName && manualSameUser(viewed, myName));
+      const maySeeCalendar = own || settings.publicCalendar;
+      if (!own && (!settings.enabled || !maySeeCalendar)) { dailyPanel.classList.add('hidden'); dailyPanel.innerHTML = ''; return; }
+      dailyPanel.classList.remove('hidden');
+      const state = own ? dailyCurrentState(myName) : null;
+      const todayButton = own && settings.enabled && state.available && !state.done
+        ? `<button type="button" class="oc-addbtn" id="oc-daily-start-today">Пройти текущий дейлик (${state.ids.length})</button>` : '';
+      const unsubscribeButton = settings.enabled ? '<button type="button" class="oc-soft-btn" id="oc-daily-unsubscribe">Отписаться от дейлика</button>' : '';
+      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">Что оцениваем<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label><label>Начальный год<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, 'С самого раннего')}</select></label><label>Начальный сезон<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>Конечный год<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, 'По самый поздний')}</select></label><label>Конечный сезон<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>Видимость календаря</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> показывать календарь всем в моём профиле</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? 'Сохранить настройки' : 'Запустить ежедневную оценку'}</button>${todayButton}${unsubscribeButton}</div>` : '';
+      dailyPanel.innerHTML = `<div class="oc-daily-head"><div><div class="oc-section-label">ежедневная оценка</div><h3>${own ? 'Твой дейлик' : `Календарь · ${escapeHtml(viewed)}`}</h3><div class="oc-hint">Новый набор появляется ежедневно в 18:00 МСК. В наборе — от 10 до 15 случайных песен.</div></div></div>${settingsHtml}${settings.enabled && maySeeCalendar ? dailyCalendarHtml(viewed, settings, profile) : ''}`;
+      $('#oc-daily-save-settings')?.addEventListener('click', () => saveDailySettingsFromPanel().catch(error => { console.error(error); setStatus('Не удалось сохранить настройки дейлика.', true); }));
+      $('#oc-daily-start-today')?.addEventListener('click', () => startDailyRating().catch(error => { console.error(error); setStatus('Не удалось открыть дейлик.', true); }));
+      $('#oc-daily-unsubscribe')?.addEventListener('click', () => unsubscribeFromDaily().catch(error => { console.error(error); setStatus('Не удалось отключить дейлик.', true); }));
+      dailyPanel.querySelectorAll('[data-daily-month]').forEach(button => button.addEventListener('click', () => { dailyCalendarMonth.setUTCMonth(dailyCalendarMonth.getUTCMonth() + Number(button.dataset.dailyMonth)); renderDailyProfilePanel(); }));
+    }
+
+    function refreshDailyUi() {
+      if (!dailyBellDot || !dailyToast) return;
+      const state = dailyCurrentState(myName);
+      const pending = Boolean(myName && state.required && state.available && !state.done);
+      dailyBellDot.classList.toggle('hidden', !pending);
+      const dismissal = `${manualUserSafeKey(myName)}|${state.clock.key}`;
+      const dismissed = localStorage.getItem(DAILY_DISMISSED_KEY) === dismissal;
+      if (pending && !dismissed) {
+        dailyToast.innerHTML = `<button class="oc-daily-toast-close" type="button" aria-label="Закрыть">×</button><h3>Твой новый дейлик готов</h3><p>${state.ids.length} песен ждут ежедневной оценки. Уведомление больше не появится до следующего обновления в 18:00 МСК.</p><button class="oc-addbtn" type="button" data-daily-toast-start>Пройти дейлик</button>`;
+        dailyToast.classList.remove('hidden');
+        dailyToast.querySelector('.oc-daily-toast-close')?.addEventListener('click', () => { localStorage.setItem(DAILY_DISMISSED_KEY, dismissal); dailyToast.classList.add('hidden'); });
+        dailyToast.querySelector('[data-daily-toast-start]')?.addEventListener('click', () => startDailyRating().catch(console.error));
+      } else dailyToast.classList.add('hidden');
+      if (activeTab === 'profile') renderDailyProfilePanel();
+      if (dailyRefreshTimer) clearTimeout(dailyRefreshTimer);
+      const nextRelease = new Date(`${state.clock.nextKey}T15:00:02.000Z`).getTime();
+      dailyRefreshTimer = setTimeout(refreshDailyUi, Math.max(1000, Math.min(2147483647, nextRelease - Date.now())));
+    }
+
+    function entryPassesSeasonVisibility(entry) {
+      return entryPassesHiddenFlags(entry, seasonHideChinese, seasonHideMovie, seasonHideShortened);
+    }
+
+    function openingListForSeason(year, season, type = seasonType) {
+      return entries
+        .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e))
+        .sort((a, b) => {
+          const av = avg(a.scores);
+          const bv = avg(b.scores);
+          if (av === null && bv !== null) return 1;
+          if (av !== null && bv === null) return -1;
+          if (av !== null && bv !== null && bv !== av) return bv - av;
+          return a.title.localeCompare(b.title, 'ru');
+        });
+    }
+
+    function openingQueueForSeason(year, season, type = seasonType) {
+      return entries
+        .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e) && !hasRated(e, myName))
+        .sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+    }
+
+    function personalOpeningQueueForSeason(year, season, type = seasonType) {
+      return entries
+        .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e) && !hasPersonalRated(e, myName))
+        .sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+    }
+
+    function previousSeasonFor(year, season) {
+      const idx = SEASON_ORDER.indexOf(season);
+      if (idx === -1) return null;
+      const prevIdx = idx === 0 ? SEASON_ORDER.length - 1 : idx - 1;
+      const prevYear = idx === 0 ? Number(year) - 1 : Number(year);
+      if (prevYear < 1990) return null;
+      const prevSeason = SEASON_ORDER[prevIdx];
+      return seasonHasStarted(prevYear, prevSeason) ? { year: prevYear, season: prevSeason } : null;
+    }
+
+    function goToPreviousSeason() {
+      if (!selectedSeason) return;
+      const prev = previousSeasonFor(selectedSeason.year, selectedSeason.season);
+      if (!prev) return;
+      selectedSeason = prev;
+      expandedYear = prev.year;
+      renderSeasonViews();
+    }
+
+    function imgHtml(entry, className) {
+      const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
+      const title = escapeHtml(entry && entry.title ? entry.title : 'видео');
+      const imageBlock = entry.image
+        ? `<div class="${className} oc-image-loading"><img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}"></div>`
+        : `<div class="${className}">${fallback}</div>`;
+      if (!entry.link) return imageBlock;
+      return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="Открыть видео: ${title}">${imageBlock}</a>`;
+    }
+
+
+    function entryYearSeasonTag(entry) {
+      return entry && entry.year ? `<span class="oc-yr-tag">${entry.year}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}</span>` : '';
+    }
+
+    function metricLabel(metric) {
+      if (metric === 'song') return 'песня';
+      if (metric === 'visual') return 'визуал';
+      return 'общая';
+    }
+
+    function metricScoreFor(entry, user, metric) {
+      if (metric === 'song') return songScoreFor(entry, user);
+      if (metric === 'visual') return visualScoreFor(entry, user);
+      return scoreFor(entry, user);
+    }
+
+    function ratedListForMetric(user, list, metric) {
+      return list
+        .map(e => ({ entry: e, score: metricScoreFor(e, user, metric || 'total') }))
+        .filter(r => r.score !== null);
+    }
+
+
+    function eventBasketAccessKey(name) {
+      return String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '');
+    }
+
+    function eventBasketCanAdd() {
+      return isAdmin();
+    }
+
+    function loadEventBasket() {
+      return firebaseEventBasket && typeof firebaseEventBasket === 'object' ? firebaseEventBasket : {};
+    }
+
+    function saveEventBasket(data) {
+      firebaseEventBasket = data && typeof data === 'object' ? data : {};
+    }
+
+    async function saveEventBasketSeasonToFirebase(key, seasonState) {
+      try {
+        const ext = await getExtendedDb();
+        const payload = {
+          ...seasonState,
+          key: String(key),
+          updatedAt: ext.serverTimestamp()
+        };
+        await ext.setDoc(ext.doc(ext.db, 'eventBasket', String(key)), payload, { merge: true });
+        firebaseEventBasket[String(key)] = { ...payload, updatedAtLocal: seasonState.updatedAtLocal || new Date().toISOString() };
+        firebaseEventBasketLoaded = true;
+        return true;
+      } catch (e) {
+        console.error('eventBasket save failed', e);
+        setStatus('Не удалось сохранить корзину ивентов.', true);
+        alert('Не удалось сохранить корзину ивентов.');
+        return false;
+      }
+    }
+
+    function basketSeasonKeyForEntry(entry) {
+      if (entry?.type === 'ED') {
+        const period = ['winter', 'spring'].includes(String(entry.season || '')) ? 'h1' : 'h2';
+        return `ending_${Number(entry.year) || ''}_${period}`;
+      }
+      return `${Number(entry.year) || ''}_${String(entry.season || '')}`;
+    }
+
+    function eventBasketHas(entry) {
+      if (!entry || !entry.id) return false;
+      const state = loadEventBasket()[basketSeasonKeyForEntry(entry)];
+      if (!state) return false;
+      const id = String(entry.id);
+      const buckets = state.buckets || {};
+      return ['unassigned', 'guaranteed', 'variable'].some(name => Array.isArray(buckets[name]) && buckets[name].map(String).includes(id));
+    }
+
+    async function toggleEntryInEventBasket(entry) {
+      if (!entry || !entry.id) return;
+      if (!['OP', 'ED'].includes(entry.type)) return;
+      if (!entry.year || !entry.season) { setStatus('У трека должны быть указаны год и сезон.', true); return; }
+      const data = loadEventBasket();
+      const key = basketSeasonKeyForEntry(entry);
+      const current = data[key] || {};
+      const buckets = current.buckets || {};
+      const id = String(entry.id);
+      const nextBuckets = {
+        unassigned: Array.isArray(buckets.unassigned) ? buckets.unassigned.map(String).filter(Boolean) : [],
+        guaranteed: Array.isArray(buckets.guaranteed) ? buckets.guaranteed.map(String).filter(Boolean) : [],
+        variable: Array.isArray(buckets.variable) ? buckets.variable.map(String).filter(Boolean) : []
+      };
+      const wasInBasket = ['unassigned','guaranteed','variable'].some(name => nextBuckets[name].includes(id));
+      if (wasInBasket) {
+        Object.keys(nextBuckets).forEach(name => {
+          nextBuckets[name] = nextBuckets[name].filter(openingId => openingId !== id);
+        });
+      } else {
+        nextBuckets.unassigned.push(id);
+      }
+      data[key] = {
+        ...current,
+        key,
+        year: Number(entry.year),
+        season: String(entry.season),
+        eventKind: entry.type === 'ED' ? 'ending-year' : 'opening-year',
+        type: entry.type,
+        period: entry.type === 'ED' ? (['winter', 'spring'].includes(String(entry.season)) ? 'h1' : 'h2') : '',
+        target: Number(current.target) || 15,
+        buckets: nextBuckets,
+        updatedAtLocal: new Date().toISOString()
+      };
+      const savedToFirebase = await saveEventBasketSeasonToFirebase(key, data[key]);
+      if (savedToFirebase) {
+        saveEventBasket(data);
+        setStatus(`${wasInBasket ? 'Убрано из' : 'Добавлено в'} корзину ивентов: ${entry.title}`);
+      }
+      renderSeasonViews();
+    }
+
+    function renderUnifiedEntryCard(entry, opts = {}) {
+      const rankLabel = opts.rankLabel !== undefined ? opts.rankLabel : '';
+      const rankClass = opts.rankClass || '';
+      const scoreText = opts.scoreText !== undefined ? opts.scoreText : visibleAverageMarkup(entry);
+      const scoreSub = opts.scoreSub ? `<span class="oc-season-score-sub">${escapeHtml(opts.scoreSub)}</span>` : '';
+      const controlsHtml = opts.controlsHtml ? `<div class="oc-card-actions">${opts.controlsHtml}</div>` : '';
+      const className = opts.className ? ` ${opts.className}` : '';
+      const metaLines = [];
+      const fields = opts.fields || ['studios', 'directors', 'performers', 'franchises'];
+      if (fields.includes('studios') && entry.studios && entry.studios.length) metaLines.push(`<span class="oc-meta-key">студия:</span> ${entityFilterValuesMarkup('studios', entry.studios)}`);
+      if (fields.includes('directors') && entry.directors && entry.directors.length) metaLines.push(`<span class="oc-meta-key">режиссёр:</span> ${entityFilterValuesMarkup('directors', entry.directors)}`);
+      if (fields.includes('performers') && entry.performers && entry.performers.length) metaLines.push(`<span class="oc-meta-key">исполнитель:</span> ${entityFilterValuesMarkup('performers', entry.performers)}`);
+      if (fields.includes('franchises') && entry.franchises && entry.franchises.length) metaLines.push(`<span class="oc-meta-key">франшиза:</span> ${entityFilterValuesMarkup('franchises', entry.franchises)}`);
+      if (opts.showImageLink && entry.image) metaLines.push(`<span class="oc-meta-key">картинка:</span> <a href="${escapeHtml(normalizeUrl(entry.image))}" target="_blank" rel="noopener noreferrer">открыть ↗</a>`);
+      if (opts.showTrackLink && entry.link) metaLines.push(`<a href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer">ссылка ↗</a>`);
+      const extraHtml = opts.extraHtml || '';
+      const votesHtml = opts.votesHtml || '';
+      const notesHtml = opts.notes && entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : '';
+      const missingFields = missingRequiredFields(entry);
+      const missing = opts.showMissingLink === false ? '' : (missingFields.length ? `<span class="oc-missing-link" title="Не заполнено: ${escapeHtml(missingFields.join(', '))}">😡</span>` : '');
+      const sameSongBadge = entry.sameSongGroupId && entry.sameSongTitle ? `<span class="oc-yr-tag" title="Связано с другими версиями этой песни">одна песня: ${escapeHtml(entry.sameSongTitle)}</span>` : '';
+      const flagBadges = `${entryIsChinese(entry) ? '<span class="oc-yr-tag">Китай</span>' : ''}${entryIsMovie(entry) ? '<span class="oc-yr-tag">фильм</span>' : ''}${entryIsShortened(entry) ? '<span class="oc-yr-tag">укор.</span>' : ''}${sameSongBadge}`;
+      return `<div class="oc-season-op oc-unified-card${className}" data-id="${escapeHtml(entry.id)}">
+        <div class="oc-rank ${rankClass}">${rankLabel}</div>
+        ${imgHtml(entry, 'oc-season-thumb')}
+        <div class="oc-info">
+          <div class="oc-name-row">
+            <span class="oc-name oc-clickable-title" data-action="open-card" data-id="${escapeHtml(entry.id)}">${escapeHtml(entry.title)}</span>
+            <span class="oc-type-tag ${entry.type}">${entry.type}</span>
+            ${entryYearSeasonTag(entry)}
+            ${missing}
+            ${flagBadges}
+          </div>
+          ${metaLines.map(l => `<div class="oc-meta oc-meta-line">${l}</div>`).join('')}
+          ${notesHtml}
+          ${extraHtml}
+          ${votesHtml}
+        </div>
+        <div class="oc-season-score">${scoreText}${scoreSub}</div>
+        ${controlsHtml}
+      </div>`;
+    }
+
+    function entityFilterValuesMarkup(kind, values) {
+      return (values || []).filter(Boolean).map((value, index) =>
+        `${index ? '<span class="oc-entity-filter-separator">, </span>' : ''}<button type="button" class="oc-entity-filter-value" data-entity-filter-kind="${escapeHtml(kind)}" data-entity-filter-value="${escapeHtml(value)}">${escapeHtml(value)}</button>`
+      ).join('');
+    }
+
+    function applyEntityCardFilter(kind, value) {
+      if (!['studios', 'directors', 'performers', 'franchises'].includes(kind) || !value) return;
+      filters.search = '';
+      filters.type = '';
+      filters.fromYear = '';
+      filters.fromSeason = 'winter';
+      filters.toYear = '';
+      filters.toSeason = 'fall';
+      filters.scoreCmp = '';
+      filters.scoreValue = '';
+      filters.missingOnly = false;
+      filters.studios = [];
+      filters.directors = [];
+      filters.performers = [];
+      filters.franchises = [];
+      filters[kind] = [value];
+      chartPage = 1;
+      closeCardModal();
+      switchTab('chart');
+      populateFilterOptions();
+      syncFilterControls();
+      render();
+      document.querySelector('#oc-main-panel .oc-filterbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function renderSeasonViews() {
+      document.querySelectorAll('.oc-season-type-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.seasonType === seasonType));
+      syncContentFilterSelect();
+      renderSeasonBrowser();
+      renderSeasonList();
+    }
+
+    function renderSeasonBrowser() {
+      if (!seasonYearsEl) return;
+      const nowYear = currentYear();
+      if (expandedYear > nowYear) expandedYear = nowYear;
+      let html = '';
+      for (let year = nowYear; year >= 1990; year--) {
+        const yearCount = entries.filter(e => entryTypeMatches(e, seasonType) && Number(e.year) === year).length;
+        const isOpen = Number(expandedYear) === year;
+        html += `<div class="oc-year-block">
+          <button class="oc-year-btn ${isOpen ? 'active' : ''}" data-season-year="${year}">
+            <span>${year}</span><span class="oc-year-count">${yearCount} ${typeLabel(seasonType)}</span>
+          </button>`;
+        if (isOpen) {
+          html += '<div class="oc-season-buttons">';
+          SEASON_ORDER.forEach(season => {
+            const started = seasonHasStarted(year, season);
+            const count = openingListForSeason(year, season).length;
+            const unrated = myName ? openingQueueForSeason(year, season).length : count;
+            const personalUnrated = myName ? personalOpeningQueueForSeason(year, season).length : count;
+            const rateUnrated = isPersonalScale() ? personalUnrated : unrated;
+            const done = Boolean(myName && count > 0 && unrated === 0);
+            const isActive = selectedSeason && Number(selectedSeason.year) === year && selectedSeason.season === season;
+            const right = started ? `${count} ${typeLabel(seasonType)} · ${unrated} без оценки` : '<span class="oc-soon">Скоро будет</span>';
+            const check = done ? '<span class="oc-season-check" title="Все OP сезона оценены с текущего ника">✓</span>' : '';
+            const rateText = isPersonalScale() ? (rateUnrated === 0 ? 'Проставлено' : 'Оценить сезон') : (done ? 'Оценено' : 'Оценить сезон');
+            const rateButton = started && count
+              ? `<button type="button" class="oc-season-rate-mini" data-season-rate="1" data-year="${year}" data-season="${season}" ${myName && rateUnrated === 0 ? 'disabled' : ''}>${rateText}</button>`
+              : '';
+            html += `<div class="oc-season-row">
+              <button type="button" class="oc-season-select ${isActive ? 'active' : ''} ${done ? 'done' : ''}" data-season-select="1" data-year="${year}" data-season="${season}" ${started ? '' : 'disabled'}>
+                <span class="oc-season-label">${check}<span>${SEASON_LABEL[season]}</span></span>
+                <span class="oc-season-right">${right}</span>
+              </button>
+              ${rateButton}
+            </div>`;
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      seasonYearsEl.innerHTML = html;
+    }
+
+    function renderSeasonList() {
+      if (!seasonListEl || !seasonTitleEl || !seasonSubtitleEl || !seasonRateBtn) return;
+      if (!selectedSeason) {
+        seasonTitleEl.textContent = 'Выберите год и сезон';
+        seasonSubtitleEl.textContent = 'Список лет идёт от актуального года до 1990. Будущие сезоны помечаются как «Скоро будет».';
+        seasonRateBtn.disabled = true;
+        if (seasonRateAllBtn) seasonRateAllBtn.disabled = true;
+        if (seasonPrevBtn) seasonPrevBtn.disabled = true;
+        if (seasonTierBtn) seasonTierBtn.disabled = true;
+        seasonRateBtn.textContent = 'Оценить сезон';
+        seasonListEl.innerHTML = '<div class="oc-empty">Нажмите на год слева, затем выберите сезон.</div>';
+        return;
+      }
+      const { year, season } = selectedSeason;
+      const list = openingListForSeason(year, season);
+      const queue = myName ? openingQueueForSeason(year, season) : list;
+      const personalQueue = myName ? personalOpeningQueueForSeason(year, season) : list;
+      const activeQueue = isPersonalScale() ? personalQueue : queue;
+      seasonTitleEl.textContent = `${SEASON_LABEL[season]} ${year}`;
+      seasonSubtitleEl.textContent = myName
+        ? (isPersonalScale()
+          ? `${typeLabel(seasonType)}: ${list.length}. Публично не оценено: ${queue.length}. Без отметки: ${personalQueue.length}.`
+          : `${typeLabel(seasonType)}: ${list.length}. Не оценено с ника «${myName}»: ${queue.length}.`)
+        : `${typeLabel(seasonType)}: ${list.length}. Чтобы скрывать уже оценённые, введите ник справа сверху.`;
+      seasonRateBtn.disabled = !list.length || Boolean(myName && activeQueue.length === 0);
+      if (seasonRateAllBtn) seasonRateAllBtn.disabled = !list.length;
+      if (seasonPrevBtn) seasonPrevBtn.disabled = !previousSeasonFor(year, season);
+      if (seasonTierBtn) seasonTierBtn.disabled = !list.length;
+      seasonRateBtn.textContent = isPersonalScale()
+        ? (myName && list.length && activeQueue.length === 0 ? 'Проставлено ✓' : 'Оценить сезон')
+        : (myName && list.length && queue.length === 0 ? 'Сезон оценён ✓' : 'Оценить сезон');
+      if (!list.length) {
+        seasonListEl.innerHTML = `<div class="oc-empty">В этом сезоне пока нет добавленных ${typeLabel(seasonType)}.</div>`;
+        return;
+      }
+      seasonListEl.innerHTML = `<div class="oc-season-op-list">${list.map((entry, idx) => {
+        const score = avg(entry.scores);
+        const myScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
+        const myScoreText = myScore !== null ? (isPersonalScale() ? formatFiveScore(myScore) : formatScore(myScore)) : '';
+        const scoreText = visibleAverageMarkup(entry, score);
+        const extraHtml = myScore !== null ? `<div class="oc-rated-mark">твоя оценка: ${escapeHtml(myScoreText)}</div>` : '';
+        const basketButton = eventBasketCanAdd() && ['OP', 'ED'].includes(entry.type)
+          ? `<button type="button" class="oc-season-re-rate oc-basket-add-btn" data-basket-add="${entry.id}">${eventBasketHas(entry) ? 'В корзине ✓' : 'Добавить в корзину'}</button>`
+          : '';
+        const controlsHtml = `${basketButton}<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
+        return renderUnifiedEntryCard(entry, {
+          rankLabel: idx + 1,
+          scoreText,
+          fields: ['performers'],
+          extraHtml,
+          controlsHtml,
+          className: 'season-card'
+        });
+      }).join('')}</div>`;
+    }
+
+
+    const ENTITY_ALBUM_META = {
+      studios: { title: 'Студии', one: 'студию', field: 'studios', icon: '🎬' },
+      performers: { title: 'Исполнители', one: 'исполнителя', field: 'performers', icon: '🎙️' },
+      directors: { title: 'Режиссёры', one: 'режиссёра', field: 'directors', icon: '🎞️' },
+      franchises: { title: 'Франшизы', one: 'франшизу', field: 'franchises', icon: '✨' }
+    };
+    const ENTITY_MIN_TRACKS = 3;
+
+    function normalizedEntityValue(value) {
+      return String(value || '').trim().toLocaleLowerCase('ru');
+    }
+
+    function entriesForEntity(type, value) {
+      const field = (ENTITY_ALBUM_META[type] || {}).field;
+      const key = normalizedEntityValue(value);
+      if (!field || !key) return [];
+      return entries.filter(entry => (entry[field] || []).some(item => normalizedEntityValue(item) === key));
+    }
+
+    function entityHasRating(entry) {
+      return isPersonalScale() ? hasPersonalRated(entry, myName) : hasRated(entry, myName);
+    }
+
+    function entityCardProgress(card) {
+      const related = entriesForEntity(card.type, card.value);
+      const rated = related.filter(entityHasRating).length;
+      return { related, rated, complete: related.length >= ENTITY_MIN_TRACKS && rated === related.length };
+    }
+
+    function eligibleEntityValues(type) {
+      const field = (ENTITY_ALBUM_META[type] || {}).field;
+      const names = new Map();
+      if (!field) return [];
+      entries.forEach(entry => (entry[field] || []).forEach(raw => {
+        const value = String(raw || '').trim();
+        const key = normalizedEntityValue(value);
+        if (!key) return;
+        if (!names.has(key)) names.set(key, { value, ids: new Set() });
+        names.get(key).ids.add(String(entry.id));
+      }));
+      return Array.from(names.values()).filter(item => item.ids.size >= ENTITY_MIN_TRACKS)
+        .sort((a, b) => a.value.localeCompare(b.value, 'ru')).map(item => ({ value: item.value, count: item.ids.size }));
+    }
+
+    function resetEntityAlbumFilters() {
+      entityFiltersExpanded = false;
+      entityCardRenderLimit = 40;
+      entityTrackRenderLimit = 30;
+      if (entitySearchInput) entitySearchInput.value = '';
+      if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
+      if (entityFromYearSelect) entityFromYearSelect.value = '';
+      if (entityFromSeasonSelect) entityFromSeasonSelect.value = '';
+      if (entityToYearSelect) entityToYearSelect.value = '';
+      if (entityToSeasonSelect) entityToSeasonSelect.value = '';
+      if (entityProgressSelect) entityProgressSelect.value = '';
+      activeEntityFilteredEntries = [];
+      if (entityTracksEl) entityTracksEl.replaceChildren();
+    }
+
+    function renderEntityAlbums() {
+      if (!entityPanel) return;
+      const meta = ENTITY_ALBUM_META[activeEntityType] || ENTITY_ALBUM_META.studios;
+      const albumQuery = normalizedEntityValue(entityAlbumSearchInput?.value);
+      const albumSort = String(entityAlbumSortSelect?.value || 'title');
+      const cards = firebaseEntityCards.filter(card => card.type === activeEntityType)
+        .filter(card => !albumQuery || normalizedEntityValue(card.value).includes(albumQuery))
+        .map(card => ({ card, progress: entityCardProgress(card) }))
+        .sort((a, b) => {
+          if (albumSort === 'unfinished') {
+            const completeDiff = Number(a.progress.complete) - Number(b.progress.complete);
+            if (completeDiff) return completeDiff;
+          } else if (albumSort === 'progress') {
+            const aRatio = a.progress.related.length ? a.progress.rated / a.progress.related.length : 0;
+            const bRatio = b.progress.related.length ? b.progress.rated / b.progress.related.length : 0;
+            if (aRatio !== bRatio) return aRatio - bRatio;
+          } else if (albumSort === 'tracks' && a.progress.related.length !== b.progress.related.length) {
+            return b.progress.related.length - a.progress.related.length;
+          }
+          return String(a.card.value || '').localeCompare(String(b.card.value || ''), 'ru');
+        })
+        .map(row => row.card);
+      const eligible = eligibleEntityValues(activeEntityType);
+      const existing = new Set(cards.map(card => normalizedEntityValue(card.value)));
+      entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум ' + ENTITY_MIN_TRACKS + ' трека)</option>' +
+        eligible.filter(item => !existing.has(normalizedEntityValue(item.value)))
+          .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' · ' + item.count + '</option>').join('');
+      entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityBackBtn.classList.remove('hidden');
+      entityBackBtn.textContent = activeEntityCardId ? '← Ко всем альбомам' : '← На главную';
+      entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityAlbumTools?.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
+      entityFiltersEl.classList.toggle('is-expanded', Boolean(activeEntityCardId && entityFiltersExpanded));
+      if (entityFiltersToggle) {
+        entityFiltersToggle.setAttribute('aria-expanded', entityFiltersExpanded ? 'true' : 'false');
+        entityFiltersToggle.innerHTML = (entityFiltersExpanded ? 'Скрыть фильтры <span aria-hidden="true">⌃</span>' : 'Показать фильтры <span aria-hidden="true">⌄</span>');
+      }
+      entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
+      if (!activeEntityCardId) entityTracksEl.replaceChildren();
+
+      if (activeEntityCardId) {
+        const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
+        if (!card) { activeEntityCardId = ''; renderEntityAlbums(); return; }
+        const progress = entityCardProgress(card);
+        entityTitleEl.textContent = card.value;
+        entitySubtitleEl.textContent = progress.rated + ' из ' + progress.related.length + ' оценено';
+        const search = normalizedEntityValue(entitySearchInput.value);
+        const trackType = entityTrackTypeSelect.value;
+        const fromYear = entityFromYearSelect.value;
+        const fromSeason = entityFromSeasonSelect.value;
+        const toYear = entityToYearSelect.value;
+        const toSeason = entityToSeasonSelect.value;
+        const progressFilter = entityProgressSelect.value;
+        const years = uniqueSorted(progress.related.map(entry => entry.year ? String(entry.year) : '')).sort((a, b) => Number(b) - Number(a));
+        entityFromYearSelect.innerHTML = '<option value="">С начала</option>' + years.map(value =>
+          '<option value="' + escapeHtml(value) + '"' + (value === fromYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
+        ).join('');
+        entityToYearSelect.innerHTML = '<option value="">По настоящее время</option>' + years.map(value =>
+          '<option value="' + escapeHtml(value) + '"' + (value === toYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
+        ).join('');
+        const seasonOrder = { winter: 0, spring: 1, summer: 2, fall: 3 };
+        const fromPoint = fromYear ? Number(fromYear) * 4 + (seasonOrder[fromSeason] ?? 0) : Number.NEGATIVE_INFINITY;
+        const toPoint = toYear ? Number(toYear) * 4 + (seasonOrder[toSeason] ?? 3) : Number.POSITIVE_INFINITY;
+        const rangeStart = Math.min(fromPoint, toPoint);
+        const rangeEnd = Math.max(fromPoint, toPoint);
+        const filtered = progress.related.filter(entry => {
+          if (search && !normalizedEntityValue([entry.title, ...(entry.performers || []), ...(entry.directors || []), ...(entry.studios || []), ...(entry.franchises || [])].join(' ')).includes(search)) return false;
+          if (trackType && entry.type !== trackType) return false;
+          const entryYear = Number(entry.year);
+          const entrySeason = seasonOrder[entry.season];
+          if ((fromYear || toYear) && (!Number.isFinite(entryYear) || entrySeason === undefined)) return false;
+          const entryPoint = entryYear * 4 + entrySeason;
+          if (entryPoint < rangeStart || entryPoint > rangeEnd) return false;
+          const rated = entityHasRating(entry);
+          return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
+        }).sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+        activeEntityFilteredEntries = filtered;
+        entityRateAllBtn.disabled = !filtered.length;
+        const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
+        entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + visibleTracks.map((entry, index) =>
+          renderUnifiedEntryCard(entry, {
+            rankLabel: index + 1,
+            className: entityHasRating(entry) ? 'oc-entity-track-rated' : '',
+            controlsHtml: '<button class="oc-secondary-btn" type="button" data-entity-rate="' + escapeHtml(entry.id) + '">' + (entityHasRating(entry) ? 'Изменить оценку' : 'Оценить') + '</button>'
+          })
+        ).join('') + progressiveMoreMarkup('entity-tracks', visibleTracks.length, filtered.length) + '</div>' : '<div class="oc-empty">По этим фильтрам треков нет.</div>';
+        installProgressiveAutoload(entityTracksEl, 'entity-tracks', () => {
+          entityTrackRenderLimit += 30;
+          renderEntityAlbums();
+        });
+        return;
+      }
+
+      entityTitleEl.textContent = meta.title;
+      entitySubtitleEl.textContent = 'Альбомы с треками из каталога. Создать новый можно для объекта, у которого есть минимум ' + ENTITY_MIN_TRACKS + ' трека.';
+      const visibleCards = cards.slice(0, entityCardRenderLimit);
+      entityGridEl.innerHTML = cards.length ? visibleCards.map(card => {
+        const progress = entityCardProgress(card);
+        return '<article class="oc-entity-card' + (progress.complete ? ' complete' : '') + '" data-entity-open="' + escapeHtml(card.id) + '">' +
+          '<div class="oc-entity-cover">' + (card.image ? '<img src="' + escapeHtml(normalizeUrl(card.image)) + '" alt="" loading="lazy" />' : '<span>' + meta.icon + '</span>') + '</div>' +
+          '<div class="oc-entity-card-body"><h3>' + escapeHtml(card.value) + '</h3><p>' + progress.rated + ' из ' + progress.related.length + ' оценено</p>' +
+          '<div class="oc-entity-progressbar"><i style="width:' + (progress.related.length ? Math.round(progress.rated / progress.related.length * 100) : 0) + '%"></i></div>' +
+          (progress.complete ? '<span class="oc-entity-done">Всё просмотрено ✓</span>' : '') +
+          (isCatalogAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
+          (isCatalogAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
+          '</div></article>';
+      }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : `<div class="oc-empty">${albumQuery ? 'По этому запросу альбомов не найдено.' : 'Альбомов пока нет.'}</div>`;
+      installProgressiveAutoload(entityGridEl, 'entity-cards', () => {
+        entityCardRenderLimit += 40;
+        renderEntityAlbums();
+      });
+    }
+
+    function startEntityRating() {
+      const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
+      if (!card || !ensureNickname()) return;
+      const related = activeEntityFilteredEntries.slice();
+      const remaining = related.filter(entry => !entityHasRating(entry));
+      evaluatorMode = 'entity';
+      activeEntityQueueLabel = card.value;
+      seasonQueue = (remaining.length ? remaining : related).slice().sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'ru'));
+      seasonQueueIndex = 0;
+      if (!seasonQueue.length) return;
+      renderEvaluator();
+    }
+
+    async function saveEntityAlbum(event) {
+      event.preventDefault();
+      if (!isCatalogAdmin()) return;
+      const value = entityValueSelect.value;
+      const image = String(entityImageInput.value || '').trim();
+      if (!value || !image) { setStatus('Выберите объект и добавьте ссылку на обложку.', true); return; }
+      try {
+        await window.OPED_DB.saveEntityCard({ type: activeEntityType, value, image });
+        entityCreateForm.reset();
+        setStatus('Альбом создан ✓');
+      } catch (error) {
+        console.error(error);
+        setStatus('Не удалось создать альбом. Проверьте доступ Firebase.', true);
+      }
+    }
+
+    function switchTab(tab) {
+      if (tab !== 'chart' && !requireAccount()) return;
+      activeTab = tab;
+      document.querySelectorAll('.oc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+      mainPanel.classList.toggle('hidden', tab !== 'chart');
+      profilePanel.classList.toggle('hidden', tab !== 'profile');
+      if (top100Panel) top100Panel.classList.toggle('hidden', tab !== 'top100');
+      seasonPanel.classList.toggle('hidden', tab !== 'season');
+      if (tierPanel) tierPanel.classList.toggle('hidden', tab !== 'tier');
+      if (statsPanel) statsPanel.classList.toggle('hidden', tab !== 'stats');
+      const entityTab = tab.startsWith('entity-');
+      if (entityPanel) entityPanel.classList.toggle('hidden', !entityTab);
+      if (entityTab) {
+        const nextEntityType = tab.slice('entity-'.length);
+        if (activeEntityType !== nextEntityType || activeEntityCardId) resetEntityAlbumFilters();
+        activeEntityType = nextEntityType;
+        activeEntityCardId = '';
+        renderEntityAlbums();
+      } else {
+        activeEntityCardId = '';
+        resetEntityAlbumFilters();
+      }
+      if (tab === 'season') renderSeasonViews();
+      if (tab === 'profile') renderProfile();
+      if (tab === 'top100') renderGlobalTop100();
+      if (tab === 'tier') { populateFilterOptions(); renderTierList(); }
+      if (tab === 'stats') renderStatsPage();
+      void syncRouteDataSubscriptions(tab);
+      dispatchAppEvent('oped:route-change', { tab });
+    }
+
+    function clampScore(value) {
+      if (value === null || value === undefined || String(value).trim() === '') return null;
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      const step = scaleStep();
+      const rounded = Math.round(num / step) * step;
+      return Math.max(ratingMin(), Math.min(ratingMax(), Number(rounded.toFixed(1))));
+    }
+
+    function startSeasonRating(includeAll = false) {
+      if (!selectedSeason) return;
+      if (!ensureNickname()) return;
+      evaluatorMode = includeAll ? 'season-all' : 'season';
+      seasonQueue = includeAll
+        ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType).slice().sort((a, b) => a.title.localeCompare(b.title, 'ru'))
+        : (isPersonalScale()
+          ? personalOpeningQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType)
+          : openingQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType));
+      seasonQueueIndex = 0;
+      if (!seasonQueue.length) {
+        setStatus(isPersonalScale()
+          ? `У всех ${typeLabel(seasonType)} этого сезона уже есть твоя оценка ✓`
+          : `Все ${typeLabel(seasonType)} этого сезона уже оценены с текущего ника ✓`);
+        return;
+      }
+      renderEvaluator();
+    }
+
+    function startOpeningRating(entryId) {
+      if (!ensureNickname()) return;
+      const entry = entriesById.get(String(entryId));
+      if (!entry) return;
+      evaluatorMode = 'single';
+      seasonQueue = [entry];
+      seasonQueueIndex = 0;
+      renderEvaluator();
+    }
+
+    function closeEvaluator() {
+      evaluatorEl.classList.add('hidden');
+      evaluatorEl.innerHTML = '';
+      seasonQueue = [];
+      seasonQueueIndex = 0;
+      dailyActiveKey = '';
+    }
+
+    function renderEvaluator() {
+      if (!seasonQueue.length || seasonQueueIndex >= seasonQueue.length) {
+        const completedMode = evaluatorMode;
+        const completedDailyKey = dailyActiveKey;
+        closeEvaluator();
+        renderSeasonViews();
+        if (completedMode === 'entity') renderEntityAlbums();
+        if (completedMode === 'daily') {
+          finalizeDaily(completedDailyKey).catch(error => { console.error(error); setStatus('Не удалось завершить дейлик.', true); });
+          return;
+        }
+        setStatus(completedMode === 'entity'
+          ? 'Альбом полностью просмотрен ✓'
+          : isPersonalScale()
+            ? (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Оценки сезона проставлены ✓')
+            : (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Сезонная оценка завершена ✓'));
+        return;
+      }
+      const entry = seasonQueue[seasonQueueIndex];
+      const existingScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
+      const savedScore = existingScore !== null ? clampScore(existingScore) : defaultScore();
+      const savedSongScore = songScoreFor(entry, myName);
+      const savedVisualScore = visualScoreFor(entry, myName);
+      const optionalPublicParts = !isPersonalScale();
+      const inputMin = ratingMin();
+      const inputMax = ratingMax();
+      const inputStep = scaleStep();
+      const progressText = evaluatorMode === 'entity'
+        ? `${activeEntityQueueLabel} · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
+        : evaluatorMode === 'single'
+        ? `Переоценка · ${entry.year || 'год не указан'}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`
+        : evaluatorMode === 'daily'
+          ? `Ежедневная оценка · ${seasonQueueIndex + 1} из ${seasonQueue.length} оставшихся`
+          : `${seasonQueueIndex + 1} из ${seasonQueue.length} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`;
+      evaluatorEl.classList.remove('hidden');
+      evaluatorEl.innerHTML = `<div class="oc-eval-modal">
+        <div class="oc-eval-top">
+          <div>
+            <div class="oc-eval-progress">${escapeHtml(progressText)}</div>
+            <div class="oc-eval-title">${escapeHtml(entry.title)}</div>
+          </div>
+          <button class="oc-eval-close" data-eval-action="close">Закрыть</button>
+        </div>
+        ${renderOpeningVideoBlock(entry)}
+        <div class="oc-eval-grid">
+          <label>Оценка
+            <input id="oc-eval-range" type="range" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
+            <div class="oc-score-word" id="oc-eval-word">${escapeHtml(formatInputScore(savedScore))}</div>
+          </label>
+          <label>${isPersonalScale() ? 'Значение' : 'Итог'}
+            <input id="oc-eval-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
+          </label>
+          ${optionalPublicParts ? `<div class="oc-eval-parts">
+            <label>Песня <span class="oc-muted-inline">необяз.</span>
+              <input id="oc-eval-song-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedSongScore !== null ? savedSongScore : ''}" placeholder="—" />
+            </label>
+            <label>Визуал <span class="oc-muted-inline">необяз.</span>
+              <input id="oc-eval-visual-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedVisualScore !== null ? savedVisualScore : ''}" placeholder="—" />
+            </label>
+          </div>` : ''}
+        </div>
+        <div class="oc-eval-actions">
+          <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? 'Отмена' : 'Пропустить'}</button>
+          ${existingScore !== null ? `<button class="oc-secondary-btn" data-eval-action="delete-current">${isPersonalScale() ? 'Удалить отметку' : 'Удалить оценку'}</button>` : ''}
+          <button class="oc-addbtn" data-eval-action="save-next">${evaluatorMode === 'single' ? 'Сохранить' : 'Сохранить и дальше'}</button>
+        </div>
+      </div>`;
+      const range = $('#oc-eval-range');
+      const score = $('#oc-eval-score');
+      const word = $('#oc-eval-word');
+      const updateWord = (val) => { if (word) word.textContent = formatInputScore(val); };
+      range.addEventListener('input', () => { score.value = range.value; updateWord(range.value); });
+      score.addEventListener('input', () => {
+        const val = clampScore(score.value);
+        if (val !== null) { range.value = String(val); updateWord(val); }
+      });
+      bindVideoEmbeds(evaluatorEl);
+    }
+
+    async function saveEvaluatorScore() {
+      const entry = seasonQueue[seasonQueueIndex];
+      if (!entry) return;
+      const score = clampScore($('#oc-eval-score').value);
+      const songInput = $('#oc-eval-song-score');
+      const visualInput = $('#oc-eval-visual-score');
+      const rawSong = songInput ? String(songInput.value || '').trim() : '';
+      const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
+      const songScore = rawSong ? clampScore(rawSong) : null;
+      const visualScore = rawVisual ? clampScore(rawVisual) : null;
+      if (score === null) { setStatus(`Введите оценку от ${formatScore(ratingMin())} до ${formatScore(ratingMax())}.`, true); return; }
+      if (rawSong && songScore === null) { setStatus(`Введите оценку песни от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.`, true); return; }
+      if (rawVisual && visualScore === null) { setStatus(`Введите оценку визуала от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.`, true); return; }
+      try {
+        if (isPersonalScale()) {
+          entry.personalScores = entry.personalScores || {};
+          entry.personalScores[myName] = score;
+          await saveRatingExtras(entry.id, myName, { personalScore: score });
+        } else {
+          entry.scores = entry.scores || {};
+          entry.scores[myName] = score;
+          if (songInput) {
+            entry.songScores = entry.songScores || {};
+            if (songScore === null) delete entry.songScores[myName];
+            else entry.songScores[myName] = songScore;
+          }
+          if (visualInput) {
+            entry.visualScores = entry.visualScores || {};
+            if (visualScore === null) delete entry.visualScores[myName];
+            else entry.visualScores[myName] = visualScore;
+          }
+          await window.OPED_DB.saveRating(entry.id, myName, score);
+          await saveRatingExtras(entry.id, myName, { songScore, visualScore });
+          appendManualOrderIfMissing(myName, entry.type, entry.id);
+        }
+        touchEntryCache(entry);
+        markRatingDataChanged();
+        if (evaluatorMode === 'daily') await markDailyEntryDone(entry.id);
+        setStatus('Оценка сохранена ✓');
+        render();
+        renderSeasonViews();
+        seasonQueueIndex += 1;
+        renderEvaluator();
+      } catch (e) {
+        console.error(e);
+        setStatus('Не удалось сохранить оценку.', true);
+      }
+    }
+
+    function renderEditCard(entry) {
+      const seasonOptions = ['', 'winter', 'spring', 'summer', 'fall'].map(s => {
+        const label = s === '' ? 'Сезон —' : SEASON_LABEL[s];
+        const sel = entry.season === s ? 'selected' : '';
+        return `<option value="${s}" ${sel}>${label}</option>`;
+      }).join('');
+
+      return `
+        <div class="oc-editcard" data-id="${entry.id}">
+          <div class="oc-section-label">редактирование трека</div>
+          <div class="oc-editgrid">
+            <input class="oc-e-title" type="text" autocomplete="off" value="${escapeHtml(entry.title)}" placeholder="Название" />
+            <select class="oc-e-type">
+              <option value="OP" ${entry.type === 'OP' ? 'selected' : ''}>OP</option>
+              <option value="ED" ${entry.type === 'ED' ? 'selected' : ''}>ED</option>
+            </select>
+            <input class="oc-e-year" type="number" min="1960" max="2100" value="${entry.year || ''}" placeholder="Год" />
+            <select class="oc-e-season">${seasonOptions}</select>
+          </div>
+          <div class="oc-editgrid2">
+            <input class="oc-e-studio" type="text" list="oc-dl-studios" autocomplete="off" value="${escapeHtml((entry.studios || []).join(', '))}" placeholder="Студии (через запятую)" />
+            <input class="oc-e-director" type="text" list="oc-dl-directors" autocomplete="off" value="${escapeHtml((entry.directors || []).join(', '))}" placeholder="Режиссёры опа (через запятую)" />
+            <input class="oc-e-performer" type="text" list="oc-dl-performers" autocomplete="off" value="${escapeHtml((entry.performers || []).join(', '))}" placeholder="Исполнители (через запятую)" />
+            <textarea class="oc-e-franchise" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Пустое поле удалит франшизу">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
+            <input class="oc-e-same-song" type="text" list="oc-dl-same-songs" autocomplete="off" value="${escapeHtml(entry.sameSongTitle || '')}" placeholder="Одинаковая песня — введи одинаковое общее название у связанных OP/ED" />
+          </div>
+          <div class="oc-editgrid3">
+            <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Основная картинка / постер (URL)" />
+            <input class="oc-e-fallback-image" type="text" value="${escapeHtml(entry.fallbackImage || '')}" placeholder="Запасная картинка (URL или images/файл.webp)" />
+            <input class="oc-e-link" type="text" value="${escapeHtml(entry.link || '')}" placeholder="Ссылка (anisongdb.com и т.п.)" />
+            <input class="oc-e-notes" type="text" value="${escapeHtml(entry.notes || '')}" placeholder="Заметка (необязательно)" />
+          </div>
+          <div class="oc-editgrid3">
+            <textarea class="oc-e-alt-titles" placeholder="Альтернативные названия — каждое с новой строки или через ;. Можно оставить пустым">${escapeHtml((entry.alternativeTitles || []).join('\n'))}</textarea>
+          </div>
+          <div class="oc-edit-flags">
+            <label class="oc-flag-check"><input class="oc-e-chinese" type="checkbox" ${entryIsChinese(entry) ? 'checked' : ''} /> Китайский OP/ED</label>
+            <label class="oc-flag-check"><input class="oc-e-movie" type="checkbox" ${entryIsMovie(entry) ? 'checked' : ''} /> OP/ED фильма</label>
+            <label class="oc-flag-check"><input class="oc-e-shortened" type="checkbox" ${entryIsShortened(entry) ? 'checked' : ''} /> Укороченный OP/ED</label>
+          </div>
+          <div class="oc-edit-actions">
+            <button class="oc-cancel-btn" data-action="cancel-edit" data-id="${entry.id}">Отмена</button>
+            <button class="oc-save-btn" data-action="save-edit" data-id="${entry.id}">Сохранить</button>
+          </div>
+        </div>`;
+    }
+
+    // ---------- manual (user-curated) top-100 ----------
+    function manualUserSafeKey(user) {
+      const raw = String(user || '').trim();
+      if (!raw) return '';
+      if (window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function') return window.OPED_DB.normalizeNickname(raw);
+      return safeDocPart(raw);
+    }
+
+    function manualCandidateKeys(user) {
+      const raw = String(user || '').trim();
+      if (!raw) return [];
+      const safe = manualUserSafeKey(raw);
+      const lower = raw.toLowerCase();
+      const keys = [raw, safe, lower].filter(Boolean);
+      Object.keys(manualRanks || {}).forEach(k => {
+        const kk = String(k || '').trim();
+        if (!kk) return;
+        const row = manualRanks[kk] || {};
+        const rowNick = String(row.nickname || row.displayName || row.name || '').trim();
+        const rowSafe = String(row.nicknameKey || '').trim();
+        if (kk.toLowerCase() === lower || manualUserSafeKey(kk) === safe || rowNick.toLowerCase() === lower || rowSafe === safe) {
+          keys.push(kk, rowNick, rowSafe);
+        }
+      });
+      return Array.from(new Set(keys.filter(Boolean)));
+    }
+
+    function manualSameUser(a, b) {
+      const aa = String(a || '').trim();
+      const bb = String(b || '').trim();
+      if (!aa || !bb) return false;
+      const aKeys = manualCandidateKeys(aa).map(x => String(x).trim()).filter(Boolean);
+      const bKeys = manualCandidateKeys(bb).map(x => String(x).trim()).filter(Boolean);
+      const bLower = new Set(bKeys.map(x => x.toLowerCase()));
+      const bSafe = new Set(bKeys.map(x => manualUserSafeKey(x)).filter(Boolean));
+      return aKeys.some(x => bLower.has(x.toLowerCase()) || bSafe.has(manualUserSafeKey(x)));
+    }
+
+    function valueForUserMap(map, user) {
+      if (!map || !user) return undefined;
+      const raw = String(user).trim();
+      if (Object.prototype.hasOwnProperty.call(map, raw)) return map[raw];
+      const keys = manualCandidateKeys(raw);
+      for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
+      }
+      const safe = manualUserSafeKey(raw);
+      const lower = raw.toLowerCase();
+      for (const key of Object.keys(map)) {
+        const k = String(key || '').trim();
+        if (!k) continue;
+        if (k.toLowerCase() === lower || manualUserSafeKey(k) === safe) return map[key];
+      }
+      return undefined;
+    }
+
+    function appendManualOrderIfMissing(user, type, id) {
+      const raw = String(user || '').trim();
+      const openingId = String(id || '').trim();
+      if (!raw || !openingId) return false;
+      const current = getManualRanksForUser(raw) || {};
+      const order = Array.isArray(current[type]) ? current[type].map(String) : savedManualOrderFor(raw, type);
+      if (order.includes(openingId)) return false;
+      order.push(openingId);
+      rememberManualRanksForUser(raw, { ...current, [type]: order });
+      markManualDirty();
+      return true;
+    }
+
+    function manualRankRowHasTop(row, type) {
+      return !!(row && Array.isArray(row[type]) && row[type].length);
+    }
+
+    function getManualRanksForUser(user) {
+      const keys = manualCandidateKeys(user);
+      const merged = {};
+      let found = false;
+      keys.forEach(key => {
+        const row = manualRanks && manualRanks[key];
+        if (!row) return;
+        found = true;
+        const op = Array.isArray(row.OP) ? row.OP.map(String)
+          : (Array.isArray(row.manualOP) ? row.manualOP.map(String)
+          : (Array.isArray(row.op) ? row.op.map(String) : null));
+        const ed = Array.isArray(row.ED) ? row.ED.map(String)
+          : (Array.isArray(row.manualED) ? row.manualED.map(String)
+          : (Array.isArray(row.ed) ? row.ed.map(String) : null));
+        const excludedOP = Array.isArray(row.excludedOP) ? row.excludedOP.map(String) : null;
+        const excludedED = Array.isArray(row.excludedED) ? row.excludedED.map(String) : null;
+        Object.keys(row).forEach(k => {
+          if (['OP','ED','op','ed','manualOP','manualED','excludedOP','excludedED'].includes(k)) return;
+          if (row[k] !== undefined && row[k] !== null && row[k] !== '') merged[k] = row[k];
+        });
+        if (op && (op.length || !Array.isArray(merged.OP))) merged.OP = op;
+        if (ed && (ed.length || !Array.isArray(merged.ED))) merged.ED = ed;
+        if (excludedOP && (excludedOP.length || !Array.isArray(merged.excludedOP))) merged.excludedOP = Array.from(new Set([...(merged.excludedOP || []), ...excludedOP]));
+        if (excludedED && (excludedED.length || !Array.isArray(merged.excludedED))) merged.excludedED = Array.from(new Set([...(merged.excludedED || []), ...excludedED]));
+      });
+      return found ? merged : {};
+    }
+
+    function rememberManualRanksForUser(user, ranks) {
+      const raw = String(user || '').trim();
+      if (!raw || !ranks) return;
+      const safe = manualUserSafeKey(raw);
+      const profileRow = {
+        ...(manualRanks[raw] || {}),
+        ...ranks,
+        nickname: ranks.nickname || raw,
+        nicknameKey: ranks.nicknameKey || safe
+      };
+      manualRanks[raw] = profileRow;
+      if (safe && safe !== raw) manualRanks[safe] = profileRow;
+    }
+
+    function manualExcludedField(type) {
+      return String(type || '').toUpperCase() === 'ED' ? 'excludedED' : 'excludedOP';
+    }
+
+    function manualExcludedSet(user, type) {
+      const row = getManualRanksForUser(user) || {};
+      const field = manualExcludedField(type);
+      return new Set((Array.isArray(row[field]) ? row[field] : []).map(String));
+    }
+
+    function setManualExcluded(user, type, ids) {
+      const row = getManualRanksForUser(user) || {};
+      const field = manualExcludedField(type);
+      const clean = Array.from(new Set((ids || []).map(String).filter(Boolean)));
+      rememberManualRanksForUser(user, { ...row, [field]: clean });
+    }
+
+    function removeManualExcluded(user, type, id) {
+      const excluded = manualExcludedSet(user, type);
+      const before = excluded.size;
+      excluded.delete(String(id));
+      if (excluded.size !== before) setManualExcluded(user, type, Array.from(excluded));
+    }
+
+    function manualHiddenKey(user, type) {
+      return `${manualUserSafeKey(user)}|${String(type || '').toUpperCase()}`;
+    }
+
+    function manualHiddenSet(user, type) {
+      const key = manualHiddenKey(user, type);
+      if (!manualHiddenForEdit[key]) manualHiddenForEdit[key] = [];
+      return new Set(manualHiddenForEdit[key].map(String));
+    }
+
+    function isManualHidden(user, type, id) {
+      return manualHiddenSet(user, type).has(String(id));
+    }
+
+    function hideManualCandidate(user, type, id) {
+      const key = manualHiddenKey(user, type);
+      const set = manualHiddenSet(user, type);
+      set.add(String(id));
+      manualHiddenForEdit[key] = Array.from(set);
+    }
+
+    function unhideManualCandidate(user, type, id) {
+      const key = manualHiddenKey(user, type);
+      const set = manualHiddenSet(user, type);
+      set.delete(String(id));
+      manualHiddenForEdit[key] = Array.from(set);
+    }
+
+    function manualHiddenCount(user) {
+      return ['OP','ED'].reduce((sum, type) => sum + manualHiddenSet(user, type).size, 0);
+    }
+
+    function ratedIdsForManual(user, type) {
+      return entries
+        .filter(e => e.type === type && scoreFor(e, user) !== null)
+        .sort((a, b) => {
+          const scoreDiff = (scoreFor(b, user) || 0) - (scoreFor(a, user) || 0);
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.title.localeCompare(b.title, 'ru');
+        })
+        .map(e => e.id);
+    }
+
+    function savedManualOrderFor(user, type) {
+      if (!user) return [];
+      const row = getManualRanksForUser(user);
+      const saved = row && Array.isArray(row[type]) ? row[type].map(String) : [];
+      const valid = new Set(entries.filter(e => e.type === type).map(e => String(e.id)));
+      const seen = new Set();
+      return saved.filter(id => valid.has(String(id)) && !seen.has(String(id)) && (seen.add(String(id)) || true));
+    }
+
+    function ensureManualOrderForEditing(user, type) {
+      if (!user) return [];
+      const current = getManualRanksForUser(user);
+      rememberManualRanksForUser(user, current);
+      const saved = savedManualOrderFor(user, type);
+      const seen = new Set(saved.map(String));
+      const excluded = manualExcludedSet(user, type);
+      const missing = ratedIdsForManual(user, type).filter(id => !seen.has(String(id)) && !excluded.has(String(id)));
+      const order = saved.concat(missing);
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
+      return order;
+    }
+
+    function manualOrderFor(user, type, includeMissing = false) {
+      return includeMissing ? ensureManualOrderForEditing(user, type) : savedManualOrderFor(user, type);
+    }
+
+    function manualPositionFor(user, type, id, includeMissing = false) {
+      const order = manualOrderFor(user, type, includeMissing);
+      const idx = order.indexOf(id);
+      return idx === -1 ? null : idx + 1;
+    }
+
+    function markManualDirty() {
+      manualDirty = true;
+      const saveBtn = $('#oc-manual-save-btn');
+      if (saveBtn) saveBtn.classList.add('active');
+    }
+
+    function swapManualRank(user, type, idA, idB) {
+      const order = ensureManualOrderForEditing(user, type);
+      const ia = order.indexOf(idA);
+      const ib = order.indexOf(idB);
+      if (ia === -1 || ib === -1) return false;
+      const tmp = order[ia];
+      order[ia] = order[ib];
+      order[ib] = tmp;
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
+      markManualDirty();
+      return true;
+    }
+
+    function moveManualRankByOffset(user, type, id, offset) {
+      const order = ensureManualOrderForEditing(user, type).slice();
+      const from = order.indexOf(id);
+      const to = from + offset;
+      if (from === -1 || to < 0 || to >= order.length) return false;
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
+      markManualDirty();
+      return true;
+    }
+
+    function moveManualRankTo(user, type, id, place) {
+      const order = ensureManualOrderForEditing(user, type).slice();
+      const from = order.indexOf(id);
+      const targetNum = Number(place);
+      if (from === -1 || !Number.isFinite(targetNum)) return false;
+      const to = Math.max(0, Math.min(order.length - 1, Math.round(targetNum) - 1));
+      if (from === to) return false;
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
+      markManualDirty();
+      return true;
+    }
+
+    function promptManualRank(user, type, id) {
+      const order = ensureManualOrderForEditing(user, type);
+      const current = order.indexOf(id) + 1;
+      if (!current) return false;
+      const raw = window.prompt(
+        `Введите место в ручном топе ${type} от 1 до ${order.length}.\n1–100 попадает в Топ-100, 101+ уйдёт ниже топа.`,
+        String(current)
+      );
+      if (raw === null) return false;
+      const place = Number(raw.replace(',', '.'));
+      if (!Number.isFinite(place)) {
+        setStatus('Нужно ввести число места.', true);
+        return false;
+      }
+      return moveManualRankTo(user, type, id, place);
+    }
+
+    function moveManualRankToTop100(user, type, id) {
+      const cleanId = String(id || '').trim();
+      if (!cleanId) return false;
+      removeManualExcluded(user, type, cleanId);
+      let order = ensureManualOrderForEditing(user, type).slice();
+      let from = order.indexOf(cleanId);
+      if (from === -1) {
+        order.push(cleanId);
+        from = order.length - 1;
+      }
+      const to = Math.min(99, Math.max(0, order.length - 1));
+      if (from === to) {
+        rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
+        markManualDirty();
+        return true;
+      }
+      const [moved] = order.splice(from, 1);
+      order.splice(to, 0, moved);
+      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
+      markManualDirty();
+      return true;
+    }
+
+    function removeManualRankFromTop100(user, type, id) {
+      const cleanId = String(id || '').trim();
+      if (!cleanId) return false;
+      const order = ensureManualOrderForEditing(user, type).slice().filter(x => String(x) !== cleanId);
+      const excluded = manualExcludedSet(user, type);
+      excluded.add(cleanId);
+      rememberManualRanksForUser(user, {
+        ...getManualRanksForUser(user),
+        [type]: order,
+        [manualExcludedField(type)]: Array.from(excluded)
+      });
+      markManualDirty();
+      return true;
+    }
+
+    function ratedListFor(user, list) {
+      return list
+        .map(e => ({ entry: e, score: scoreFor(e, user) }))
+        .filter(r => r.score !== null);
+    }
+
+    function computeProfileStats(user, list) {
+      const rated = ratedListFor(user, list);
+      const opRated = rated.filter(r => r.entry.type === 'OP');
+      const edRated = rated.filter(r => r.entry.type === 'ED');
+      const meanOf = (arr) => arr.length ? arr.reduce((a, b) => a + b.score, 0) / arr.length : null;
+      const songRated = list.map(e => ({ entry: e, score: songScoreFor(e, user) })).filter(r => r.score !== null);
+      const visualRated = list.map(e => ({ entry: e, score: visualScoreFor(e, user) })).filter(r => r.score !== null);
+
+      function groupRows(getKeys, sourceList) {
+        const groups = {};
+        sourceList.forEach(r => {
+          getKeys(r.entry).forEach(key => {
+            if (!key) return;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(r.score);
+          });
+        });
+        const rows = Object.entries(groups)
+          .map(([key, scores]) => ({ key, mean: scores.reduce((a, b) => a + b, 0) / scores.length, count: scores.length }))
+          .filter(row => row.count >= MIN_PUBLIC_VOTES);
+        rows.sort((a, b) => b.mean - a.mean || b.count - a.count || a.key.localeCompare(b.key, 'ru'));
+        const worstRows = rows.slice().sort((a, b) => a.mean - b.mean || b.count - a.count || a.key.localeCompare(b.key, 'ru'));
+        return { top: rows.slice(0, 5), worst: worstRows[0] ? [worstRows[0]] : [] };
+      }
+
+      return {
+        avgOp: meanOf(opRated), avgEd: meanOf(edRated), avgAll: meanOf(rated),
+        countOp: opRated.length, countEd: edRated.length, countAll: rated.length,
+        avgSong: meanOf(songRated), countSong: songRated.length,
+        avgVisual: meanOf(visualRated), countVisual: visualRated.length,
+        opStudios: groupRows(e => e.studios || [], opRated),
+        edStudios: groupRows(e => e.studios || [], edRated),
+        topDirectors: groupRows(e => e.directors || [], rated),
+        topPerformers: groupRows(e => e.performers || [], rated),
+        opFranchises: groupRows(e => e.franchises || [], opRated),
+        edFranchises: groupRows(e => e.franchises || [], edRated),
+        topSongPerformers: groupRows(e => e.performers || [], songRated),
+        topSeasonYears: groupRows(e => (e.year && e.season) ? [`${SEASON_LABEL[e.season]} ${e.year}`] : [], rated),
+        topEdSeasonYears: groupRows(e => (e.year && e.season) ? [`${SEASON_LABEL[e.season]} ${e.year}`] : [], edRated)
+      };
+    }
+
+    function statCard(label, value, sub, accent) {
+      return `<div class="oc-stat-card"><div class="oc-stat-label">${label}</div><div class="oc-stat-value${accent ? ' accent' : ''}">${value}</div>${sub ? `<div class="oc-stat-sub">${sub}</div>` : ''}</div>`;
+    }
+
+    function statListCard(label, rows, emptyText, worstRows) {
+      const body = rows && rows.length
+        ? `<div class="oc-small-list">${rows.map((row, idx) => `<div class="oc-small-list-row"><span>${idx + 1}. ${escapeHtml(row.key)}</span><span>${formatScore(row.mean)} · ${row.count}</span></div>`).join('')}${worstRows && worstRows.length ? `<div class="oc-small-list-row"><span>худший: ${escapeHtml(worstRows[0].key)}</span><span>${formatScore(worstRows[0].mean)} · ${worstRows[0].count}</span></div>` : ''}</div>`
+        : `<div class="oc-stat-sub">${emptyText || 'нет данных'}${worstRows && worstRows.length ? ` · худший: ${escapeHtml(worstRows[0].key)} (${formatScore(worstRows[0].mean)})` : ''}</div>`;
+      return `<div class="oc-stat-card"><div class="oc-stat-label">${label}</div>${body}</div>`;
+    }
+
+    function renderProfileStats(stats) {
+      const el = $('#oc-profile-stats');
+      if (!el) return;
+      if (!stats.countAll) {
+        el.innerHTML = statCard('статистика', '—', 'нет оценок по текущим фильтрам');
+        return;
+      }
+      const parts = [];
+      parts.push(statCard('Средняя · OP', formatScore(stats.avgOp), stats.countOp + ' оценено', true));
+      parts.push(statCard('Средняя · ED', formatScore(stats.avgEd), stats.countEd + ' оценено', true));
+      parts.push(statCard('Средняя · всего', formatScore(stats.avgAll), stats.countAll + ' оценено'));
+      if (stats.countSong) parts.push(statCard('Средняя · песня', formatScore(stats.avgSong), stats.countSong + ' оценено отдельно', true));
+      if (stats.countVisual) parts.push(statCard('Средняя · визуал', formatScore(stats.avgVisual), stats.countVisual + ' оценено отдельно', true));
+      parts.push(statCard('Оценено OP', stats.countOp, ''));
+      parts.push(statCard('Оценено ED', stats.countEd, ''));
+      parts.push(statListCard('Топ-5 студий · OP', stats.opStudios.top, 'нужно минимум 3 OP одной студии', stats.opStudios.worst));
+      parts.push(statListCard('Топ-5 студий · ED', stats.edStudios.top, 'нужно минимум 3 ED одной студии', stats.edStudios.worst));
+      parts.push(statListCard('Топ-5 исполнителей', stats.topPerformers.top, 'нужно минимум 3 трека исполнителя', stats.topPerformers.worst));
+      if (stats.topSongPerformers && stats.topSongPerformers.top.length) parts.push(statListCard('Топ-5 исполнителей · песня', stats.topSongPerformers.top, 'нет отдельных оценок песни', stats.topSongPerformers.worst));
+      parts.push(statListCard('Топ-5 режиссёров', stats.topDirectors.top, 'нужно минимум 3 трека режиссёра', stats.topDirectors.worst));
+      parts.push(statListCard('Топ-5 франшиз · OP', stats.opFranchises.top, 'нужно минимум 3 OP одной франшизы', stats.opFranchises.worst));
+      parts.push(statListCard('Топ-5 франшиз · ED', stats.edFranchises.top, 'нужно минимум 3 ED одной франшизы', stats.edFranchises.worst));
+      parts.push(statListCard('Топ-5 сезонов', stats.topSeasonYears.top, 'нужно минимум 3 трека сезона', stats.topSeasonYears.worst));
+      parts.push(statListCard('Топ-5 сезонов · ED', stats.topEdSeasonYears.top, 'нужно минимум 3 ED в сезоне', stats.topEdSeasonYears.worst));
+      el.innerHTML = parts.join('');
+    }
+
+    function populateArScoreOptions(user, list) {
+      const sel = $('#oc-ar-score');
+      if (!sel) return;
+      const rated = ratedListForMetric(user, list, arScoreMetric);
+      const values = Array.from(new Set(rated.map(r => r.score))).sort((a, b) => a - b);
+      const prev = sel.value;
+      sel.innerHTML = `<option value="">Любая ${metricLabel(arScoreMetric)}</option>` + values.map(v => `<option value="${v}">${formatScore(v)}</option>`).join('');
+      sel.value = values.map(String).includes(prev) ? prev : '';
+      arScoreFilter = sel.value;
+    }
+
+    function renderAllRatings(user, list) {
+      const opContainer = $('#oc-allratings-op') || $('#oc-allratings-list');
+      const edContainer = $('#oc-allratings-ed');
+      const opCol = $('#oc-allratings-col-op');
+      const edCol = $('#oc-allratings-col-ed');
+      if (!opContainer) return;
+      if (!user) {
+        opContainer.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
+        if (edContainer) edContainer.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
+        return;
+      }
+
+      function renderColumn(type, container) {
+        if (!container) return;
+        let rated = ratedListForMetric(user, list, arScoreMetric).filter(r => r.entry.type === type);
+        if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
+        rated.sort((a, b) => {
+          const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
+          if (scoreDiff !== 0) return scoreDiff;
+          return a.entry.title.localeCompare(b.entry.title, 'ru');
+        });
+
+        if (!rated.length) {
+          container.innerHTML = `<div class="oc-empty">Нет оценённых ${type} для выбранной оценки: ${metricLabel(arScoreMetric)}</div>`;
+          return;
+        }
+
+        const editableManual = topMode === 'manual' && manualEditMode && !!myName && manualSameUser(user, myName);
+        if (editableManual) {
+          ensureManualOrderForEditing(user, type);
+          if (!manualShowHidden) rated = rated.filter(r => !isManualHidden(user, type, r.entry.id));
+        }
+
+        allRatingsPage[type] = clampPage(allRatingsPage[type] || 1, rated.length);
+        const page = pageSlice(rated, allRatingsPage[type]);
+        const rowsHtml = page.items.map((r, idx) => {
+          const e = r.entry;
+          const pos = manualPositionFor(user, e.type, e.id, editableManual);
+          const canDeleteRating = !!myName && manualSameUser(user, myName);
+          const hiddenInEditor = editableManual && isManualHidden(user, e.type, e.id);
+          const manualControls = editableManual ? `
+              ${hiddenInEditor ? `<button type="button" class="oc-ar-top-btn" data-action="all-unhide-manual" data-type="${e.type}" data-id="${e.id}" title="Вернуть в список редактирования">Вернуть</button>` : `
+                <button type="button" class="oc-ar-rank-btn" data-action="all-set-rank" data-type="${e.type}" data-id="${e.id}" title="Ввести точное место в ручном топе">№ ${pos || '—'}</button>
+                ${(!pos || pos > 100) ? `<button type="button" class="oc-ar-top-btn" data-action="all-to-top100" data-type="${e.type}" data-id="${e.id}" title="Поставить на 100-е место и вытолкнуть текущий 100-й ниже">В топ-100</button>` : ''}
+                <button type="button" class="oc-ar-top-btn" data-action="all-hide-manual" data-type="${e.type}" data-id="${e.id}" title="Скрыть только из списка редактирования">Скрыть</button>
+              `}` : '';
+          const deleteControl = canDeleteRating ? `<button type="button" class="oc-ar-top-btn" data-action="all-delete-rating" data-id="${e.id}" title="Удалить твою оценку">Удалить оценку</button>` : '';
+          const controls = manualControls + deleteControl;
+          const detailBits = [];
+          const totalVal = scoreFor(e, user);
+          const songVal = songScoreFor(e, user);
+          const visualVal = visualScoreFor(e, user);
+          if (arScoreMetric !== 'total' && totalVal !== null) detailBits.push('общая: ' + formatScore(totalVal));
+          if (arScoreMetric !== 'song' && songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
+          if (arScoreMetric !== 'visual' && visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
+          const extraHtml = detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : '';
+          return renderUnifiedEntryCard(e, {
+            rankLabel: page.start + idx + 1,
+            scoreText: formatScore(r.score),
+            scoreSub: metricLabel(arScoreMetric),
+            fields: ['performers'],
+            extraHtml,
+            controlsHtml: controls,
+            className: `compact allratings-card${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}`
+          });
+        }).join('');
+
+        const scope = 'allratings-' + type.toLowerCase();
+        const pager = paginationHtml(scope, allRatingsPage[type], rated.length);
+        container.innerHTML = pager + rowsHtml + pager;
+        bindPagination(container, scope, () => allRatingsPage[type] || 1, v => { allRatingsPage[type] = clampPage(v, rated.length); }, () => renderAllRatings(user, list));
+      }
+
+      if (opCol) opCol.style.display = (!arTypeFilter || arTypeFilter === 'OP') ? '' : 'none';
+      if (edCol) edCol.style.display = (!arTypeFilter || arTypeFilter === 'ED') ? '' : 'none';
+      renderColumn('OP', opContainer);
+      if (edContainer) renderColumn('ED', edContainer);
+
+      const root = $('#oc-allratings-columns') || opContainer;
+      root.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
+
+      const editableManual = topMode === 'manual' && manualEditMode && !!myName && manualSameUser(user, myName);
+      if (editableManual) {
+        root.querySelectorAll('[data-action="all-set-rank"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (promptManualRank(user, type, id)) {
+              renderProfile();
+              setStatus('Место в ручном топе обновлено. Нажми «Сохранить топ-100», чтобы отправить всем.');
+            }
+          });
+        });
+        root.querySelectorAll('[data-action="all-to-top100"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (moveManualRankToTop100(user, type, id)) {
+              renderProfile();
+              setStatus('Трек добавлен в Топ-100 локально. Нажми «Сохранить топ-100».');
+            }
+          });
+        });
+        root.querySelectorAll('[data-action="all-hide-manual"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            hideManualCandidate(user, btn.getAttribute('data-type'), btn.getAttribute('data-id'));
+            renderProfile();
+            setStatus('Скрыто из списка редактирования. Это не удаляет оценку и не влияет на сохранённый топ.');
+          });
+        });
+        root.querySelectorAll('[data-action="all-unhide-manual"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            unhideManualCandidate(user, btn.getAttribute('data-type'), btn.getAttribute('data-id'));
+            renderProfile();
+            setStatus('Вернул в список редактирования.');
+          });
+        });
+      }
+      root.querySelectorAll('[data-action="all-delete-rating"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          if (!window.confirm('Удалить твою оценку?')) return;
+          await deleteCurrentRating(id, myName, 'public');
+        });
+      });
+    }
+
+    function renderProfileList(containerId, list, user, opts) {
+      opts = opts || {};
+      const container = $(containerId);
+      if (!container) return;
+      if (!user) {
+        container.innerHTML = '<div class="oc-empty">Выберите пользователя</div>';
+        return;
+      }
+      if (!list.length) {
+        const manualEmpty = opts && opts.manual;
+        container.innerHTML = `<div class="oc-empty">${manualEmpty ? 'Нет сохранённого ручного топа для этого типа' : 'Нет треков'}</div>`;
+        return;
+      }
+      const editable = !!opts.editable;
+      const type = opts.type || 'OP';
+      const fullOrder = editable ? manualOrderFor(user, type, true) : [];
+      const visibleList = list.slice(0, 100);
+      const html = visibleList.map((item, idx) => {
+        const absoluteIdx = idx;
+        const rankClass = absoluteIdx === 0 ? 'gold' : absoluteIdx === 1 ? 'silver' : absoluteIdx === 2 ? 'bronze' : '';
+        const e = item.entry;
+        const absolutePos = editable ? manualPositionFor(user, type, e.id, true) : (absoluteIdx + 1);
+        const rankLabel = editable ? absolutePos : (absoluteIdx < 3 ? ['①','②','③'][absoluteIdx] : (absoluteIdx + 1));
+        const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
+        const scoreClass = item.score === null ? 'none' : '';
+        const orderIdx = editable ? fullOrder.indexOf(e.id) : -1;
+        const moveButtons = editable ? `
+            <div class="oc-move-btns">
+              <button class="oc-move-btn" data-action="move-up" data-type="${type}" data-id="${e.id}" ${orderIdx <= 0 ? 'disabled' : ''} title="Выше">▲</button>
+              <button class="oc-move-btn" data-action="move-down" data-type="${type}" data-id="${e.id}" ${(orderIdx === -1 || orderIdx >= fullOrder.length - 1) ? 'disabled' : ''} title="Ниже">▼</button>
+            </div>` : '';
+        const rowActions = editable ? `
+            <div class="oc-manual-row-actions">
+              <button type="button" class="oc-ar-top-btn" data-action="remove-from-top" data-type="${type}" data-id="${e.id}" title="Убрать из текущего топ-100, оценки при этом останутся">Удалить из топа</button>
+            </div>` : '';
+        const rankHtml = editable
+          ? `<button type="button" class="oc-rank-jump-btn" data-action="set-rank" data-type="${type}" data-id="${e.id}" title="Кликните, чтобы ввести место вручную">${rankLabel}</button>`
+          : `<div class="oc-profile-rank ${rankClass}">${rankLabel}</div>`;
+        return `
+          <div class="oc-profile-item${editable ? ' manual' : ''}">
+            ${rankHtml}
+            ${imgHtml(e, 'oc-profile-thumb')}
+            <div>
+              <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span></div>
+              ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
+            </div>
+            <div class="oc-profile-score ${scoreClass}">${formatScore(item.score)}</div>
+            ${moveButtons}
+            ${rowActions}
+          </div>
+        `;
+      }).join('');
+      container.innerHTML = html;
+      container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
+
+      if (editable) {
+        container.querySelectorAll('[data-action="set-rank"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (promptManualRank(user, type, id)) {
+              renderProfile();
+              setStatus('Место в ручном топе обновлено. Нажми «Сохранить топ-100», чтобы отправить всем.');
+            }
+          });
+        });
+        container.querySelectorAll('[data-action="move-up"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (moveManualRankByOffset(user, type, id, -1)) {
+              renderProfile();
+            }
+          });
+        });
+        container.querySelectorAll('[data-action="move-down"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (moveManualRankByOffset(user, type, id, 1)) {
+              renderProfile();
+            }
+          });
+        });
+        container.querySelectorAll('[data-action="remove-from-top"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-id');
+            const type = btn.getAttribute('data-type');
+            if (!window.confirm('Убрать из текущего топ-100? Оценка останется, трек можно будет вернуть кнопкой «В топ-100».')) return;
+            if (removeManualRankFromTop100(user, type, id)) {
+              renderProfile();
+              setStatus('Удалено из топ-100 локально. Нажми «Сохранить топ-100».');
+            }
+          });
+        });
+      }
+    }
+
+    function renderProfile() {
+      populateProfileUsers();
+      profileUser = profileUserSelect.value;
+
+      const filtered = applyFilters(entries);
+      const topFiltered = applyFiltersIgnoringType(entries);
+      const allRatingsFiltered = applyFiltersIgnoringType(entries);
+      if (profilePanel) {
+        profilePanel.dataset.profileRatingsReady = String(
+          firebaseRatingsScope === 'all' && remoteDataState.ratings.ready
+        );
+        profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
+      }
+
+      renderProfileStats(computeProfileStats(profileUser, filtered));
+
+      function topForScore(type) {
+        const manualOrder = manualOrderFor(profileUser, type);
+        const manualIndex = new Map(manualOrder.map((id, idx) => [id, idx]));
+        const list = topFiltered
+          .filter(e => e.type === type && e.scores && profileUser && e.scores[profileUser] !== undefined)
+          .map(e => ({ entry: e, score: e.scores[profileUser] }));
+        list.sort((a, b) => {
+          const scoreDiff = b.score - a.score;
+          if (scoreDiff !== 0) return scoreDiff;
+          const ai = manualIndex.has(a.entry.id) ? manualIndex.get(a.entry.id) : Number.POSITIVE_INFINITY;
+          const bi = manualIndex.has(b.entry.id) ? manualIndex.get(b.entry.id) : Number.POSITIVE_INFINITY;
+          if (ai !== bi) return ai - bi;
+          return a.entry.title.localeCompare(b.entry.title, 'ru');
+        });
+        return list.slice(0, 100);
+      }
+
+      function topForManual(type) {
+        const ownProfile = !!myName && manualSameUser(profileUser, myName);
+        const order = manualOrderFor(profileUser, type, manualEditMode && ownProfile);
+        return order
+          .map(id => {
+            const e = topFiltered.find(x => x.id === id && x.type === type);
+            return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
+          })
+          .filter(Boolean)
+          .slice(0, 100);
+      }
+
+      const isOwnProfile = !!myName && manualSameUser(profileUser, myName);
+      const canEdit = topMode === 'manual' && manualEditMode && isOwnProfile;
+      const opList = topMode === 'manual' ? topForManual('OP') : topForScore('OP');
+      const edList = topMode === 'manual' ? topForManual('ED') : topForScore('ED');
+
+      renderProfileList('#oc-profile-op', opList, profileUser, { editable: canEdit, type: 'OP', manual: topMode === 'manual' });
+      renderProfileList('#oc-profile-ed', edList, profileUser, { editable: canEdit, type: 'ED', manual: topMode === 'manual' });
+
+      const labelText = '(вручную)';
+      $('#oc-topmode-label-op').textContent = labelText;
+      $('#oc-topmode-label-ed').textContent = labelText;
+      const hintEl = $('#oc-topmode-hint');
+      if (topMode === 'manual') {
+        hintEl.style.display = 'block';
+        hintEl.textContent = canEdit
+          ? 'Режим редактирования: меняй места, затем нажми «Сохранить топ-100», чтобы порядок стал виден всем.'
+          : `Показан сохранённый ручной топ пользователя — порядок статичный, не пересчитывается сам по оценке.`;
+      } else {
+        hintEl.style.display = 'none';
+        hintEl.textContent = '';
+      }
+
+      const manualEditBtn = $('#oc-manual-edit-btn');
+      const manualSaveBtn = $('#oc-manual-save-btn');
+      const isOwnManual = !!myName && manualSameUser(profileUser, myName) && topMode === 'manual';
+      if (manualEditBtn) {
+        manualEditBtn.disabled = !isOwnManual;
+        manualEditBtn.classList.toggle('active', canEdit);
+        manualEditBtn.textContent = canEdit ? 'Завершить редактирование' : 'Редактировать топ-100';
+      }
+      if (manualSaveBtn) {
+        manualSaveBtn.disabled = !isOwnManual;
+        manualSaveBtn.classList.toggle('active', manualDirty);
+      }
+      if (manualHiddenToggleBtn) {
+        const hiddenCount = manualHiddenCount(profileUser);
+        manualHiddenToggleBtn.disabled = !canEdit || hiddenCount === 0;
+        manualHiddenToggleBtn.style.display = canEdit ? '' : 'none';
+        manualHiddenToggleBtn.classList.toggle('active', manualShowHidden);
+        manualHiddenToggleBtn.textContent = manualShowHidden ? `Скрыть скрытые (${hiddenCount})` : `Показать скрытые (${hiddenCount})`;
+      }
+      if (profileDeleteBtn) {
+        profileDeleteBtn.disabled = !isAdmin() || !profileUser;
+        profileDeleteBtn.style.display = isAdmin() ? '' : 'none';
+      }
+
+      populateArScoreOptions(profileUser, allRatingsFiltered);
+      renderAllRatings(profileUser, allRatingsFiltered);
+      renderDailyProfilePanel();
+      if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
+        registerNameInput.value = myName || '';
+      }
+    }
+
+    function setTopMode(mode) {
+      topMode = mode;
+      manualEditMode = false;
+      profileTopPage = { OP: 1, ED: 1 };
+      allRatingsPage = { OP: 1, ED: 1 };
+      $('#oc-topmode-score').classList.toggle('active', mode === 'score');
+      $('#oc-topmode-manual').classList.toggle('active', mode === 'manual');
+      renderProfile();
+    }
+
+
+    function usersWithManualTop(type, scope = 'all') {
+      const users = [];
+      const seenKeys = new Set();
+      Object.keys(manualRanks || {}).forEach(key => {
+        const row = manualRanks[key] || {};
+        const display = String(row.nickname || row.displayName || row.name || key || '').trim();
+        if (!display) return;
+        const belongsToAdmin = isAdminNickname(display);
+        if (scope === 'admins' && !belongsToAdmin) return;
+        const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
+        if (seenKeys.has(safe)) return;
+        const arr = manualOrderFor(display, type);
+        if (!Array.isArray(arr) || !arr.length) return;
+        seenKeys.add(safe);
+        users.push(display);
+      });
+      return users.sort((a, b) => a.localeCompare(b, 'ru'));
+    }
+
+    function computeGlobalManualTop(type, scope = 'all') {
+      const users = usersWithManualTop(type, scope);
+      const rows = new Map();
+      users.forEach(user => {
+        const seen = new Set();
+        manualOrderFor(user, type).slice(0, 100).forEach((id, idx) => {
+          if (seen.has(id)) return;
+          const entry = entriesById.get(String(id));
+          if (!entry || entry.type !== type) return;
+          seen.add(id);
+          if (!rows.has(id)) rows.set(id, { entry, sumPlace: 0, count: 0, bestPlace: Number.POSITIVE_INFINITY, users: [] });
+          const row = rows.get(id);
+          const place = idx + 1;
+          row.sumPlace += place;
+          row.count += 1;
+          row.bestPlace = Math.min(row.bestPlace, place);
+          row.users.push(user);
+        });
+      });
+      return Array.from(rows.values()).map(row => {
+        const avgPlace = row.sumPlace / row.count;
+        const coverage = users.length ? row.count / users.length : 0;
+        return { ...row, avgPlace, coverage, totalUsers: users.length, mode: 'manual' };
+      }).sort((a, b) =>
+        b.count - a.count ||
+        a.avgPlace - b.avgPlace ||
+        a.bestPlace - b.bestPlace ||
+        a.entry.title.localeCompare(b.entry.title, 'ru')
+      ).slice(0, 100);
+    }
+
+    function computeGlobalScoreTop(type, scope = 'all') {
+      const minVotes = scope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
+      const rows = entries
+        .filter(e => e.type === type)
+        .map(e => ({
+          entry: e,
+          avgScore: scope === 'admins' ? adminAvg(e.scores, minVotes) : avg(e.scores, minVotes),
+          count: scope === 'admins' ? adminRatingCount(e.scores) : ratingCount(e.scores),
+          mode: 'score'
+        }))
+        .filter(r => r.avgScore !== null)
+        .sort((a, b) => b.avgScore - a.avgScore || b.count - a.count || a.entry.title.localeCompare(b.entry.title, 'ru'));
+      if (rows.length <= 100) return rows;
+      const cutoff = rows[99].avgScore;
+      return rows.filter((row, idx) => idx < 100 || Math.abs(row.avgScore - cutoff) < 0.0001);
+    }
+
+    function cachedGlobalTop(mode, type, scope) {
+      const key = `${mode}|${type}|${scope}|${dataVersion}|${manualRanksVersion}`;
+      if (globalTopCache.has(key)) return globalTopCache.get(key);
+      const rows = mode === 'score' ? computeGlobalScoreTop(type, scope) : computeGlobalManualTop(type, scope);
+      globalTopCache.set(key, rows);
+      return rows;
+    }
+
+    function renderGlobalTop100() {
+      const listEl = $('#oc-globaltop-list');
+      const summaryEl = $('#oc-globaltop-summary');
+      if (!listEl) return;
+      if (!isAdmin()) globalTopScope = 'all';
+      document.querySelectorAll('[data-globaltop-type]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopType === globalTopType));
+      document.querySelectorAll('[data-globaltop-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopMode === globalTopMode));
+      document.querySelectorAll('[data-globaltop-scope]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopScope === globalTopScope));
+      const rows = cachedGlobalTop(globalTopMode, globalTopType, globalTopScope);
+      const users = usersWithManualTop(globalTopType, globalTopScope);
+      const scopeLabel = globalTopScope === 'admins' ? 'Только администраторы.' : 'Все пользователи, включая администраторов.';
+      const minVotes = globalTopScope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
+      if (summaryEl) summaryEl.textContent = globalTopMode === 'score'
+        ? `${scopeLabel} Тип: ${globalTopType}. Режим: средний балл. Минимум ${minVotes} оценки. Показано: ${rows.length}.`
+        : `${scopeLabel} Тип: ${globalTopType}. Режим: ручные топ-100. Сначала учитывается количество попаданий в топ, потом среднее место. Пользователей с ручным топом: ${users.length}. Показано: ${rows.length}.`;
+      if (globalTopMode === 'manual' && !users.length) {
+        listEl.innerHTML = '<div class="oc-empty">Пока нет сохранённых ручных топ-100 для этого типа.</div>';
+        return;
+      }
+      if (!rows.length) {
+        listEl.innerHTML = globalTopMode === 'score'
+          ? `<div class="oc-empty">${globalTopScope === 'admins' ? 'Пока нет треков с оценками администраторов.' : 'Пока нет треков с минимум 3 публичными оценками.'}</div>`
+          : '<div class="oc-empty">В ручных топах пока нет актуальных треков.</div>';
+        return;
+      }
+      const visibleRows = rows.slice(0, globalTopRenderLimit);
+      listEl.innerHTML = `<div class="oc-globaltop-list">${visibleRows.map((row, idx) => {
+        const e = row.entry;
+        const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
+        const yearBit = e.year ? `${e.year}${e.season ? ' · ' + SEASON_LABEL[e.season] : ''}` : '';
+        const metric = globalTopMode === 'score'
+          ? `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">ср. ${formatScore(row.avgScore)}</span></div><div class="oc-globaltop-metric">оценок ${row.count}</div><div class="oc-globaltop-metric">мин. ${minVotes}</div>`
+          : `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">в топе ${row.count}/${row.totalUsers}</span></div><div class="oc-globaltop-metric">ср. место ${formatScore(row.avgPlace)}</div><div class="oc-globaltop-metric">лучшее место ${row.bestPlace}</div>`;
+        return `<div class="oc-globaltop-item">
+          <div class="oc-profile-rank ${rankClass}">${idx < 3 ? ['①','②','③'][idx] : idx + 1}</div>
+          ${imgHtml(e, 'oc-profile-thumb')}
+          <div>
+            <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span> <span class="oc-type-tag ${e.type}">${e.type}</span></div>
+            ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
+          </div>
+          ${metric}
+        </div>`;
+      }).join('')}${progressiveMoreMarkup('global-top', visibleRows.length, rows.length)}</div>`;
+      listEl.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
+      installProgressiveAutoload(listEl, 'global-top', () => {
+        globalTopRenderLimit += 30;
+        renderGlobalTop100();
+      });
+    }
+
+    function ratingStepsDesc() {
+      const steps = [];
+      for (let v = 10; v >= 1; v--) steps.push(v);
+      return steps;
+    }
+
+    function tierStepsDesc() {
+      if (isPersonalScale()) return [5, 4, 3, 2, 1];
+      return ratingStepsDesc();
+    }
+
+    function tierScoreForEntry(entry, user) {
+      return isPersonalScale() ? personalScoreFor(entry, user) : scoreFor(entry, user);
+    }
+
+    function baseTierRowForScore(score) {
+      if (isPersonalScale()) {
+        const num = normalizeOptionalNumber(score);
+        if (num === null) return null;
+        return Math.max(1, Math.min(5, Math.round(num)));
+      }
+      const num = normalizePublicScore(score);
+      if (num === null) return null;
+      return Math.max(1, Math.min(10, Math.floor(num)));
+    }
+
+    function allowedTierRowsForScore(score) {
+      if (isPersonalScale()) {
+        const row = baseTierRowForScore(score);
+        return row === null ? [] : [row];
+      }
+      const num = normalizePublicScore(score);
+      if (num === null) return [];
+      if (Math.abs(num - Math.round(num)) < 0.0001) return [Math.max(1, Math.min(10, Math.round(num)))];
+      const low = Math.max(1, Math.min(10, Math.floor(num)));
+      const high = Math.max(1, Math.min(10, Math.ceil(num)));
+      return Array.from(new Set([low, high]));
+    }
+
+    function tierRowForEntry(user, type, year, season, entry) {
+      const score = tierScoreForEntry(entry, user);
+      const allowed = allowedTierRowsForScore(score);
+      if (!allowed.length) return null;
+      const placements = tierPlacementsForContext(user, type, year, season);
+      const custom = placements && placements[entry.id] !== undefined ? Number(placements[entry.id]) : null;
+      return custom !== null && allowed.includes(custom) ? custom : allowed[0];
+    }
+
+    function normalizedTierScoreRatio(score) {
+      const n = Number(score);
+      if (!Number.isFinite(n)) return 0;
+      if (isPersonalScale()) return Math.max(0, Math.min(1, (n - 1) / 4));
+      return normalizedPublicScoreRatio(n);
+    }
+
+    function tierRowStyle(score) {
+      const ratio = normalizedTierScoreRatio(score);
+      const hue = Math.round(ratio * 120); // low = red, high = green
+      return `--tier-label-bg: hsla(${hue}, 55%, 22%, 0.72); --tier-zone-bg: hsla(${hue}, 55%, 30%, 0.09); --tier-border: hsla(${hue}, 70%, 55%, 0.42); --tier-text: hsl(${hue}, 80%, 72%);`;
+    }
+
+    function tierOrderForContext(user, type, year, season, score) {
+      const keys = manualCandidateKeys(user);
+      for (const candidate of keys) {
+        const val = tierOrders[tierOrderKey(candidate, type, year, season, score)];
+        if (Array.isArray(val)) return val;
+      }
+      return tierOrders[tierOrderKey(user, type, year, season, score)] || [];
+    }
+
+    function tierPlacementsForContext(user, type, year, season) {
+      const keys = manualCandidateKeys(user);
+      for (const candidate of keys) {
+        const val = tierPlacements[tierContextKey(candidate, type, year, season)];
+        if (val && typeof val === 'object') return val;
+      }
+      return tierPlacements[tierContextKey(user, type, year, season)] || {};
+    }
+
+    function orderedTierItems(user, type, year, season, score) {
+      const items = entries.filter(e =>
+        e.type === type &&
+        Number(e.year) === Number(year) &&
+        e.season === season &&
+        tierScoreForEntry(e, user) !== null &&
+        tierRowForEntry(user, type, year, season, e) === Number(score)
+      );
+      const saved = tierOrderForContext(user, type, year, season, score);
+      const byId = new Map(items.map(e => [e.id, e]));
+      const ordered = saved.filter(id => byId.has(id)).map(id => byId.get(id));
+      const used = new Set(ordered.map(e => e.id));
+      const rest = items.filter(e => !used.has(e.id)).sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+      return ordered.concat(rest);
+    }
+
+    function renderTierList() {
+      const container = $('#oc-tier-list');
+      if (!container) return;
+      const typeSel = $('#oc-tier-type');
+      const yearSel = $('#oc-tier-year');
+      const seasonSel = $('#oc-tier-season');
+      if (typeSel) typeSel.value = tierSelection.type;
+      if (yearSel) yearSel.value = String(tierSelection.year);
+      if (seasonSel) seasonSel.value = tierSelection.season;
+      if (!myName) {
+        container.innerHTML = '<div class="oc-empty">Введите никнейм, чтобы строить личный тир-лист.</div>';
+        return;
+      }
+      const seasonItems = entries.filter(e => e.type === tierSelection.type && Number(e.year) === Number(tierSelection.year) && e.season === tierSelection.season);
+      const ratedCount = seasonItems.filter(e => tierScoreForEntry(e, myName) !== null).length;
+      if (!seasonItems.length) {
+        container.innerHTML = '<div class="oc-empty">В этом сезоне нет треков выбранного типа.</div>';
+        return;
+      }
+      if (!ratedCount) {
+        container.innerHTML = isPersonalScale()
+          ? '<div class="oc-empty">У тебя пока нет отметок 1–5 в этом сезоне. Оцени сезон по пятибалльному чеклисту — и карточки сами появятся в нужных рядах.</div>'
+          : '<div class="oc-empty">У тебя пока нет оценок в этом сезоне. Оцени сезон — и карточки сами появятся в нужных рядах.</div>';
+        return;
+      }
+      const rows = tierStepsDesc().map(score => {
+        const items = orderedTierItems(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
+        const cards = items.map(e => {
+          const title = escapeHtml(e.title);
+          const bg = e.image ? `<img class="oc-track-image" src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" crossorigin="anonymous" referrerpolicy="no-referrer" data-remove-on-error="1">` : `<span>${escapeHtml(e.type)}</span>`;
+          return `<div class="oc-tier-card" draggable="true" data-tier-card="1" data-id="${e.id}" data-score="${score}" title="${title}">
+            ${bg}<div class="oc-tier-card-controls"><button type="button" class="oc-tier-shift-btn" data-tier-shift="-1" data-id="${e.id}" data-score="${score}" title="Левее">←</button><button type="button" class="oc-tier-shift-btn" data-tier-shift="1" data-id="${e.id}" data-score="${score}" title="Правее">→</button></div><div class="oc-tier-card-title">${title}</div>
+          </div>`;
+        }).join('');
+        const label = tierLabelFor(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
+        const labelIsCustom = label !== tierDefaultLabel(score);
+        return `<div class="oc-tier-row" data-tier-score="${score}" style="${tierRowStyle(score)}">
+          <div class="oc-tier-label" data-tier-label="1" data-score="${score}" title="Клик — переименовать тир. Пустое название сбросит его обратно.">
             <span class="${labelIsCustom ? 'oc-tier-label-custom' : ''}">${escapeHtml(label)}</span>
             <span class="oc-tier-label-edit">✎</span>
           </div>
