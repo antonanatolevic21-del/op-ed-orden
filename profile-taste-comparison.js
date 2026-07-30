@@ -64,7 +64,7 @@
         if (name && !name.startsWith('__')) names.set(normalize(name), name);
       });
     });
-    return [...names.values()].sort((a, b) => a.localeCompare(b, 'ru'));
+    return [...names.values()].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' }));
   }
 
   function mean(values) {
