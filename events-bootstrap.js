@@ -154,7 +154,7 @@ async function clickRequestedMode(mode) {
 async function loadFull(mode = '', profile = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260729-ending-evaluator1');
+  await import('./events-app.js?v=20260730-firebase-restore1');
   if (mode) void clickRequestedMode(mode);
 
   document.addEventListener('click', event => {
