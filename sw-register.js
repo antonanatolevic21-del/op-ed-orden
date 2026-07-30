@@ -1,5 +1,6 @@
 (() => {
-  const primaryVersion = '20260730-tier-current1';
+  const primaryVersion = '20260730-discovery-suite1';
+  const discoveryVersion = '20260730-discovery-suite1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -9,15 +10,13 @@
   const top100DragVersion = '20260726-top100-drag2';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
-  const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
   let top100Promise = null;
   let seasonPromise = null;
   let statsPromise = null;
   let profilePromise = null;
   let entityPromise = null;
+  let discoveryPromise = null;
   let adminPromise = null;
-  let preserveNextTierRoute = false;
-  let tierDefaultTimer = 0;
 
   document.documentElement.classList.remove('oc-primary-booting');
   document.documentElement.classList.add('oc-primary-ready', 'oc-primary-progressive');
@@ -137,6 +136,17 @@
     return entityPromise;
   }
 
+  function loadDiscoveryPackage() {
+    if (discoveryPromise) return discoveryPromise;
+    addStyle('discovery-suite.css', discoveryVersion);
+    discoveryPromise = addScript('discovery-suite.js', discoveryVersion, true)
+      .catch(error => {
+        console.error('Discovery package load failed', error);
+        throw error;
+      });
+    return discoveryPromise;
+  }
+
   function loadAdminPackage() {
     if (adminPromise) return adminPromise;
     addStyle('admin-enhancements.css', primaryVersion);
@@ -159,50 +169,7 @@
     if (route === 'top100') void loadTop100Package();
     if (route === 'season') void loadSeasonPackage();
     if (route === 'stats') void loadStatsPackage();
-  }
-
-  function currentTierSeason() {
-    const now = new Date();
-    return {
-      year: String(now.getFullYear()),
-      season: seasonOrder[Math.max(0, Math.min(3, Math.floor(now.getMonth() / 3)))]
-    };
-  }
-
-  function tierViewIsOpen() {
-    const panel = document.querySelector('#oc-tier-panel');
-    const activeButton = document.querySelector('.oc-tab-btn.active[data-tab="tier"]');
-    const route = new URL(window.location.href).searchParams.get('view') || '';
-    return Boolean(activeButton || (panel && !panel.classList.contains('hidden')) || route === 'tier');
-  }
-
-  function applyCurrentTierSeason() {
-    if (!tierViewIsOpen()) return true;
-    const yearSelect = document.querySelector('#oc-tier-year');
-    const seasonSelect = document.querySelector('#oc-tier-season');
-    if (!yearSelect || !seasonSelect) return false;
-
-    const current = currentTierSeason();
-    const hasCurrentYear = Array.from(yearSelect.options).some(option => option.value === current.year);
-    if (!hasCurrentYear) return false;
-
-    if (yearSelect.value !== current.year) {
-      yearSelect.value = current.year;
-      yearSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (seasonSelect.value !== current.season) {
-      seasonSelect.value = current.season;
-      seasonSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    return true;
-  }
-
-  function scheduleCurrentTierSeason(attempt = 0) {
-    window.clearTimeout(tierDefaultTimer);
-    tierDefaultTimer = window.setTimeout(() => {
-      if (applyCurrentTierSeason() || attempt >= 20) return;
-      scheduleCurrentTierSeason(attempt + 1);
-    }, attempt ? 100 : 0);
+    if (route === 'discovery') void loadDiscoveryPackage();
   }
 
   function routeLazyModules(target) {
@@ -214,11 +181,7 @@
     if (target?.closest?.('[data-entity-home]')) loadRoutePackage(`entity-${target.closest('[data-entity-home]').getAttribute('data-entity-home') || ''}`);
   }
 
-  document.addEventListener('click', event => {
-    routeLazyModules(event.target);
-    if (event.target?.closest?.('#oc-season-tier-btn')) preserveNextTierRoute = true;
-    if (event.target?.closest?.('.oc-tab-btn[data-tab="tier"]')) preserveNextTierRoute = false;
-  }, true);
+  document.addEventListener('click', event => routeLazyModules(event.target), true);
   const profile = document.querySelector('#oc-profile-panel');
   if (profile) {
     new MutationObserver(() => { if (profile.dataset.profileView === 'top100') void loadTop100Package(); })
@@ -231,21 +194,10 @@
     if (document.querySelector('.oc-tab-btn[data-tab="stats"]')?.classList.contains('active')) void loadStatsPackage();
     const view = new URL(window.location.href).searchParams.get('view') || 'chart';
     loadRoutePackage(view);
-    if (view === 'tier') scheduleCurrentTierSeason();
     maybeLoadAdminPackage();
   }
-
   window.setTimeout(detectCurrentLazyView, 100);
-  window.addEventListener('oped:route-change', event => {
-    const tab = String(event?.detail?.tab || '');
-    loadRoutePackage(tab);
-    if (tab !== 'tier') return;
-    if (preserveNextTierRoute) {
-      preserveNextTierRoute = false;
-      return;
-    }
-    scheduleCurrentTierSeason();
-  });
+  window.addEventListener('oped:route-change', event => loadRoutePackage(event?.detail?.tab));
   window.addEventListener('oped-account-restored', () => window.setTimeout(maybeLoadAdminPackage, 0));
   const accessBadge = document.querySelector('#oc-access-badge');
   if (accessBadge) new MutationObserver(maybeLoadAdminPackage).observe(accessBadge, { attributes: true, attributeFilter: ['class'] });
@@ -253,7 +205,7 @@
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
       try {
-        const registration = await navigator.serviceWorker.register('./sw.js?v=20260729-performance1', { updateViaCache: 'none' });
+        const registration = await navigator.serviceWorker.register('./sw.js?v=20260730-discovery-suite1', { updateViaCache: 'none' });
         await registration.update();
       } catch (error) { console.warn('Image cache service worker registration failed', error); }
     });
