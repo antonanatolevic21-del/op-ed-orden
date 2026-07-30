@@ -6,6 +6,7 @@
 
 	let syncTimer = 0;
 	const clean = value => String(value || '').trim();
+	const loadingGif = 'https://www.image2url.com/r2/default/gifs/1785398081496-70cb3d2d-c6f9-49e7-9840-d635f8c2157e.gif';
 
 	function currentEntityType() {
 		const active = document.querySelector('.oc-tab-btn.active[data-tab^="entity-"]');
@@ -39,8 +40,32 @@
 		window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 	}
 
+	function syncAlbumPlaceholders() {
+		if (window.OC_CATALOG_ADMIN_WORKSPACE === true) return;
+		const grid = document.querySelector('#oc-entity-grid');
+		if (!grid) return;
+
+		const empty = grid.querySelector(':scope > .oc-empty');
+		if (empty && clean(empty.textContent) === 'Альбомов пока нет.') {
+			empty.className = 'oc-inline-loader oc-inline-loader-compact oc-entity-gif-placeholder';
+			empty.setAttribute('role', 'status');
+			empty.setAttribute('aria-label', 'Загрузка альбомов');
+			empty.innerHTML = `<img src="${loadingGif}" alt="Загрузка альбомов" referrerpolicy="no-referrer" />`;
+		}
+
+		grid.querySelectorAll('.oc-progressive-more[data-progressive-more="entity-cards"]').forEach(button => {
+			if (button.classList.contains('oc-progressive-more-gif')) return;
+			const label = clean(button.textContent) || 'Загрузить ещё альбомы';
+			button.classList.add('oc-progressive-more-gif');
+			button.setAttribute('aria-label', label);
+			button.title = label;
+			button.innerHTML = `<img src="${loadingGif}" alt="" referrerpolicy="no-referrer" />`;
+		});
+	}
+
 	function syncLinks() {
 		window.clearTimeout(syncTimer);
+		syncAlbumPlaceholders();
 		document.querySelectorAll('.oc-entity-card[data-entity-open]').forEach(card => {
 			const id = clean(card.getAttribute('data-entity-open'));
 			if (!id) return;
