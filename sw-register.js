@@ -1,6 +1,6 @@
 (() => {
-  const primaryVersion = '20260730-admin-journal-profile1';
-  const discoveryVersion = '20260730-admin-journal-profile1';
+  const primaryVersion = '20260730-top100-candidates1';
+  const discoveryVersion = '20260730-top100-candidates1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260725-season-fill2';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -123,7 +123,8 @@
     addStyle('discovery-suite.css', discoveryVersion);
     profilePromise = addScriptsOrdered([
       ['profile-enhancements.js', primaryVersion],
-      ['profile-taste-comparison.js', discoveryVersion]
+      ['profile-taste-comparison.js', discoveryVersion],
+      ['profile-top-duel.js', discoveryVersion]
     ])
       .catch(error => {
         console.error('Profile package load failed', error);
@@ -252,7 +253,6 @@
     if (view === 'tier') scheduleCurrentTierSeason();
     maybeLoadAdminPackage();
   }
-
   window.setTimeout(detectCurrentLazyView, 100);
   window.addEventListener('oped:route-change', event => {
     const tab = String(event?.detail?.tab || '');
@@ -271,7 +271,7 @@
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
       try {
-        const registration = await navigator.serviceWorker.register('./sw.js?v=20260730-admin-journal-profile1', { updateViaCache: 'none' });
+        const registration = await navigator.serviceWorker.register('./sw.js?v=20260730-top100-candidates1', { updateViaCache: 'none' });
         await registration.update();
       } catch (error) { console.warn('Image cache service worker registration failed', error); }
     });
