@@ -14,6 +14,133 @@
   padding: 18px 0 4px;
 }
 
+#oc-profile-top-duel {
+  --discover-card: #15111d;
+  --discover-card-2: #1b1525;
+  --discover-line: #2b2437;
+  --discover-soft: #938ba0;
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 22px;
+  border: 1px solid var(--discover-line);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(255,46,99,.045), rgba(8,217,214,.035)), #100d16;
+}
+
+#oc-profile-top-duel.oc-profile-section-hidden {
+  display: none !important;
+}
+
+.oc-top100-candidate-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid rgba(8,217,214,.28);
+  border-radius: 14px;
+  background: rgba(8,217,214,.065);
+}
+
+.oc-top100-candidate-bar strong,
+.oc-top100-candidate-bar span {
+  display: block;
+}
+
+.oc-top100-candidate-bar span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.oc-top100-pin-box {
+  padding: 17px;
+  border: 1px solid var(--discover-line);
+  border-radius: 16px;
+  background: var(--discover-card);
+}
+
+.oc-top100-pin-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.oc-top100-pin-search input {
+  min-height: 42px;
+  box-sizing: border-box;
+  border: 1px solid var(--discover-line);
+  border-radius: 10px;
+  background: #100d16;
+  color: var(--text);
+  padding: 0 12px;
+}
+
+.oc-top100-pin-results,
+.oc-top100-pins {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.oc-top100-pin-results button,
+.oc-top100-pins > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 10px;
+  background: #120f18;
+  color: var(--text);
+}
+
+.oc-top100-pin-results button {
+  cursor: pointer;
+  text-align: left;
+}
+
+.oc-top100-pin-results b {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(8,217,214,.12);
+  color: #08d9d6;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.oc-top100-pins > div {
+  justify-content: space-between;
+}
+
+.oc-top100-pins button {
+  border: 0;
+  background: transparent;
+  color: #ff7597;
+  cursor: pointer;
+}
+
+.oc-manual-insert-result.candidate {
+  border-color: rgba(8,217,214,.42);
+  background: rgba(8,217,214,.055);
+}
+
+.oc-top-candidate-badge {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(8,217,214,.13);
+  color: #08d9d6;
+  font-size: 8px;
+  text-transform: uppercase;
+  vertical-align: 2px;
+}
+
 .oc-discovery-shell {
   display: grid;
   gap: 18px;
@@ -310,11 +437,34 @@
 }
 
 .oc-compare-columns,
-.oc-research-columns,
-.oc-collections-layout {
+.oc-research-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.oc-collections-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  width: 100%;
+}
+
+.oc-collection-list {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.oc-collections-layout.editing .oc-collection-editor {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.oc-collections-layout.editing .oc-collection-fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.oc-collections-layout.editing .oc-collection-fields > :nth-child(n+3) {
+  grid-column: 1 / -1;
 }
 
 .oc-discovery-list {
@@ -594,9 +744,14 @@
   .oc-discovery-grid,
   .oc-compare-columns,
   .oc-research-columns,
-  .oc-collections-layout,
   .oc-duel-stage {
     grid-template-columns: 1fr;
+  }
+  .oc-collections-layout.editing .oc-collection-fields {
+    grid-template-columns: 1fr;
+  }
+  .oc-collections-layout.editing .oc-collection-fields > * {
+    grid-column: 1;
   }
   .oc-duel-vs {
     justify-self: center;
@@ -606,5 +761,18 @@
   }
   .oc-duel-card img {
     height: 210px;
+  }
+  #oc-profile-top-duel {
+    padding: 14px;
+  }
+  .oc-top100-candidate-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .oc-top100-pin-search {
+    grid-template-columns: minmax(0, 1fr) 70px;
+  }
+  .oc-top100-pin-search span {
+    grid-column: 2;
   }
 }
