@@ -9,6 +9,7 @@
   const top100EditorVersion = '20260730-natural-sort1';
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
+  const top100CandidatesVersion = '20260731-top100-candidates1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
@@ -63,6 +64,8 @@
   void addScript('primary-enhancements.js', primaryVersion, true)
     .catch(error => console.error('Primary UI bundle load failed', error))
     .finally(() => document.documentElement.classList.remove('oc-enhancements-loading'));
+  void addScript('profile-top-candidates.js', top100CandidatesVersion, true)
+    .catch(error => console.error('Top-100 candidate manager load failed', error));
 
   ['oc-f-score-cmp', 'oc-p-score-cmp'].forEach(id => {
     const option = document.querySelector(`#${id} option[value="="]`);
