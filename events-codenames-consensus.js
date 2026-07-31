@@ -15,6 +15,7 @@
   let roomState = null;
   let votePending = false;
   let renderQueued = false;
+  let boardObserver = null;
 
   function normalizeNickname(value) {
     return String(value || '')
@@ -133,25 +134,30 @@
     const myKey = currentPlayerKey();
     const total = eligible.length;
 
-    buttons.forEach(button => {
-      const index = Number(button.dataset.cnCard);
-      const voters = eligible.filter(player => Number(votes[player.key]) === index);
-      button.querySelector('.oc-cn-consensus-badge')?.remove();
-      button.classList.remove('oc-cn-has-votes', 'oc-cn-my-vote', 'oc-cn-unanimous', 'oc-cn-red-vote', 'oc-cn-blue-vote');
-      button.removeAttribute('data-cn-vote-count');
+    boardObserver?.disconnect();
+    try {
+      buttons.forEach(button => {
+        const index = Number(button.dataset.cnCard);
+        const voters = eligible.filter(player => Number(votes[player.key]) === index);
+        button.querySelector('.oc-cn-consensus-badge')?.remove();
+        button.classList.remove('oc-cn-has-votes', 'oc-cn-my-vote', 'oc-cn-unanimous', 'oc-cn-red-vote', 'oc-cn-blue-vote');
+        button.removeAttribute('data-cn-vote-count');
 
-      if (!voters.length || room.board?.[index]?.revealed) return;
+        if (!voters.length || room.board?.[index]?.revealed) return;
 
-      button.classList.add('oc-cn-has-votes', room.turn === 'red' ? 'oc-cn-red-vote' : 'oc-cn-blue-vote');
-      if (voters.some(player => player.key === myKey)) button.classList.add('oc-cn-my-vote');
-      if (total > 0 && voters.length >= total) button.classList.add('oc-cn-unanimous');
-      button.dataset.cnVoteCount = `${voters.length}/${total}`;
+        button.classList.add('oc-cn-has-votes', room.turn === 'red' ? 'oc-cn-red-vote' : 'oc-cn-blue-vote');
+        if (voters.some(player => player.key === myKey)) button.classList.add('oc-cn-my-vote');
+        if (total > 0 && voters.length >= total) button.classList.add('oc-cn-unanimous');
+        button.dataset.cnVoteCount = `${voters.length}/${total}`;
 
-      const badge = document.createElement('div');
-      badge.className = 'oc-cn-consensus-badge';
-      badge.innerHTML = `<strong>${voters.length}/${total}</strong><span>${voters.map(player => escapeHtml(player.name)).join(', ')}</span>`;
-      button.append(badge);
-    });
+        const badge = document.createElement('div');
+        badge.className = 'oc-cn-consensus-badge';
+        badge.innerHTML = `<strong>${voters.length}/${total}</strong><span>${voters.map(player => escapeHtml(player.name)).join(', ')}</span>`;
+        button.append(badge);
+      });
+    } finally {
+      boardObserver?.observe(document.documentElement, { childList: true, subtree: true });
+    }
   }
 
   function scheduleDecorate() {
@@ -366,7 +372,8 @@
     void voteForCard(Number(button.dataset.cnCard));
   }, true);
 
-  new MutationObserver(scheduleDecorate).observe(document.documentElement, { childList: true, subtree: true });
+  boardObserver = new MutationObserver(scheduleDecorate);
+  boardObserver.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('storage', event => {
     if (event.key === ROOM_SELECTION_KEY || event.key === NAME_KEY) void subscribeRoom(selectedRoomId());
   });
