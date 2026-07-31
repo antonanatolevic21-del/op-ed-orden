@@ -2,6 +2,7 @@
   const primaryVersion = '20260730-natural-sort1';
   const discoveryVersion = '20260731-duel-editor-draft1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
+  const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -62,6 +63,8 @@
     for (const [file, version] of rows) await addScript(file, version, true);
   }
 
+  void addScript('image-upload-secret-memory.js', imageUploadSecretVersion, true)
+    .catch(error => console.error('Image upload secret memory load failed', error));
   void addScript('primary-enhancements.js', primaryVersion, true)
     .catch(error => console.error('Primary UI bundle load failed', error))
     .finally(() => document.documentElement.classList.remove('oc-enhancements-loading'));
