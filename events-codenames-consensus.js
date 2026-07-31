@@ -4,14 +4,16 @@
 
   const ROOM_SELECTION_KEY = 'aboba-event-room-selection-v1';
   const NAME_KEY = 'my-display-name';
-  const COLLECTION = 'eventCodenames';
-  const VOTES_FIELD = 'consensusVotes';
+  const ROOM_COLLECTION = 'eventCodenames';
+  const VOTE_COLLECTION = 'eventCodenamesVotes';
   const CARD_SELECTOR = '.ev-cn-card[data-cn-card]';
 
   let firebasePromise = null;
   let roomUnsubscribe = null;
+  let votesUnsubscribe = null;
   let roomId = '';
   let roomState = null;
+  let voteRows = new Map();
   let votePending = false;
   let revealPending = false;
   let renderQueued = false;
@@ -62,13 +64,19 @@
     ]);
   }
 
-  function activeVotes(room = roomState) {
+  function activeVotes(room = roomState, rows = voteRows) {
     const key = roundKey(room);
-    const raw = room?.[VOTES_FIELD];
-    const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-    return Object.fromEntries(Object.entries(source).filter(([, vote]) =>
-      vote && typeof vote === 'object' && String(vote.roundKey || '') === key && Number.isInteger(Number(vote.index))
-    ));
+    const out = {};
+    rows.forEach(row => {
+      const playerKey = normalizeNickname(row?.playerKey);
+      const index = Number(row?.index);
+      if (!playerKey || String(row?.roundKey || '') !== key || !Number.isInteger(index)) return;
+      const previous = out[playerKey];
+      if (!previous || Number(row.updatedAtLocal || 0) >= Number(previous.updatedAtLocal || 0)) {
+        out[playerKey] = { ...row, index };
+      }
+    });
+    return out;
   }
 
   function escapeHtml(value) {
@@ -92,17 +100,32 @@
     return '';
   }
 
+  function hash(value) {
+    let result = 2166136261;
+    const source = String(value || '');
+    for (let index = 0; index < source.length; index += 1) {
+      result ^= source.charCodeAt(index);
+      result = Math.imul(result, 16777619);
+    }
+    return (result >>> 0).toString(36);
+  }
+
   async function firebaseTools() {
     if (firebasePromise) return firebasePromise;
     firebasePromise = Promise.all([
       import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js'),
+      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js'),
       import('./firebase-config.js')
-    ]).then(([appModule, firestore, config]) => {
+    ]).then(([appModule, firestore, authModule, config]) => {
       const app = appModule.getApps().length
         ? appModule.getApp()
         : appModule.initializeApp(config.firebaseConfig);
-      return { db: firestore.getFirestore(app), ...firestore };
+      return {
+        db: firestore.getFirestore(app),
+        auth: authModule.getAuth(app),
+        ...firestore
+      };
     });
     return firebasePromise;
   }
@@ -207,9 +230,23 @@
       guessesLeft,
       winner,
       status: winner ? 'finished' : 'playing',
-      log: [...(Array.isArray(room.log) ? room.log : []), message].slice(-80),
-      [VOTES_FIELD]: {}
+      log: [...(Array.isArray(room.log) ? room.log : []), message].slice(-80)
     };
+  }
+
+  function rowsFromSnapshot(snapshot, expectedRoomId) {
+    const byPlayer = new Map();
+    snapshot.docs.forEach(documentSnapshot => {
+      const row = { id: documentSnapshot.id, ...documentSnapshot.data() };
+      if (String(row.roomId || '') !== String(expectedRoomId || '')) return;
+      const playerKey = normalizeNickname(row.playerKey);
+      if (!playerKey) return;
+      const previous = byPlayer.get(playerKey);
+      if (!previous || Number(row.updatedAtLocal || 0) >= Number(previous.updatedAtLocal || 0)) {
+        byPlayer.set(playerKey, row);
+      }
+    });
+    return byPlayer;
   }
 
   async function revealIfUnanimous(room = roomState) {
@@ -220,20 +257,26 @@
     if (!eligible.length || eligible[0]?.key !== myKey) return;
 
     const votes = activeVotes(room);
-    const firstVote = votes[eligible[0].key];
-    const index = Number(firstVote?.index);
+    const index = Number(votes[eligible[0].key]?.index);
     if (!Number.isInteger(index) || !eligible.every(player => Number(votes[player.key]?.index) === index)) return;
 
     revealPending = true;
     try {
       const tools = await firebaseTools();
-      const roomRef = tools.doc(tools.db, COLLECTION, String(room.id || roomId));
-      const snapshot = await tools.getDoc(roomRef);
-      if (!snapshot.exists()) return;
+      const roomRef = tools.doc(tools.db, ROOM_COLLECTION, String(room.id || roomId));
+      const [roomSnapshot, votesSnapshot] = await Promise.all([
+        tools.getDoc(roomRef),
+        tools.getDocs(tools.query(
+          tools.collection(tools.db, VOTE_COLLECTION),
+          tools.where('roomId', '==', String(room.id || roomId))
+        ))
+      ]);
+      if (!roomSnapshot.exists()) return;
 
-      const fresh = { id: snapshot.id, ...snapshot.data() };
+      const fresh = { id: roomSnapshot.id, ...roomSnapshot.data() };
       const freshEligible = eligiblePlayers(fresh).sort((left, right) => String(left.key).localeCompare(String(right.key), 'ru'));
-      const freshVotes = activeVotes(fresh);
+      const freshRows = rowsFromSnapshot(votesSnapshot, fresh.id);
+      const freshVotes = activeVotes(fresh, freshRows);
       if (!freshEligible.length || freshEligible[0]?.key !== myKey) return;
       if (!freshEligible.every(player => Number(freshVotes[player.key]?.index) === index)) return;
 
@@ -243,6 +286,8 @@
 
       await tools.updateDoc(roomRef, {
         ...buildRevealPatch(fresh, board, card),
+        consensusVotes: tools.deleteField(),
+        consensusRoundKey: tools.deleteField(),
         updatedAtLocal: new Date().toISOString(),
         updatedAt: tools.serverTimestamp()
       });
@@ -258,21 +303,38 @@
   async function subscribeRoom(nextRoomId) {
     if (nextRoomId === roomId) return;
     roomUnsubscribe?.();
+    votesUnsubscribe?.();
     roomUnsubscribe = null;
+    votesUnsubscribe = null;
     roomId = nextRoomId;
     roomState = null;
+    voteRows = new Map();
     scheduleDecorate();
     if (!roomId) return;
 
     const tools = await firebaseTools();
-    roomUnsubscribe = tools.onSnapshot(tools.doc(tools.db, COLLECTION, roomId), snapshot => {
+    roomUnsubscribe = tools.onSnapshot(tools.doc(tools.db, ROOM_COLLECTION, roomId), snapshot => {
       roomState = snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
       scheduleDecorate();
       void revealIfUnanimous(roomState);
     }, error => {
-      console.warn('Codenames consensus subscription failed', error);
+      console.warn('Codenames consensus room subscription failed', error);
       roomState = null;
       scheduleDecorate();
+    });
+
+    votesUnsubscribe = tools.onSnapshot(tools.query(
+      tools.collection(tools.db, VOTE_COLLECTION),
+      tools.where('roomId', '==', roomId)
+    ), snapshot => {
+      voteRows = rowsFromSnapshot(snapshot, roomId);
+      scheduleDecorate();
+      void revealIfUnanimous(roomState);
+    }, error => {
+      console.warn('Codenames consensus votes subscription failed', error);
+      voteRows = new Map();
+      scheduleDecorate();
+      showStatus('Не удалось синхронизировать нажатия игроков.', true);
     });
   }
 
@@ -293,24 +355,38 @@
 
     try {
       const tools = await firebaseTools();
-      const roomRef = tools.doc(tools.db, COLLECTION, selectedId);
+      if (typeof tools.auth.authStateReady === 'function') await tools.auth.authStateReady();
+      const user = tools.auth.currentUser;
+      if (!user) throw new Error('Для голосования нужно войти в ивенты.');
+
       const votes = activeVotes(room);
       const sameCard = Number(votes[me.key]?.index) === index;
-      const votePath = `${VOTES_FIELD}.${me.key}`;
-      const patch = {
-        [votePath]: sameCard
-          ? tools.deleteField()
-          : { index, roundKey: roundKey(room), name: String(me.name || currentName()) },
-        updatedAtLocal: new Date().toISOString(),
-        updatedAt: tools.serverTimestamp()
-      };
+      const voteRef = tools.doc(
+        tools.db,
+        VOTE_COLLECTION,
+        `cnv-${hash(selectedId)}-${hash(user.uid)}`
+      );
 
-      await tools.updateDoc(roomRef, patch);
+      if (sameCard) {
+        await tools.deleteDoc(voteRef);
+      } else {
+        await tools.setDoc(voteRef, {
+          ownerUid: String(user.uid),
+          roomId: selectedId,
+          playerKey: String(me.key),
+          playerName: String(me.name || currentName()),
+          team: String(me.team || ''),
+          index,
+          roundKey: roundKey(room),
+          updatedAtLocal: Date.now(),
+          updatedAt: tools.serverTimestamp()
+        }, { merge: true });
+      }
+
       showStatus(sameCard ? 'Выбор карточки снят.' : 'Голос учтён. Ждём остальных игроков.');
     } catch (error) {
       console.error('Codenames consensus vote failed', error);
-      const quota = String(error?.message || '').toLowerCase().includes('quota');
-      showStatus(quota ? 'Не удалось записать голос: превышен лимит хранилища Firebase. Повтори нажатие после обновления страницы.' : (error?.message || 'Не удалось сохранить выбор карточки.'), true);
+      showStatus(error?.message || 'Не удалось сохранить выбор карточки.', true);
     } finally {
       votePending = false;
       document.querySelectorAll('.oc-cn-vote-pending').forEach(node => node.classList.remove('oc-cn-vote-pending'));
