@@ -11,15 +11,7 @@
 
     const nativeSort = Array.prototype.sort;
     const nativeToSorted = Array.prototype.toSorted;
-    const TRACK_WRAPPERS = ['entry', 'e', 'opening', 'track', 'row', 'item'];
-
-    function normalizeTitle(value) {
-      return String(value || '')
-        .trim()
-        .toLocaleLowerCase('ru')
-        .replace(/ё/g, 'е')
-        .replace(/\s+/g, ' ');
-    }
+    const TRACK_WRAPPERS = ['entry', 'e', 'opening', 'track', 'row', 'item', 'card', 'candidate'];
 
     function trackInfo(value) {
       if (!value || typeof value !== 'object') return null;
@@ -30,11 +22,7 @@
 
       for (const candidate of candidates) {
         const type = String(candidate?.type || candidate?.openingType || '').trim().toUpperCase();
-        if (type !== 'OP' && type !== 'ED') continue;
-        return {
-          type,
-          title: normalizeTitle(candidate?.title || candidate?.anime || candidate?.name || '')
-        };
+        if (type === 'OP' || type === 'ED') return { type };
       }
       return null;
     }
@@ -46,22 +34,9 @@
 
     function prioritizedComparator(compareFn) {
       return (left, right) => {
-        const leftTrack = trackInfo(left);
-        const rightTrack = trackInfo(right);
-        const sameTitle = Boolean(
-          leftTrack?.title
-          && rightTrack?.title
-          && leftTrack.title === rightTrack.title
-        );
-
-        if (sameTitle) {
-          const titleTypeDiff = typePriority(leftTrack, rightTrack);
-          if (titleTypeDiff) return titleTypeDiff;
-        }
-
         const compared = Number(compareFn(left, right));
         if (Number.isFinite(compared) && compared !== 0) return compared;
-        return typePriority(leftTrack, rightTrack);
+        return typePriority(trackInfo(left), trackInfo(right));
       };
     }
 
