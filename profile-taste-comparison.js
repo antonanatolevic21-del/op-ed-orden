@@ -4,6 +4,7 @@
 
   let firstUser = '';
   let secondUser = '';
+  let activeAccountKey = '';
 
   function root() {
     return document.querySelector('#oc-profile-taste-comparison');
@@ -150,17 +151,42 @@
       : '<div class="oc-discovery-meta">Пока нет подходящих треков.</div>'}</div>`;
   }
 
+  function hasUser(users, user) {
+    return Boolean(user && users.some(name => normalize(name) === normalize(user)));
+  }
+
+  function selectedProfileUser(users) {
+    const selected = String(document.querySelector('#oc-profile-user')?.value || '').trim();
+    return hasUser(users, selected) ? users.find(name => normalize(name) === normalize(selected)) || selected : '';
+  }
+
+  function syncParticipants(users) {
+    const data = snapshot();
+    const current = String(data.currentUser?.nickname || '').trim();
+    const currentKey = String(data.currentUser?.uid || normalize(current)).trim();
+    const accountChanged = Boolean(currentKey && currentKey !== activeAccountKey);
+
+    if (current && (accountChanged || !hasUser(users, firstUser))) {
+      firstUser = users.find(name => normalize(name) === normalize(current)) || current;
+    } else if (!hasUser(users, firstUser)) {
+      firstUser = users[0] || '';
+    }
+
+    if (currentKey) activeAccountKey = currentKey;
+
+    if (accountChanged || !hasUser(users, secondUser) || normalize(secondUser) === normalize(firstUser)) {
+      const selected = selectedProfileUser(users);
+      secondUser = selected && normalize(selected) !== normalize(firstUser)
+        ? selected
+        : users.find(name => normalize(name) !== normalize(firstUser)) || '';
+    }
+  }
+
   function render() {
     const host = root();
     if (!host) return;
     const users = allUsers();
-    const current = String(snapshot().currentUser?.nickname || '').trim();
-    if (!firstUser || !users.some(name => normalize(name) === normalize(firstUser))) {
-      firstUser = current || users[0] || '';
-    }
-    if (!secondUser || normalize(secondUser) === normalize(firstUser) || !users.some(name => normalize(name) === normalize(secondUser))) {
-      secondUser = users.find(name => normalize(name) !== normalize(firstUser)) || '';
-    }
+    syncParticipants(users);
     const data = firstUser && secondUser ? comparisonData(firstUser, secondUser) : null;
     const compatibility = data ? Math.max(0, Math.min(100, Math.round((data.correlation + 1) * 50))) : 0;
 
@@ -195,6 +221,11 @@
     } else if (event.target.matches('#oc-profile-compare-b')) {
       secondUser = event.target.value;
       render();
+    } else if (event.target.matches('#oc-profile-user') && document.querySelector('#oc-profile-panel')?.dataset.profileView === 'comparison') {
+      const users = allUsers();
+      const selected = selectedProfileUser(users);
+      if (selected && normalize(selected) !== normalize(firstUser)) secondUser = selected;
+      render();
     }
   });
 
@@ -204,6 +235,7 @@
   });
 
   window.addEventListener('oped:profile-comparison-open', render);
+  window.addEventListener('oped-account-restored', render);
   window.addEventListener('oped:app-data-updated', () => {
     if (document.querySelector('#oc-profile-panel')?.dataset.profileView === 'comparison') render();
   });
