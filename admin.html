@@ -7,8 +7,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>АБОБА · Админ-панель</title>
   <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="stylesheet" href="admin-panel.css?v=20260730-admin-journal1" />
-  <link rel="stylesheet" href="admin-journal-filters.css?v=20260731-admin-journal-filters1" />
+  <link rel="stylesheet" href="admin-panel.css?v=20260731-admin-journal-filters2" />
+  <link rel="stylesheet" href="admin-journal-filters.css?v=20260731-admin-journal-filters2" />
 </head>
 <body class="oc-admin-auth-pending">
   <div id="oc-admin-auth-gate" class="oc-admin-auth-gate" role="status" aria-label="Проверяем права администратора">
@@ -47,13 +47,35 @@
           </div>
           <button type="button" data-admin-journal-refresh>Обновить</button>
         </div>
+        <div class="oc-admin-journal-filters" aria-label="Фильтры журнала каталога">
+          <label class="oc-admin-journal-filter">
+            <span>Событие</span>
+            <select id="oc-admin-journal-action-filter">
+              <option value="">Все события</option>
+              <option value="create">Добавлено</option>
+              <option value="update">Изменено</option>
+              <option value="delete">Удалено</option>
+            </select>
+          </label>
+          <label class="oc-admin-journal-filter">
+            <span>Что изменено</span>
+            <select id="oc-admin-journal-target-filter">
+              <option value="">Все изменения</option>
+              <option value="whole">Трек целиком</option>
+              <option value="fields">Любое отдельное поле</option>
+            </select>
+          </label>
+          <button type="button" class="oc-admin-journal-filter-reset">Сбросить</button>
+          <div class="oc-admin-journal-filter-count" aria-live="polite"></div>
+        </div>
+        <div class="oc-admin-journal-filter-empty" hidden>Для выбранных фильтров событий не найдено.</div>
         <div id="oc-admin-journal-list" class="oc-admin-journal-list">
           <div class="oc-admin-journal-empty">Загружаю журнал…</div>
         </div>
       </section>
     </section>
   </main>
-  <script src="admin-panel.js?v=20260730-admin-journal1" defer></script>
-  <script src="admin-journal-filters.js?v=20260731-admin-journal-filters1" defer></script>
+  <script src="admin-panel.js?v=20260731-admin-journal-filters2" defer></script>
+  <script src="admin-journal-filters.js?v=20260731-admin-journal-filters2" defer></script>
 </body>
 </html>
