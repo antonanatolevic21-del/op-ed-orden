@@ -1,6 +1,7 @@
 (() => {
   const primaryVersion = '20260730-natural-sort1';
   const discoveryVersion = '20260730-staged-duel-blocks1';
+  const tasteComparisonVersion = '20260731-taste-account-fix1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
@@ -127,7 +128,7 @@
     addStyle('discovery-suite.css', discoveryVersion);
     profilePromise = addScriptsOrdered([
       ['profile-enhancements.js', primaryVersion],
-      ['profile-taste-comparison.js', discoveryVersion],
+      ['profile-taste-comparison.js', tasteComparisonVersion],
       ['profile-top-duel.js', discoveryVersion],
       ['profile-top-duel-blocks.js', discoveryVersion]
     ])
