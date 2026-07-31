@@ -7,8 +7,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <title>АБОБА · Админ-панель</title>
   <link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
-  <link rel="stylesheet" href="admin-panel.css?v=20260731-admin-journal-filters2" />
-  <link rel="stylesheet" href="admin-journal-filters.css?v=20260731-admin-journal-filters2" />
+  <link rel="stylesheet" href="admin-panel.css?v=20260731-admin-journal-filters3" />
+  <link rel="stylesheet" href="admin-journal-filters.css?v=20260731-admin-journal-filters3" />
 </head>
 <body class="oc-admin-auth-pending">
   <div id="oc-admin-auth-gate" class="oc-admin-auth-gate" role="status" aria-label="Проверяем права администратора">
@@ -65,6 +65,20 @@
               <option value="fields">Любое отдельное поле</option>
             </select>
           </label>
+          <label class="oc-admin-journal-filter">
+            <span>Кто изменил</span>
+            <select id="oc-admin-journal-actor-filter">
+              <option value="">Все пользователи</option>
+            </select>
+          </label>
+          <label class="oc-admin-journal-filter">
+            <span>Дата и время от</span>
+            <input id="oc-admin-journal-from-filter" type="datetime-local" step="60" />
+          </label>
+          <label class="oc-admin-journal-filter">
+            <span>Дата и время до</span>
+            <input id="oc-admin-journal-to-filter" type="datetime-local" step="60" />
+          </label>
           <button type="button" class="oc-admin-journal-filter-reset">Сбросить</button>
           <div class="oc-admin-journal-filter-count" aria-live="polite"></div>
         </div>
@@ -72,10 +86,15 @@
         <div id="oc-admin-journal-list" class="oc-admin-journal-list">
           <div class="oc-admin-journal-empty">Загружаю журнал…</div>
         </div>
+        <nav class="oc-admin-journal-pagination" aria-label="Страницы журнала" hidden>
+          <button type="button" data-admin-journal-page="prev">← Предыдущая</button>
+          <span class="oc-admin-journal-page-label">Страница 1 из 1</span>
+          <button type="button" data-admin-journal-page="next">Следующая →</button>
+        </nav>
       </section>
     </section>
   </main>
-  <script src="admin-panel.js?v=20260731-admin-journal-filters2" defer></script>
-  <script src="admin-journal-filters.js?v=20260731-admin-journal-filters2" defer></script>
+  <script src="admin-panel.js?v=20260731-admin-journal-filters3" defer></script>
+  <script src="admin-journal-filters.js?v=20260731-admin-journal-filters3" defer></script>
 </body>
 </html>
