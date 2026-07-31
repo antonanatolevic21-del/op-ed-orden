@@ -10,6 +10,7 @@
   const collator = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
   const normalize = value => String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
   const state = readState();
+  const knownFields = new Map();
   let toolbar = null;
   let actionSelect = null;
   let targetSelect = null;
@@ -119,11 +120,10 @@
 
   function buildTargetOptions() {
     ensureUi();
-    const labels = new Map();
     eventEntries().forEach(entry => {
-      fieldsFor(entry).forEach(label => labels.set(fieldKey(label), label));
+      fieldsFor(entry).forEach(label => knownFields.set(fieldKey(label), label));
     });
-    const rows = [...labels.entries()].sort((left, right) => collator.compare(left[1], right[1]));
+    const rows = [...knownFields.entries()].sort((left, right) => collator.compare(left[1], right[1]));
     const selected = state.target;
     targetSelect.innerHTML = `
       <option value="">Все изменения</option>
