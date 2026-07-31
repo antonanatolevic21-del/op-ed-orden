@@ -1,6 +1,6 @@
 .oc-admin-journal-filters {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) minmax(220px, 340px) auto minmax(120px, 1fr);
+  grid-template-columns: minmax(150px, .8fr) minmax(210px, 1.2fr) minmax(170px, 1fr) minmax(190px, 1fr) minmax(190px, 1fr) auto;
   align-items: end;
   gap: 10px;
   max-width: 1240px;
@@ -25,7 +25,9 @@
 }
 
 .oc-admin-journal-filter select,
-.oc-admin-journal-filter-reset {
+.oc-admin-journal-filter input,
+.oc-admin-journal-filter-reset,
+.oc-admin-journal-pagination button {
   width: 100%;
   min-height: 40px;
   border: 1px solid #4b4058;
@@ -40,6 +42,11 @@
   cursor: pointer;
 }
 
+.oc-admin-journal-filter input {
+  padding: 0 10px;
+  color-scheme: dark;
+}
+
 .oc-admin-journal-filter-reset {
   width: auto;
   padding: 0 14px;
@@ -47,13 +54,15 @@
 }
 
 .oc-admin-journal-filter-reset:hover,
-.oc-admin-journal-filter select:focus {
+.oc-admin-journal-filter select:focus,
+.oc-admin-journal-filter input:focus,
+.oc-admin-journal-pagination button:hover:not(:disabled) {
   border-color: #6d4fa0;
   outline: none;
 }
 
 .oc-admin-journal-filter-count {
-  align-self: center;
+  grid-column: 1 / -1;
   justify-self: end;
   color: var(--admin-muted);
   font: 700 10px "Space Mono", monospace;
@@ -70,10 +79,48 @@
   text-align: center;
 }
 
+.oc-admin-journal-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  max-width: 1240px;
+  margin: 14px auto 0;
+}
+
+.oc-admin-journal-pagination[hidden] {
+  display: none !important;
+}
+
+.oc-admin-journal-pagination button {
+  width: auto;
+  min-width: 135px;
+  padding: 0 14px;
+  cursor: pointer;
+}
+
+.oc-admin-journal-pagination button:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+.oc-admin-journal-page-label {
+  min-width: 130px;
+  color: var(--admin-muted);
+  font: 700 10px "Space Mono", monospace;
+  text-align: center;
+}
+
 .oc-admin-journal-entry[hidden],
 .oc-admin-journal-change[hidden],
 .oc-admin-journal-filter-empty[hidden] {
   display: none !important;
+}
+
+@media (max-width: 1120px) {
+  .oc-admin-journal-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -93,5 +140,19 @@
 
   .oc-admin-journal-filter-reset {
     width: 100%;
+  }
+
+  .oc-admin-journal-pagination {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .oc-admin-journal-page-label {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .oc-admin-journal-pagination button {
+    min-width: 0;
   }
 }
