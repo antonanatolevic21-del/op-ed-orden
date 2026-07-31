@@ -1,4 +1,83 @@
 (() => {
+  if (!window.__OC_OP_PRIORITY_SORT_READY__) {
+    window.__OC_OP_PRIORITY_SORT_READY__ = true;
+
+    const nativeSort = Array.prototype.sort;
+    const nativeToSorted = Array.prototype.toSorted;
+    const TRACK_WRAPPERS = ['entry', 'e', 'opening', 'track', 'row', 'item'];
+
+    function normalizeTitle(value) {
+      return String(value || '')
+        .trim()
+        .toLocaleLowerCase('ru')
+        .replace(/ё/g, 'е')
+        .replace(/\s+/g, ' ');
+    }
+
+    function trackInfo(value) {
+      if (!value || typeof value !== 'object') return null;
+      const candidates = [value];
+      TRACK_WRAPPERS.forEach(key => {
+        if (value[key] && typeof value[key] === 'object') candidates.push(value[key]);
+      });
+      for (const candidate of candidates) {
+        const type = String(candidate?.type || candidate?.openingType || '').trim().toUpperCase();
+        if (type !== 'OP' && type !== 'ED') continue;
+        return {
+          type,
+          title: normalizeTitle(candidate?.title || candidate?.anime || candidate?.name || '')
+        };
+      }
+      return null;
+    }
+
+    function typePriority(left, right) {
+      if (!left || !right || left.type === right.type) return 0;
+      return left.type === 'OP' ? -1 : 1;
+    }
+
+    function prioritizedComparator(compareFn) {
+      return (left, right) => {
+        const leftTrack = trackInfo(left);
+        const rightTrack = trackInfo(right);
+        if (leftTrack?.title && rightTrack?.title && leftTrack.title === rightTrack.title) {
+          const sameTitleDiff = typePriority(leftTrack, rightTrack);
+          if (sameTitleDiff) return sameTitleDiff;
+        }
+        const compared = Number(compareFn(left, right));
+        if (Number.isFinite(compared) && compared !== 0) return compared;
+        return typePriority(leftTrack, rightTrack);
+      };
+    }
+
+    function hasTracks(values) {
+      for (let index = 0; index < values.length; index += 1) {
+        if (trackInfo(values[index])) return true;
+      }
+      return false;
+    }
+
+    Array.prototype.sort = function(compareFn) {
+      if (typeof compareFn !== 'function' || !hasTracks(this)) {
+        return typeof compareFn === 'function'
+          ? nativeSort.call(this, compareFn)
+          : nativeSort.call(this);
+      }
+      return nativeSort.call(this, prioritizedComparator(compareFn));
+    };
+
+    if (typeof nativeToSorted === 'function') {
+      Array.prototype.toSorted = function(compareFn) {
+        if (typeof compareFn !== 'function' || !hasTracks(this)) {
+          return typeof compareFn === 'function'
+            ? nativeToSorted.call(this, compareFn)
+            : nativeToSorted.call(this);
+        }
+        return nativeToSorted.call(this, prioritizedComparator(compareFn));
+      };
+    }
+  }
+
   if (window.__OC_EVENTS_STORAGE_QUOTA_GUARD_READY__) return;
   window.__OC_EVENTS_STORAGE_QUOTA_GUARD_READY__ = true;
 
