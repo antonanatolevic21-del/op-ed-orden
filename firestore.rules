@@ -232,6 +232,47 @@ service cloud.firestore {
         && (isAdmin() || resource.data.hostUid == request.auth.uid);
     }
 
+    // Нажатия в Codenames хранятся отдельно, чтобы не перерисовывать игровое поле.
+    match /eventCodenamesVotes/{voteId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.roomId is string
+        && request.resource.data.roomId.size() > 0
+        && request.resource.data.roomId.size() <= 100
+        && request.resource.data.playerKey is string
+        && request.resource.data.playerKey.size() > 0
+        && request.resource.data.playerKey.size() <= 60
+        && request.resource.data.playerName is string
+        && request.resource.data.playerName.size() <= 80
+        && request.resource.data.team in ['red', 'blue']
+        && request.resource.data.index is int
+        && request.resource.data.index >= 0
+        && request.resource.data.index < 25
+        && request.resource.data.roundKey is string
+        && request.resource.data.roundKey.size() > 0
+        && request.resource.data.roundKey.size() <= 200;
+
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.roomId == resource.data.roomId
+        && request.resource.data.playerKey == resource.data.playerKey
+        && request.resource.data.playerName is string
+        && request.resource.data.playerName.size() <= 80
+        && request.resource.data.team in ['red', 'blue']
+        && request.resource.data.index is int
+        && request.resource.data.index >= 0
+        && request.resource.data.index < 25
+        && request.resource.data.roundKey is string
+        && request.resource.data.roundKey.size() > 0
+        && request.resource.data.roundKey.size() <= 200;
+
+      allow delete: if signedIn()
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
     // Параллельные комнаты «Лучшее / худшее».
     match /bestWorstRooms/{roomId} {
       allow read: if signedIn() && validRoomId(roomId);
