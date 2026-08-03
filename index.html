@@ -281,6 +281,14 @@
         <select id="oc-profile-user"></select>
       </div>
       <div id="oc-profile-context" class="oc-profile-context" aria-live="polite"></div>
+      <div class="oc-profile-subtabs" role="tablist" aria-label="Разделы профиля">
+        <button type="button" role="tab" data-profile-view="overview">Обзор</button>
+        <button type="button" role="tab" data-profile-view="top100">Мой топ-100</button>
+        <button type="button" role="tab" data-profile-view="ratings">Все оценки</button>
+        <button type="button" role="tab" data-profile-view="comparison">Сравнение вкусов</button>
+        <button type="button" role="tab" data-profile-view="daily">Дейлики</button>
+        <button type="button" role="tab" data-profile-view="events">Мои ивенты</button>
+      </div>
       <div class="oc-filterbar oc-profile-filterbar">
         <div class="oc-section-label">фильтры профиля</div>
         <div class="oc-filtergrid">
@@ -688,6 +696,6 @@
   <script src="catalog-store.js?v=20260729-performance1" defer></script>
   <script type="module" src="index-app.js?v=20260803-existing-corrections1"></script>
   <script type="module" src="firebase-app.js?v=20260803-uncertain-comments1"></script>
-  <script src="sw-register.js?v=20260803-existing-corrections1" defer></script>
+  <script src="sw-register.js?v=20260803-existing-corrections2" defer></script>
 </body>
 </html>
