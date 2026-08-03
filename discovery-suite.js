@@ -16,6 +16,7 @@
     duelMode: 'new',
     duel: null,
     collectionOwner: '',
+    openedCollectionId: '',
     collectionDraft: null,
     collectionSearch: '',
     collectionMessage: '',
@@ -42,6 +43,37 @@
   function normalize(value) {
     return String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
   }
+
+  function readDiscoveryRoute() {
+    const params = new URL(window.location.href).searchParams;
+    const section = String(params.get('section') || '');
+    return {
+      active: TAB_META.some(([id]) => id === section) ? section : 'recommendations',
+      owner: String(params.get('owner') || ''),
+      collection: String(params.get('collection') || '')
+    };
+  }
+
+  function applyDiscoveryRoute() {
+    const route = readDiscoveryRoute();
+    state.active = route.active;
+    state.collectionOwner = route.owner;
+    state.openedCollectionId = route.collection;
+  }
+
+  function syncDiscoveryRoute(push = true) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', 'discovery');
+    if (state.active && state.active !== 'recommendations') url.searchParams.set('section', state.active);
+    else url.searchParams.delete('section');
+    if (state.active === 'collections' && state.collectionOwner) url.searchParams.set('owner', state.collectionOwner);
+    else url.searchParams.delete('owner');
+    if (state.active === 'collections' && state.openedCollectionId) url.searchParams.set('collection', state.openedCollectionId);
+    else url.searchParams.delete('collection');
+    history[push ? 'pushState' : 'replaceState']({}, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  applyDiscoveryRoute();
 
   function snapshot() {
     return bridge()?.snapshot?.() || window.OC_APP_DATA || {
@@ -682,7 +714,7 @@
               <button class="oc-discovery-button" type="button" data-collection-open="${esc(collection.id)}">Открыть</button>
               ${normalize(visibleGroup.owner) === normalize(currentName()) ? `<button class="oc-discovery-button" type="button" data-collection-edit="${esc(collection.id)}">Изменить</button><button class="oc-discovery-button danger" type="button" data-collection-delete="${esc(collection.id)}">Удалить</button>` : ''}
             </div>
-            <div class="oc-collection-expanded hidden" data-collection-body="${esc(collection.id)}">${collectionRowsMarkup(collection)}</div>
+            <div class="oc-collection-expanded ${String(state.openedCollectionId) === String(collection.id) ? '' : 'hidden'}" data-collection-body="${esc(collection.id)}">${collectionRowsMarkup(collection)}</div>
           </article>`).join('') : '<div class="oc-discovery-empty">У этого пользователя пока нет подборок.</div>'}
         </div>
         ${draft ? `<div class="oc-collection-editor">
@@ -757,6 +789,8 @@
     const tab = event.target.closest('[data-discovery-tab]');
     if (tab) {
       state.active = String(tab.dataset.discoveryTab || 'recommendations');
+      state.openedCollectionId = '';
+      syncDiscoveryRoute();
       render();
       return;
     }
@@ -796,8 +830,10 @@
     }
     const openCollection = event.target.closest('[data-collection-open]');
     if (openCollection) {
-      const body = panel.querySelector(`[data-collection-body="${CSS.escape(openCollection.dataset.collectionOpen)}"]`);
-      body?.classList.toggle('hidden');
+      const id = String(openCollection.dataset.collectionOpen || '');
+      state.openedCollectionId = state.openedCollectionId === id ? '' : id;
+      syncDiscoveryRoute();
+      renderActive();
       return;
     }
     const editCollection = event.target.closest('[data-collection-edit]');
@@ -850,7 +886,9 @@
       renderActive();
     } else if (event.target.matches('#oc-collection-owner')) {
       state.collectionOwner = event.target.value;
+      state.openedCollectionId = '';
       state.collectionDraft = null;
+      syncDiscoveryRoute();
       renderActive();
     }
   });
@@ -870,6 +908,10 @@
     }
   });
 
+  window.addEventListener('popstate', () => {
+    applyDiscoveryRoute();
+    if (new URL(window.location.href).searchParams.get('view') === 'discovery') render();
+  });
   window.addEventListener('oped:app-data-updated', queueRender);
   window.addEventListener('oped:route-change', event => {
     if (event.detail?.tab === 'discovery') {
