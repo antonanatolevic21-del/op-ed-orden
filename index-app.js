@@ -3701,10 +3701,6 @@
       }
       const progressMap = { ...(profile?.dailyProgress || {}) };
       const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
-      ids.forEach(id => {
-        const entry = entriesById.get(String(id));
-        if (entry && dailyEntryHasUserScore(entry, myName)) progressed.add(String(id));
-      });
       progressMap[key] = [...progressed];
       await saveDailyProfilePatch({ dailyProgress: progressMap });
       seasonQueue = ids.filter(id => !progressed.has(String(id))).map(id => entriesById.get(String(id))).filter(Boolean);
