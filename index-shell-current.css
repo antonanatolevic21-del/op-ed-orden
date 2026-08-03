@@ -223,3 +223,12 @@
 .oc-blind-compare-row .up{color:#48d7a0}.oc-blind-compare-row .down{color:#ff6d91}.oc-blind-compare-row .same{color:#d5cfdd}
 .oc-blind-new-comment{margin-top:4px;padding:11px 13px;border-radius:10px;background:#1b1623;color:#c9c2d1;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:600px){.oc-blind-options{grid-template-columns:1fr}.oc-blind-compare-head,.oc-blind-compare-row{grid-template-columns:minmax(76px,1fr) 54px 18px 54px;gap:5px}}
+
+/* Dedicated blind re-rating tab */
+.oc-rerating-page{max-width:780px;margin:28px auto;padding:30px;border:1px solid #342c40;border-radius:18px;background:linear-gradient(145deg,#18131f,#131019);box-shadow:0 18px 46px rgba(0,0,0,.22)}
+.oc-rerating-page h2{margin:7px 0 10px;font-size:30px}
+.oc-rerating-page>p{max-width:660px;margin:0;color:#b7b0c0;line-height:1.55}
+.oc-rerating-rules{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px 0}
+.oc-rerating-rules span{padding:13px;border:1px solid #3b3048;border-radius:11px;background:rgba(112,77,145,.08);color:#d1cad9;font-size:13px;line-height:1.4}
+.oc-rerating-page>.oc-blind-rerate-btn{min-height:44px;padding:0 20px}
+@media(max-width:700px){.oc-rerating-page{margin:14px 0;padding:20px}.oc-rerating-rules{grid-template-columns:1fr}}
