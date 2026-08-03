@@ -224,3 +224,16 @@
   .oc-addbar-compact .oc-addgrid2{grid-template-columns:1fr}
   .oc-addbar-compact .oc-add-flags{align-items:flex-start;flex-direction:column;gap:12px}
 }
+
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>input,
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>select,
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>textarea{padding-right:78px!important}
+.oc-addbar-compact .oc-add-field-uncertain{
+  position:absolute;z-index:2;top:7px;right:39px;width:28px;height:28px;display:grid;place-items:center;
+  padding:0;border:1px solid #3c3347;border-radius:8px;background:#17111f;color:#8b8698;
+  filter:grayscale(1);opacity:.48;cursor:pointer;font-size:14px;line-height:1;
+  transition:border-color .16s ease,background .16s ease,opacity .16s ease,transform .16s ease,filter .16s ease;
+}
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain):not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain{right:7px}
+.oc-addbar-compact .oc-add-field-uncertain:hover{opacity:.9;border-color:#9a7a42;transform:translateY(-1px)}
+.oc-addbar-compact .oc-add-field-uncertain.active{border-color:#f0bd4f;background:rgba(240,189,79,.13);filter:none;opacity:1;box-shadow:0 0 0 2px rgba(240,189,79,.08)}
