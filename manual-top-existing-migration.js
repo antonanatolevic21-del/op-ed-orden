@@ -170,5 +170,5 @@
     new MutationObserver(() => retrySoon()).observe(profile, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-profile-view'] });
   }
 
-  [0, 300, 1000, 2500, 5000, 8000, 12000].forEach(delay => window.setTimeout(migrateExistingTop, delay));
+  queueMicrotask(migrateExistingTop);
 })();
