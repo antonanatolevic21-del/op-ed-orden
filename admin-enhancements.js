@@ -47,9 +47,10 @@
   function editableControls(scope) {
     if (!scope) return [];
     return [...scope.querySelectorAll(
-      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not(.oc-add-field-pin):not([disabled])'
+      'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not(.oc-add-field-pin):not(.oc-add-field-uncertain):not([disabled])'
     )].filter(control => {
       if (!(control instanceof HTMLElement)) return false;
+      if (control.getAttribute('tabindex') === '-1') return false;
       if (control.getAttribute('aria-hidden') === 'true') return false;
       const style = window.getComputedStyle(control);
       return style.display !== 'none' && style.visibility !== 'hidden' && control.getClientRects().length > 0;
