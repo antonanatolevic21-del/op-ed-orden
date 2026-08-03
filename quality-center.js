@@ -8,6 +8,7 @@
   let loadingPromise = null;
   let triggerButton = null;
   let currentIssues = new Map();
+  const issueVisibleLimits = new Map();
   let qualityNotice = '';
   let rejectedFranchisePairs = new Set();
   let firestoreToolsPromise = null;
@@ -442,6 +443,18 @@
         return;
       }
 
+      const more = event.target.closest('[data-quality-more]');
+      if (more) {
+        const details = more.closest('[data-quality-issue]');
+        const issueId = String(details?.dataset.qualityIssue || '');
+        issueVisibleLimits.set(issueId, (issueVisibleLimits.get(issueId) || ISSUE_LIMIT) + ISSUE_LIMIT);
+        if (details) {
+          details.dataset.qualityRendered = '';
+          renderIssueRows(details);
+        }
+        return;
+      }
+
       const track = event.target.closest('[data-quality-track]');
       if (track) openTrack(String(track.dataset.qualityTrack || ''), String(track.dataset.qualityTitle || ''));
     });
@@ -462,7 +475,8 @@
     }
 
     if (issue.type === 'franchisePairs') {
-      const visibleRows = issue.rows.slice(0, ISSUE_LIMIT);
+      const visibleLimit = issueVisibleLimits.get(issue.id) || ISSUE_LIMIT;
+      const visibleRows = issue.rows.slice(0, visibleLimit);
       list.innerHTML = visibleRows.map(pair => `
         <article class="oc-quality-franchise-pair" data-quality-franchise-pair="${escapeHtml(pair.key)}">
           <div class="oc-quality-franchise-variants">
@@ -484,11 +498,12 @@
             <button type="button" class="oc-quality-franchise-reject" data-quality-franchise-reject="${escapeHtml(pair.key)}">Не объединять</button>
             <button type="button" class="oc-quality-franchise-merge" data-quality-franchise-merge="${escapeHtml(pair.key)}">Объединить</button>
           </div>
-        </article>`).join('') + (issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">Показаны первые ${visibleRows.length} из ${issue.rows.length}</div>` : '');
+        </article>`).join('') + (issue.rows.length > visibleRows.length ? `<button type="button" class="oc-quality-more" data-quality-more>Показать ещё · сейчас ${visibleRows.length} из ${issue.rows.length}</button>` : '');
       return;
     }
 
-    const visibleRows = issue.rows.slice(0, ISSUE_LIMIT);
+    const visibleLimit = issueVisibleLimits.get(issue.id) || ISSUE_LIMIT;
+      const visibleRows = issue.rows.slice(0, visibleLimit);
     list.innerHTML = visibleRows.map(opening => {
       const season = opening.season ? `${SEASON_LABEL[opening.season] || opening.season} ${opening.year || ''}`.trim() : String(opening.year || '—');
       const title = String(opening.title || opening.anime || 'Без названия');
@@ -500,7 +515,7 @@
           ].filter(Boolean).join(', ')
         : '';
       return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}${uncertain ? ` · неуверенно: ${escapeHtml(uncertain)}` : ''}</small></button>`;
-    }).join('') + (issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">Показаны первые ${visibleRows.length} из ${issue.rows.length}</div>` : '');
+    }).join('') + (issue.rows.length > visibleRows.length ? `<button type="button" class="oc-quality-more" data-quality-more>Показать ещё · сейчас ${visibleRows.length} из ${issue.rows.length}</button>` : '');
   }
 
   function franchisePairByKey(key) {
