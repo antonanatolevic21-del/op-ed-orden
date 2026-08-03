@@ -77,8 +77,8 @@
   });
 
   if (catalogAdminWorkspace && document.querySelector('.oc-addbar')) {
-    addStyle('track-add-panel.css');
-    void addScript('track-add-panel.js', '20260803-uncertain-comments1', true);
+    addStyle('track-add-panel.css', '20260803-status-buttons-stack2');
+    void addScript('track-add-panel.js', '20260803-status-buttons-stack2', true);
   }
 
   function loadTop100Package() {
