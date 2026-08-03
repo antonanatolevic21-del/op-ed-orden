@@ -7381,6 +7381,7 @@
         });
         if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, uncertainPerformer, uncertainDirector, uncertainImage, ...sameSong });
         try { localStorage.setItem('op-ed-last-added-title-v1', title); } catch (_) {}
+        window.OC_ADD_FIELD_HISTORY?.capture?.();
 
         const resetAddControl = (id, value, checked) => {
           if (window.OC_ADD_FIELD_PINS?.isPinned?.(id)) return;
