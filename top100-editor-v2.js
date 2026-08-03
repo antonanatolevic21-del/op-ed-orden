@@ -608,6 +608,24 @@
     ensureToolbar(); monitorDom(); if (isTopView()) await loadSaved(viewedUser(), true); document.documentElement.classList.remove('oc-top100-loading');
   }
 
+  window.OC_TOP100_DRAFT = {
+    async applyOrder(type, order) {
+      const safeType = type === 'ED' ? 'ED' : 'OP';
+      if (!isOwnProfile()) return false;
+      if (!state.loaded) await loadSaved(viewedUser(), true);
+      state.editing = true;
+      editButton()?.classList.add('active');
+      const next = cloneOrder(state.draft);
+      next[safeType] = uniqueIds(order);
+      setDraft(next);
+      toast('Результат дуэлей перенесён в общий черновик топ‑100. Проверь порядок и сохрани его.', 'success');
+      return true;
+    },
+    snapshot() {
+      return { baseline: cloneOrder(state.baseline), draft: cloneOrder(state.draft), dirty: dirty() };
+    }
+  };
+
   window.addEventListener('oped-db-ready', () => { if (isTopView()) void loadSaved(viewedUser(), !state.loaded); });
   window.addEventListener('oped-account-restored', () => { if (isTopView()) void loadSaved(viewedUser(), true); });
   window.addEventListener('oped:app-data-updated', event => {
