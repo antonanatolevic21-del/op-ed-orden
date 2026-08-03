@@ -16,7 +16,7 @@
 
   function focusables(root) {
     return [...root.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex="-1"])')]
-      .filter(element => element.getClientRects().length && element.getAttribute('aria-hidden') !== 'true');
+      .filter(element => element.getAttribute('tabindex') !== '-1' && element.getClientRects().length && element.getAttribute('aria-hidden') !== 'true');
   }
 
   function annotate() {
