@@ -1,6 +1,6 @@
 (() => {
-  const primaryVersion = '20260803-arrow-skip-status1';
-  const discoveryVersion = '20260731-duel-editor-draft1';
+  const primaryVersion = '20260803-existing-corrections1';
+  const discoveryVersion = '20260803-existing-corrections1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
@@ -8,7 +8,7 @@
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
-  const top100EditorVersion = '20260730-natural-sort1';
+  const top100EditorVersion = '20260803-existing-corrections1';
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
@@ -77,8 +77,8 @@
   });
 
   if (catalogAdminWorkspace && document.querySelector('.oc-addbar')) {
-    addStyle('track-add-panel.css', '20260803-field-history1');
-    void addScript('track-add-panel.js', '20260803-field-history1', true);
+    addStyle('track-add-panel.css', '20260803-existing-corrections1');
+    void addScript('track-add-panel.js', '20260803-existing-corrections1', true);
   }
 
   function loadTop100Package() {
