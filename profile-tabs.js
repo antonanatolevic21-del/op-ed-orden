@@ -18,22 +18,27 @@
 
   function ensureTabs() {
     const root = panel();
-    if (!root || root.querySelector('.oc-profile-subtabs')) return;
+    if (!root) return;
     const anchor = root.querySelector('.oc-profile-select-wrap');
     if (!anchor) return;
 
-    const tabs = document.createElement('div');
-    tabs.className = 'oc-profile-subtabs';
-    tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Разделы профиля');
-    tabs.innerHTML = `
-      <button type="button" role="tab" data-profile-view="overview">Обзор</button>
-      <button type="button" role="tab" data-profile-view="top100">Мой топ-100</button>
-      <button type="button" role="tab" data-profile-view="ratings">Все оценки</button>
-      <button type="button" role="tab" data-profile-view="comparison">Сравнение вкусов</button>
-      <button type="button" role="tab" data-profile-view="daily">Дейлики</button>
-      <button type="button" role="tab" data-profile-view="events">Мои ивенты</button>`;
-    anchor.insertAdjacentElement('afterend', tabs);
+    let tabs = root.querySelector('.oc-profile-subtabs');
+    if (!tabs) {
+      tabs = document.createElement('div');
+      tabs.className = 'oc-profile-subtabs';
+      tabs.setAttribute('role', 'tablist');
+      tabs.setAttribute('aria-label', 'Разделы профиля');
+      tabs.innerHTML = `
+        <button type="button" role="tab" data-profile-view="overview">Обзор</button>
+        <button type="button" role="tab" data-profile-view="top100">Мой топ-100</button>
+        <button type="button" role="tab" data-profile-view="ratings">Все оценки</button>
+        <button type="button" role="tab" data-profile-view="comparison">Сравнение вкусов</button>
+        <button type="button" role="tab" data-profile-view="daily">Дейлики</button>
+        <button type="button" role="tab" data-profile-view="events">Мои ивенты</button>`;
+      anchor.insertAdjacentElement('afterend', tabs);
+    }
+    if (tabs.dataset.profileTabsBound === '1') return;
+    tabs.dataset.profileTabsBound = '1';
 
     tabs.addEventListener('click', event => {
       const button = event.target.closest('[data-profile-view]');
