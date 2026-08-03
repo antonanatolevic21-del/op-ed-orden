@@ -3600,12 +3600,19 @@
       return hash >>> 0;
     }
 
-    function dailyAssignmentFor(name, key, settings, savedIds = null) {
-      if (Array.isArray(savedIds) && savedIds.length) return savedIds.map(String).filter(id => entriesById.has(id));
+    function dailyAssignmentFor(name, key, settings, savedIds = null, progressedIds = null) {
       const candidates = dailyEligibleEntries(settings, name);
-      if (candidates.length < 10) return [];
       const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}`;
       const shuffled = candidates.slice().sort((a, b) => dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`));
+      if (Array.isArray(savedIds) && savedIds.length) {
+        const progressed = new Set(Array.isArray(progressedIds) ? progressedIds.map(String) : []);
+        const saved = savedIds.map(String).filter(id => entriesById.has(id));
+        const kept = saved.filter(id => progressed.has(id) || !dailyEntryHasUserScore(entriesById.get(id), name));
+        const used = new Set(kept);
+        const refill = shuffled.filter(entry => !used.has(String(entry.id))).slice(0, Math.max(0, saved.length - kept.length));
+        return kept.concat(refill.map(entry => String(entry.id)));
+      }
+      if (candidates.length < 10) return [];
       const count = Math.min(candidates.length, 10 + dailyHash(seed) % 6);
       return shuffled.slice(0, count).map(entry => String(entry.id));
     }
@@ -3631,8 +3638,9 @@
       const settings = normalizeDailySettings(profile?.dailySettings || {});
       const clock = dailyClock();
       const assignments = profile?.dailyAssignments && typeof profile.dailyAssignments === 'object' ? profile.dailyAssignments : {};
+      const progress = profile?.dailyProgress && typeof profile.dailyProgress === 'object' ? profile.dailyProgress : {};
       const completed = profile?.dailyCompleted && typeof profile.dailyCompleted === 'object' ? profile.dailyCompleted : {};
-      const ids = settings.enabled ? dailyAssignmentFor(name, clock.key, settings, assignments[clock.key]) : [];
+      const ids = settings.enabled ? dailyAssignmentFor(name, clock.key, settings, assignments[clock.key], progress[clock.key]) : [];
       const required = Boolean(settings.enabled && settings.firstRequiredKey && clock.key >= settings.firstRequiredKey);
       const offered = required || settings.optionalKey === clock.key;
       return { profile, settings, clock, assignments, completed, ids, required, offered, available: offered && ids.length >= 10, done: Boolean(completed[clock.key]) };
@@ -3693,16 +3701,15 @@
       const settings = normalizeDailySettings(profile?.dailySettings || {});
       if (!settings.enabled) { switchTab('profile'); setStatus('Сначала подключи ежедневную оценку в своём профиле.', true); return; }
       const assignments = { ...(profile?.dailyAssignments || {}) };
-      let ids = dailyAssignmentFor(myName, key, settings, assignments[key]);
+      const progressMap = { ...(profile?.dailyProgress || {}) };
+      const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
+      let ids = dailyAssignmentFor(myName, key, settings, assignments[key], [...progressed]);
       if (ids.length < 10) { setStatus('Под выбранные критерии нашлось меньше 10 песен — дейлик сегодня не сформировался.', true); return; }
-      if (!Array.isArray(assignments[key]) || !assignments[key].length) {
+      const savedIds = Array.isArray(assignments[key]) ? assignments[key].map(String) : [];
+      if (savedIds.length !== ids.length || savedIds.some((id, index) => id !== ids[index])) {
         assignments[key] = ids;
         await saveDailyProfilePatch({ dailyAssignments: assignments });
       }
-      const progressMap = { ...(profile?.dailyProgress || {}) };
-      const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
-      progressMap[key] = [...progressed];
-      await saveDailyProfilePatch({ dailyProgress: progressMap });
       seasonQueue = ids.filter(id => !progressed.has(String(id))).map(id => entriesById.get(String(id))).filter(Boolean);
       if (!seasonQueue.length) { await finalizeDaily(key); return; }
       dailyActiveKey = key;
