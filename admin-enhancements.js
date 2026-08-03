@@ -1461,9 +1461,24 @@
     if (badge) new MutationObserver(syncTriggerVisibility).observe(badge, { childList: true, characterData: true, subtree: true });
   }
 
+  window.addEventListener('oped:app-data-updated', () => {
+    if (!modal || modal.classList.contains('hidden')) return;
+    const rows = Array.isArray(window.OC_APP_DATA?.entries) ? window.OC_APP_DATA.entries : null;
+    if (!rows) return;
+    const openIssues = [...modal.querySelectorAll('[data-quality-issue][open]')].map(details => String(details.dataset.qualityIssue || ''));
+    cachedOpenings = rows;
+    render(cachedOpenings);
+    openIssues.forEach(id => {
+      const details = modal?.querySelector(`[data-quality-issue="${CSS.escape(id)}"]`);
+      if (!details) return;
+      details.open = true;
+      renderIssueRows(details);
+    });
+  });
   window.addEventListener('oped-open-quality', () => { void openQualityCenter(false); });
   window.addEventListener('oped-close-quality', () => closeQualityCenter(true));
   window.__OC_QUALITY_CENTER_READY__ = true;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountTrigger(), { once: true });
   else mountTrigger();
 })();
+
