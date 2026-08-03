@@ -268,3 +268,14 @@
 .oc-addbar-compact .oc-add-status-field:not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain{
   top:50%!important;bottom:auto!important;transform:translateY(-50%)!important
 }
+
+/* The uncertainty control intentionally shares the pin's keyboard-skip class. */
+.oc-addbar-compact .oc-add-status-field>.oc-add-field-pin:not(.oc-add-field-uncertain){
+  top:auto!important;bottom:7px!important
+}
+.oc-addbar-compact .oc-add-status-field>.oc-add-field-uncertain{
+  top:7px!important;bottom:auto!important
+}
+.oc-addbar-compact .oc-add-status-field:not(:has(>.oc-add-field-pin:not(.oc-add-field-uncertain)))>.oc-add-field-uncertain{
+  top:50%!important;bottom:auto!important;transform:translateY(-50%)!important
+}
