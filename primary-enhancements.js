@@ -1872,29 +1872,33 @@
   else bindLegacyStatus();
 })();
 
-/* inline-loading.js */
+/* skeleton-loading.js */
 (() => {
   if (window.__OC_SKELETON_LOADING_READY__) return;
 
-  const loadingGif = 'https://www.image2url.com/r2/default/gifs/1785398081496-70cb3d2d-c6f9-49e7-9840-d635f8c2157e.gif';
-  const loaderHtml = label => `
-    <div class="oc-inline-loader" role="status" aria-label="${label}">
-      <img src="${loadingGif}" alt="${label}" referrerpolicy="no-referrer" />
-    </div>`;
+  const skeletonHtml = count => `<div class="oc-skeleton-list" aria-hidden="true">${Array.from({ length: count }, () => `
+    <div class="oc-skeleton-card">
+      <div class="oc-skeleton-thumb"></div>
+      <div class="oc-skeleton-body">
+        <div class="oc-skeleton-line w70"></div>
+        <div class="oc-skeleton-line w45"></div>
+        <div class="oc-skeleton-pills"><div class="oc-skeleton-pill"></div><div class="oc-skeleton-pill"></div><div class="oc-skeleton-pill"></div></div>
+      </div>
+    </div>`).join('')}</div>`;
 
-  function showInitialCatalogLoader() {
+  function showInitialCatalogSkeleton() {
     const container = document.querySelector('#oc-list-container');
     if (!container) return;
     const text = String(container.textContent || '').trim().toLowerCase();
-    if (text.includes('загрузка списка')) container.innerHTML = loaderHtml('Загрузка списка');
+    if (text.includes('загрузка списка')) container.innerHTML = skeletonHtml(6);
   }
 
-  function showPanelLoader(panel) {
+  function showPanelSkeleton(panel) {
     if (!panel || panel.classList.contains('hidden')) return;
     const target = panel.querySelector('#oc-profile-op,#oc-top100-list,#oc-tier-list,.oc-profile-list,.oc-allratings-list');
     if (!target) return;
     const text = String(target.textContent || '').trim().toLowerCase();
-    if (text.includes('загрузка')) target.innerHTML = loaderHtml('Загрузка данных');
+    if (text.includes('загрузка')) target.innerHTML = skeletonHtml(3);
   }
 
   document.addEventListener('click', event => {
@@ -1902,13 +1906,13 @@
     if (!tab) return;
     window.requestAnimationFrame(() => {
       const panel = document.querySelector(`#oc-${tab.dataset.tab}-panel`);
-      showPanelLoader(panel);
+      showPanelSkeleton(panel);
     });
   }, true);
 
   window.__OC_SKELETON_LOADING_READY__ = true;
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showInitialCatalogLoader, { once: true });
-  else showInitialCatalogLoader();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showInitialCatalogSkeleton, { once: true });
+  else showInitialCatalogSkeleton();
 })();
 
 /* advanced-filters.js */
@@ -2278,7 +2282,7 @@
     '#oc-p-search', '#oc-p-type', '#oc-p-score-cmp', '#oc-p-score-value',
     '#oc-p-from-year', '#oc-p-from-season', '#oc-p-to-year',
     '#oc-p-to-season', '#oc-p-missing', '#oc-entity-album-search', '#oc-entity-album-sort',
-    '#oc-entity-search', '#oc-entity-track-type', '#oc-entity-track-sort', '#oc-entity-from-year',
+    '#oc-entity-search', '#oc-entity-track-type', '#oc-entity-from-year',
     '#oc-entity-from-season', '#oc-entity-to-year', '#oc-entity-to-season',
     '#oc-entity-progress'
   ];

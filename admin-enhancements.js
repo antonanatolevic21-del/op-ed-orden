@@ -1467,4 +1467,3 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountTrigger(), { once: true });
   else mountTrigger();
 })();
-
