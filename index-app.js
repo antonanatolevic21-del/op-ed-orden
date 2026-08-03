@@ -524,7 +524,7 @@
 
     function touchEntryCache(entry) {
       if (!entry) return entry;
-      ['scores', 'songScores', 'visualScores', 'personalScores'].forEach(key => {
+      ['scores', 'songScores', 'visualScores', 'personalScores', 'comments'].forEach(key => {
         if (entry[key] && typeof entry[key] === 'object') {
           try { delete entry[key].__oc_stats; } catch (e) {}
         }
@@ -621,6 +621,9 @@
       if (Object.prototype.hasOwnProperty.call(extras, 'isShortened')) payload.isShortened = Boolean(extras.isShortened);
       if (Object.prototype.hasOwnProperty.call(extras, 'sameSongGroupId')) payload.sameSongGroupId = String(extras.sameSongGroupId || '').trim();
       if (Object.prototype.hasOwnProperty.call(extras, 'sameSongTitle')) payload.sameSongTitle = String(extras.sameSongTitle || '').trim();
+      if (Object.prototype.hasOwnProperty.call(extras, 'uncertainPerformer')) payload.uncertainPerformer = Boolean(extras.uncertainPerformer);
+      if (Object.prototype.hasOwnProperty.call(extras, 'uncertainDirector')) payload.uncertainDirector = Boolean(extras.uncertainDirector);
+      if (Object.prototype.hasOwnProperty.call(extras, 'uncertainImage')) payload.uncertainImage = Boolean(extras.uncertainImage);
       await ext.setDoc(ext.doc(ext.db, 'openings', String(openingId)), payload, { merge: true });
     }
 
@@ -643,6 +646,10 @@
         const val = extras[key];
         payload[key] = (val === null || val === undefined || val === '') ? ext.deleteField() : Number(val);
       });
+      if (Object.prototype.hasOwnProperty.call(extras, 'comment')) {
+        const comment = String(extras.comment || '').trim().slice(0, 1000);
+        payload.comment = comment ? comment : ext.deleteField();
+      }
       await ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${safeOpeningId}`), payload, { merge: true });
     }
 
@@ -659,10 +666,11 @@
           if (entry.scores) delete entry.scores[name];
           if (entry.songScores) delete entry.songScores[name];
           if (entry.visualScores) delete entry.visualScores[name];
+          if (entry.comments) delete entry.comments[name];
           if (window.OPED_DB && typeof window.OPED_DB.deleteRating === 'function') {
-            await window.OPED_DB.deleteRating(entry.id, name, ['score', 'songScore', 'visualScore']);
+            await window.OPED_DB.deleteRating(entry.id, name, ['score', 'songScore', 'visualScore', 'comment']);
           } else {
-            await saveRatingExtras(entry.id, name, { score: null, songScore: null, visualScore: null });
+            await saveRatingExtras(entry.id, name, { score: null, songScore: null, visualScore: null, comment: null });
           }
         }
         touchEntryCache(entry);
@@ -1034,6 +1042,9 @@
         franchises: cleanFranchiseList(row.franchises || row.franchise || []),
         image: row.image || '',
         fallbackImage: row.fallbackImage || row.imageFallback || '',
+        uncertainPerformer: Boolean(row.uncertainPerformer),
+        uncertainDirector: Boolean(row.uncertainDirector),
+        uncertainImage: Boolean(row.uncertainImage),
         sameSongGroupId: String(row.sameSongGroupId || row.songGroupId || '').trim(),
         sameSongTitle: String(row.sameSongTitle || row.songGroupTitle || '').trim(),
         link: row.link || '',
@@ -1047,6 +1058,7 @@
         scores: aggregateScoreMap(row),
         songScores: aggregateScoreMap(row, 'song'),
         visualScores: aggregateScoreMap(row, 'visual'),
+        comments: {},
         personalScores: {}
       };
     }
@@ -1074,6 +1086,7 @@
         const songScore = normalizeOptionalNumber(r.songScore);
         const visualScore = normalizeOptionalNumber(r.visualScore);
         const personalScore = normalizeOptionalNumber(r.personalScore);
+        const comment = String(r.comment || '').trim();
 
         if (!entry || !nickname) return;
         if (r.avatar) {
@@ -1087,6 +1100,10 @@
         if (Number.isFinite(personalScore)) {
           entry.personalScores = entry.personalScores || {};
           entry.personalScores[nickname] = personalScore;
+        }
+        if (comment) {
+          entry.comments = entry.comments || {};
+          entry.comments[nickname] = comment;
         }
         if (Number.isFinite(score)) {
           entry.scores = entry.scores || {};
@@ -3441,6 +3458,32 @@
       return val !== undefined ? normalizePublicScore(val) : null;
     }
 
+    function ratingCommentFor(entry, name) {
+      const value = valueForUserMap(entry && entry.comments, name);
+      return value === undefined ? '' : String(value || '').trim();
+    }
+
+    function uncertaintyFields(entry) {
+      const fields = [];
+      if (entry?.uncertainPerformer) fields.push('исполнитель');
+      if (entry?.uncertainDirector) fields.push('режиссёр');
+      if (entry?.uncertainImage) fields.push('основное изображение');
+      return fields;
+    }
+
+    function uncertaintyMarker(entry) {
+      const fields = uncertaintyFields(entry);
+      return fields.length ? `<span class="oc-missing-link oc-uncertain-link" title="Неуверенные данные: ${escapeHtml(fields.join(', '))}">🤔</span>` : '';
+    }
+
+    function ratingCommentEditorMarkup(prefix, comment) {
+      const cleanComment = String(comment || '').trim();
+      return `<details class="oc-rating-comment-editor${cleanComment ? ' has-comment' : ''}">
+        <summary>${cleanComment ? '💬 Комментарий добавлен' : '💬 Добавить комментарий'}</summary>
+        <textarea id="${prefix}-comment" maxlength="1000" rows="3" placeholder="Комментарий необязателен…">${escapeHtml(cleanComment)}</textarea>
+      </details>`;
+    }
+
     function hasRated(entry, name) {
       return scoreFor(entry, name) !== null;
     }
@@ -4017,6 +4060,7 @@
       const notesHtml = opts.notes && entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : '';
       const missingFields = missingRequiredFields(entry);
       const missing = opts.showMissingLink === false ? '' : (missingFields.length ? `<span class="oc-missing-link" title="Не заполнено: ${escapeHtml(missingFields.join(', '))}">😡</span>` : '');
+      const uncertain = opts.showMissingLink === false ? '' : uncertaintyMarker(entry);
       const sameSongBadge = entry.sameSongGroupId && entry.sameSongTitle ? `<span class="oc-yr-tag" title="Связано с другими версиями этой песни">одна песня: ${escapeHtml(entry.sameSongTitle)}</span>` : '';
       const flagBadges = `${entryIsChinese(entry) ? '<span class="oc-yr-tag">Китай</span>' : ''}${entryIsMovie(entry) ? '<span class="oc-yr-tag">фильм</span>' : ''}${entryIsShortened(entry) ? '<span class="oc-yr-tag">укор.</span>' : ''}${sameSongBadge}`;
       return `<div class="oc-season-op oc-unified-card${className}" data-id="${escapeHtml(entry.id)}">
@@ -4027,7 +4071,7 @@
             <span class="oc-name oc-clickable-title" data-action="open-card" data-id="${escapeHtml(entry.id)}">${escapeHtml(entry.title)}</span>
             <span class="oc-type-tag ${entry.type}">${entry.type}</span>
             ${entryYearSeasonTag(entry)}
-            ${missing}
+            ${missing}${uncertain}
             ${flagBadges}
           </div>
           ${metaLines.map(l => `<div class="oc-meta oc-meta-line">${l}</div>`).join('')}
@@ -4521,6 +4565,7 @@
       const savedScore = existingScore !== null ? clampScore(existingScore) : defaultScore();
       const savedSongScore = songScoreFor(entry, myName);
       const savedVisualScore = visualScoreFor(entry, myName);
+      const savedComment = ratingCommentFor(entry, myName);
       const optionalPublicParts = !isPersonalScale();
       const inputMin = ratingMin();
       const inputMax = ratingMax();
@@ -4557,7 +4602,8 @@
             <label>Визуал <span class="oc-muted-inline">необяз.</span>
               <input id="oc-eval-visual-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedVisualScore !== null ? savedVisualScore : ''}" placeholder="—" />
             </label>
-          </div>` : ''}
+          </div>
+          ${ratingCommentEditorMarkup('oc-eval', savedComment)}` : ''}
         </div>
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? 'Отмена' : 'Пропустить'}</button>
@@ -4584,6 +4630,8 @@
       const score = clampScore($('#oc-eval-score').value);
       const songInput = $('#oc-eval-song-score');
       const visualInput = $('#oc-eval-visual-score');
+      const commentInput = $('#oc-eval-comment');
+      const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
       const rawSong = songInput ? String(songInput.value || '').trim() : '';
       const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
       const songScore = rawSong ? clampScore(rawSong) : null;
@@ -4610,7 +4658,10 @@
             else entry.visualScores[myName] = visualScore;
           }
           await window.OPED_DB.saveRating(entry.id, myName, score);
-          await saveRatingExtras(entry.id, myName, { songScore, visualScore });
+          entry.comments = entry.comments || {};
+          if (comment) entry.comments[myName] = comment;
+          else delete entry.comments[myName];
+          await saveRatingExtras(entry.id, myName, { songScore, visualScore, comment });
           appendManualOrderIfMissing(myName, entry.type, entry.id);
         }
         touchEntryCache(entry);
@@ -4648,13 +4699,13 @@
           </div>
           <div class="oc-editgrid2">
             <input class="oc-e-studio" type="text" list="oc-dl-studios" autocomplete="off" value="${escapeHtml((entry.studios || []).join(', '))}" placeholder="Студии (через запятую)" />
-            <input class="oc-e-director" type="text" list="oc-dl-directors" autocomplete="off" value="${escapeHtml((entry.directors || []).join(', '))}" placeholder="Режиссёры опа (через запятую)" />
-            <input class="oc-e-performer" type="text" list="oc-dl-performers" autocomplete="off" value="${escapeHtml((entry.performers || []).join(', '))}" placeholder="Исполнители (через запятую)" />
+            <div class="oc-edit-field-with-status"><input class="oc-e-director" type="text" list="oc-dl-directors" autocomplete="off" value="${escapeHtml((entry.directors || []).join(', '))}" placeholder="Режиссёры опа (через запятую)" /><label class="oc-uncertain-edit-toggle" title="Неуверенный режиссёр"><input class="oc-e-uncertain-director" type="checkbox" ${entry.uncertainDirector ? 'checked' : ''} />❓</label></div>
+            <div class="oc-edit-field-with-status"><input class="oc-e-performer" type="text" list="oc-dl-performers" autocomplete="off" value="${escapeHtml((entry.performers || []).join(', '))}" placeholder="Исполнители (через запятую)" /><label class="oc-uncertain-edit-toggle" title="Неуверенный исполнитель"><input class="oc-e-uncertain-performer" type="checkbox" ${entry.uncertainPerformer ? 'checked' : ''} />❓</label></div>
             <textarea class="oc-e-franchise" autocomplete="off" placeholder="Франшизы: одна строка = одна франшиза. Пустое поле удалит франшизу">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
             <input class="oc-e-same-song" type="text" list="oc-dl-same-songs" autocomplete="off" value="${escapeHtml(entry.sameSongTitle || '')}" placeholder="Одинаковая песня — введи одинаковое общее название у связанных OP/ED" />
           </div>
           <div class="oc-editgrid3">
-            <input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Основная картинка / постер (URL)" />
+            <div class="oc-edit-field-with-status"><input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="Основная картинка / постер (URL)" /><label class="oc-uncertain-edit-toggle" title="Неуверенное основное изображение"><input class="oc-e-uncertain-image" type="checkbox" ${entry.uncertainImage ? 'checked' : ''} />❓</label></div>
             <input class="oc-e-fallback-image" type="text" value="${escapeHtml(entry.fallbackImage || '')}" placeholder="Запасная картинка (URL или images/файл.webp)" />
             <input class="oc-e-link" type="text" value="${escapeHtml(entry.link || '')}" placeholder="Ссылка (anisongdb.com и т.п.)" />
             <input class="oc-e-notes" type="text" value="${escapeHtml(entry.notes || '')}" placeholder="Заметка (необязательно)" />
@@ -5163,7 +5214,9 @@
           if (arScoreMetric !== 'total' && totalVal !== null) detailBits.push('общая: ' + formatScore(totalVal));
           if (arScoreMetric !== 'song' && songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
           if (arScoreMetric !== 'visual' && visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
-          const extraHtml = detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : '';
+          const comment = ratingCommentFor(e, user);
+          const extraHtml = (detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : '') +
+            (comment ? `<div class="oc-profile-rating-comment">💬 ${escapeHtml(comment)}</div>` : '');
           return renderUnifiedEntryCard(e, {
             rankLabel: page.start + idx + 1,
             scoreText: formatScore(r.score),
@@ -5280,6 +5333,7 @@
             <div>
               <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span></div>
               ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
+              ${ratingCommentFor(e, user) ? `<div class="oc-profile-rating-comment">💬 ${escapeHtml(ratingCommentFor(e, user))}</div>` : ''}
             </div>
             <div class="oc-profile-score ${scoreClass}">${formatScore(item.score)}</div>
             ${moveButtons}
@@ -5984,6 +6038,7 @@
       const myPublicScore = scoreFor(entry, myName);
       const mySongScore = songScoreFor(entry, myName);
       const myVisualScore = visualScoreFor(entry, myName);
+      const myComment = ratingCommentFor(entry, myName);
       const savedScore = myPublicScore !== null ? clampOpeningModalScore(myPublicScore) : 5;
       const hasAnyMyRating = myPublicScore !== null || mySongScore !== null || myVisualScore !== null;
       openingModal.classList.remove('hidden');
@@ -6022,6 +6077,7 @@
                 <input id="oc-card-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${myVisualScore !== null ? formatScore(myVisualScore) : ''}" placeholder="—" />
               </label>
             </div>
+            ${ratingCommentEditorMarkup('oc-card', myComment)}
           </div>
           <div class="oc-opening-rate-actions">
             ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
@@ -6081,6 +6137,8 @@
       const scoreInput = $('#oc-card-score');
       const songInput = $('#oc-card-song-score');
       const visualInput = $('#oc-card-visual-score');
+      const commentInput = $('#oc-card-comment');
+      const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
       const score = clampOpeningModalScore(scoreInput ? scoreInput.value : '');
       const rawSong = songInput ? String(songInput.value || '').trim() : '';
       const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
@@ -6102,7 +6160,10 @@
         if (window.OPED_DB && typeof window.OPED_DB.saveRating === 'function') {
           await window.OPED_DB.saveRating(entry.id, myName, score);
         }
-        await saveRatingExtras(entry.id, myName, { score, songScore, visualScore });
+        entry.comments = entry.comments || {};
+        if (comment) entry.comments[myName] = comment;
+        else delete entry.comments[myName];
+        await saveRatingExtras(entry.id, myName, { score, songScore, visualScore, comment });
         appendManualOrderIfMissing(myName, entry.type, entry.id);
         touchEntryCache(entry);
         markRatingDataChanged();
@@ -6327,7 +6388,10 @@
             alternativeTitles: alternativeTitlesForSave(title, card.querySelector('.oc-e-alt-titles') ? card.querySelector('.oc-e-alt-titles').value : ''),
             isChinese: Boolean(card.querySelector('.oc-e-chinese') && card.querySelector('.oc-e-chinese').checked),
             isMovie: Boolean(card.querySelector('.oc-e-movie') && card.querySelector('.oc-e-movie').checked),
-            isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked)
+            isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked),
+            uncertainPerformer: Boolean(card.querySelector('.oc-e-uncertain-performer')?.checked),
+            uncertainDirector: Boolean(card.querySelector('.oc-e-uncertain-director')?.checked),
+            uncertainImage: Boolean(card.querySelector('.oc-e-uncertain-image')?.checked)
           };
 
           if (imageChanged) {
@@ -6336,7 +6400,7 @@
 
           try {
             await window.OPED_DB.updateOpening(id, updatedEntry);
-            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened, sameSongGroupId: updatedEntry.sameSongGroupId, sameSongTitle: updatedEntry.sameSongTitle });
+            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened, sameSongGroupId: updatedEntry.sameSongGroupId, sameSongTitle: updatedEntry.sameSongTitle, uncertainPerformer: updatedEntry.uncertainPerformer, uncertainDirector: updatedEntry.uncertainDirector, uncertainImage: updatedEntry.uncertainImage });
 
             Object.assign(entry, updatedEntry);
             touchEntryCache(entry);
@@ -7100,6 +7164,9 @@
       const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
       const isMovie = Boolean($('#oc-add-movie') && $('#oc-add-movie').checked);
       const isShortened = Boolean($('#oc-add-shortened') && $('#oc-add-shortened').checked);
+      const uncertainPerformer = Boolean($('#oc-add-uncertain-performer')?.checked);
+      const uncertainDirector = Boolean($('#oc-add-uncertain-director')?.checked);
+      const uncertainImage = Boolean($('#oc-add-uncertain-image')?.checked);
 
       const addEntry = { title, type, year, season, studios, directors, performers, franchises, image, link };
       const missingFields = missingAddFormFields(addEntry);
@@ -7131,10 +7198,13 @@
           isChinese,
           isMovie,
           isShortened,
+          uncertainPerformer,
+          uncertainDirector,
+          uncertainImage,
           notes: '',
           createdBy: myName
         });
-        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, ...sameSong });
+        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, uncertainPerformer, uncertainDirector, uncertainImage, ...sameSong });
         try { localStorage.setItem('op-ed-last-added-title-v1', title); } catch (_) {}
 
         const resetAddControl = (id, value, checked) => {
@@ -7160,6 +7230,13 @@
         resetAddControl('oc-add-chinese', '', false);
         resetAddControl('oc-add-movie', '', false);
         resetAddControl('oc-add-shortened', '', false);
+        ['oc-add-uncertain-performer', 'oc-add-uncertain-director', 'oc-add-uncertain-image'].forEach(id => {
+          const control = $('#' + id);
+          if (control) {
+            control.checked = false;
+            control.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
         resetAddControl('oc-add-backup-image', '', true);
 
         const shouldCreateBackup = Boolean(image && makeImageBackup && !fallbackImage && createdRef && createdRef.id);
