@@ -81,6 +81,7 @@
   function addUncertaintyToggle(control, wrapper) {
     const checkboxId = uncertaintyFields[control.id];
     if (!checkboxId || document.getElementById(checkboxId)) return;
+    wrapper.classList.add('oc-add-status-field');
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.id = checkboxId;
