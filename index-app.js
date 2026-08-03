@@ -4587,7 +4587,7 @@
             </select>
           </label>
         </div>
-        <div class="oc-blind-candidate-count">Доступно по текущим фильтрам: <strong>${candidates.length}</strong></div>
+        <div class="oc-blind-candidate-count">Всего ранее оценено: <strong>${candidates.length}</strong></div>
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="close">Отмена</button>
           <button class="oc-addbtn" data-eval-action="blind-start">Начать</button>
