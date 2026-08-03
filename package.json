@@ -1,0 +1,9 @@
+{
+  "name": "op-ed-orden",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-primary-bundles.mjs",
+    "check:bundles": "npm run build && git diff --exit-code -- primary-enhancements.js primary-enhancements.css profile-enhancements.js profile-enhancements.css entity-enhancements.js entity-enhancements.css admin-enhancements.js admin-enhancements.css"
+  }
+}
