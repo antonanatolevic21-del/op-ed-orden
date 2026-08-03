@@ -451,10 +451,12 @@
       if (!state.duel?.complete || state.duel.stage !== 2) return;
       state.busy = true;
       try {
-        await bridge()?.saveDuelRanks?.(state.type, finalOrder());
+        const order = finalOrder();
+        const applied = await window.OC_TOP100_DRAFT?.applyOrder?.(state.type, order);
+        if (!applied) await bridge()?.saveDuelRanks?.(state.type, order);
         clearDraft();
         state.duel = null;
-        state.notice = 'Топ‑100 сохранён.';
+        state.notice = applied ? 'Результат перенесён в общий черновик топ‑100.' : 'Топ‑100 сохранён.';
       } finally { state.busy = false; render(); }
       return;
     }
