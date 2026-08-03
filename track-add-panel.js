@@ -89,7 +89,7 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.tabIndex = -1;
-    button.className = 'oc-add-field-uncertain';
+    button.className = 'oc-add-field-pin oc-add-field-uncertain';
     button.textContent = '❓';
     const sync = () => {
       button.classList.toggle('active', checkbox.checked);
