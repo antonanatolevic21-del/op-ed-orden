@@ -77,8 +77,8 @@
   });
 
   if (catalogAdminWorkspace && document.querySelector('.oc-addbar')) {
-    addStyle('track-add-panel.css', '20260803-uncertain-pin-alias1');
-    void addScript('track-add-panel.js', '20260803-uncertain-pin-alias1', true);
+    addStyle('track-add-panel.css', '20260803-field-history1');
+    void addScript('track-add-panel.js', '20260803-field-history1', true);
   }
 
   function loadTop100Package() {
