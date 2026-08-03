@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260803-hotkey-skip-status2';
+  const primaryVersion = '20260803-status-buttons-stack1';
   const discoveryVersion = '20260731-duel-editor-draft1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
