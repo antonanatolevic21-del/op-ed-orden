@@ -127,6 +127,7 @@
     const filterStatEl = $('#oc-filterstat');
     const mainPanel = $('#oc-main-panel');
     const profilePanel = $('#oc-profile-panel');
+    const reratingPanel = $('#oc-rerating-panel');
     const discoveryPanel = $('#oc-discovery-panel');
     const top100Panel = $('#oc-top100-panel');
     const seasonPanel = $('#oc-season-panel');
@@ -4471,6 +4472,7 @@
       document.querySelectorAll('.oc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
       mainPanel.classList.toggle('hidden', tab !== 'chart');
       profilePanel.classList.toggle('hidden', tab !== 'profile');
+      if (reratingPanel) reratingPanel.classList.toggle('hidden', tab !== 'rerating');
       if (discoveryPanel) discoveryPanel.classList.toggle('hidden', tab !== 'discovery');
       if (top100Panel) top100Panel.classList.toggle('hidden', tab !== 'top100');
       seasonPanel.classList.toggle('hidden', tab !== 'season');
@@ -4547,12 +4549,12 @@
     }
 
     function openBlindReratingSetup() {
-      if (!ensureNickname() || !myName || !manualSameUser(profileUser, myName)) return;
+      if (!ensureNickname() || !myName) return;
       if (isPersonalScale()) {
         setStatus('Слепая переоценка пока работает с общей шкалой 1–10. Переключи шкалу в шапке.', true);
         return;
       }
-      const candidates = applyFiltersIgnoringType(entries).filter(entry => scoreFor(entry, myName) !== null);
+      const candidates = entries.filter(entry => scoreFor(entry, myName) !== null);
       if (!candidates.length) {
         setStatus('По текущим фильтрам нет ранее оценённых треков.', true);
         return;
@@ -4596,7 +4598,7 @@
     function startBlindRerating() {
       const type = String($('#oc-blind-type')?.value || '');
       const requested = Math.max(1, Number($('#oc-blind-count')?.value || 10));
-      const candidates = applyFiltersIgnoringType(entries)
+      const candidates = entries
         .filter(entry => scoreFor(entry, myName) !== null)
         .filter(entry => !type || entry.type === type);
       for (let index = candidates.length - 1; index > 0; index -= 1) {
@@ -5622,11 +5624,6 @@
       const manualEditBtn = $('#oc-manual-edit-btn');
       const manualSaveBtn = $('#oc-manual-save-btn');
       const isOwnManual = !!myName && manualSameUser(profileUser, myName) && topMode === 'manual';
-      const blindRerateBtn = $('#oc-blind-rerate-btn');
-      if (blindRerateBtn) {
-        blindRerateBtn.disabled = !myName || !manualSameUser(profileUser, myName) || isPersonalScale();
-        blindRerateBtn.title = isPersonalScale() ? 'Переключи шкалу на 1–10 или 0.5–10' : 'Старые оценки будут скрыты до сравнения';
-      }
       if (manualEditBtn) {
         manualEditBtn.disabled = !isOwnManual;
         manualEditBtn.classList.toggle('active', canEdit);
