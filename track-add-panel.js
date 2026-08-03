@@ -5,6 +5,7 @@
   const PIN_STORAGE_KEY = 'op-ed-add-field-pins-v1';
   const LAST_TITLE_STORAGE_KEY = 'op-ed-last-added-title-v1';
   const FIELD_HISTORY_STORAGE_KEY = 'op-ed-add-field-history-v1';
+  const FORM_STATE_STORAGE_KEY = 'op-ed-add-form-state-v2';
   const pinFieldIds = [
     'oc-add-type', 'oc-add-year', 'oc-add-season',
     'oc-add-studio', 'oc-add-director', 'oc-add-performer', 'oc-add-same-song',
@@ -20,11 +21,19 @@
     'oc-add-director': 'oc-add-uncertain-director',
     'oc-add-image': 'oc-add-uncertain-image'
   };
-  let pinState = {};
+  let formState = { pins: {}, history: {} };
   try {
-    const parsed = JSON.parse(localStorage.getItem(PIN_STORAGE_KEY) || '{}');
-    if (parsed && typeof parsed === 'object') pinState = parsed;
+    const parsed = JSON.parse(localStorage.getItem(FORM_STATE_STORAGE_KEY) || 'null');
+    if (parsed && typeof parsed === 'object') formState = { pins: parsed.pins || {}, history: parsed.history || {} };
   } catch (_) {}
+  let pinState = formState.pins;
+  if (!Object.keys(pinState).length) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PIN_STORAGE_KEY) || '{}');
+      if (parsed && typeof parsed === 'object') pinState = parsed;
+    } catch (_) {}
+  }
+  formState.pins = pinState;
   uniqueFieldIds.forEach(id => delete pinState[id]);
   try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinState)); } catch (_) {}
 
@@ -32,8 +41,16 @@
     return control.type === 'checkbox' ? Boolean(control.checked) : String(control.value || '');
   }
 
+  function saveFormState() {
+    formState.pins = pinState;
+    try {
+      localStorage.setItem(FORM_STATE_STORAGE_KEY, JSON.stringify(formState));
+      localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinState));
+    } catch (_) {}
+  }
+
   function savePinState() {
-    try { localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinState)); } catch (_) {}
+    saveFormState();
   }
 
   function restorePinnedValue(control) {
@@ -164,12 +181,14 @@
   });
 
   function readFieldHistory() {
+    if (formState.history && Object.keys(formState.history).length) return formState.history;
     try {
       const parsed = JSON.parse(localStorage.getItem(FIELD_HISTORY_STORAGE_KEY) || '{}');
-      return parsed && typeof parsed === 'object' ? parsed : {};
+      formState.history = parsed && typeof parsed === 'object' ? parsed : {};
     } catch (_) {
-      return {};
+      formState.history = {};
     }
+    return formState.history;
   }
 
   function captureFieldHistory() {
@@ -180,6 +199,8 @@
       history[control.id] = controlValue(control);
     });
     try {
+      formState.history = history;
+      saveFormState();
       localStorage.setItem(FIELD_HISTORY_STORAGE_KEY, JSON.stringify(history));
       if (history['oc-add-title']) localStorage.setItem(LAST_TITLE_STORAGE_KEY, String(history['oc-add-title']));
     } catch (_) {}
