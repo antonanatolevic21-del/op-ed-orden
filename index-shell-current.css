@@ -203,3 +203,23 @@
 .oc-uncertain-edit-toggle{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border:1px solid #3c3347;border-radius:9px;background:#17111f;cursor:pointer;filter:grayscale(1);opacity:.58}
 .oc-uncertain-edit-toggle input{position:absolute;inline-size:1px;block-size:1px;opacity:0;pointer-events:none}
 .oc-uncertain-edit-toggle:has(input:checked){border-color:#f0bd4f;background:rgba(240,189,79,.13);filter:none;opacity:1;box-shadow:0 0 0 2px rgba(240,189,79,.08)}
+
+/* Blind re-rating */
+.oc-blind-rerate-btn{border-color:#6e5b87!important}
+.oc-blind-rerate-btn:not(:disabled){background:linear-gradient(135deg,rgba(112,77,145,.22),rgba(42,36,53,.7))}
+.oc-blind-setup{max-width:620px}
+.oc-blind-intro{margin:4px 0 18px;padding:13px 15px;border:1px solid #443851;border-radius:11px;background:rgba(112,77,145,.1);color:#d4cddb;line-height:1.45}
+.oc-blind-options{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.oc-blind-options label{display:grid;gap:7px;color:#aaa3b6;font-size:13px}
+.oc-blind-options select{width:100%;min-height:42px;padding:0 11px;border:1px solid #3c3347;border-radius:9px;background:#17111f;color:#f5f3fa}
+.oc-blind-candidate-count{margin-top:14px;color:#aaa3b6}
+.oc-blind-comment-hint{grid-column:1/-1;margin-top:-4px;color:#8f889a;font-size:12px}
+.oc-blind-review{max-width:680px}
+.oc-blind-compare{display:grid;gap:8px;margin:8px 0 4px}
+.oc-blind-compare-head,.oc-blind-compare-row{display:grid;grid-template-columns:minmax(90px,1fr) 70px 24px 70px;align-items:center;gap:8px}
+.oc-blind-compare-head{color:#8f889a;font-size:11px;text-transform:uppercase;text-align:center}
+.oc-blind-compare-row{padding:11px 13px;border:1px solid #342c40;border-radius:10px;background:#17131f}
+.oc-blind-compare-row>strong,.oc-blind-compare-row>span:not(:first-child){text-align:center}
+.oc-blind-compare-row .up{color:#48d7a0}.oc-blind-compare-row .down{color:#ff6d91}.oc-blind-compare-row .same{color:#d5cfdd}
+.oc-blind-new-comment{margin-top:4px;padding:11px 13px;border-radius:10px;background:#1b1623;color:#c9c2d1;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){.oc-blind-options{grid-template-columns:1fr}.oc-blind-compare-head,.oc-blind-compare-row{grid-template-columns:minmax(76px,1fr) 54px 18px 54px;gap:5px}}
