@@ -4830,7 +4830,7 @@
         : evaluatorMode === 'single'
         ? `Переоценка · ${entry.year || 'год не указан'}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`
         : evaluatorMode === 'daily'
-          ? `Ежедневная оценка · ${seasonQueueIndex + 1} из ${seasonQueue.length} оставшихся`
+          ? `Ежедневная оценка · ${entry.type === 'ED' ? 'ED — эндинг' : 'OP — опенинг'} · ${seasonQueueIndex + 1} из ${seasonQueue.length} оставшихся`
           : `${seasonQueueIndex + 1} из ${seasonQueue.length} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`;
       evaluatorEl.classList.remove('hidden');
       evaluatorEl.innerHTML = `<div class="oc-eval-modal">
