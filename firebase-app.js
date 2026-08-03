@@ -264,6 +264,9 @@
         alternativeTitles: cleanArray(opening.alternativeTitles || opening.altTitles || opening.aliases),
         image: String(opening.image || "").trim(),
         fallbackImage: String(opening.fallbackImage || opening.imageFallback || "").trim(),
+        uncertainPerformer: Boolean(opening.uncertainPerformer),
+        uncertainDirector: Boolean(opening.uncertainDirector),
+        uncertainImage: Boolean(opening.uncertainImage),
         sameSongGroupId: String(opening.sameSongGroupId || opening.songGroupId || "").trim(),
         sameSongTitle: String(opening.sameSongTitle || opening.songGroupTitle || "").trim(),
         link: String(opening.link || "").trim(),
@@ -546,7 +549,8 @@
     const JOURNAL_FIELDS = [
       "title", "type", "year", "season", "studios", "directors", "performers",
       "franchises", "alternativeTitles", "sameSongGroupId", "sameSongTitle",
-      "image", "fallbackImage", "link", "notes", "isChinese", "isMovie", "isShortened"
+      "image", "fallbackImage", "link", "notes", "isChinese", "isMovie", "isShortened",
+      "uncertainPerformer", "uncertainDirector", "uncertainImage"
     ];
 
     function journalValue(value) {
@@ -682,7 +686,7 @@
       }, { merge: true });
     }
 
-    async function deleteRating(openingId, nickname, fields = ["score", "songScore", "visualScore"]) {
+    async function deleteRating(openingId, nickname, fields = ["score", "songScore", "visualScore", "comment"]) {
       const displayName = String(nickname || "").trim();
       const safeName = normalizeNickname(displayName);
       const safeOpeningId = String(openingId || "").trim();
