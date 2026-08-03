@@ -58,8 +58,22 @@
     let catalogView = localStorage.getItem(CATALOG_VIEW_KEY) === 'compact' ? 'compact' : 'detailed';
     const FILTER_DEFAULTS = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
     const cloneFilterState = source => ({ ...source, studios: [...(source.studios || [])], directors: [...(source.directors || [])], performers: [...(source.performers || [])], franchises: [...(source.franchises || [])] });
-    const catalogFilters = cloneFilterState(FILTER_DEFAULTS);
-    const profileFilters = cloneFilterState(FILTER_DEFAULTS);
+    function loadFilterState(key) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(key) || 'null');
+        return cloneFilterState(saved && typeof saved === 'object' ? { ...FILTER_DEFAULTS, ...saved } : FILTER_DEFAULTS);
+      } catch (_) {
+        return cloneFilterState(FILTER_DEFAULTS);
+      }
+    }
+    const catalogFilters = loadFilterState('op-ed-catalog-filters-v1');
+    const profileFilters = loadFilterState('op-ed-profile-filters-v1');
+    function persistFilterStates() {
+      try {
+        localStorage.setItem('op-ed-catalog-filters-v1', JSON.stringify(catalogFilters));
+        localStorage.setItem('op-ed-profile-filters-v1', JSON.stringify(profileFilters));
+      } catch (_) {}
+    }
     let filters = catalogFilters;
     let sortMode = 'added_desc';
     let editingId = null;
@@ -7509,6 +7523,7 @@
 
     function applyFilterChange() {
       normalizeMainFilterRange();
+      persistFilterStates();
       chartPage = 1;
       profileTopPage = { OP: 1, ED: 1 };
       allRatingsPage = { OP: 1, ED: 1 };
@@ -7610,6 +7625,7 @@
       chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 }; arScoreFilter = '';
       const sort = $('#oc-sort');
       if (sort) sort.value = 'added_desc';
+      persistFilterStates();
       populateFilterOptions();
       syncContentFilterSelect();
       render();
@@ -7618,6 +7634,14 @@
 
     $('#oc-reset-filters').addEventListener('click', resetAllFilters);
     $('#oc-p-reset-filters').addEventListener('click', resetAllFilters);
+    $('#oc-p-copy-catalog-filters')?.addEventListener('click', () => {
+      Object.assign(profileFilters, cloneFilterState(catalogFilters));
+      filters = profileFilters;
+      persistFilterStates();
+      syncFilterControls();
+      applyFilterChange();
+      setStatus('Фильтры каталога перенесены в профиль ✓');
+    });
 
     scaleSelect.addEventListener('change', async (e) => {
       await saveScale(e.target.value);
