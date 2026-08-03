@@ -220,6 +220,8 @@
     let seasonQueue = [];
     let seasonQueueIndex = 0;
     let evaluatorMode = 'season';
+    let blindPendingRating = null;
+    let blindSessionStats = null;
     let dailyActiveKey = '';
     let dailyCalendarMonth = null;
     let dailyRefreshTimer = null;
@@ -4539,18 +4541,162 @@
       evaluatorEl.innerHTML = '';
       seasonQueue = [];
       seasonQueueIndex = 0;
+      blindPendingRating = null;
+      blindSessionStats = null;
       dailyActiveKey = '';
+    }
+
+    function openBlindReratingSetup() {
+      if (!ensureNickname() || !myName || !manualSameUser(profileUser, myName)) return;
+      if (isPersonalScale()) {
+        setStatus('Слепая переоценка пока работает с общей шкалой 1–10. Переключи шкалу в шапке.', true);
+        return;
+      }
+      const candidates = applyFiltersIgnoringType(entries).filter(entry => scoreFor(entry, myName) !== null);
+      if (!candidates.length) {
+        setStatus('По текущим фильтрам нет ранее оценённых треков.', true);
+        return;
+      }
+      evaluatorMode = 'blind-setup';
+      evaluatorEl.classList.remove('hidden');
+      evaluatorEl.innerHTML = `<div class="oc-eval-modal oc-blind-setup">
+        <div class="oc-eval-top">
+          <div>
+            <div class="oc-eval-progress">Слепая переоценка</div>
+            <div class="oc-eval-title">Настройка выборки</div>
+          </div>
+          <button class="oc-eval-close" data-eval-action="close">Закрыть</button>
+        </div>
+        <div class="oc-blind-intro">Старые баллы будут скрыты до новой оценки. Ничего не перезапишется без отдельного подтверждения.</div>
+        <div class="oc-blind-options">
+          <label>Тип
+            <select id="oc-blind-type">
+              <option value="">OP и ED</option>
+              <option value="OP">Только OP</option>
+              <option value="ED">Только ED</option>
+            </select>
+          </label>
+          <label>Количество
+            <select id="oc-blind-count">
+              <option value="5">5 треков</option>
+              <option value="10" selected>10 треков</option>
+              <option value="20">20 треков</option>
+              <option value="50">50 треков</option>
+            </select>
+          </label>
+        </div>
+        <div class="oc-blind-candidate-count">Доступно по текущим фильтрам: <strong>${candidates.length}</strong></div>
+        <div class="oc-eval-actions">
+          <button class="oc-secondary-btn" data-eval-action="close">Отмена</button>
+          <button class="oc-addbtn" data-eval-action="blind-start">Начать</button>
+        </div>
+      </div>`;
+    }
+
+    function startBlindRerating() {
+      const type = String($('#oc-blind-type')?.value || '');
+      const requested = Math.max(1, Number($('#oc-blind-count')?.value || 10));
+      const candidates = applyFiltersIgnoringType(entries)
+        .filter(entry => scoreFor(entry, myName) !== null)
+        .filter(entry => !type || entry.type === type);
+      for (let index = candidates.length - 1; index > 0; index -= 1) {
+        const swap = Math.floor(Math.random() * (index + 1));
+        [candidates[index], candidates[swap]] = [candidates[swap], candidates[index]];
+      }
+      seasonQueue = candidates.slice(0, requested);
+      seasonQueueIndex = 0;
+      blindPendingRating = null;
+      blindSessionStats = { replaced: 0, kept: 0, skipped: 0, total: seasonQueue.length };
+      if (!seasonQueue.length) {
+        closeEvaluator();
+        setStatus('Для выбранного типа по текущим фильтрам нет оценённых треков.', true);
+        return;
+      }
+      evaluatorMode = 'blind';
+      renderEvaluator();
+    }
+
+    function renderBlindComparison(entry) {
+      const pending = blindPendingRating;
+      if (!pending || pending.entryId !== String(entry.id)) return false;
+      const scoreLine = (label, oldValue, newValue) => `<div class="oc-blind-compare-row"><span>${label}</span><strong>${formatScore(oldValue)}</strong><span aria-hidden="true">→</span><strong class="${Number(oldValue) === Number(newValue) ? 'same' : Number(newValue) > Number(oldValue) ? 'up' : 'down'}">${formatScore(newValue)}</strong></div>`;
+      evaluatorEl.classList.remove('hidden');
+      evaluatorEl.innerHTML = `<div class="oc-eval-modal oc-blind-review">
+        <div class="oc-eval-top">
+          <div>
+            <div class="oc-eval-progress">Слепая переоценка · сравнение · ${seasonQueueIndex + 1} из ${seasonQueue.length}</div>
+            <div class="oc-eval-title">${escapeHtml(entry.title)}</div>
+          </div>
+          <button class="oc-eval-close" data-eval-action="close">Закрыть</button>
+        </div>
+        <div class="oc-blind-compare">
+          <div class="oc-blind-compare-head"><span></span><span>Было</span><span></span><span>Стало</span></div>
+          ${scoreLine('Итог', pending.old.score, pending.next.score)}
+          ${scoreLine('Песня', pending.old.songScore, pending.next.songScore)}
+          ${scoreLine('Визуал', pending.old.visualScore, pending.next.visualScore)}
+          ${pending.next.comment ? `<div class="oc-blind-new-comment">💬 Новый комментарий: ${escapeHtml(pending.next.comment)}</div>` : ''}
+        </div>
+        <div class="oc-eval-actions">
+          <button class="oc-secondary-btn" data-eval-action="blind-skip">Пропустить</button>
+          <button class="oc-secondary-btn" data-eval-action="blind-keep">Оставить старую</button>
+          <button class="oc-addbtn" data-eval-action="blind-replace">Заменить новой</button>
+        </div>
+      </div>`;
+      return true;
+    }
+
+    async function resolveBlindRating(action) {
+      const entry = seasonQueue[seasonQueueIndex];
+      const pending = blindPendingRating;
+      if (!entry || !pending) return;
+      try {
+        if (action === 'replace') {
+          const next = pending.next;
+          entry.scores = entry.scores || {};
+          entry.songScores = entry.songScores || {};
+          entry.visualScores = entry.visualScores || {};
+          entry.comments = entry.comments || {};
+          entry.scores[myName] = next.score;
+          if (next.songScore === null) delete entry.songScores[myName]; else entry.songScores[myName] = next.songScore;
+          if (next.visualScore === null) delete entry.visualScores[myName]; else entry.visualScores[myName] = next.visualScore;
+          const finalComment = next.comment || pending.old.comment;
+          if (finalComment) entry.comments[myName] = finalComment; else delete entry.comments[myName];
+          await window.OPED_DB.saveRating(entry.id, myName, next.score);
+          await saveRatingExtras(entry.id, myName, { songScore: next.songScore, visualScore: next.visualScore, comment: finalComment });
+          touchEntryCache(entry);
+          markRatingDataChanged();
+          blindSessionStats.replaced += 1;
+        } else if (action === 'keep') {
+          blindSessionStats.kept += 1;
+        } else {
+          blindSessionStats.skipped += 1;
+        }
+        blindPendingRating = null;
+        seasonQueueIndex += 1;
+        render();
+        if (activeTab === 'profile') renderProfile();
+        renderEvaluator();
+      } catch (error) {
+        console.error(error);
+        setStatus('Не удалось сохранить результат переоценки.', true);
+      }
     }
 
     function renderEvaluator() {
       if (!seasonQueue.length || seasonQueueIndex >= seasonQueue.length) {
         const completedMode = evaluatorMode;
         const completedDailyKey = dailyActiveKey;
+        const completedBlindStats = blindSessionStats ? { ...blindSessionStats } : null;
         closeEvaluator();
         renderSeasonViews();
         if (completedMode === 'entity') renderEntityAlbums();
         if (completedMode === 'daily') {
           finalizeDaily(completedDailyKey).catch(error => { console.error(error); setStatus('Не удалось завершить дейлик.', true); });
+          return;
+        }
+        if (completedMode === 'blind') {
+          const stats = completedBlindStats;
+          setStatus(stats ? `Слепая переоценка завершена: заменено ${stats.replaced}, оставлено ${stats.kept}, пропущено ${stats.skipped} ✓` : 'Слепая переоценка завершена ✓');
           return;
         }
         setStatus(completedMode === 'entity'
@@ -4561,16 +4707,20 @@
         return;
       }
       const entry = seasonQueue[seasonQueueIndex];
+      if (evaluatorMode === 'blind' && renderBlindComparison(entry)) return;
       const existingScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
-      const savedScore = existingScore !== null ? clampScore(existingScore) : defaultScore();
-      const savedSongScore = songScoreFor(entry, myName);
-      const savedVisualScore = visualScoreFor(entry, myName);
-      const savedComment = ratingCommentFor(entry, myName);
+      const blindMode = evaluatorMode === 'blind';
+      const savedScore = blindMode ? defaultScore() : (existingScore !== null ? clampScore(existingScore) : defaultScore());
+      const savedSongScore = blindMode ? null : songScoreFor(entry, myName);
+      const savedVisualScore = blindMode ? null : visualScoreFor(entry, myName);
+      const savedComment = blindMode ? '' : ratingCommentFor(entry, myName);
       const optionalPublicParts = !isPersonalScale();
       const inputMin = ratingMin();
       const inputMax = ratingMax();
       const inputStep = scaleStep();
-      const progressText = evaluatorMode === 'entity'
+      const progressText = evaluatorMode === 'blind'
+        ? `Слепая переоценка · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
+        : evaluatorMode === 'entity'
         ? `${activeEntityQueueLabel} · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
         : evaluatorMode === 'single'
         ? `Переоценка · ${entry.year || 'год не указан'}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`
@@ -4603,13 +4753,14 @@
               <input id="oc-eval-visual-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedVisualScore !== null ? savedVisualScore : ''}" placeholder="—" />
             </label>
           </div>
-          ${ratingCommentEditorMarkup('oc-eval', savedComment)}` : ''}
+          ${ratingCommentEditorMarkup('oc-eval', savedComment)}
+          ${blindMode ? '<div class="oc-blind-comment-hint">Пустое поле сохранит прежний комментарий.</div>' : ''}` : ''}
         </div>
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? 'Отмена' : 'Пропустить'}</button>
-          ${existingScore !== null ? `<button class="oc-secondary-btn" data-eval-action="delete-current">${isPersonalScale() ? 'Удалить отметку' : 'Удалить оценку'}</button>` : ''}
-          <button class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" data-eval-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100'}</button>
-          <button class="oc-addbtn" data-eval-action="save-next">${evaluatorMode === 'single' ? 'Сохранить' : 'Сохранить и дальше'}</button>
+          ${existingScore !== null && !blindMode ? `<button class="oc-secondary-btn" data-eval-action="delete-current">${isPersonalScale() ? 'Удалить отметку' : 'Удалить оценку'}</button>` : ''}
+          <button class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" ${blindMode ? 'style="display:none"' : ''} data-eval-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100'}</button>
+          <button class="oc-addbtn" data-eval-action="save-next">${blindMode ? 'Показать сравнение' : evaluatorMode === 'single' ? 'Сохранить' : 'Сохранить и дальше'}</button>
         </div>
       </div>`;
       const range = $('#oc-eval-range');
@@ -4639,6 +4790,20 @@
       if (score === null) { setStatus(`Введите оценку от ${formatScore(ratingMin())} до ${formatScore(ratingMax())}.`, true); return; }
       if (rawSong && songScore === null) { setStatus(`Введите оценку песни от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.`, true); return; }
       if (rawVisual && visualScore === null) { setStatus(`Введите оценку визуала от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.`, true); return; }
+      if (evaluatorMode === 'blind') {
+        blindPendingRating = {
+          entryId: String(entry.id),
+          old: {
+            score: scoreFor(entry, myName),
+            songScore: songScoreFor(entry, myName),
+            visualScore: visualScoreFor(entry, myName),
+            comment: ratingCommentFor(entry, myName)
+          },
+          next: { score, songScore, visualScore, comment }
+        };
+        renderEvaluator();
+        return;
+      }
       try {
         if (isPersonalScale()) {
           entry.personalScores = entry.personalScores || {};
@@ -5457,6 +5622,11 @@
       const manualEditBtn = $('#oc-manual-edit-btn');
       const manualSaveBtn = $('#oc-manual-save-btn');
       const isOwnManual = !!myName && manualSameUser(profileUser, myName) && topMode === 'manual';
+      const blindRerateBtn = $('#oc-blind-rerate-btn');
+      if (blindRerateBtn) {
+        blindRerateBtn.disabled = !myName || !manualSameUser(profileUser, myName) || isPersonalScale();
+        blindRerateBtn.title = isPersonalScale() ? 'Переключи шкалу на 1–10 или 0.5–10' : 'Старые оценки будут скрыты до сравнения';
+      }
       if (manualEditBtn) {
         manualEditBtn.disabled = !isOwnManual;
         manualEditBtn.classList.toggle('active', canEdit);
@@ -6645,9 +6815,17 @@
       const action = e.target.getAttribute('data-eval-action');
       if (!action) return;
       if (action === 'close') closeEvaluator();
+      if (action === 'blind-start') startBlindRerating();
+      if (action === 'blind-replace') await resolveBlindRating('replace');
+      if (action === 'blind-keep') await resolveBlindRating('keep');
+      if (action === 'blind-skip') await resolveBlindRating('skip');
       if (action === 'skip') {
         if (evaluatorMode === 'single') closeEvaluator();
-        else { seasonQueueIndex += 1; renderEvaluator(); }
+        else {
+          if (evaluatorMode === 'blind' && blindSessionStats) blindSessionStats.skipped += 1;
+          seasonQueueIndex += 1;
+          renderEvaluator();
+        }
       }
       if (action === 'delete-current') {
         const entry = seasonQueue[seasonQueueIndex];
@@ -7393,6 +7571,8 @@
     $('#oc-topmode-manual').addEventListener('click', () => setTopMode('manual'));
     const manualEditBtn = $('#oc-manual-edit-btn');
     const manualSaveBtn = $('#oc-manual-save-btn');
+    const blindRerateBtn = $('#oc-blind-rerate-btn');
+    if (blindRerateBtn) blindRerateBtn.addEventListener('click', openBlindReratingSetup);
     if (manualEditBtn) manualEditBtn.addEventListener('click', () => {
       if (!myName || !manualSameUser(profileUser, myName)) return;
       manualEditMode = !manualEditMode;
