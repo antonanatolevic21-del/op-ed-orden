@@ -252,3 +252,19 @@
   top:50%;right:8px;transform:translateY(-50%)
 }
 .oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain):not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain:hover{transform:translateY(calc(-50% - 1px))}
+
+/* Explicit class avoids selector/cascade differences in the generated admin layout. */
+.oc-addbar-compact .oc-add-status-field>input,
+.oc-addbar-compact .oc-add-status-field>select,
+.oc-addbar-compact .oc-add-status-field>textarea{padding-right:36px!important}
+.oc-addbar-compact .oc-add-status-field>.oc-add-field-pin,
+.oc-addbar-compact .oc-add-status-field>.oc-add-field-uncertain{
+  position:absolute!important;right:7px!important;width:19px!important;height:19px!important;
+  min-width:19px!important;min-height:19px!important;padding:0!important;border-radius:5px!important;
+  font-size:9px!important;line-height:19px!important;transform:none
+}
+.oc-addbar-compact .oc-add-status-field>.oc-add-field-uncertain{top:7px!important;bottom:auto!important}
+.oc-addbar-compact .oc-add-status-field>.oc-add-field-pin{top:auto!important;bottom:7px!important}
+.oc-addbar-compact .oc-add-status-field:not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain{
+  top:50%!important;bottom:auto!important;transform:translateY(-50%)!important
+}
