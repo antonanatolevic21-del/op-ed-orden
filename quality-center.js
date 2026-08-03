@@ -299,6 +299,7 @@
 
   function buildIssues(openings) {
     const issues = [
+      { id: 'uncertain', label: '🤔 Неуверенные данные', type: 'uncertain', rows: [] },
       { id: 'title', label: 'Без названия', rows: [] },
       { id: 'image', label: 'Без основной картинки', rows: [] },
       { id: 'fallback', label: 'Без запасной картинки', rows: [] },
@@ -329,6 +330,9 @@
     }
 
     for (const opening of openings) {
+      if (opening.uncertainPerformer || opening.uncertainDirector || opening.uncertainImage) {
+        byId.get('uncertain').rows.push(opening);
+      }
       const rawTitle = String(opening.title || opening.anime || '').trim();
       if (!rawTitle) byId.get('title').rows.push(opening);
       const hasPrimaryImage = Boolean(String(opening.image || '').trim());
@@ -488,7 +492,14 @@
     list.innerHTML = visibleRows.map(opening => {
       const season = opening.season ? `${SEASON_LABEL[opening.season] || opening.season} ${opening.year || ''}`.trim() : String(opening.year || '—');
       const title = String(opening.title || opening.anime || 'Без названия');
-      return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}</small></button>`;
+      const uncertain = issue.type === 'uncertain'
+        ? [
+            opening.uncertainPerformer ? 'исполнитель' : '',
+            opening.uncertainDirector ? 'режиссёр' : '',
+            opening.uncertainImage ? 'основное изображение' : ''
+          ].filter(Boolean).join(', ')
+        : '';
+      return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}${uncertain ? ` · неуверенно: ${escapeHtml(uncertain)}` : ''}</small></button>`;
     }).join('') + (issue.rows.length > visibleRows.length ? `<div class="oc-quality-more">Показаны первые ${visibleRows.length} из ${issue.rows.length}</div>` : '');
   }
 
