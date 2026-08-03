@@ -14,6 +14,11 @@
   const uniqueFieldIds = [
     'oc-add-title', 'oc-add-image', 'oc-add-fallback-image', 'oc-add-link', 'oc-add-notes'
   ];
+  const uncertaintyFields = {
+    'oc-add-performer': 'oc-add-uncertain-performer',
+    'oc-add-director': 'oc-add-uncertain-director',
+    'oc-add-image': 'oc-add-uncertain-image'
+  };
   let pinState = {};
   try {
     const parsed = JSON.parse(localStorage.getItem(PIN_STORAGE_KEY) || '{}');
@@ -73,6 +78,35 @@
     return button;
   }
 
+  function addUncertaintyToggle(control, wrapper) {
+    const checkboxId = uncertaintyFields[control.id];
+    if (!checkboxId || document.getElementById(checkboxId)) return;
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = checkboxId;
+    checkbox.hidden = true;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.tabIndex = -1;
+    button.className = 'oc-add-field-uncertain';
+    button.textContent = '❓';
+    const sync = () => {
+      button.classList.toggle('active', checkbox.checked);
+      button.setAttribute('aria-pressed', String(checkbox.checked));
+      button.title = checkbox.checked ? 'Снять пометку «неуверенно»' : 'Пометить как неуверенное';
+      button.setAttribute('aria-label', button.title);
+    };
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      checkbox.checked = !checkbox.checked;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    checkbox.addEventListener('change', sync);
+    wrapper.append(checkbox, button);
+    sync();
+  }
+
   pinFieldIds.forEach(id => {
     const control = document.getElementById(id);
     if (!control || control.dataset.pinReady === '1') return;
@@ -89,7 +123,18 @@
       control.before(wrapper);
       wrapper.append(control, button);
     }
+    addUncertaintyToggle(control, wrapper);
   });
+
+  const imageControl = document.getElementById('oc-add-image');
+  if (imageControl && imageControl.dataset.uncertaintyReady !== '1') {
+    imageControl.dataset.uncertaintyReady = '1';
+    const wrapper = document.createElement('span');
+    wrapper.className = 'oc-add-pin-field';
+    imageControl.before(wrapper);
+    wrapper.append(imageControl);
+    addUncertaintyToggle(imageControl, wrapper);
+  }
 
   window.OC_ADD_FIELD_PINS = {
     isPinned(id) {
