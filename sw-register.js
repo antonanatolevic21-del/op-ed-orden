@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260803-rerating-tab1';
+  const primaryVersion = '20260803-arrow-skip-status1';
   const discoveryVersion = '20260731-duel-editor-draft1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
