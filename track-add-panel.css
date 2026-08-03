@@ -237,3 +237,18 @@
 .oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain):not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain{right:7px}
 .oc-addbar-compact .oc-add-field-uncertain:hover{opacity:.9;border-color:#9a7a42;transform:translateY(-1px)}
 .oc-addbar-compact .oc-add-field-uncertain.active{border-color:#f0bd4f;background:rgba(240,189,79,.13);filter:none;opacity:1;box-shadow:0 0 0 2px rgba(240,189,79,.08)}
+
+/* Keep status controls in a narrow vertical rail instead of covering field text. */
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>input,
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>select,
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>textarea{padding-right:38px!important}
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>.oc-add-field-pin,
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>.oc-add-field-uncertain{
+  right:8px;width:20px;height:20px;border-radius:6px;font-size:10px
+}
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-pin)>.oc-add-field-uncertain{top:8px}
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain)>.oc-add-field-pin{top:auto;bottom:8px}
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain):not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain{
+  top:50%;right:8px;transform:translateY(-50%)
+}
+.oc-addbar-compact .oc-add-pin-field:has(>.oc-add-field-uncertain):not(:has(>.oc-add-field-pin))>.oc-add-field-uncertain:hover{transform:translateY(calc(-50% - 1px))}
