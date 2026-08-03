@@ -4,6 +4,7 @@
 
   const PIN_STORAGE_KEY = 'op-ed-add-field-pins-v1';
   const LAST_TITLE_STORAGE_KEY = 'op-ed-last-added-title-v1';
+  const FIELD_HISTORY_STORAGE_KEY = 'op-ed-add-field-history-v1';
   const pinFieldIds = [
     'oc-add-type', 'oc-add-year', 'oc-add-season',
     'oc-add-studio', 'oc-add-director', 'oc-add-performer', 'oc-add-same-song',
@@ -86,9 +87,9 @@
     checkbox.type = 'checkbox';
     checkbox.id = checkboxId;
     checkbox.hidden = true;
-    const button = document.createElement('button');
-    button.type = 'button';
+    const button = document.createElement('span');
     button.tabIndex = -1;
+    button.setAttribute('role', 'button');
     button.className = 'oc-add-field-pin oc-add-field-uncertain';
     button.textContent = '❓';
     const sync = () => {
@@ -162,17 +163,56 @@
     if (control) control.placeholder = placeholder;
   });
 
-  const titleInput = document.getElementById('oc-add-title');
-  titleInput?.addEventListener('keydown', event => {
-    if (event.key !== 'ArrowDown' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    let previousTitle = '';
-    try { previousTitle = String(localStorage.getItem(LAST_TITLE_STORAGE_KEY) || ''); } catch (_) {}
-    if (!previousTitle) return;
-    event.preventDefault();
-    titleInput.value = previousTitle;
-    titleInput.setSelectionRange(previousTitle.length, previousTitle.length);
-    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+  function readFieldHistory() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(FIELD_HISTORY_STORAGE_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function captureFieldHistory() {
+    const history = {};
+    panel.querySelectorAll('[id^="oc-add-"]').forEach(control => {
+      if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)) return;
+      if (control.id === 'oc-add-btn') return;
+      history[control.id] = controlValue(control);
+    });
+    try {
+      localStorage.setItem(FIELD_HISTORY_STORAGE_KEY, JSON.stringify(history));
+      if (history['oc-add-title']) localStorage.setItem(LAST_TITLE_STORAGE_KEY, String(history['oc-add-title']));
+    } catch (_) {}
+    return history;
+  }
+
+  function restorePreviousFieldValue(control) {
+    const history = readFieldHistory();
+    let previous = history[control.id];
+    if (previous === undefined && control.id === 'oc-add-title') {
+      try { previous = localStorage.getItem(LAST_TITLE_STORAGE_KEY) || ''; } catch (_) {}
+    }
+    if (previous === undefined || previous === null) return false;
+    if (control.type === 'checkbox') control.checked = Boolean(previous);
+    else control.value = String(previous);
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    if (control instanceof HTMLInputElement && ['text', 'number', 'url', 'search'].includes(control.type)) {
+      try { control.setSelectionRange(control.value.length, control.value.length); } catch (_) {}
+    }
+    return true;
+  }
+
+  panel.querySelectorAll('input:not([type="hidden"]), select, textarea').forEach(control => {
+    control.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowDown' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (!restorePreviousFieldValue(control)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
   });
+
+  window.OC_ADD_FIELD_HISTORY = { capture: captureFieldHistory };
 
   const head = panel.querySelector('.oc-addbar-head');
   if (head) {
