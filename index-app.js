@@ -56,7 +56,11 @@
     let ratingScale = 'int'; // 'int', 'half' or personal 'five'
     let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
     let catalogView = localStorage.getItem(CATALOG_VIEW_KEY) === 'compact' ? 'compact' : 'detailed';
-    const filters = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
+    const FILTER_DEFAULTS = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
+    const cloneFilterState = source => ({ ...source, studios: [...(source.studios || [])], directors: [...(source.directors || [])], performers: [...(source.performers || [])], franchises: [...(source.franchises || [])] });
+    const catalogFilters = cloneFilterState(FILTER_DEFAULTS);
+    const profileFilters = cloneFilterState(FILTER_DEFAULTS);
+    let filters = catalogFilters;
     let sortMode = 'added_desc';
     let editingId = null;
     let manualRanks = {};
@@ -654,6 +658,29 @@
         payload.comment = comment ? comment : ext.deleteField();
       }
       await ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${safeOpeningId}`), payload, { merge: true });
+    }
+
+    async function persistCompleteRating(entry, values) {
+      if (!entry || !myName) throw new Error('Не найден пользователь или трек.');
+      const score = Number(values.score);
+      if (!Number.isFinite(score)) throw new Error('Некорректная оценка.');
+      const songScore = values.songScore === null || values.songScore === undefined ? null : Number(values.songScore);
+      const visualScore = values.visualScore === null || values.visualScore === undefined ? null : Number(values.visualScore);
+      const comment = String(values.comment || '').trim().slice(0, 1000);
+      entry.scores = entry.scores || {};
+      entry.songScores = entry.songScores || {};
+      entry.visualScores = entry.visualScores || {};
+      entry.comments = entry.comments || {};
+      entry.scores[myName] = score;
+      if (songScore === null || !Number.isFinite(songScore)) delete entry.songScores[myName]; else entry.songScores[myName] = songScore;
+      if (visualScore === null || !Number.isFinite(visualScore)) delete entry.visualScores[myName]; else entry.visualScores[myName] = visualScore;
+      if (comment) entry.comments[myName] = comment; else delete entry.comments[myName];
+      await window.OPED_DB.saveRating(entry.id, myName, score);
+      await saveRatingExtras(entry.id, myName, { songScore, visualScore, comment });
+      appendManualOrderIfMissing(myName, entry.type, entry.id);
+      touchEntryCache(entry);
+      markRatingDataChanged();
+      return { score, songScore, visualScore, comment };
     }
 
     async function deleteCurrentRating(openingId, nickname, forceMode) {
@@ -2953,22 +2980,23 @@
 
     function syncFilterControls() {
       const pairs = [
-        ['#oc-f-search', filters.search], ['#oc-p-search', filters.search],
-        ['#oc-f-type', filters.type], ['#oc-p-type', filters.type],
-        ['#oc-f-from-year', filters.fromYear], ['#oc-p-from-year', filters.fromYear],
-        ['#oc-f-from-season', filters.fromSeason], ['#oc-p-from-season', filters.fromSeason],
-        ['#oc-f-to-year', filters.toYear], ['#oc-p-to-year', filters.toYear],
-        ['#oc-f-to-season', filters.toSeason], ['#oc-p-to-season', filters.toSeason],
-        ['#oc-f-score-cmp', filters.scoreCmp], ['#oc-p-score-cmp', filters.scoreCmp],
-        ['#oc-f-score-value', filters.scoreValue], ['#oc-p-score-value', filters.scoreValue]
+        ['#oc-f-search', catalogFilters.search], ['#oc-p-search', profileFilters.search],
+        ['#oc-f-type', catalogFilters.type], ['#oc-p-type', profileFilters.type],
+        ['#oc-f-from-year', catalogFilters.fromYear], ['#oc-p-from-year', profileFilters.fromYear],
+        ['#oc-f-from-season', catalogFilters.fromSeason], ['#oc-p-from-season', profileFilters.fromSeason],
+        ['#oc-f-to-year', catalogFilters.toYear], ['#oc-p-to-year', profileFilters.toYear],
+        ['#oc-f-to-season', catalogFilters.toSeason], ['#oc-p-to-season', profileFilters.toSeason],
+        ['#oc-f-score-cmp', catalogFilters.scoreCmp], ['#oc-p-score-cmp', profileFilters.scoreCmp],
+        ['#oc-f-score-value', catalogFilters.scoreValue], ['#oc-p-score-value', profileFilters.scoreValue]
       ];
       pairs.forEach(([selector, value]) => { const el = $(selector); if (el) el.value = value; });
-      ['#oc-f-missing', '#oc-p-missing'].forEach(selector => { const el = $(selector); if (el) el.checked = Boolean(filters.missingOnly); });
+      const catalogMissing = $('#oc-f-missing'); if (catalogMissing) catalogMissing.checked = Boolean(catalogFilters.missingOnly);
+      const profileMissing = $('#oc-p-missing'); if (profileMissing) profileMissing.checked = Boolean(profileFilters.missingOnly);
       const multiPairs = [
-        ['#oc-f-studio', filters.studios], ['#oc-p-studio', filters.studios],
-        ['#oc-f-director', filters.directors], ['#oc-p-director', filters.directors],
-        ['#oc-f-performer', filters.performers], ['#oc-p-performer', filters.performers],
-        ['#oc-f-franchise', filters.franchises], ['#oc-p-franchise', filters.franchises]
+        ['#oc-f-studio', catalogFilters.studios], ['#oc-p-studio', profileFilters.studios],
+        ['#oc-f-director', catalogFilters.directors], ['#oc-p-director', profileFilters.directors],
+        ['#oc-f-performer', catalogFilters.performers], ['#oc-p-performer', profileFilters.performers],
+        ['#oc-f-franchise', catalogFilters.franchises], ['#oc-p-franchise', profileFilters.franchises]
       ];
       syncContentFilterSelect();
       multiPairs.forEach(([selector, selected]) => {
@@ -3663,8 +3691,19 @@
       return shuffled.slice(0, count).map(entry => String(entry.id));
     }
 
+    function trimDailyMap(value, limit = 62) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+      const keys = Object.keys(value).sort().slice(-limit);
+      return Object.fromEntries(keys.map(key => [key, value[key]]));
+    }
+
     async function saveDailyProfilePatch(patch) {
       if (!myName) return;
+      const compactPatch = { ...patch };
+      ['dailyAssignments', 'dailyProgress', 'dailyCompleted'].forEach(key => {
+        if (compactPatch[key]) compactPatch[key] = trimDailyMap(compactPatch[key]);
+      });
+      patch = compactPatch;
       const ext = await getExtendedDb();
       const safe = manualUserSafeKey(myName);
       await ext.setDoc(ext.doc(ext.db, 'userProfiles', safe), {
@@ -4469,6 +4508,8 @@
     function switchTab(tab) {
       if (tab !== 'chart' && !requireAccount()) return;
       activeTab = tab;
+      filters = tab === 'profile' ? profileFilters : catalogFilters;
+      syncFilterControls();
       document.querySelectorAll('.oc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
       mainPanel.classList.toggle('hidden', tab !== 'chart');
       profilePanel.classList.toggle('hidden', tab !== 'profile');
@@ -4548,6 +4589,49 @@
       dailyActiveKey = '';
     }
 
+    function blindSessionStorageKey() {
+      return 'op-ed-blind-rerating-v1:' + manualUserSafeKey(myName);
+    }
+
+    function savedBlindSession() {
+      try {
+        const row = JSON.parse(localStorage.getItem(blindSessionStorageKey()) || 'null');
+        if (!row || !Array.isArray(row.ids) || !row.ids.length) return null;
+        return row;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function persistBlindSession() {
+      if (evaluatorMode !== 'blind' || !seasonQueue.length) return;
+      try {
+        localStorage.setItem(blindSessionStorageKey(), JSON.stringify({
+          ids: seasonQueue.map(entry => String(entry.id)),
+          index: seasonQueueIndex,
+          pending: blindPendingRating,
+          stats: blindSessionStats,
+          savedAt: Date.now()
+        }));
+      } catch (_) {}
+    }
+
+    function clearBlindSession() {
+      try { localStorage.removeItem(blindSessionStorageKey()); } catch (_) {}
+    }
+
+    function resumeBlindRerating() {
+      const saved = savedBlindSession();
+      if (!saved) return openBlindReratingSetup();
+      seasonQueue = saved.ids.map(id => entriesById.get(String(id))).filter(Boolean);
+      seasonQueueIndex = Math.max(0, Math.min(seasonQueue.length, Number(saved.index) || 0));
+      blindPendingRating = saved.pending || null;
+      blindSessionStats = saved.stats || { replaced: 0, kept: 0, skipped: 0, total: seasonQueue.length };
+      evaluatorMode = 'blind';
+      persistBlindSession();
+      renderEvaluator();
+    }
+
     function openBlindReratingSetup() {
       if (!ensureNickname() || !myName) return;
       if (isPersonalScale()) {
@@ -4559,6 +4643,9 @@
         setStatus('По текущим фильтрам нет ранее оценённых треков.', true);
         return;
       }
+      const savedSession = savedBlindSession();
+      const years = [...new Set(candidates.map(entry => Number(entry.year)).filter(Number.isFinite))].sort((a, b) => a - b);
+      const yearOptions = years.map(year => `<option value="${year}">${year}</option>`).join('');
       evaluatorMode = 'blind-setup';
       evaluatorEl.classList.remove('hidden');
       evaluatorEl.innerHTML = `<div class="oc-eval-modal oc-blind-setup">
@@ -4578,6 +4665,12 @@
               <option value="ED">Только ED</option>
             </select>
           </label>
+          <label>От года
+            <select id="oc-blind-from-year"><option value="">Без ограничения</option>${yearOptions}</select>
+          </label>
+          <label>До года
+            <select id="oc-blind-to-year"><option value="">Без ограничения</option>${yearOptions}</select>
+          </label>
           <label>Количество
             <select id="oc-blind-count">
               <option value="5">5 треков</option>
@@ -4590,7 +4683,8 @@
         <div class="oc-blind-candidate-count">Всего ранее оценено: <strong>${candidates.length}</strong></div>
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="close">Отмена</button>
-          <button class="oc-addbtn" data-eval-action="blind-start">Начать</button>
+          ${savedSession ? '<button class="oc-secondary-btn" data-eval-action="blind-resume">Продолжить сохранённую</button>' : ''}
+          <button class="oc-addbtn" data-eval-action="blind-start">Начать заново</button>
         </div>
       </div>`;
     }
@@ -4598,9 +4692,13 @@
     function startBlindRerating() {
       const type = String($('#oc-blind-type')?.value || '');
       const requested = Math.max(1, Number($('#oc-blind-count')?.value || 10));
+      const fromYear = Number($('#oc-blind-from-year')?.value || 0);
+      const toYear = Number($('#oc-blind-to-year')?.value || 0);
       const candidates = entries
         .filter(entry => scoreFor(entry, myName) !== null)
-        .filter(entry => !type || entry.type === type);
+        .filter(entry => !type || entry.type === type)
+        .filter(entry => !fromYear || Number(entry.year) >= fromYear)
+        .filter(entry => !toYear || Number(entry.year) <= toYear);
       for (let index = candidates.length - 1; index > 0; index -= 1) {
         const swap = Math.floor(Math.random() * (index + 1));
         [candidates[index], candidates[swap]] = [candidates[swap], candidates[index]];
@@ -4654,19 +4752,8 @@
       try {
         if (action === 'replace') {
           const next = pending.next;
-          entry.scores = entry.scores || {};
-          entry.songScores = entry.songScores || {};
-          entry.visualScores = entry.visualScores || {};
-          entry.comments = entry.comments || {};
-          entry.scores[myName] = next.score;
-          if (next.songScore === null) delete entry.songScores[myName]; else entry.songScores[myName] = next.songScore;
-          if (next.visualScore === null) delete entry.visualScores[myName]; else entry.visualScores[myName] = next.visualScore;
           const finalComment = next.comment || pending.old.comment;
-          if (finalComment) entry.comments[myName] = finalComment; else delete entry.comments[myName];
-          await window.OPED_DB.saveRating(entry.id, myName, next.score);
-          await saveRatingExtras(entry.id, myName, { songScore: next.songScore, visualScore: next.visualScore, comment: finalComment });
-          touchEntryCache(entry);
-          markRatingDataChanged();
+          await persistCompleteRating(entry, { score: next.score, songScore: next.songScore, visualScore: next.visualScore, comment: finalComment });
           blindSessionStats.replaced += 1;
         } else if (action === 'keep') {
           blindSessionStats.kept += 1;
@@ -4675,6 +4762,7 @@
         }
         blindPendingRating = null;
         seasonQueueIndex += 1;
+        persistBlindSession();
         render();
         if (activeTab === 'profile') renderProfile();
         renderEvaluator();
@@ -4697,6 +4785,7 @@
           return;
         }
         if (completedMode === 'blind') {
+          clearBlindSession();
           const stats = completedBlindStats;
           setStatus(stats ? `Слепая переоценка завершена: заменено ${stats.replaced}, оставлено ${stats.kept}, пропущено ${stats.skipped} ✓` : 'Слепая переоценка завершена ✓');
           return;
@@ -4803,6 +4892,7 @@
           },
           next: { score, songScore, visualScore, comment }
         };
+        persistBlindSession();
         renderEvaluator();
         return;
       }
@@ -4812,24 +4902,7 @@
           entry.personalScores[myName] = score;
           await saveRatingExtras(entry.id, myName, { personalScore: score });
         } else {
-          entry.scores = entry.scores || {};
-          entry.scores[myName] = score;
-          if (songInput) {
-            entry.songScores = entry.songScores || {};
-            if (songScore === null) delete entry.songScores[myName];
-            else entry.songScores[myName] = songScore;
-          }
-          if (visualInput) {
-            entry.visualScores = entry.visualScores || {};
-            if (visualScore === null) delete entry.visualScores[myName];
-            else entry.visualScores[myName] = visualScore;
-          }
-          await window.OPED_DB.saveRating(entry.id, myName, score);
-          entry.comments = entry.comments || {};
-          if (comment) entry.comments[myName] = comment;
-          else delete entry.comments[myName];
-          await saveRatingExtras(entry.id, myName, { songScore, visualScore, comment });
-          appendManualOrderIfMissing(myName, entry.type, entry.id);
+          await persistCompleteRating(entry, { score, songScore, visualScore, comment });
         }
         touchEntryCache(entry);
         markRatingDataChanged();
@@ -6316,24 +6389,7 @@
       if (rawSong && songScore === null) { setStatus(`Введите оценку песни от ${formatScore(bounds.min)} до ${formatScore(bounds.max)} или оставьте поле пустым.`, true); return; }
       if (rawVisual && visualScore === null) { setStatus(`Введите оценку визуала от ${formatScore(bounds.min)} до ${formatScore(bounds.max)} или оставьте поле пустым.`, true); return; }
       try {
-        entry.scores = entry.scores || {};
-        entry.songScores = entry.songScores || {};
-        entry.visualScores = entry.visualScores || {};
-        entry.scores[myName] = score;
-        if (songScore === null) delete entry.songScores[myName];
-        else entry.songScores[myName] = songScore;
-        if (visualScore === null) delete entry.visualScores[myName];
-        else entry.visualScores[myName] = visualScore;
-        if (window.OPED_DB && typeof window.OPED_DB.saveRating === 'function') {
-          await window.OPED_DB.saveRating(entry.id, myName, score);
-        }
-        entry.comments = entry.comments || {};
-        if (comment) entry.comments[myName] = comment;
-        else delete entry.comments[myName];
-        await saveRatingExtras(entry.id, myName, { score, songScore, visualScore, comment });
-        appendManualOrderIfMissing(myName, entry.type, entry.id);
-        touchEntryCache(entry);
-        markRatingDataChanged();
+        await persistCompleteRating(entry, { score, songScore, visualScore, comment });
         render();
         renderSeasonViews();
         if (activeTab === 'profile') renderProfile();
@@ -6813,6 +6869,7 @@
       if (!action) return;
       if (action === 'close') closeEvaluator();
       if (action === 'blind-start') startBlindRerating();
+      if (action === 'blind-resume') resumeBlindRerating();
       if (action === 'blind-replace') await resolveBlindRating('replace');
       if (action === 'blind-keep') await resolveBlindRating('keep');
       if (action === 'blind-skip') await resolveBlindRating('skip');
@@ -6821,6 +6878,7 @@
         else {
           if (evaluatorMode === 'blind' && blindSessionStats) blindSessionStats.skipped += 1;
           seasonQueueIndex += 1;
+          if (evaluatorMode === 'blind') persistBlindSession();
           renderEvaluator();
         }
       }
@@ -7461,67 +7519,73 @@
 
     const debouncedFilterChange = makeDebounced(applyFilterChange, 250);
 
-    function bindSimpleFilter(selector, key, eventName = 'change') {
+    function bindSimpleFilter(selector, key, targetFilters, eventName = 'change') {
       const el = $(selector);
       if (!el) return;
       el.addEventListener(eventName, (e) => {
-        filters[key] = e.target.value;
+        targetFilters[key] = e.target.value;
+        filters = activeTab === 'profile' ? profileFilters : catalogFilters;
         if (eventName === 'input') debouncedFilterChange();
         else applyFilterChange();
       });
     }
 
-    bindSimpleFilter('#oc-f-search', 'search', 'input');
-    bindSimpleFilter('#oc-p-search', 'search', 'input');
-    bindSimpleFilter('#oc-f-type', 'type');
-    bindSimpleFilter('#oc-p-type', 'type');
-    bindSimpleFilter('#oc-f-from-year', 'fromYear');
-    bindSimpleFilter('#oc-p-from-year', 'fromYear');
-    bindSimpleFilter('#oc-f-from-season', 'fromSeason');
-    bindSimpleFilter('#oc-p-from-season', 'fromSeason');
-    bindSimpleFilter('#oc-f-to-year', 'toYear');
-    bindSimpleFilter('#oc-p-to-year', 'toYear');
-    bindSimpleFilter('#oc-f-to-season', 'toSeason');
-    bindSimpleFilter('#oc-p-to-season', 'toSeason');
-    bindSimpleFilter('#oc-f-score-cmp', 'scoreCmp');
-    bindSimpleFilter('#oc-p-score-cmp', 'scoreCmp');
-    bindSimpleFilter('#oc-f-score-value', 'scoreValue', 'input');
-    bindSimpleFilter('#oc-p-score-value', 'scoreValue', 'input');
-    ['#oc-f-missing', '#oc-p-missing'].forEach(selector => {
+    bindSimpleFilter('#oc-f-search', 'search', catalogFilters, 'input');
+    bindSimpleFilter('#oc-p-search', 'search', profileFilters, 'input');
+    bindSimpleFilter('#oc-f-type', 'type', catalogFilters);
+    bindSimpleFilter('#oc-p-type', 'type', profileFilters);
+    bindSimpleFilter('#oc-f-from-year', 'fromYear', catalogFilters);
+    bindSimpleFilter('#oc-p-from-year', 'fromYear', profileFilters);
+    bindSimpleFilter('#oc-f-from-season', 'fromSeason', catalogFilters);
+    bindSimpleFilter('#oc-p-from-season', 'fromSeason', profileFilters);
+    bindSimpleFilter('#oc-f-to-year', 'toYear', catalogFilters);
+    bindSimpleFilter('#oc-p-to-year', 'toYear', profileFilters);
+    bindSimpleFilter('#oc-f-to-season', 'toSeason', catalogFilters);
+    bindSimpleFilter('#oc-p-to-season', 'toSeason', profileFilters);
+    bindSimpleFilter('#oc-f-score-cmp', 'scoreCmp', catalogFilters);
+    bindSimpleFilter('#oc-p-score-cmp', 'scoreCmp', profileFilters);
+    bindSimpleFilter('#oc-f-score-value', 'scoreValue', catalogFilters, 'input');
+    bindSimpleFilter('#oc-p-score-value', 'scoreValue', profileFilters, 'input');
+    [['#oc-f-missing', catalogFilters], ['#oc-p-missing', profileFilters]].forEach(([selector, targetFilters]) => {
       const el = $(selector);
       if (!el) return;
-      el.addEventListener('change', () => { filters.missingOnly = Boolean(el.checked); applyFilterChange(); });
+      el.addEventListener('change', () => {
+        targetFilters.missingOnly = Boolean(el.checked);
+        filters = activeTab === 'profile' ? profileFilters : catalogFilters;
+        applyFilterChange();
+      });
     });
     if (contentFilterSelect) {
       contentFilterSelect.addEventListener('change', (e) => setContentFilterMode(e.target.value));
     }
     $('#oc-sort').addEventListener('change', (e) => { sortMode = e.target.value; chartPage = 1; render(); });
 
-    function bindMultiFilter(selector, filterKey) {
+    function bindMultiFilter(selector, filterKey, targetFilters) {
       const el = $(selector);
       if (!el) return;
+      const apply = () => {
+        targetFilters[filterKey] = Array.from(el.selectedOptions).map(o => o.value);
+        filters = activeTab === 'profile' ? profileFilters : catalogFilters;
+        applyFilterChange();
+      };
       el.addEventListener('mousedown', (e) => {
         const option = e.target && e.target.closest ? e.target.closest('option') : null;
         if (!option || !el.contains(option)) return;
         e.preventDefault();
         option.selected = !option.selected;
-        filters[filterKey] = Array.from(el.selectedOptions).map(o => o.value);
-        applyFilterChange();
+        apply();
         el.focus();
       });
-      el.addEventListener('change', (e) => {
-        filters[filterKey] = Array.from(e.target.selectedOptions).map(o => o.value);
-        applyFilterChange();
-      });
+      el.addEventListener('change', apply);
     }
-    bindMultiFilter('#oc-f-studio', 'studios');
-    bindMultiFilter('#oc-f-director', 'directors');
-    bindMultiFilter('#oc-f-performer', 'performers');
-    bindMultiFilter('#oc-f-franchise', 'franchises');
-    bindMultiFilter('#oc-p-studio', 'studios');
-    bindMultiFilter('#oc-p-director', 'directors');
-    bindMultiFilter('#oc-p-performer', 'performers');
-    bindMultiFilter('#oc-p-franchise', 'franchises');
+    bindMultiFilter('#oc-f-studio', 'studios', catalogFilters);
+    bindMultiFilter('#oc-f-director', 'directors', catalogFilters);
+    bindMultiFilter('#oc-f-performer', 'performers', catalogFilters);
+    bindMultiFilter('#oc-f-franchise', 'franchises', catalogFilters);
+    bindMultiFilter('#oc-p-studio', 'studios', profileFilters);
+    bindMultiFilter('#oc-p-director', 'directors', profileFilters);
+    bindMultiFilter('#oc-p-performer', 'performers', profileFilters);
+    bindMultiFilter('#oc-p-franchise', 'franchises', profileFilters);
 
     document.querySelectorAll('[data-filter-suggest]').forEach(input => {
       input.addEventListener('change', () => addFilterValueFromInput(input));
