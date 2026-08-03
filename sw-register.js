@@ -1,5 +1,5 @@
 (() => {
-  const primaryVersion = '20260730-natural-sort1';
+  const primaryVersion = '20260803-uncertain-comments1';
   const discoveryVersion = '20260731-duel-editor-draft1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
@@ -78,7 +78,7 @@
 
   if (catalogAdminWorkspace && document.querySelector('.oc-addbar')) {
     addStyle('track-add-panel.css');
-    void addScript('track-add-panel.js', '20260729-last-title1', true);
+    void addScript('track-add-panel.js', '20260803-uncertain-comments1', true);
   }
 
   function loadTop100Package() {
