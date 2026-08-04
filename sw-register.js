@@ -13,6 +13,7 @@
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
   const ratingWorkbenchVersion = '20260804-split-op-ed1';
+  const trackAddPanelVersion = '20260804-list-suggestions1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
@@ -81,8 +82,8 @@
   });
 
   if (catalogAdminWorkspace && document.querySelector('.oc-addbar')) {
-    addStyle('track-add-panel.css', '20260803-existing-corrections1');
-    void addScript('track-add-panel.js', '20260803-existing-corrections1', true);
+    addStyle('track-add-panel.css', trackAddPanelVersion);
+    void addScript('track-add-panel.js', trackAddPanelVersion, true);
   }
 
   function loadTop100Package() {
