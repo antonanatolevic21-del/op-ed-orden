@@ -7855,7 +7855,10 @@
           const control = $('#' + id);
           if (!control) return;
           if (control.type === 'checkbox') control.checked = Boolean(checked);
-          else control.value = value;
+          else {
+            control.value = value;
+            control.dispatchEvent(new Event('input', { bubbles: true }));
+          }
         };
         resetAddControl('oc-add-title', '');
         resetAddControl('oc-add-type', 'OP');
