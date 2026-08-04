@@ -588,7 +588,7 @@
 
     function touchEntryCache(entry) {
       if (!entry) return entry;
-      ['scores', 'songScores', 'visualScores', 'personalScores', 'comments'].forEach(key => {
+      ['scores', 'songScores', 'visualScores', 'customScores', 'personalScores', 'comments'].forEach(key => {
         if (entry[key] && typeof entry[key] === 'object') {
           try { delete entry[key].__oc_stats; } catch (e) {}
         }
@@ -714,6 +714,10 @@
         const comment = String(extras.comment || '').trim().slice(0, 1000);
         payload.comment = comment ? comment : ext.deleteField();
       }
+      if (Object.prototype.hasOwnProperty.call(extras, 'customScores')) {
+        const customScores = normalizeCustomRatingScores(extras.customScores);
+        payload.customScores = Object.keys(customScores).length ? customScores : ext.deleteField();
+      }
       await ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${safeOpeningId}`), payload, { merge: true });
     }
 
@@ -723,22 +727,25 @@
       if (!Number.isFinite(score)) throw new Error('Некорректная оценка.');
       const songScore = values.songScore === null || values.songScore === undefined ? null : Number(values.songScore);
       const visualScore = values.visualScore === null || values.visualScore === undefined ? null : Number(values.visualScore);
+      const customScores = normalizeCustomRatingScores(values.customScores);
       const comment = String(values.comment || '').trim().slice(0, 1000);
       entry.scores = entry.scores || {};
       entry.songScores = entry.songScores || {};
       entry.visualScores = entry.visualScores || {};
+      entry.customScores = entry.customScores || {};
       entry.comments = entry.comments || {};
       entry.scores[myName] = score;
       if (songScore === null || !Number.isFinite(songScore)) delete entry.songScores[myName]; else entry.songScores[myName] = songScore;
       if (visualScore === null || !Number.isFinite(visualScore)) delete entry.visualScores[myName]; else entry.visualScores[myName] = visualScore;
+      if (Object.keys(customScores).length) entry.customScores[myName] = customScores; else delete entry.customScores[myName];
       if (comment) entry.comments[myName] = comment; else delete entry.comments[myName];
       await window.OPED_DB.saveRating(entry.id, myName, score);
-      await saveRatingExtras(entry.id, myName, { songScore, visualScore, comment });
+      await saveRatingExtras(entry.id, myName, { songScore, visualScore, customScores, comment });
       await removeRateLaterEntry(entry.id);
       appendManualOrderIfMissing(myName, entry.type, entry.id);
       touchEntryCache(entry);
       markRatingDataChanged();
-      return { score, songScore, visualScore, comment };
+      return { score, songScore, visualScore, customScores, comment };
     }
 
     async function deleteCurrentRating(openingId, nickname, forceMode) {
@@ -1146,6 +1153,7 @@
         scores: aggregateScoreMap(row),
         songScores: aggregateScoreMap(row, 'song'),
         visualScores: aggregateScoreMap(row, 'visual'),
+        customScores: {},
         comments: {},
         personalScores: {}
       };
@@ -1174,6 +1182,7 @@
         const songScore = normalizeOptionalNumber(r.songScore);
         const visualScore = normalizeOptionalNumber(r.visualScore);
         const personalScore = normalizeOptionalNumber(r.personalScore);
+        const customScores = normalizeCustomRatingScores(r.customScores);
         const comment = String(r.comment || '').trim();
 
         if (!entry || !nickname) return;
@@ -1192,6 +1201,10 @@
         if (comment) {
           entry.comments = entry.comments || {};
           entry.comments[nickname] = comment;
+        }
+        if (Object.keys(customScores).length) {
+          entry.customScores = entry.customScores || {};
+          entry.customScores[nickname] = customScores;
         }
         if (Number.isFinite(score)) {
           entry.scores = entry.scores || {};
@@ -3573,51 +3586,87 @@
       </details>`;
     }
 
-    function ratingCriteriaMarkup(entry, prefix) {
-      if (!entry || isPersonalScale()) return '';
-      const criteria = ratingCriteriaFor(entry.type);
-      const total = criteria.songWeight + criteria.visualWeight;
-      const songPercent = Math.round(criteria.songWeight / total * 100);
-      const visualPercent = 100 - songPercent;
-      return `<div class="oc-rating-criteria" data-rating-criteria-prefix="${escapeHtml(prefix)}" data-song-weight="${criteria.songWeight}" data-visual-weight="${criteria.visualWeight}">
-        <div><strong>${entry.type === 'ED' ? 'Критерии эндинга' : 'Критерии опенинга'}</strong><span>песня ${songPercent}% · визуал ${visualPercent}%</span></div>
-        ${criteria.note ? `<p>${escapeHtml(criteria.note)}</p>` : ''}
-        <div class="oc-rating-criteria-suggestion"><span data-rating-criteria-value>Заполни песню и визуал, чтобы получить подсказку</span><button type="button" class="oc-secondary-btn" data-rating-criteria-apply disabled>Подставить итог</button></div>
-      </div>`;
+    function normalizeRatingFields(value) {
+      const source = Array.isArray(value) ? value : [];
+      const used = new Set();
+      return source.slice(0, 8).map((row, index) => {
+        const item = row && typeof row === 'object' ? row : {};
+        const label = String(item.label || item.name || '').trim().slice(0, 48);
+        let id = String(item.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+        if (!id) id = `field-${index + 1}`;
+        while (used.has(id)) id = `${id}-${index + 1}`;
+        used.add(id);
+        return { id, label };
+      }).filter(row => row.label);
     }
 
-    function bindRatingCriteriaSuggestion(root, prefix) {
-      const box = root?.querySelector?.(`[data-rating-criteria-prefix="${prefix}"]`);
-      const song = root?.querySelector?.(`#${prefix}-song-score`);
-      const visual = root?.querySelector?.(`#${prefix}-visual-score`);
-      const totalInput = root?.querySelector?.(`#${prefix}-score`);
-      if (!box || !song || !visual || !totalInput) return;
-      const value = box.querySelector('[data-rating-criteria-value]');
-      const apply = box.querySelector('[data-rating-criteria-apply]');
-      let suggested = null;
-      const update = () => {
-        const songValue = clampScore(song.value);
-        const visualValue = clampScore(visual.value);
-        if (songValue === null || visualValue === null) {
-          suggested = null;
-          if (value) value.textContent = 'Заполни песню и визуал, чтобы получить подсказку';
-          if (apply) apply.disabled = true;
-          return;
-        }
-        const songWeight = Number(box.dataset.songWeight) || 0;
-        const visualWeight = Number(box.dataset.visualWeight) || 0;
-        suggested = clampScore((songValue * songWeight + visualValue * visualWeight) / Math.max(1, songWeight + visualWeight));
-        if (value) value.textContent = `Предлагаемый итог: ${formatScore(suggested)}`;
-        if (apply) apply.disabled = false;
-      };
-      song.addEventListener('input', update);
-      visual.addEventListener('input', update);
-      apply?.addEventListener('click', () => {
-        if (suggested === null) return;
-        totalInput.value = String(suggested);
-        totalInput.dispatchEvent(new Event('input', { bubbles: true }));
+    function normalizeCustomRatingScores(value) {
+      const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      const result = {};
+      Object.entries(source).slice(0, 8).forEach(([rawId, rawValue]) => {
+        const id = String(rawId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+        const score = normalizeOptionalNumber(rawValue);
+        if (id && Number.isFinite(score)) result[id] = score;
       });
-      update();
+      return result;
+    }
+
+    function detailedRatingSettings(name = myName) {
+      const profile = dailyProfileFor(name);
+      return {
+        enabled: Boolean(profile?.detailedRatingEnabled),
+        songLabel: String(profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня',
+        visualLabel: String(profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
+        fields: normalizeRatingFields(profile?.ratingFields)
+      };
+    }
+
+    function customScoresFor(entry, name) {
+      return normalizeCustomRatingScores(valueForUserMap(entry && entry.customScores, name));
+    }
+
+    function detailedRatingMarkup(entry, prefix, songScore, visualScore) {
+      if (!entry || isPersonalScale()) return '';
+      const settings = detailedRatingSettings();
+      if (!settings.enabled) {
+        return `<div class="oc-detailed-rating-off"><span><b>Детальное оценивание выключено</b><small>Дополнительные критерии скрыты</small></span><button type="button" class="oc-secondary-btn" data-open-rating-fields-settings>Включить детальное оценивание</button></div>`;
+      }
+      const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
+      const saved = customScoresFor(entry, myName);
+      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз.</span><input type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}"></label>`).join('')}</div>` : '';
+      return `<div class="oc-eval-parts">
+        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз.</span>
+          <input id="${prefix}-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" />
+        </label>
+        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз.</span>
+          <input id="${prefix}-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" />
+        </label>
+      </div>${custom}`;
+    }
+
+    function readDetailedRating(root, entry, prefix) {
+      const settings = detailedRatingSettings();
+      if (!settings.enabled) {
+        return { songScore: songScoreFor(entry, myName), visualScore: visualScoreFor(entry, myName), customScores: customScoresFor(entry, myName), error: '' };
+      }
+      const songInput = root?.querySelector?.(`#${prefix}-song-score`);
+      const visualInput = root?.querySelector?.(`#${prefix}-visual-score`);
+      const rawSong = songInput ? String(songInput.value || '').trim() : '';
+      const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
+      const songScore = rawSong ? clampScore(rawSong) : null;
+      const visualScore = rawVisual ? clampScore(rawVisual) : null;
+      if (rawSong && songScore === null) return { error: `Введите «${settings.songLabel}» от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
+      if (rawVisual && visualScore === null) return { error: `Введите «${settings.visualLabel}» от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
+      const customScores = {};
+      for (const input of root?.querySelectorAll?.('[data-custom-rating-id]') || []) {
+        const raw = String(input.value || '').trim();
+        if (!raw) continue;
+        const score = clampScore(raw);
+        const label = String(input.dataset.customRatingLabel || 'Дополнительная оценка');
+        if (score === null) return { error: `Введите «${label}» от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
+        customScores[input.dataset.customRatingId] = score;
+      }
+      return { songScore, visualScore, customScores, error: '' };
     }
 
     function hasRated(entry, name) {
@@ -3757,23 +3806,6 @@
       await saveDailyProfilePatch({ rateLaterIds: ids.filter(value => value !== id) });
       publishAppData('rate-later-saved');
       return true;
-    }
-
-    function normalizeRatingCriteria(value) {
-      const source = value && typeof value === 'object' ? value : {};
-      const normalizeType = row => {
-        const item = row && typeof row === 'object' ? row : {};
-        let songWeight = Math.max(0, Math.min(100, Number(item.songWeight ?? 50) || 0));
-        let visualWeight = Math.max(0, Math.min(100, Number(item.visualWeight ?? 50) || 0));
-        if (songWeight + visualWeight <= 0) { songWeight = 50; visualWeight = 50; }
-        return { songWeight, visualWeight, note: String(item.note || '').trim().slice(0, 240) };
-      };
-      return { OP: normalizeType(source.OP), ED: normalizeType(source.ED) };
-    }
-
-    function ratingCriteriaFor(type, name = myName) {
-      const profile = dailyProfileFor(name);
-      return normalizeRatingCriteria(profile?.ratingCriteria)[type === 'ED' ? 'ED' : 'OP'];
     }
 
     function normalizeDailySettings(raw = {}) {
@@ -5028,8 +5060,9 @@
         <div class="oc-blind-compare">
           <div class="oc-blind-compare-head"><span></span><span>Было</span><span></span><span>Стало</span></div>
           ${scoreLine('Итог', pending.old.score, pending.next.score)}
-          ${scoreLine('Песня', pending.old.songScore, pending.next.songScore)}
-          ${scoreLine('Визуал', pending.old.visualScore, pending.next.visualScore)}
+          ${scoreLine(detailedRatingSettings().songLabel, pending.old.songScore, pending.next.songScore)}
+          ${scoreLine(detailedRatingSettings().visualLabel, pending.old.visualScore, pending.next.visualScore)}
+          ${detailedRatingSettings().fields.map(field => scoreLine(field.label, pending.old.customScores?.[field.id], pending.next.customScores?.[field.id])).join('')}
           ${pending.next.comment ? `<div class="oc-blind-new-comment">💬 Новый комментарий: ${escapeHtml(pending.next.comment)}</div>` : ''}
         </div>
         <div class="oc-eval-actions">
@@ -5049,7 +5082,7 @@
         if (action === 'replace') {
           const next = pending.next;
           const finalComment = next.comment || pending.old.comment;
-          await persistCompleteRating(entry, { score: next.score, songScore: next.songScore, visualScore: next.visualScore, comment: finalComment });
+          await persistCompleteRating(entry, { score: next.score, songScore: next.songScore, visualScore: next.visualScore, customScores: next.customScores, comment: finalComment });
           blindSessionStats.replaced += 1;
         } else if (action === 'keep') {
           blindSessionStats.kept += 1;
@@ -5136,16 +5169,8 @@
           <label>${isPersonalScale() ? 'Значение' : 'Итог'}
             <input id="oc-eval-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
           </label>
-          ${optionalPublicParts ? `<div class="oc-eval-parts">
-            <label>Песня <span class="oc-muted-inline">необяз.</span>
-              <input id="oc-eval-song-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedSongScore !== null ? savedSongScore : ''}" placeholder="—" />
-            </label>
-            <label>Визуал <span class="oc-muted-inline">необяз.</span>
-              <input id="oc-eval-visual-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedVisualScore !== null ? savedVisualScore : ''}" placeholder="—" />
-            </label>
-          </div>
+          ${optionalPublicParts ? `${detailedRatingMarkup(entry, 'oc-eval', savedSongScore, savedVisualScore)}
           ${ratingCommentEditorMarkup('oc-eval', savedComment)}
-          ${ratingCriteriaMarkup(entry, 'oc-eval')}
           ${blindMode ? '<div class="oc-blind-comment-hint">Пустое поле сохранит прежний комментарий.</div>' : ''}` : ''}
         </div>
         <div class="oc-eval-actions">
@@ -5164,7 +5189,6 @@
         const val = clampScore(score.value);
         if (val !== null) { range.value = String(val); updateWord(val); }
       });
-      bindRatingCriteriaSuggestion(evaluatorEl, 'oc-eval');
       bindVideoEmbeds(evaluatorEl);
     }
 
@@ -5172,17 +5196,12 @@
       const entry = seasonQueue[seasonQueueIndex];
       if (!entry) return;
       const score = clampScore($('#oc-eval-score').value);
-      const songInput = $('#oc-eval-song-score');
-      const visualInput = $('#oc-eval-visual-score');
       const commentInput = $('#oc-eval-comment');
       const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
-      const rawSong = songInput ? String(songInput.value || '').trim() : '';
-      const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
-      const songScore = rawSong ? clampScore(rawSong) : null;
-      const visualScore = rawVisual ? clampScore(rawVisual) : null;
+      const detailed = readDetailedRating(evaluatorEl, entry, 'oc-eval');
+      const { songScore, visualScore, customScores } = detailed;
       if (score === null) { setStatus(`Введите оценку от ${formatScore(ratingMin())} до ${formatScore(ratingMax())}.`, true); return; }
-      if (rawSong && songScore === null) { setStatus(`Введите оценку песни от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.`, true); return; }
-      if (rawVisual && visualScore === null) { setStatus(`Введите оценку визуала от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.`, true); return; }
+      if (detailed.error) { setStatus(detailed.error, true); return; }
       if (evaluatorMode === 'blind') {
         blindPendingRating = {
           entryId: String(entry.id),
@@ -5190,9 +5209,10 @@
             score: scoreFor(entry, myName),
             songScore: songScoreFor(entry, myName),
             visualScore: visualScoreFor(entry, myName),
+            customScores: customScoresFor(entry, myName),
             comment: ratingCommentFor(entry, myName)
           },
-          next: { score, songScore, visualScore, comment }
+          next: { score, songScore, visualScore, customScores, comment }
         };
         persistBlindSession();
         renderEvaluator();
@@ -5205,7 +5225,7 @@
           await saveRatingExtras(entry.id, myName, { personalScore: score });
           await removeRateLaterEntry(entry.id);
         } else {
-          await persistCompleteRating(entry, { score, songScore, visualScore, comment });
+          await persistCompleteRating(entry, { score, songScore, visualScore, customScores, comment });
         }
         touchEntryCache(entry);
         markRatingDataChanged();
@@ -6666,16 +6686,8 @@
             <label>Итог
               <input id="oc-card-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${savedScore}" />
             </label>
-            <div class="oc-eval-parts">
-              <label>Песня <span class="oc-muted-inline">необяз.</span>
-                <input id="oc-card-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${mySongScore !== null ? formatScore(mySongScore) : ''}" placeholder="—" />
-              </label>
-              <label>Визуал <span class="oc-muted-inline">необяз.</span>
-                <input id="oc-card-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${myVisualScore !== null ? formatScore(myVisualScore) : ''}" placeholder="—" />
-              </label>
-            </div>
+            ${detailedRatingMarkup(entry, 'oc-card', mySongScore, myVisualScore)}
             ${ratingCommentEditorMarkup('oc-card', myComment)}
-            ${ratingCriteriaMarkup(entry, 'oc-card')}
           </div>
           <div class="oc-opening-rate-actions">
             ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
@@ -6688,12 +6700,11 @@
         </div>
         <div class="oc-opening-user-votes">
           <div class="oc-section-label" style="margin-bottom:8px;">оценки пользователей</div>
-          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${songScoreFor(entry, voter) !== null ? ' · песня ' + formatScore(songScoreFor(entry, voter)) : ''}${visualScoreFor(entry, voter) !== null ? ' · визуал ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
+          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
         </div>
       </div>`;
 
       bindOpeningVideoEmbed();
-      bindRatingCriteriaSuggestion(openingModal, 'oc-card');
       const range = $('#oc-card-range');
       const scoreInput = $('#oc-card-score');
       const word = $('#oc-card-word');
@@ -6734,21 +6745,16 @@
       if (!entry || !openingModal) return;
       if (!ensureNickname()) return;
       const scoreInput = $('#oc-card-score');
-      const songInput = $('#oc-card-song-score');
-      const visualInput = $('#oc-card-visual-score');
       const commentInput = $('#oc-card-comment');
       const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
       const score = clampOpeningModalScore(scoreInput ? scoreInput.value : '');
-      const rawSong = songInput ? String(songInput.value || '').trim() : '';
-      const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
-      const songScore = rawSong ? clampOpeningModalScore(rawSong) : null;
-      const visualScore = rawVisual ? clampOpeningModalScore(rawVisual) : null;
+      const detailed = readDetailedRating(openingModal, entry, 'oc-card');
+      const { songScore, visualScore, customScores } = detailed;
       const bounds = openingModalInputBounds();
       if (score === null) { setStatus(`Введите общую оценку от ${formatScore(bounds.min)} до ${formatScore(bounds.max)}.`, true); return; }
-      if (rawSong && songScore === null) { setStatus(`Введите оценку песни от ${formatScore(bounds.min)} до ${formatScore(bounds.max)} или оставьте поле пустым.`, true); return; }
-      if (rawVisual && visualScore === null) { setStatus(`Введите оценку визуала от ${formatScore(bounds.min)} до ${formatScore(bounds.max)} или оставьте поле пустым.`, true); return; }
+      if (detailed.error) { setStatus(detailed.error, true); return; }
       try {
-        await persistCompleteRating(entry, { score, songScore, visualScore, comment });
+        await persistCompleteRating(entry, { score, songScore, visualScore, customScores, comment });
         render();
         renderSeasonViews();
         if (activeTab === 'profile') renderProfile();
