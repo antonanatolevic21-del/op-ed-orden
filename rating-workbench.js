@@ -14,14 +14,18 @@
   const viewedName = () => String(document.querySelector('#oc-profile-user')?.value || currentName()).trim();
   const sameUser = (left, right) => String(left || '').trim().toLowerCase().replace(/ё/g, 'е') === String(right || '').trim().toLowerCase().replace(/ё/g, 'е');
 
-  function normalizeCriteria(value) {
-    const source = value && typeof value === 'object' ? value : {};
-    const row = type => ({
-      songWeight: Math.max(0, Math.min(100, Number(source[type]?.songWeight ?? 50) || 0)),
-      visualWeight: Math.max(0, Math.min(100, Number(source[type]?.visualWeight ?? 50) || 0)),
-      note: String(source[type]?.note || '').slice(0, 240)
-    });
-    return { OP: row('OP'), ED: row('ED') };
+  function normalizeRatingFields(value) {
+    const source = Array.isArray(value) ? value : [];
+    const used = new Set();
+    return source.slice(0, 8).map((row, index) => {
+      const item = row && typeof row === 'object' ? row : {};
+      const label = String(item.label || item.name || '').trim().slice(0, 48);
+      let id = String(item.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+      if (!id) id = `field-${index + 1}`;
+      while (used.has(id)) id = `${id}-${index + 1}`;
+      used.add(id);
+      return { id, label };
+    }).filter(row => row.label);
   }
 
   function profileFor(name) {
@@ -41,23 +45,22 @@
     return root;
   }
 
+  function ratingFieldRow(field = {}) {
+    const id = String(field.id || `field-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}">
+      <input type="text" maxlength="48" value="${esc(field.label || '')}" data-rating-field-label placeholder="Например: Личное впечатление">
+      <button type="button" data-rating-field-remove aria-label="Удалить поле">×</button>
+    </div>`;
+  }
+
   function criteriaMarkup(profile, own) {
     if (!own) return '';
-    const criteria = normalizeCriteria(profile?.ratingCriteria);
-    const panel = type => {
-      const row = criteria[type];
-      return `<fieldset class="oc-criteria-card ${type.toLowerCase()}">
-        <legend>${type === 'OP' ? 'Критерии опенинга' : 'Критерии эндинга'}</legend>
-        <div class="oc-criteria-weights">
-          <label>Вес песни<input type="number" min="0" max="100" step="5" value="${row.songWeight}" data-criteria-type="${type}" data-criteria-field="songWeight"></label>
-          <label>Вес визуала<input type="number" min="0" max="100" step="5" value="${row.visualWeight}" data-criteria-type="${type}" data-criteria-field="visualWeight"></label>
-        </div>
-        <label>Личная памятка<textarea maxlength="240" rows="3" data-criteria-type="${type}" data-criteria-field="note" placeholder="На что ты обращаешь внимание именно в ${type}…">${esc(row.note)}</textarea></label>
-      </fieldset>`;
-    };
+    const fields = normalizeRatingFields(profile?.ratingFields);
+    const rows = fields.map(ratingFieldRow).join('');
     return `<section class="oc-workbench-block oc-criteria-settings">
-      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Разные критерии OP и ED</h3><p>Вес используется только для необязательной подсказки итоговой оценки. Балл всегда можно поставить вручную.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить критерии</button></div>
-      <div class="oc-criteria-grid">${panel('OP')}${panel('ED')}</div>
+      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Дополнительные поля оценки</h3><p>Добавь до восьми необязательных оценок со своими названиями. Они будут доступны и для OP, и для ED.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить поля</button></div>
+      <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
+      <button type="button" class="oc-secondary-btn oc-custom-field-add" data-rating-field-add>+ Добавить поле</button>
     </section>`;
   }
 
@@ -114,7 +117,7 @@
     const user = viewedName();
     const own = Boolean(user && currentName() && sameUser(user, currentName()));
     const profile = profileFor(user) || {};
-    root.innerHTML = `${criteriaMarkup(profile, own)}${rateLaterMarkup(entries, profile, own)}${coverageMarkup(entries, user, own)}`;
+    root.innerHTML = `${rateLaterMarkup(entries, profile, own)}${criteriaMarkup(profile, own)}${coverageMarkup(entries, user, own)}`;
     root.hidden = !user;
     scanRateLaterButtons();
   }
@@ -122,22 +125,16 @@
   async function saveCriteria(button) {
     const root = ensureRoot();
     if (!root) return;
-    const criteria = { OP: {}, ED: {} };
-    root.querySelectorAll('[data-criteria-type][data-criteria-field]').forEach(input => {
-      const type = input.dataset.criteriaType;
-      const field = input.dataset.criteriaField;
-      criteria[type][field] = field === 'note' ? String(input.value || '').trim().slice(0, 240) : Math.max(0, Math.min(100, Number(input.value) || 0));
-    });
-    ['OP', 'ED'].forEach(type => {
-      if (criteria[type].songWeight + criteria[type].visualWeight <= 0) {
-        criteria[type].songWeight = 50;
-        criteria[type].visualWeight = 50;
-      }
+    const fields = [];
+    root.querySelectorAll('[data-rating-field-row]').forEach(row => {
+      const label = String(row.querySelector('[data-rating-field-label]')?.value || '').trim().slice(0, 48);
+      const id = String(row.dataset.fieldId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+      if (label && id) fields.push({ id, label });
     });
     button.disabled = true;
     button.textContent = 'Сохраняю…';
     try {
-      await bridge()?.saveProfilePatch?.({ ratingCriteria: criteria });
+      await bridge()?.saveProfilePatch?.({ ratingFields: fields.slice(0, 8) });
       button.textContent = 'Сохранено ✓';
       window.setTimeout(render, 500);
     } catch (error) {
@@ -170,6 +167,22 @@
   }
 
   document.addEventListener('click', async event => {
+    const addField = event.target.closest('[data-rating-field-add]');
+    if (addField) {
+      const list = ensureRoot()?.querySelector('[data-rating-fields-list]');
+      if (!list || list.querySelectorAll('[data-rating-field-row]').length >= 8) return;
+      list.querySelector('[data-rating-fields-empty]')?.remove();
+      list.insertAdjacentHTML('beforeend', ratingFieldRow());
+      list.lastElementChild?.querySelector('input')?.focus();
+      return;
+    }
+    const removeField = event.target.closest('[data-rating-field-remove]');
+    if (removeField) {
+      const list = removeField.closest('[data-rating-fields-list]');
+      removeField.closest('[data-rating-field-row]')?.remove();
+      if (list && !list.querySelector('[data-rating-field-row]')) list.innerHTML = '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>';
+      return;
+    }
     const save = event.target.closest('[data-criteria-save]');
     if (save) { await saveCriteria(save); return; }
     const coverage = event.target.closest('[data-coverage-key]');
