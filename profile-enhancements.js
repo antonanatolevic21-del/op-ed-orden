@@ -289,12 +289,12 @@
 
     let summary = stats.querySelector('.oc-profile-overview-heading-summary');
     if (!summary) summary = overviewHeading('summary', 'Ключевые показатели', 'Средние оценки и прогресс по каталогу без лишней россыпи карточек.');
-    if (firstMetric) stats.insertBefore(summary, firstMetric);
+    if (firstMetric && (summary.parentElement !== stats || summary.nextElementSibling !== firstMetric)) stats.insertBefore(summary, firstMetric);
 
     let leaders = stats.querySelector('.oc-profile-overview-heading-leaders');
     if (firstLeader) {
       if (!leaders) leaders = overviewHeading('leaders', 'Лидеры', 'Студии, исполнители, режиссёры, франшизы и сезоны — крупными, читаемыми блоками.');
-      stats.insertBefore(leaders, firstLeader);
+      if (leaders.parentElement !== stats || leaders.nextElementSibling !== firstLeader) stats.insertBefore(leaders, firstLeader);
     } else if (leaders) {
       leaders.remove();
     }
@@ -303,7 +303,7 @@
   function scheduleOverviewStats() {
     if (statsEnhanceScheduled) return;
     statsEnhanceScheduled = true;
-    requestAnimationFrame(enhanceOverviewStats);
+    queueMicrotask(enhanceOverviewStats);
   }
 
   function syncManualOwnershipControls() {
@@ -524,7 +524,7 @@
   function queueMount() {
     if (mountQueued) return;
     mountQueued = true;
-    requestAnimationFrame(() => requestAnimationFrame(mount));
+    queueMicrotask(mount);
   }
 
   const profile = document.querySelector('#oc-profile-panel');
