@@ -79,6 +79,7 @@
   }
 
   function coverageMarkup(entries, user, own) {
+    if (!own) return '';
     const rows = new Map();
     queueMap = new Map();
     entries.forEach(entry => {
