@@ -54,7 +54,9 @@
       while (used.has(id)) id = `${id}-${index + 1}`;
       used.add(id);
       const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
-      return { id, label, weight };
+      const mode = item.mode === 'modifier' ? 'modifier' : 'weight';
+      const modifierRules = String(item.modifierRules || item.rules || '').trim().slice(0, 240);
+      return { id, label, weight, mode, modifierRules };
     }).filter(row => row.label);
   }
 
@@ -68,6 +70,10 @@
       visualLabel: String(source?.visualLabel || profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
       songWeight: Math.max(0, Math.min(100, Number(source?.songWeight ?? oldType?.songWeight ?? profile?.songScoreWeight ?? 50) || 0)),
       visualWeight: Math.max(0, Math.min(100, Number(source?.visualWeight ?? oldType?.visualWeight ?? profile?.visualScoreWeight ?? 50) || 0)),
+      songMode: source?.songMode === 'modifier' ? 'modifier' : 'weight',
+      visualMode: source?.visualMode === 'modifier' ? 'modifier' : 'weight',
+      songModifierRules: String(source?.songModifierRules || '').trim().slice(0, 240),
+      visualModifierRules: String(source?.visualModifierRules || '').trim().slice(0, 240),
       fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
     };
   }
@@ -92,9 +98,13 @@
   function ratingFieldRow(type, field = {}) {
     const id = String(field.id || `${type.toLowerCase()}-field-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
     const weight = Math.max(0, Math.min(100, Number(field.weight ?? 50) || 0));
-    return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}">
+    const mode = field.mode === 'modifier' ? 'modifier' : 'weight';
+    const modifierRules = String(field.modifierRules || '').trim().slice(0, 240);
+    return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}" data-criterion-config>
       <input type="text" maxlength="48" value="${esc(field.label || '')}" data-rating-field-label placeholder="Например: Личное впечатление">
-      <label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${weight}" data-rating-field-weight></label>
+      <label class="oc-rating-mode-field"><span>Расчёт</span><select data-rating-field-mode data-criterion-mode><option value="weight" ${mode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${mode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label>
+      <label class="oc-rating-weight-field" data-criterion-weight ${mode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${weight}" data-rating-field-weight></label>
+      <label class="oc-rating-modifier-field" data-criterion-modifier ${mode === 'modifier' ? '' : 'hidden'}><span>Правила</span><input type="text" maxlength="240" value="${esc(modifierRules)}" data-rating-field-modifier placeholder="1-3: -1; 9-10: +1"></label>
       <button type="button" data-rating-field-remove aria-label="Удалить поле">×</button>
     </div>`;
   }
@@ -111,8 +121,8 @@
         <legend>${title}</legend>
         <label class="oc-detailed-rating-switch"><input type="checkbox" data-type-detailed-enabled ${settings.enabled ? 'checked' : ''}><span><b>Включить детальную оценку ${type}</b><small>Настройка действует только для ${type}</small></span></label>
         <div class="oc-base-rating-fields">
-          <div class="oc-base-rating-field"><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(settings.songLabel)}" data-type-song-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.songWeight}" data-type-song-weight></label></div>
-          <div class="oc-base-rating-field"><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(settings.visualLabel)}" data-type-visual-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.visualWeight}" data-type-visual-weight></label></div>
+          <div class="oc-base-rating-field" data-criterion-config><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(settings.songLabel)}" data-type-song-label></label><label class="oc-rating-mode-field"><span>Расчёт</span><select data-type-song-mode data-criterion-mode><option value="weight" ${settings.songMode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${settings.songMode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label><label class="oc-rating-weight-field" data-criterion-weight ${settings.songMode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.songWeight}" data-type-song-weight></label><label class="oc-rating-modifier-field" data-criterion-modifier ${settings.songMode === 'modifier' ? '' : 'hidden'}><span>Правила</span><input type="text" maxlength="240" value="${esc(settings.songModifierRules)}" data-type-song-modifier placeholder="1-3: -1; 9-10: +1"></label></div>
+          <div class="oc-base-rating-field" data-criterion-config><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(settings.visualLabel)}" data-type-visual-label></label><label class="oc-rating-mode-field"><span>Расчёт</span><select data-type-visual-mode data-criterion-mode><option value="weight" ${settings.visualMode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${settings.visualMode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label><label class="oc-rating-weight-field" data-criterion-weight ${settings.visualMode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.visualWeight}" data-type-visual-weight></label><label class="oc-rating-modifier-field" data-criterion-modifier ${settings.visualMode === 'modifier' ? '' : 'hidden'}><span>Правила</span><input type="text" maxlength="240" value="${esc(settings.visualModifierRules)}" data-type-visual-modifier placeholder="1-3: -1; 9-10: +1"></label></div>
         </div>
         <div class="oc-custom-fields-head"><b>Собственные критерии</b><span>до восьми</span></div>
         <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
@@ -121,7 +131,7 @@
     };
     return `<section class="oc-workbench-block oc-criteria-settings" id="oc-rating-fields-settings">
       <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание OP и ED</h3><p>Каждый тип включается и настраивается отдельно. Несохранённые изменения остаются в локальном черновике и не пропадают при обновлении профиля.</p></div><div class="oc-criteria-actions"><span class="oc-criteria-draft-state" data-criteria-draft-state ${draft ? '' : 'hidden'}>Черновик сохранён локально</span><button type="button" class="oc-secondary-btn" data-criteria-discard ${draft ? '' : 'hidden'}>Вернуть сохранённое</button><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div></div>
-      <div class="oc-rating-weight-hint">Вес относительный: значения не обязаны складываться в 100. Нулевой вес исключает критерий из подсказки итогового балла.</div>
+      <div class="oc-rating-weight-hint">«Вес» формирует базовую среднюю: значения не обязаны складываться в 100. «Модификатор» прибавляется к основе по первому подходящему правилу: <b>1-3: -1; 9-10: +1</b>. Также доступны условия <b>&lt;=3</b>, <b>&gt;=9</b> и <b>*</b>.</div>
       <div class="oc-criteria-grid">${panel('OP')}${panel('ED')}</div>
     </section>`;
   }
@@ -198,7 +208,9 @@
         const label = String(row.querySelector('[data-rating-field-label]')?.value || '').trim().slice(0, 48);
         const id = String(row.dataset.fieldId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
         const weight = Math.max(0, Math.min(100, Number(row.querySelector('[data-rating-field-weight]')?.value ?? 50) || 0));
-        if (label && id) fields.push({ id, label, weight });
+        const mode = row.querySelector('[data-rating-field-mode]')?.value === 'modifier' ? 'modifier' : 'weight';
+        const modifierRules = String(row.querySelector('[data-rating-field-modifier]')?.value || '').trim().slice(0, 240);
+        if (label && id) fields.push({ id, label, weight, mode, modifierRules });
       });
       detailedRatingByType[type] = {
         enabled: Boolean(panel.querySelector('[data-type-detailed-enabled]')?.checked),
@@ -206,6 +218,10 @@
         visualLabel: String(panel.querySelector('[data-type-visual-label]')?.value || '').trim().slice(0, 48) || 'Визуал',
         songWeight: Math.max(0, Math.min(100, Number(panel.querySelector('[data-type-song-weight]')?.value ?? 50) || 0)),
         visualWeight: Math.max(0, Math.min(100, Number(panel.querySelector('[data-type-visual-weight]')?.value ?? 50) || 0)),
+        songMode: panel.querySelector('[data-type-song-mode]')?.value === 'modifier' ? 'modifier' : 'weight',
+        visualMode: panel.querySelector('[data-type-visual-mode]')?.value === 'modifier' ? 'modifier' : 'weight',
+        songModifierRules: String(panel.querySelector('[data-type-song-modifier]')?.value || '').trim().slice(0, 240),
+        visualModifierRules: String(panel.querySelector('[data-type-visual-modifier]')?.value || '').trim().slice(0, 240),
         fields: fields.slice(0, 8)
       };
     });
@@ -222,11 +238,46 @@
     document.querySelector('[data-criteria-discard]')?.removeAttribute('hidden');
   }
 
+  function modifierRulesAreValid(value) {
+    const rows = String(value || '').split(/;|\n/).map(row => row.trim()).filter(Boolean);
+    if (!rows.length) return false;
+    const number = '[+-]?\\d+(?:[.,]\\d+)?';
+    const exact = new RegExp(`^${number}$`);
+    const range = new RegExp(`^${number}\\s*(?:-|–|—|\\.\\.)\\s*${number}$`);
+    const comparison = new RegExp(`^(?:<=|>=|<|>)\\s*${number}$`);
+    const delta = new RegExp(`^${number}$`);
+    return rows.every(row => {
+      const separator = row.lastIndexOf(':');
+      if (separator <= 0) return false;
+      const condition = row.slice(0, separator).trim();
+      const modifier = row.slice(separator + 1).trim();
+      return Boolean(modifier && delta.test(modifier) && (condition === '*' || exact.test(condition) || range.test(condition) || comparison.test(condition)));
+    });
+  }
+
+  function syncCriterionMode(select) {
+    const config = select?.closest?.('[data-criterion-config]');
+    if (!config) return;
+    const modifier = select.value === 'modifier';
+    config.querySelector('[data-criterion-weight]')?.toggleAttribute('hidden', modifier);
+    config.querySelector('[data-criterion-modifier]')?.toggleAttribute('hidden', !modifier);
+  }
+
   async function saveCriteria(button) {
     const root = ensureRoot();
     if (!root) return;
     const detailedRatingByType = collectCriteriaSettings(root);
     persistCriteriaDraft();
+    const invalidRules = [...root.querySelectorAll('[data-criterion-config]')].find(config => {
+      const mode = config.querySelector('[data-criterion-mode]')?.value;
+      const rules = config.querySelector('[data-criterion-modifier] input')?.value;
+      return mode === 'modifier' && !modifierRulesAreValid(rules);
+    });
+    if (invalidRules) {
+      window.alert('Проверь правила модификатора. Формат: 1-3: -1; 9-10: +1. Первым пишется диапазон или условие, после двоеточия — изменение итогового балла.');
+      invalidRules.querySelector('[data-criterion-modifier] input')?.focus();
+      return;
+    }
     button.disabled = true;
     button.textContent = 'Сохраняю…';
     try {
@@ -359,6 +410,7 @@
     if (event.target?.closest?.('#oc-rating-fields-settings [data-rating-type-panel]')) persistCriteriaDraft();
   });
   document.addEventListener('change', event => {
+    if (event.target?.matches?.('[data-criterion-mode]')) syncCriterionMode(event.target);
     if (event.target?.closest?.('#oc-rating-fields-settings [data-rating-type-panel]')) persistCriteriaDraft();
   });
   document.addEventListener('focusout', event => {
