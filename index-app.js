@@ -3597,7 +3597,9 @@
         while (used.has(id)) id = `${id}-${index + 1}`;
         used.add(id);
         const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
-        return { id, label, weight };
+        const mode = item.mode === 'modifier' ? 'modifier' : 'weight';
+        const modifierRules = String(item.modifierRules || item.rules || '').trim().slice(0, 240);
+        return { id, label, weight, mode, modifierRules };
       }).filter(row => row.label);
     }
 
@@ -3610,6 +3612,36 @@
         if (id && Number.isFinite(score)) result[id] = score;
       });
       return result;
+    }
+
+    function ratingModifierForScore(rules, rawScore) {
+      const score = Number(rawScore);
+      if (!Number.isFinite(score)) return { matched: false, value: 0 };
+      const numberValue = value => Number(String(value || '').trim().replace(',', '.'));
+      const rows = String(rules || '').split(/;|\n/).map(row => row.trim()).filter(Boolean);
+      for (const row of rows) {
+        const separator = row.lastIndexOf(':');
+        if (separator <= 0) continue;
+        const condition = row.slice(0, separator).trim();
+        const modifier = numberValue(row.slice(separator + 1));
+        if (!Number.isFinite(modifier)) continue;
+        let matches = condition === '*';
+        const comparison = condition.match(/^(<=|>=|<|>)\s*([+-]?\d+(?:[.,]\d+)?)$/);
+        if (comparison) {
+          const limit = numberValue(comparison[2]);
+          matches = comparison[1] === '<=' ? score <= limit : comparison[1] === '>=' ? score >= limit : comparison[1] === '<' ? score < limit : score > limit;
+        }
+        const range = condition.match(/^([+-]?\d+(?:[.,]\d+)?)\s*(?:-|–|—|\.\.)\s*([+-]?\d+(?:[.,]\d+)?)$/);
+        if (range) {
+          const left = numberValue(range[1]);
+          const right = numberValue(range[2]);
+          matches = score >= Math.min(left, right) && score <= Math.max(left, right);
+        } else if (!comparison && condition !== '*' && /^[+-]?\d+(?:[.,]\d+)?$/.test(condition)) {
+          matches = score === numberValue(condition);
+        }
+        if (matches) return { matched: true, value: modifier };
+      }
+      return { matched: false, value: 0 };
     }
 
     function detailedRatingSettings(name = myName, rawType = 'OP') {
@@ -3625,6 +3657,10 @@
         visualLabel: String(source?.visualLabel || profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
         songWeight: Math.max(0, Math.min(100, Number(source?.songWeight ?? oldType?.songWeight ?? profile?.songScoreWeight ?? 50) || 0)),
         visualWeight: Math.max(0, Math.min(100, Number(source?.visualWeight ?? oldType?.visualWeight ?? profile?.visualScoreWeight ?? 50) || 0)),
+        songMode: source?.songMode === 'modifier' ? 'modifier' : 'weight',
+        visualMode: source?.visualMode === 'modifier' ? 'modifier' : 'weight',
+        songModifierRules: String(source?.songModifierRules || '').trim().slice(0, 240),
+        visualModifierRules: String(source?.visualModifierRules || '').trim().slice(0, 240),
         fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
       };
     }
@@ -3641,13 +3677,17 @@
       }
       const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
       const saved = customScoresFor(entry, myName);
-      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · вес ${field.weight}</span><input type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" data-rating-weight="${field.weight}"></label>`).join('')}</div>` : '';
+      const calculationHint = (mode, weight, rules) => mode === 'modifier' ? `модификатор · ${rules || 'нет правил'}` : `вес ${weight}`;
+      const calculationAttributes = (mode, weight, rules) => mode === 'modifier'
+        ? `data-rating-modifier-rules="${escapeHtml(rules || '')}"`
+        : `data-rating-weight="${weight}"`;
+      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(field.mode, field.weight, field.modifierRules))}</span><input type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" ${calculationAttributes(field.mode, field.weight, field.modifierRules)}></label>`).join('')}</div>` : '';
       return `<div class="oc-eval-parts">
-        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз. · вес ${settings.songWeight}</span>
-          <input id="${prefix}-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" data-rating-weight="${settings.songWeight}" />
+        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.songMode, settings.songWeight, settings.songModifierRules))}</span>
+          <input id="${prefix}-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" ${calculationAttributes(settings.songMode, settings.songWeight, settings.songModifierRules)} />
         </label>
-        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз. · вес ${settings.visualWeight}</span>
-          <input id="${prefix}-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" data-rating-weight="${settings.visualWeight}" />
+        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.visualMode, settings.visualWeight, settings.visualModifierRules))}</span>
+          <input id="${prefix}-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" ${calculationAttributes(settings.visualMode, settings.visualWeight, settings.visualModifierRules)} />
         </label>
       </div>${custom}<div class="oc-detailed-rating-suggestion" data-detailed-rating-suggestion="${escapeHtml(prefix)}"><span data-detailed-rating-value>Заполни критерии, чтобы получить подсказку итогового балла</span><button type="button" class="oc-secondary-btn" data-detailed-rating-apply disabled>Подставить итог</button></div>`;
     }
@@ -3656,14 +3696,15 @@
       const box = root?.querySelector?.(`[data-detailed-rating-suggestion="${prefix}"]`);
       const totalInput = root?.querySelector?.(`#${prefix}-score`);
       if (!box || !totalInput) return;
-      const inputs = [...root.querySelectorAll('[data-rating-weight]')];
+      const weightInputs = [...root.querySelectorAll('[data-rating-weight]')];
+      const modifierInputs = [...root.querySelectorAll('[data-rating-modifier-rules]')];
       const value = box.querySelector('[data-detailed-rating-value]');
       const apply = box.querySelector('[data-detailed-rating-apply]');
       let suggested = null;
       const update = () => {
         let weightedTotal = 0;
         let usedWeight = 0;
-        inputs.forEach(input => {
+        weightInputs.forEach(input => {
           const raw = String(input.value || '').trim();
           const score = raw ? clampScore(raw) : null;
           const weight = Math.max(0, Number(input.dataset.ratingWeight) || 0);
@@ -3671,13 +3712,26 @@
           weightedTotal += score * weight;
           usedWeight += weight;
         });
-        suggested = usedWeight > 0 ? clampScore(weightedTotal / usedWeight) : null;
+        const base = usedWeight > 0 ? weightedTotal / usedWeight : null;
+        let modifierTotal = 0;
+        let modifierMatches = 0;
+        modifierInputs.forEach(input => {
+          const raw = String(input.value || '').trim();
+          const score = raw ? clampScore(raw) : null;
+          if (score === null) return;
+          const result = ratingModifierForScore(input.dataset.ratingModifierRules, score);
+          if (!result.matched) return;
+          modifierTotal += result.value;
+          modifierMatches += 1;
+        });
+        suggested = base !== null ? clampScore(base + modifierTotal) : null;
+        const signedModifier = modifierTotal > 0 ? `+${formatScore(modifierTotal)}` : formatScore(modifierTotal);
         if (value) value.textContent = suggested === null
-          ? 'Заполни критерии, чтобы получить подсказку итогового балла'
-          : `Предлагаемый итог: ${formatScore(suggested)} · учтённый вес ${usedWeight}`;
+          ? 'Заполни хотя бы один критерий в режиме «Вес», чтобы получить основу'
+          : `Предлагаемый итог: ${formatScore(suggested)} · основа ${formatScore(base)}${modifierMatches ? ` · модификаторы ${signedModifier}` : ''}`;
         if (apply) apply.disabled = suggested === null;
       };
-      inputs.forEach(input => input.addEventListener('input', update));
+      [...weightInputs, ...modifierInputs].forEach(input => input.addEventListener('input', update));
       apply?.addEventListener('click', () => {
         if (suggested === null) return;
         totalInput.value = String(suggested);
