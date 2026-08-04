@@ -12,7 +12,7 @@
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
-  const ratingWorkbenchVersion = '20260804-rating-modifiers1';
+  const ratingWorkbenchVersion = '20260804-rating-modifiers-save1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
