@@ -61,7 +61,7 @@
     </section>`;
   }
 
-  function coverageMarkup(entries, user) {
+  function coverageMarkup(entries, user, own) {
     const rows = new Map();
     queueMap = new Map();
     entries.forEach(entry => {
@@ -82,14 +82,14 @@
       const parts = ['OP', 'ED'].map(type => {
         const key = `${year}|${season}|${type}`;
         const row = rows.get(key) || { total: 0, rated: 0, ids: [] };
-        if (row.ids.length) queueMap.set(key, row.ids);
+        if (own && row.ids.length) queueMap.set(key, row.ids);
         const done = row.total > 0 && row.rated === row.total;
-        return `<button type="button" class="oc-coverage-type ${type.toLowerCase()}${done ? ' done' : ''}" data-coverage-key="${key}" ${row.ids.length ? '' : 'disabled'}><b>${type}</b><span>${row.rated}/${row.total}</span></button>`;
+        return `<button type="button" class="oc-coverage-type ${type.toLowerCase()}${done ? ' done' : ''}" data-coverage-key="${key}" ${own && row.ids.length ? '' : 'disabled'}><b>${type}</b><span>${row.rated}/${row.total}</span></button>`;
       }).join('');
       return `<div class="oc-coverage-cell"><small>${SEASON_LABELS[season]}</small>${parts}</div>`;
     };
     return `<section class="oc-workbench-block oc-coverage-block">
-      <div class="oc-workbench-head"><div><span>прогресс каталога</span><h3>Карта покрытия</h3><p>Нажми на незавершённый OP или ED, чтобы продолжить оценку именно этого сезона.</p></div></div>
+      <div class="oc-workbench-head"><div><span>прогресс каталога</span><h3>Карта покрытия</h3><p>${own ? 'Нажми на незавершённый OP или ED, чтобы продолжить оценку именно этого сезона.' : 'Для чужого профиля карта отображается без запуска оценки.'}</p></div></div>
       <div class="oc-coverage-table">${years.map(year => `<div class="oc-coverage-row"><strong>${year}</strong>${SEASONS.map(season => cell(year, season)).join('')}</div>`).join('')}</div>
     </section>`;
   }
@@ -114,7 +114,7 @@
     const user = viewedName();
     const own = Boolean(user && currentName() && sameUser(user, currentName()));
     const profile = profileFor(user) || {};
-    root.innerHTML = `${criteriaMarkup(profile, own)}${rateLaterMarkup(entries, profile, own)}${coverageMarkup(entries, user)}`;
+    root.innerHTML = `${criteriaMarkup(profile, own)}${rateLaterMarkup(entries, profile, own)}${coverageMarkup(entries, user, own)}`;
     root.hidden = !user;
     scanRateLaterButtons();
   }
