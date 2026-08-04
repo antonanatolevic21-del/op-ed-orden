@@ -3612,15 +3612,20 @@
       return result;
     }
 
-    function detailedRatingSettings(name = myName) {
+    function detailedRatingSettings(name = myName, rawType = 'OP') {
       const profile = dailyProfileFor(name);
+      const type = String(rawType || '').toUpperCase() === 'ED' ? 'ED' : 'OP';
+      const stored = profile?.detailedRatingByType?.[type];
+      const source = stored && typeof stored === 'object' ? stored : null;
+      const oldType = profile?.ratingCriteria?.[type];
       return {
-        enabled: Boolean(profile?.detailedRatingEnabled),
-        songLabel: String(profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня',
-        visualLabel: String(profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
-        songWeight: Math.max(0, Math.min(100, Number(profile?.songScoreWeight ?? 50) || 0)),
-        visualWeight: Math.max(0, Math.min(100, Number(profile?.visualScoreWeight ?? 50) || 0)),
-        fields: normalizeRatingFields(profile?.ratingFields)
+        type,
+        enabled: source ? Boolean(source.enabled) : Boolean(profile?.detailedRatingEnabled),
+        songLabel: String(source?.songLabel || profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня',
+        visualLabel: String(source?.visualLabel || profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
+        songWeight: Math.max(0, Math.min(100, Number(source?.songWeight ?? oldType?.songWeight ?? profile?.songScoreWeight ?? 50) || 0)),
+        visualWeight: Math.max(0, Math.min(100, Number(source?.visualWeight ?? oldType?.visualWeight ?? profile?.visualScoreWeight ?? 50) || 0)),
+        fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
       };
     }
 
@@ -3630,9 +3635,9 @@
 
     function detailedRatingMarkup(entry, prefix, songScore, visualScore) {
       if (!entry || isPersonalScale()) return '';
-      const settings = detailedRatingSettings();
+      const settings = detailedRatingSettings(myName, entry.type);
       if (!settings.enabled) {
-        return `<div class="oc-detailed-rating-off"><span><b>Детальное оценивание выключено</b><small>Дополнительные критерии скрыты</small></span><button type="button" class="oc-secondary-btn" data-open-rating-fields-settings>Включить детальное оценивание</button></div>`;
+        return `<div class="oc-detailed-rating-off"><span><b>Детальное оценивание ${settings.type} выключено</b><small>Дополнительные критерии для ${settings.type} скрыты</small></span><button type="button" class="oc-secondary-btn" data-open-rating-fields-settings data-rating-settings-type="${settings.type}">Настроить ${settings.type}</button></div>`;
       }
       const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
       const saved = customScoresFor(entry, myName);
@@ -3682,7 +3687,7 @@
     }
 
     function readDetailedRating(root, entry, prefix) {
-      const settings = detailedRatingSettings();
+      const settings = detailedRatingSettings(myName, entry?.type);
       if (!settings.enabled) {
         return { songScore: songScoreFor(entry, myName), visualScore: visualScoreFor(entry, myName), customScores: customScoresFor(entry, myName), error: '' };
       }
@@ -5084,6 +5089,7 @@
     function renderBlindComparison(entry) {
       const pending = blindPendingRating;
       if (!pending || pending.entryId !== String(entry.id)) return false;
+      const detailSettings = detailedRatingSettings(myName, entry.type);
       const scoreLine = (label, oldValue, newValue) => `<div class="oc-blind-compare-row"><span>${label}</span><strong>${formatScore(oldValue)}</strong><span aria-hidden="true">→</span><strong class="${Number(oldValue) === Number(newValue) ? 'same' : Number(newValue) > Number(oldValue) ? 'up' : 'down'}">${formatScore(newValue)}</strong></div>`;
       evaluatorEl.classList.remove('hidden');
       evaluatorEl.innerHTML = `<div class="oc-eval-modal oc-blind-review">
@@ -5097,7 +5103,7 @@
         <div class="oc-blind-compare">
           <div class="oc-blind-compare-head"><span></span><span>Было</span><span></span><span>Стало</span></div>
           ${scoreLine('Итог', pending.old.score, pending.next.score)}
-          ${detailedRatingSettings().enabled ? `${scoreLine(detailedRatingSettings().songLabel, pending.old.songScore, pending.next.songScore)}${scoreLine(detailedRatingSettings().visualLabel, pending.old.visualScore, pending.next.visualScore)}${detailedRatingSettings().fields.map(field => scoreLine(field.label, pending.old.customScores?.[field.id], pending.next.customScores?.[field.id])).join('')}` : ''}
+          ${detailSettings.enabled ? `${scoreLine(detailSettings.songLabel, pending.old.songScore, pending.next.songScore)}${scoreLine(detailSettings.visualLabel, pending.old.visualScore, pending.next.visualScore)}${detailSettings.fields.map(field => scoreLine(field.label, pending.old.customScores?.[field.id], pending.next.customScores?.[field.id])).join('')}` : ''}
           ${pending.next.comment ? `<div class="oc-blind-new-comment">💬 Новый комментарий: ${escapeHtml(pending.next.comment)}</div>` : ''}
         </div>
         <div class="oc-eval-actions">
@@ -6666,13 +6672,14 @@
       const adminCount = adminRatingCount(entry.scores);
       const avgSong = avgAny(entry.songScores || {});
       const avgVisual = avgAny(entry.visualScores || {});
+      const detailSettings = detailedRatingSettings(myName, entry.type);
       const votes = Object.entries(entry.scores || {}).sort((a,b)=> Number(b[1]) - Number(a[1]));
       const arrayValue = (arr, kind) => (arr || []).filter(Boolean).length ? entityFilterValuesMarkup(kind, arr) : '—';
       const scoreRows = [
         `<div class="oc-detail-box"><div class="oc-detail-label">общая средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
         isAdmin() ? `<div class="oc-detail-box"><div class="oc-detail-label">средняя админов</div><div class="oc-detail-value">${formatScore(adminScore)} · ${adminCount} оценок</div></div>` : '',
-        detailedRatingSettings().enabled && avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailedRatingSettings().songLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
-        detailedRatingSettings().enabled && avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailedRatingSettings().visualLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
+        detailSettings.enabled && avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailSettings.songLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
+        detailSettings.enabled && avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailSettings.visualLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
       ].filter(Boolean).join('');
       const detailRows = `
         <div class="oc-detail-box"><div class="oc-detail-label">тип</div><div class="oc-detail-value">${escapeHtml(entry.type || '—')}</div></div>
@@ -6736,7 +6743,7 @@
         </div>
         <div class="oc-opening-user-votes">
           <div class="oc-section-label" style="margin-bottom:8px;">оценки пользователей</div>
-          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${detailedRatingSettings().enabled && songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${detailedRatingSettings().enabled && visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
+          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${detailSettings.enabled && songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailSettings.songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${detailSettings.enabled && visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailSettings.visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
         </div>
       </div>`;
 
