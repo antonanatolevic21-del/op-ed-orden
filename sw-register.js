@@ -14,6 +14,7 @@
   const top100CandidatesVersion = '20260731-top100-candidates1';
   const ratingWorkbenchVersion = '20260804-rating-modifiers-save1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
+  const profileVersion = '20260804-profile-stats-stable1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
@@ -132,10 +133,10 @@
 
   function loadProfilePackage() {
     if (profilePromise) return profilePromise;
-    addStyle('profile-enhancements.css', primaryVersion);
+    addStyle('profile-enhancements.css', profileVersion);
     addStyle('discovery-suite.css', discoveryVersion);
     profilePromise = addScriptsOrdered([
-      ['profile-enhancements.js', primaryVersion],
+      ['profile-enhancements.js', profileVersion],
       ['profile-taste-comparison.js', tasteComparisonVersion],
       ['profile-top-duel.js', discoveryVersion],
       ['profile-top-duel-blocks.js', discoveryVersion]
