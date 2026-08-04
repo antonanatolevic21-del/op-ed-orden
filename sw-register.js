@@ -12,6 +12,7 @@
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
+  const ratingWorkbenchVersion = '20260804-rating-workbench1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
@@ -70,6 +71,9 @@
     .finally(() => document.documentElement.classList.remove('oc-enhancements-loading'));
   void addScript('profile-top-candidates.js', top100CandidatesVersion, true)
     .catch(error => console.error('Top-100 candidate manager load failed', error));
+  addStyle('rating-workbench.css', ratingWorkbenchVersion);
+  void addScript('rating-workbench.js', ratingWorkbenchVersion, true)
+    .catch(error => console.error('Rating workbench load failed', error));
 
   ['oc-f-score-cmp', 'oc-p-score-cmp'].forEach(id => {
     const option = document.querySelector(`#${id} option[value="="]`);
