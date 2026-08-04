@@ -19,6 +19,22 @@
 .oc-criteria-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .oc-criteria-draft-state{color:#08d9d6;font:8px/1.4 'Space Mono',monospace}
 .oc-criteria-actions [hidden]{display:none!important}
+.oc-criteria-settings [hidden]{display:none!important}
+.oc-rating-mode-field,.oc-rating-modifier-field{display:grid!important;gap:6px;color:#aaa2b4;font:700 9px 'Space Mono',monospace}
+.oc-rating-mode-field select,.oc-rating-modifier-field input{
+  box-sizing:border-box;width:100%;min-width:0;min-height:39px;padding:9px 10px;
+  border:1px solid #393043;border-radius:9px;outline:0;background:#121019;color:#f5f3fa;font:11px Inter,sans-serif
+}
+.oc-rating-mode-field select:focus,.oc-rating-modifier-field input:focus{border-color:#08d9d6;box-shadow:0 0 0 3px rgba(8,217,214,.1)}
+.oc-criteria-card .oc-base-rating-field{grid-template-columns:minmax(0,1fr) 112px minmax(155px,1.15fr)}
+.oc-criteria-card .oc-custom-field-row{grid-template-columns:minmax(0,1fr) 112px minmax(155px,1.15fr) 38px;align-items:end}
+.oc-criteria-card .oc-custom-field-row>.oc-rating-weight-field{grid-template-columns:1fr!important;align-items:stretch}
+.oc-criteria-card .oc-rating-weight-hint b{color:#bdb5c7;font-weight:700}
+@media(max-width:1200px){.oc-criteria-grid{grid-template-columns:1fr}}
+@media(max-width:700px){
+  .oc-criteria-card .oc-base-rating-field,.oc-criteria-card .oc-custom-field-row{grid-template-columns:1fr}
+  .oc-criteria-card .oc-custom-field-row>button{justify-self:end;width:38px;min-height:38px}
+}
 .oc-detailed-rating-switch input{
   width:18px;
   height:18px;
