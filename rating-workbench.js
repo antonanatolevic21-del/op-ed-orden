@@ -57,8 +57,16 @@
     if (!own) return '';
     const fields = normalizeRatingFields(profile?.ratingFields);
     const rows = fields.map(ratingFieldRow).join('');
-    return `<section class="oc-workbench-block oc-criteria-settings">
-      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Дополнительные поля оценки</h3><p>Добавь до восьми необязательных оценок со своими названиями. Они будут доступны и для OP, и для ED.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить поля</button></div>
+    const songLabel = String(profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня';
+    const visualLabel = String(profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал';
+    return `<section class="oc-workbench-block oc-criteria-settings" id="oc-rating-fields-settings">
+      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание</h3><p>По умолчанию скрыто во всех формах. Можно переименовать базовые поля и добавить до восьми собственных.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div>
+      <label class="oc-detailed-rating-switch"><input type="checkbox" data-detailed-rating-enabled ${profile?.detailedRatingEnabled ? 'checked' : ''}><span><b>Включить детальное оценивание</b><small>Показывать дополнительные поля в карточках, дейликах и сезонной оценке</small></span></label>
+      <div class="oc-base-rating-fields">
+        <label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(songLabel)}" data-song-score-label></label>
+        <label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(visualLabel)}" data-visual-score-label></label>
+      </div>
+      <div class="oc-custom-fields-head"><b>Собственные критерии</b><span>необязательно</span></div>
       <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
       <button type="button" class="oc-secondary-btn oc-custom-field-add" data-rating-field-add>+ Добавить поле</button>
     </section>`;
@@ -134,7 +142,10 @@
     button.disabled = true;
     button.textContent = 'Сохраняю…';
     try {
-      await bridge()?.saveProfilePatch?.({ ratingFields: fields.slice(0, 8) });
+      const detailedRatingEnabled = Boolean(root.querySelector('[data-detailed-rating-enabled]')?.checked);
+      const songScoreLabel = String(root.querySelector('[data-song-score-label]')?.value || '').trim().slice(0, 48) || 'Песня';
+      const visualScoreLabel = String(root.querySelector('[data-visual-score-label]')?.value || '').trim().slice(0, 48) || 'Визуал';
+      await bridge()?.saveProfilePatch?.({ ratingFields: fields.slice(0, 8), detailedRatingEnabled, songScoreLabel, visualScoreLabel });
       button.textContent = 'Сохранено ✓';
       window.setTimeout(render, 500);
     } catch (error) {
@@ -167,6 +178,22 @@
   }
 
   document.addEventListener('click', async event => {
+    const openSettings = event.target.closest('[data-open-rating-fields-settings]');
+    if (openSettings) {
+      event.preventDefault();
+      document.querySelector('.oc-tab-btn[data-tab="profile"]')?.click();
+      window.setTimeout(() => {
+        document.querySelector('[data-profile-view="overview"]')?.click();
+        window.setTimeout(() => {
+          const settings = document.querySelector('#oc-rating-fields-settings');
+          settings?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          settings?.classList.add('is-highlighted');
+          window.setTimeout(() => settings?.classList.remove('is-highlighted'), 1600);
+          settings?.querySelector('[data-detailed-rating-enabled]')?.focus();
+        }, 80);
+      }, 80);
+      return;
+    }
     const addField = event.target.closest('[data-rating-field-add]');
     if (addField) {
       const list = ensureRoot()?.querySelector('[data-rating-fields-list]');
