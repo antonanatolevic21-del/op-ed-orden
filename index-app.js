@@ -5060,9 +5060,7 @@
         <div class="oc-blind-compare">
           <div class="oc-blind-compare-head"><span></span><span>Было</span><span></span><span>Стало</span></div>
           ${scoreLine('Итог', pending.old.score, pending.next.score)}
-          ${scoreLine(detailedRatingSettings().songLabel, pending.old.songScore, pending.next.songScore)}
-          ${scoreLine(detailedRatingSettings().visualLabel, pending.old.visualScore, pending.next.visualScore)}
-          ${detailedRatingSettings().fields.map(field => scoreLine(field.label, pending.old.customScores?.[field.id], pending.next.customScores?.[field.id])).join('')}
+          ${detailedRatingSettings().enabled ? `${scoreLine(detailedRatingSettings().songLabel, pending.old.songScore, pending.next.songScore)}${scoreLine(detailedRatingSettings().visualLabel, pending.old.visualScore, pending.next.visualScore)}${detailedRatingSettings().fields.map(field => scoreLine(field.label, pending.old.customScores?.[field.id], pending.next.customScores?.[field.id])).join('')}` : ''}
           ${pending.next.comment ? `<div class="oc-blind-new-comment">💬 Новый комментарий: ${escapeHtml(pending.next.comment)}</div>` : ''}
         </div>
         <div class="oc-eval-actions">
@@ -6635,8 +6633,8 @@
       const scoreRows = [
         `<div class="oc-detail-box"><div class="oc-detail-label">общая средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
         isAdmin() ? `<div class="oc-detail-box"><div class="oc-detail-label">средняя админов</div><div class="oc-detail-value">${formatScore(adminScore)} · ${adminCount} оценок</div></div>` : '',
-        avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">песня</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
-        avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">визуал</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
+        detailedRatingSettings().enabled && avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailedRatingSettings().songLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
+        detailedRatingSettings().enabled && avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailedRatingSettings().visualLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
       ].filter(Boolean).join('');
       const detailRows = `
         <div class="oc-detail-box"><div class="oc-detail-label">тип</div><div class="oc-detail-value">${escapeHtml(entry.type || '—')}</div></div>
@@ -6700,7 +6698,7 @@
         </div>
         <div class="oc-opening-user-votes">
           <div class="oc-section-label" style="margin-bottom:8px;">оценки пользователей</div>
-          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
+          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${detailedRatingSettings().enabled && songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${detailedRatingSettings().enabled && visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailedRatingSettings().visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
         </div>
       </div>`;
 
