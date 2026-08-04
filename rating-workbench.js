@@ -181,6 +181,9 @@
     const openSettings = event.target.closest('[data-open-rating-fields-settings]');
     if (openSettings) {
       event.preventDefault();
+      event.stopPropagation();
+      document.querySelector('[data-eval-action="close"]')?.click();
+      document.querySelector('[data-modal-close]')?.click();
       document.querySelector('.oc-tab-btn[data-tab="profile"]')?.click();
       window.setTimeout(() => {
         document.querySelector('[data-profile-view="overview"]')?.click();
