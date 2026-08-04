@@ -19,6 +19,8 @@
 .oc-criteria-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .oc-criteria-draft-state{color:#08d9d6;font:8px/1.4 'Space Mono',monospace}
 .oc-criteria-actions [hidden]{display:none!important}
+.oc-criteria-savebar{position:sticky;bottom:10px;z-index:8;display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:11px 12px;border:1px solid #443850;border-radius:11px;background:rgba(18,15,25,.96);box-shadow:0 8px 28px rgba(0,0,0,.35);backdrop-filter:blur(10px)}
+.oc-criteria-savebar span{color:#91899d;font:9px/1.45 'Space Mono',monospace}.oc-criteria-savebar span[data-state="saving"]{color:#f2c94c}.oc-criteria-savebar span[data-state="success"]{color:#62dcae}.oc-criteria-savebar span[data-state="error"]{color:#ff7596}.oc-criteria-savebar button{flex:0 0 auto;min-width:190px}
 .oc-criteria-settings [hidden]{display:none!important}
 .oc-rating-mode-field,.oc-rating-modifier-field{display:grid!important;gap:6px;color:#aaa2b4;font:700 9px 'Space Mono',monospace}
 .oc-rating-mode-field select,.oc-rating-modifier-field input{
@@ -32,6 +34,7 @@
 .oc-criteria-card .oc-rating-weight-hint b{color:#bdb5c7;font-weight:700}
 @media(max-width:1200px){.oc-criteria-grid{grid-template-columns:1fr}}
 @media(max-width:700px){
+  .oc-criteria-savebar{position:static;align-items:stretch;flex-direction:column}.oc-criteria-savebar button{width:100%;min-width:0}
   .oc-criteria-card .oc-base-rating-field,.oc-criteria-card .oc-custom-field-row{grid-template-columns:1fr}
   .oc-criteria-card .oc-custom-field-row>button{justify-self:end;width:38px;min-height:38px}
 }
