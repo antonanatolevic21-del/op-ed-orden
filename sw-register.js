@@ -12,7 +12,7 @@
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
-  const ratingWorkbenchVersion = '20260804-rating-weights1';
+  const ratingWorkbenchVersion = '20260804-private-coverage1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
