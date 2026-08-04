@@ -133,6 +133,7 @@
       <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание OP и ED</h3><p>Каждый тип включается и настраивается отдельно. Несохранённые изменения остаются в локальном черновике и не пропадают при обновлении профиля.</p></div><div class="oc-criteria-actions"><span class="oc-criteria-draft-state" data-criteria-draft-state ${draft ? '' : 'hidden'}>Черновик сохранён локально</span><button type="button" class="oc-secondary-btn" data-criteria-discard ${draft ? '' : 'hidden'}>Вернуть сохранённое</button><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div></div>
       <div class="oc-rating-weight-hint">«Вес» формирует базовую среднюю: значения не обязаны складываться в 100. «Модификатор» прибавляется к основе по первому подходящему правилу: <b>1-3: -1; 9-10: +1</b>. Также доступны условия <b>&lt;=3</b>, <b>&gt;=9</b> и <b>*</b>.</div>
       <div class="oc-criteria-grid">${panel('OP')}${panel('ED')}</div>
+      <div class="oc-criteria-savebar"><span data-criteria-save-status>Изменения хранятся в локальном черновике, пока ты их не сохранишь.</span><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div>
     </section>`;
   }
 
@@ -266,6 +267,8 @@
   async function saveCriteria(button) {
     const root = ensureRoot();
     if (!root) return;
+    const buttons = [...root.querySelectorAll('[data-criteria-save]')];
+    const status = root.querySelector('[data-criteria-save-status]');
     const detailedRatingByType = collectCriteriaSettings(root);
     persistCriteriaDraft();
     const invalidRules = [...root.querySelectorAll('[data-criterion-config]')].find(config => {
@@ -274,21 +277,37 @@
       return mode === 'modifier' && !modifierRulesAreValid(rules);
     });
     if (invalidRules) {
+      if (status) {
+        status.textContent = 'Правила не сохранены: исправь выделенный модификатор.';
+        status.dataset.state = 'error';
+      }
       window.alert('Проверь правила модификатора. Формат: 1-3: -1; 9-10: +1. Первым пишется диапазон или условие, после двоеточия — изменение итогового балла.');
       invalidRules.querySelector('[data-criterion-modifier] input')?.focus();
       return;
     }
-    button.disabled = true;
-    button.textContent = 'Сохраняю…';
+    buttons.forEach(item => { item.disabled = true; item.textContent = 'Сохраняю…'; });
+    if (status) {
+      status.textContent = 'Записываю настройки в профиль…';
+      status.dataset.state = 'saving';
+    }
     try {
-      await bridge()?.saveProfilePatch?.({ detailedRatingByType });
+      const saveProfilePatch = bridge()?.saveProfilePatch;
+      if (typeof saveProfilePatch !== 'function') throw new Error('Хранилище профиля ещё не подключено.');
+      await saveProfilePatch({ detailedRatingByType });
       clearCriteriaDraft();
       renderPendingAfterEdit = false;
-      button.textContent = 'Сохранено ✓';
-      window.setTimeout(() => render({ force: true }), 500);
+      buttons.forEach(item => { item.textContent = 'Сохранено ✓'; });
+      if (status) {
+        status.textContent = 'Настройки и правила сохранены в профиле.';
+        status.dataset.state = 'success';
+      }
+      window.setTimeout(() => render({ force: true }), 900);
     } catch (error) {
-      button.disabled = false;
-      button.textContent = 'Не удалось сохранить';
+      buttons.forEach(item => { item.disabled = false; item.textContent = 'Повторить сохранение'; });
+      if (status) {
+        status.textContent = `Не удалось сохранить: ${String(error?.message || 'ошибка записи')}`;
+        status.dataset.state = 'error';
+      }
       console.error(error);
     }
   }
