@@ -180,6 +180,109 @@
     if (control) control.placeholder = placeholder;
   });
 
+  const commaListFieldIds = ['oc-add-studio', 'oc-add-director', 'oc-add-performer'];
+  const alternativeSeparatorPattern = /(?:\s+(?:и|and)\s+|\s*[&＆×✕✖•·∙⋅・;|/／+]\s*)/iu;
+  const alternativeSeparatorGlobalPattern = /(?:\s+(?:и|and)\s+|\s*[&＆×✕✖•·∙⋅・;|/／+]\s*)/giu;
+
+  function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function protectedListValue(control, rawValue) {
+    let value = String(rawValue || '');
+    const protectedValues = [];
+    const datalist = document.getElementById(control.getAttribute('list') || '');
+    const known = [...(datalist?.options || [])]
+      .map(option => String(option.value || '').trim())
+      .filter(item => item && alternativeSeparatorPattern.test(item))
+      .sort((left, right) => right.length - left.length);
+    known.forEach(item => {
+      const pattern = new RegExp(escapeRegExp(item), 'giu');
+      value = value.replace(pattern, () => {
+        const token = `\uE000${protectedValues.length}\uE001`;
+        protectedValues.push(item);
+        return token;
+      });
+    });
+    return { value, protectedValues };
+  }
+
+  function suggestedCommaList(control) {
+    const raw = String(control.value || '').trim();
+    if (!raw) return '';
+    const protectedValue = protectedListValue(control, raw);
+    if (!alternativeSeparatorPattern.test(protectedValue.value)) return '';
+    let proposed = protectedValue.value
+      .replace(alternativeSeparatorGlobalPattern, ', ')
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean)
+      .join(', ');
+    protectedValue.protectedValues.forEach((item, index) => {
+      proposed = proposed.replaceAll(`\uE000${index}\uE001`, item);
+    });
+    return proposed && proposed !== raw ? proposed : '';
+  }
+
+  function bindCommaListSuggestion(control) {
+    if (!control || control.dataset.listSuggestionReady === '1') return;
+    const wrapper = control.closest('.oc-add-pin-field');
+    if (!wrapper) return;
+    control.dataset.listSuggestionReady = '1';
+    wrapper.classList.add('oc-list-suggestion-host');
+    const suggestion = document.createElement('span');
+    suggestion.className = 'oc-list-normalize-suggestion';
+    suggestion.hidden = true;
+    suggestion.setAttribute('role', 'status');
+    suggestion.setAttribute('aria-live', 'polite');
+    const label = document.createElement('span');
+    label.className = 'oc-list-normalize-label';
+    label.textContent = 'Записать через запятую:';
+    const value = document.createElement('code');
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'oc-list-normalize-apply';
+    apply.textContent = 'Применить';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'oc-list-normalize-close';
+    close.textContent = '×';
+    close.setAttribute('aria-label', 'Скрыть предложение');
+    suggestion.append(label, value, apply, close);
+    wrapper.append(suggestion);
+
+    let proposed = '';
+    let dismissedValue = '';
+    const update = () => {
+      const raw = String(control.value || '');
+      proposed = raw === dismissedValue ? '' : suggestedCommaList(control);
+      suggestion.hidden = !proposed;
+      value.textContent = proposed;
+      value.title = proposed;
+    };
+    apply.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!proposed) return;
+      control.value = proposed;
+      dismissedValue = '';
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      control.focus();
+    });
+    close.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      dismissedValue = String(control.value || '');
+      suggestion.hidden = true;
+    });
+    control.addEventListener('input', update);
+    control.addEventListener('change', update);
+    update();
+  }
+
+  commaListFieldIds.forEach(id => bindCommaListSuggestion(document.getElementById(id)));
+
   function readFieldHistory() {
     if (formState.history && Object.keys(formState.history).length) return formState.history;
     try {
@@ -248,7 +351,7 @@
 
   const hint = panel.querySelector('.oc-hint');
   if (hint) {
-    hint.textContent = 'Студии/режиссёры/исполнители — через запятую. Франшизы — по одной на строку, чтобы названия с запятой не дробились.';
+    hint.textContent = 'Студии/режиссёры/исполнители — через запятую. Если использовать «и», &, ×, • или другой разделитель, появится вариант исправления. Франшизы — по одной на строку.';
   }
 
   panel.classList.remove('oc-addbar-v2');
