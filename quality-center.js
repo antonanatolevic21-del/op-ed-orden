@@ -12,6 +12,7 @@
   let qualityNotice = '';
   let rejectedFranchisePairs = new Set();
   let firestoreToolsPromise = null;
+  let activeInlineEditor = null;
   const unreachableImages = new Set();
   const QUALITY_META_ID = 'qualityCenter';
 
@@ -393,6 +394,23 @@
     document.body.append(modal);
 
     modal.addEventListener('click', event => {
+      const currentEditor = event.target.closest('.oc-quality-inline-editor');
+      const currentTrack = event.target.closest('[data-quality-track]');
+      if (activeInlineEditor && !currentEditor && (!currentTrack || currentTrack.dataset.qualityTrack !== activeInlineEditor.dataset.qualityInlineId)) {
+        closeInlineEditor();
+        if (event.target === modal) return;
+      }
+      const inlineSave = event.target.closest('[data-quality-inline-save]');
+      if (inlineSave) {
+        event.preventDefault();
+        void saveInlineEditor(inlineSave);
+        return;
+      }
+      if (event.target.closest('[data-quality-inline-cancel]')) {
+        event.preventDefault();
+        closeInlineEditor();
+        return;
+      }
       if (event.target === modal || event.target.closest('[data-quality-close]')) {
         closeQualityCenter();
         return;
@@ -456,10 +474,68 @@
       }
 
       const track = event.target.closest('[data-quality-track]');
-      if (track) openTrack(String(track.dataset.qualityTrack || ''), String(track.dataset.qualityTitle || ''));
+      if (track) {
+        event.preventDefault();
+        openInlineEditor(track);
+      }
     });
 
     return modal;
+  }
+
+  function closeInlineEditor() {
+    activeInlineEditor?.remove();
+    activeInlineEditor = null;
+  }
+
+  function openInlineEditor(button) {
+    const id = String(button?.dataset.qualityTrack || '');
+    if (!id || !window.OC_APP_BRIDGE?.renderCatalogEditor) return;
+    if (activeInlineEditor?.dataset.qualityInlineId === id) {
+      closeInlineEditor();
+      return;
+    }
+    closeInlineEditor();
+    const markup = String(window.OC_APP_BRIDGE.renderCatalogEditor(id) || '');
+    if (!markup) {
+      openTrack(id, String(button?.dataset.qualityTitle || ''));
+      return;
+    }
+    const wrapper = button.closest('.oc-quality-track-row');
+    if (!wrapper) return;
+    const editor = document.createElement('div');
+    editor.className = 'oc-quality-inline-editor';
+    editor.dataset.qualityInlineId = id;
+    editor.innerHTML = markup
+      .replaceAll('data-action="save-edit"', 'data-quality-inline-save')
+      .replaceAll('data-action="cancel-edit"', 'data-quality-inline-cancel');
+    wrapper.append(editor);
+    activeInlineEditor = editor;
+    editor.querySelector('input, textarea, select')?.focus();
+  }
+
+  async function saveInlineEditor(button) {
+    const editor = button.closest('.oc-quality-inline-editor');
+    const card = editor?.querySelector('.oc-editcard');
+    const id = String(editor?.dataset.qualityInlineId || '');
+    if (!editor || !card || !id) return;
+    button.disabled = true;
+    button.textContent = 'Сохраняю…';
+    try {
+      await window.OC_APP_BRIDGE?.saveCatalogEditor?.(id, card);
+      closeInlineEditor();
+      qualityNotice = 'Изменения трека сохранены ✓';
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Сохранить';
+      let status = editor.querySelector('.oc-quality-inline-error');
+      if (!status) {
+        status = document.createElement('div');
+        status.className = 'oc-quality-inline-error';
+        editor.append(status);
+      }
+      status.textContent = error?.message || 'Не удалось сохранить изменения.';
+    }
   }
 
   function renderIssueRows(details) {
@@ -514,7 +590,7 @@
             opening.uncertainImage ? 'основное изображение' : ''
           ].filter(Boolean).join(', ')
         : '';
-      return `<button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}${uncertain ? ` · неуверенно: ${escapeHtml(uncertain)}` : ''}</small></button>`;
+      return `<div class="oc-quality-track-row"><button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}${uncertain ? ` · неуверенно: ${escapeHtml(uncertain)}` : ''}</small></button></div>`;
     }).join('') + (issue.rows.length > visibleRows.length ? `<button type="button" class="oc-quality-more" data-quality-more>Показать ещё · сейчас ${visibleRows.length} из ${issue.rows.length}</button>` : '');
   }
 
@@ -844,6 +920,7 @@
   }
 
   function closeQualityCenter(force = false) {
+    closeInlineEditor();
     if (!force && document.documentElement.classList.contains('oc-admin-quality-route')) return;
     if (!modal) return;
     modal.classList.add('hidden');
