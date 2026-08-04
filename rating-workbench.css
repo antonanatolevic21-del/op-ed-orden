@@ -16,6 +16,9 @@
 .oc-criteria-card .oc-detailed-rating-switch{display:flex;margin-bottom:2px}
 .oc-criteria-card .oc-base-rating-fields{grid-template-columns:1fr;margin-bottom:2px}
 .oc-criteria-card .oc-custom-field-add{justify-self:start}
+.oc-criteria-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+.oc-criteria-draft-state{color:#08d9d6;font:8px/1.4 'Space Mono',monospace}
+.oc-criteria-actions [hidden]{display:none!important}
 .oc-detailed-rating-switch input{
   width:18px;
   height:18px;
