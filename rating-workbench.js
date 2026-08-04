@@ -10,7 +10,13 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const bridge = () => window.OC_APP_BRIDGE;
   const snapshot = () => bridge()?.snapshot?.() || window.OC_APP_DATA || {};
-  const currentName = () => String(snapshot().currentUser?.nickname || '').trim();
+  const currentName = () => {
+    const fromSnapshot = snapshot().currentUser?.nickname;
+    const fromInput = document.querySelector('#oc-myname')?.value;
+    let fromStorage = '';
+    try { fromStorage = localStorage.getItem('op-ed-primary-account-name') || localStorage.getItem('my-display-name') || ''; } catch (_) {}
+    return String(fromSnapshot || fromInput || fromStorage || '').trim();
+  };
   const viewedName = () => String(document.querySelector('#oc-profile-user')?.value || currentName()).trim();
   const sameUser = (left, right) => String(left || '').trim().toLowerCase().replace(/ё/g, 'е') === String(right || '').trim().toLowerCase().replace(/ё/g, 'е');
 
@@ -27,6 +33,20 @@
       const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
       return { id, label, weight };
     }).filter(row => row.label);
+  }
+
+  function normalizeTypeSettings(profile, type) {
+    const stored = profile?.detailedRatingByType?.[type];
+    const source = stored && typeof stored === 'object' ? stored : null;
+    const oldType = profile?.ratingCriteria?.[type];
+    return {
+      enabled: source ? Boolean(source.enabled) : Boolean(profile?.detailedRatingEnabled),
+      songLabel: String(source?.songLabel || profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня',
+      visualLabel: String(source?.visualLabel || profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
+      songWeight: Math.max(0, Math.min(100, Number(source?.songWeight ?? oldType?.songWeight ?? profile?.songScoreWeight ?? 50) || 0)),
+      visualWeight: Math.max(0, Math.min(100, Number(source?.visualWeight ?? oldType?.visualWeight ?? profile?.visualScoreWeight ?? 50) || 0)),
+      fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
+    };
   }
 
   function profileFor(name) {
@@ -46,8 +66,8 @@
     return root;
   }
 
-  function ratingFieldRow(field = {}) {
-    const id = String(field.id || `field-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  function ratingFieldRow(type, field = {}) {
+    const id = String(field.id || `${type.toLowerCase()}-field-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
     const weight = Math.max(0, Math.min(100, Number(field.weight ?? 50) || 0));
     return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}">
       <input type="text" maxlength="48" value="${esc(field.label || '')}" data-rating-field-label placeholder="Например: Личное впечатление">
@@ -58,23 +78,26 @@
 
   function criteriaMarkup(profile, own) {
     if (!own) return '';
-    const fields = normalizeRatingFields(profile?.ratingFields);
-    const rows = fields.map(ratingFieldRow).join('');
-    const songLabel = String(profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня';
-    const visualLabel = String(profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал';
-    const songWeight = Math.max(0, Math.min(100, Number(profile?.songScoreWeight ?? 50) || 0));
-    const visualWeight = Math.max(0, Math.min(100, Number(profile?.visualScoreWeight ?? 50) || 0));
+    const panel = type => {
+      const settings = normalizeTypeSettings(profile, type);
+      const rows = settings.fields.map(field => ratingFieldRow(type, field)).join('');
+      const title = type === 'OP' ? 'Опенинги' : 'Эндинги';
+      return `<fieldset class="oc-criteria-card ${type.toLowerCase()}" data-rating-type-panel="${type}">
+        <legend>${title}</legend>
+        <label class="oc-detailed-rating-switch"><input type="checkbox" data-type-detailed-enabled ${settings.enabled ? 'checked' : ''}><span><b>Включить детальную оценку ${type}</b><small>Настройка действует только для ${type}</small></span></label>
+        <div class="oc-base-rating-fields">
+          <div class="oc-base-rating-field"><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(settings.songLabel)}" data-type-song-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.songWeight}" data-type-song-weight></label></div>
+          <div class="oc-base-rating-field"><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(settings.visualLabel)}" data-type-visual-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.visualWeight}" data-type-visual-weight></label></div>
+        </div>
+        <div class="oc-custom-fields-head"><b>Собственные критерии</b><span>до восьми</span></div>
+        <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
+        <button type="button" class="oc-secondary-btn oc-custom-field-add" data-rating-field-add="${type}">+ Добавить поле для ${type}</button>
+      </fieldset>`;
+    };
     return `<section class="oc-workbench-block oc-criteria-settings" id="oc-rating-fields-settings">
-      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание</h3><p>По умолчанию скрыто во всех формах. Можно переименовать базовые поля и добавить до восьми собственных.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div>
-      <label class="oc-detailed-rating-switch"><input type="checkbox" data-detailed-rating-enabled ${profile?.detailedRatingEnabled ? 'checked' : ''}><span><b>Включить детальное оценивание</b><small>Показывать дополнительные поля в карточках, дейликах и сезонной оценке</small></span></label>
-      <div class="oc-base-rating-fields">
-        <div class="oc-base-rating-field"><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(songLabel)}" data-song-score-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${songWeight}" data-song-score-weight></label></div>
-        <div class="oc-base-rating-field"><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(visualLabel)}" data-visual-score-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${visualWeight}" data-visual-score-weight></label></div>
-      </div>
+      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание OP и ED</h3><p>Каждый тип включается и настраивается отдельно. Старые общие настройки автоматически подставлены в обе колонки.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div>
       <div class="oc-rating-weight-hint">Вес относительный: значения не обязаны складываться в 100. Нулевой вес исключает критерий из подсказки итогового балла.</div>
-      <div class="oc-custom-fields-head"><b>Собственные критерии</b><span>необязательно</span></div>
-      <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
-      <button type="button" class="oc-secondary-btn oc-custom-field-add" data-rating-field-add>+ Добавить поле</button>
+      <div class="oc-criteria-grid">${panel('OP')}${panel('ED')}</div>
     </section>`;
   }
 
@@ -140,22 +163,29 @@
   async function saveCriteria(button) {
     const root = ensureRoot();
     if (!root) return;
-    const fields = [];
-    root.querySelectorAll('[data-rating-field-row]').forEach(row => {
-      const label = String(row.querySelector('[data-rating-field-label]')?.value || '').trim().slice(0, 48);
-      const id = String(row.dataset.fieldId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
-      const weight = Math.max(0, Math.min(100, Number(row.querySelector('[data-rating-field-weight]')?.value ?? 50) || 0));
-      if (label && id) fields.push({ id, label, weight });
+    const detailedRatingByType = {};
+    root.querySelectorAll('[data-rating-type-panel]').forEach(panel => {
+      const type = panel.dataset.ratingTypePanel === 'ED' ? 'ED' : 'OP';
+      const fields = [];
+      panel.querySelectorAll('[data-rating-field-row]').forEach(row => {
+        const label = String(row.querySelector('[data-rating-field-label]')?.value || '').trim().slice(0, 48);
+        const id = String(row.dataset.fieldId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+        const weight = Math.max(0, Math.min(100, Number(row.querySelector('[data-rating-field-weight]')?.value ?? 50) || 0));
+        if (label && id) fields.push({ id, label, weight });
+      });
+      detailedRatingByType[type] = {
+        enabled: Boolean(panel.querySelector('[data-type-detailed-enabled]')?.checked),
+        songLabel: String(panel.querySelector('[data-type-song-label]')?.value || '').trim().slice(0, 48) || 'Песня',
+        visualLabel: String(panel.querySelector('[data-type-visual-label]')?.value || '').trim().slice(0, 48) || 'Визуал',
+        songWeight: Math.max(0, Math.min(100, Number(panel.querySelector('[data-type-song-weight]')?.value ?? 50) || 0)),
+        visualWeight: Math.max(0, Math.min(100, Number(panel.querySelector('[data-type-visual-weight]')?.value ?? 50) || 0)),
+        fields: fields.slice(0, 8)
+      };
     });
     button.disabled = true;
     button.textContent = 'Сохраняю…';
     try {
-      const detailedRatingEnabled = Boolean(root.querySelector('[data-detailed-rating-enabled]')?.checked);
-      const songScoreLabel = String(root.querySelector('[data-song-score-label]')?.value || '').trim().slice(0, 48) || 'Песня';
-      const visualScoreLabel = String(root.querySelector('[data-visual-score-label]')?.value || '').trim().slice(0, 48) || 'Визуал';
-      const songScoreWeight = Math.max(0, Math.min(100, Number(root.querySelector('[data-song-score-weight]')?.value ?? 50) || 0));
-      const visualScoreWeight = Math.max(0, Math.min(100, Number(root.querySelector('[data-visual-score-weight]')?.value ?? 50) || 0));
-      await bridge()?.saveProfilePatch?.({ ratingFields: fields.slice(0, 8), detailedRatingEnabled, songScoreLabel, visualScoreLabel, songScoreWeight, visualScoreWeight });
+      await bridge()?.saveProfilePatch?.({ detailedRatingByType });
       button.textContent = 'Сохранено ✓';
       window.setTimeout(render, 500);
     } catch (error) {
@@ -202,17 +232,19 @@
           settings?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           settings?.classList.add('is-highlighted');
           window.setTimeout(() => settings?.classList.remove('is-highlighted'), 1600);
-          settings?.querySelector('[data-detailed-rating-enabled]')?.focus();
+          const type = openSettings.dataset.ratingSettingsType === 'ED' ? 'ED' : 'OP';
+          settings?.querySelector(`[data-rating-type-panel="${type}"] [data-type-detailed-enabled]`)?.focus();
         }, 80);
       }, 80);
       return;
     }
     const addField = event.target.closest('[data-rating-field-add]');
     if (addField) {
-      const list = ensureRoot()?.querySelector('[data-rating-fields-list]');
+      const type = addField.dataset.ratingFieldAdd === 'ED' ? 'ED' : 'OP';
+      const list = addField.closest('[data-rating-type-panel]')?.querySelector('[data-rating-fields-list]');
       if (!list || list.querySelectorAll('[data-rating-field-row]').length >= 8) return;
       list.querySelector('[data-rating-fields-empty]')?.remove();
-      list.insertAdjacentHTML('beforeend', ratingFieldRow());
+      list.insertAdjacentHTML('beforeend', ratingFieldRow(type));
       list.lastElementChild?.querySelector('input')?.focus();
       return;
     }
@@ -263,9 +295,14 @@
   }
 
   window.addEventListener('oped:app-data-updated', queueRender);
+  window.addEventListener('oped-account-restored', queueRender);
+  window.addEventListener('oped-db-ready', queueRender);
   window.addEventListener('oped:route-change', queueRender);
   document.addEventListener('click', event => {
     if (event.target.closest('[data-profile-view], #oc-profile-user')) window.setTimeout(queueRender, 0);
+  });
+  document.addEventListener('change', event => {
+    if (event.target?.matches?.('#oc-profile-user, #oc-myname')) window.setTimeout(queueRender, 0);
   });
   new MutationObserver(() => {
     scanRateLaterButtons();
