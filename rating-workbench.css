@@ -12,6 +12,10 @@
   color:#f5f3fa;
   cursor:pointer;
 }
+.oc-criteria-card{min-width:0}
+.oc-criteria-card .oc-detailed-rating-switch{display:flex;margin-bottom:2px}
+.oc-criteria-card .oc-base-rating-fields{grid-template-columns:1fr;margin-bottom:2px}
+.oc-criteria-card .oc-custom-field-add{justify-self:start}
 .oc-detailed-rating-switch input{
   width:18px;
   height:18px;
