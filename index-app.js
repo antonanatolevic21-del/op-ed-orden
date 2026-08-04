@@ -3596,7 +3596,8 @@
         if (!id) id = `field-${index + 1}`;
         while (used.has(id)) id = `${id}-${index + 1}`;
         used.add(id);
-        return { id, label };
+        const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
+        return { id, label, weight };
       }).filter(row => row.label);
     }
 
@@ -3617,6 +3618,8 @@
         enabled: Boolean(profile?.detailedRatingEnabled),
         songLabel: String(profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня',
         visualLabel: String(profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал',
+        songWeight: Math.max(0, Math.min(100, Number(profile?.songScoreWeight ?? 50) || 0)),
+        visualWeight: Math.max(0, Math.min(100, Number(profile?.visualScoreWeight ?? 50) || 0)),
         fields: normalizeRatingFields(profile?.ratingFields)
       };
     }
@@ -3633,15 +3636,49 @@
       }
       const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
       const saved = customScoresFor(entry, myName);
-      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз.</span><input type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}"></label>`).join('')}</div>` : '';
+      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · вес ${field.weight}</span><input type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" data-rating-weight="${field.weight}"></label>`).join('')}</div>` : '';
       return `<div class="oc-eval-parts">
-        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз.</span>
-          <input id="${prefix}-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" />
+        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз. · вес ${settings.songWeight}</span>
+          <input id="${prefix}-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" data-rating-weight="${settings.songWeight}" />
         </label>
-        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз.</span>
-          <input id="${prefix}-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" />
+        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз. · вес ${settings.visualWeight}</span>
+          <input id="${prefix}-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" data-rating-weight="${settings.visualWeight}" />
         </label>
-      </div>${custom}`;
+      </div>${custom}<div class="oc-detailed-rating-suggestion" data-detailed-rating-suggestion="${escapeHtml(prefix)}"><span data-detailed-rating-value>Заполни критерии, чтобы получить подсказку итогового балла</span><button type="button" class="oc-secondary-btn" data-detailed-rating-apply disabled>Подставить итог</button></div>`;
+    }
+
+    function bindDetailedRatingSuggestion(root, prefix) {
+      const box = root?.querySelector?.(`[data-detailed-rating-suggestion="${prefix}"]`);
+      const totalInput = root?.querySelector?.(`#${prefix}-score`);
+      if (!box || !totalInput) return;
+      const inputs = [...root.querySelectorAll('[data-rating-weight]')];
+      const value = box.querySelector('[data-detailed-rating-value]');
+      const apply = box.querySelector('[data-detailed-rating-apply]');
+      let suggested = null;
+      const update = () => {
+        let weightedTotal = 0;
+        let usedWeight = 0;
+        inputs.forEach(input => {
+          const raw = String(input.value || '').trim();
+          const score = raw ? clampScore(raw) : null;
+          const weight = Math.max(0, Number(input.dataset.ratingWeight) || 0);
+          if (score === null || weight <= 0) return;
+          weightedTotal += score * weight;
+          usedWeight += weight;
+        });
+        suggested = usedWeight > 0 ? clampScore(weightedTotal / usedWeight) : null;
+        if (value) value.textContent = suggested === null
+          ? 'Заполни критерии, чтобы получить подсказку итогового балла'
+          : `Предлагаемый итог: ${formatScore(suggested)} · учтённый вес ${usedWeight}`;
+        if (apply) apply.disabled = suggested === null;
+      };
+      inputs.forEach(input => input.addEventListener('input', update));
+      apply?.addEventListener('click', () => {
+        if (suggested === null) return;
+        totalInput.value = String(suggested);
+        totalInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      update();
     }
 
     function readDetailedRating(root, entry, prefix) {
@@ -5187,6 +5224,7 @@
         const val = clampScore(score.value);
         if (val !== null) { range.value = String(val); updateWord(val); }
       });
+      bindDetailedRatingSuggestion(evaluatorEl, 'oc-eval');
       bindVideoEmbeds(evaluatorEl);
     }
 
@@ -6703,6 +6741,7 @@
       </div>`;
 
       bindOpeningVideoEmbed();
+      bindDetailedRatingSuggestion(openingModal, 'oc-card');
       const range = $('#oc-card-range');
       const scoreInput = $('#oc-card-score');
       const word = $('#oc-card-word');
