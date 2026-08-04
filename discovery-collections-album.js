@@ -321,9 +321,13 @@
     const collection = currentCollection();
     if (!collection) return;
     const remaining = filteredEntries(collection).filter(entry => !hasRating(entry)).map(entry => String(entry.id));
-    state.ratingQueue = remaining;
-    state.ratingCurrent = remaining[0] || '';
-    if (state.ratingCurrent) bridge()?.rateTrack?.(state.ratingCurrent);
+    state.ratingQueue = [];
+    state.ratingCurrent = '';
+    bridge()?.startRatingQueue?.(remaining, {
+      mode: 'collection',
+      label: collection.title || 'Подборка',
+      context: { owner: state.owner || currentName(), collectionId: state.collectionId }
+    });
   }
 
   function advanceRatingQueue() {
@@ -440,7 +444,6 @@
 
   window.addEventListener('oped:app-data-updated', () => {
     if (!state.collectionId) return;
-    advanceRatingQueue();
     window.setTimeout(renderDetail, 90);
   });
   window.addEventListener('oped:user-profiles-updated', () => {
