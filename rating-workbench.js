@@ -1,0 +1,223 @@
+(() => {
+  if (window.__OC_RATING_WORKBENCH_READY__) return;
+  window.__OC_RATING_WORKBENCH_READY__ = true;
+
+  const SEASONS = ['winter', 'spring', 'summer', 'fall'];
+  const SEASON_LABELS = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
+  let renderTimer = 0;
+  let queueMap = new Map();
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const bridge = () => window.OC_APP_BRIDGE;
+  const snapshot = () => bridge()?.snapshot?.() || window.OC_APP_DATA || {};
+  const currentName = () => String(snapshot().currentUser?.nickname || '').trim();
+  const viewedName = () => String(document.querySelector('#oc-profile-user')?.value || currentName()).trim();
+  const sameUser = (left, right) => String(left || '').trim().toLowerCase().replace(/ё/g, 'е') === String(right || '').trim().toLowerCase().replace(/ё/g, 'е');
+
+  function normalizeCriteria(value) {
+    const source = value && typeof value === 'object' ? value : {};
+    const row = type => ({
+      songWeight: Math.max(0, Math.min(100, Number(source[type]?.songWeight ?? 50) || 0)),
+      visualWeight: Math.max(0, Math.min(100, Number(source[type]?.visualWeight ?? 50) || 0)),
+      note: String(source[type]?.note || '').slice(0, 240)
+    });
+    return { OP: row('OP'), ED: row('ED') };
+  }
+
+  function profileFor(name) {
+    return bridge()?.profileData?.(name) || null;
+  }
+
+  function ensureRoot() {
+    const stats = document.querySelector('#oc-profile-stats');
+    if (!stats) return null;
+    let root = document.querySelector('#oc-rating-workbench');
+    if (!root) {
+      root = document.createElement('section');
+      root.id = 'oc-rating-workbench';
+      root.className = 'oc-rating-workbench';
+      stats.insertAdjacentElement('afterend', root);
+    }
+    return root;
+  }
+
+  function criteriaMarkup(profile, own) {
+    if (!own) return '';
+    const criteria = normalizeCriteria(profile?.ratingCriteria);
+    const panel = type => {
+      const row = criteria[type];
+      return `<fieldset class="oc-criteria-card ${type.toLowerCase()}">
+        <legend>${type === 'OP' ? 'Критерии опенинга' : 'Критерии эндинга'}</legend>
+        <div class="oc-criteria-weights">
+          <label>Вес песни<input type="number" min="0" max="100" step="5" value="${row.songWeight}" data-criteria-type="${type}" data-criteria-field="songWeight"></label>
+          <label>Вес визуала<input type="number" min="0" max="100" step="5" value="${row.visualWeight}" data-criteria-type="${type}" data-criteria-field="visualWeight"></label>
+        </div>
+        <label>Личная памятка<textarea maxlength="240" rows="3" data-criteria-type="${type}" data-criteria-field="note" placeholder="На что ты обращаешь внимание именно в ${type}…">${esc(row.note)}</textarea></label>
+      </fieldset>`;
+    };
+    return `<section class="oc-workbench-block oc-criteria-settings">
+      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Разные критерии OP и ED</h3><p>Вес используется только для необязательной подсказки итоговой оценки. Балл всегда можно поставить вручную.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить критерии</button></div>
+      <div class="oc-criteria-grid">${panel('OP')}${panel('ED')}</div>
+    </section>`;
+  }
+
+  function coverageMarkup(entries, user) {
+    const rows = new Map();
+    queueMap = new Map();
+    entries.forEach(entry => {
+      const year = Number(entry.year);
+      const season = String(entry.season || '');
+      const type = entry.type === 'ED' ? 'ED' : 'OP';
+      if (!Number.isFinite(year) || !SEASONS.includes(season)) return;
+      const key = `${year}|${season}|${type}`;
+      if (!rows.has(key)) rows.set(key, { total: 0, rated: 0, ids: [] });
+      const row = rows.get(key);
+      row.total += 1;
+      if (bridge()?.userScore?.(entry.id, user) !== null) row.rated += 1;
+      else row.ids.push(String(entry.id));
+    });
+    const years = [...new Set([...rows.keys()].map(key => Number(key.split('|')[0])))].sort((a, b) => b - a);
+    if (!years.length) return '';
+    const cell = (year, season) => {
+      const parts = ['OP', 'ED'].map(type => {
+        const key = `${year}|${season}|${type}`;
+        const row = rows.get(key) || { total: 0, rated: 0, ids: [] };
+        if (row.ids.length) queueMap.set(key, row.ids);
+        const done = row.total > 0 && row.rated === row.total;
+        return `<button type="button" class="oc-coverage-type ${type.toLowerCase()}${done ? ' done' : ''}" data-coverage-key="${key}" ${row.ids.length ? '' : 'disabled'}><b>${type}</b><span>${row.rated}/${row.total}</span></button>`;
+      }).join('');
+      return `<div class="oc-coverage-cell"><small>${SEASON_LABELS[season]}</small>${parts}</div>`;
+    };
+    return `<section class="oc-workbench-block oc-coverage-block">
+      <div class="oc-workbench-head"><div><span>прогресс каталога</span><h3>Карта покрытия</h3><p>Нажми на незавершённый OP или ED, чтобы продолжить оценку именно этого сезона.</p></div></div>
+      <div class="oc-coverage-table">${years.map(year => `<div class="oc-coverage-row"><strong>${year}</strong>${SEASONS.map(season => cell(year, season)).join('')}</div>`).join('')}</div>
+    </section>`;
+  }
+
+  function rateLaterMarkup(entries, profile, own) {
+    if (!own) return '';
+    const ids = Array.from(new Set((profile?.rateLaterIds || []).map(String)));
+    const map = new Map(entries.map(entry => [String(entry.id), entry]));
+    const rows = ids.map(id => map.get(id)).filter(Boolean).filter(entry => bridge()?.userScore?.(entry.id, currentName()) === null);
+    const list = rows.length ? rows.slice(0, 40).map(entry => `<div class="oc-later-row"><button type="button" data-later-open="${esc(entry.id)}"><b>${esc(entry.type)}</b><span>${esc(entry.title)}</span><small>${esc(entry.year || '—')} · ${esc(SEASON_LABELS[entry.season] || entry.season || '—')}</small></button><button type="button" class="oc-later-remove" data-rate-later-toggle="${esc(entry.id)}" aria-label="Убрать из очереди">×</button></div>`).join('') : '<div class="oc-workbench-empty">Очередь пока пуста. Добавить трек можно с любой карточки каталога.</div>';
+    return `<section class="oc-workbench-block oc-later-block">
+      <div class="oc-workbench-head"><div><span>личная очередь</span><h3>Оценить позже · ${rows.length}</h3><p>Сюда попадают только ещё не оценённые тобой треки.</p></div>${rows.length ? '<button type="button" class="oc-addbtn" data-later-start>Начать оценку</button>' : ''}</div>
+      <div class="oc-later-list">${list}</div>
+    </section>`;
+  }
+
+  function render() {
+    const root = ensureRoot();
+    if (!root) return;
+    const data = snapshot();
+    const entries = Array.isArray(data.entries) ? data.entries : [];
+    const user = viewedName();
+    const own = Boolean(user && currentName() && sameUser(user, currentName()));
+    const profile = profileFor(user) || {};
+    root.innerHTML = `${criteriaMarkup(profile, own)}${rateLaterMarkup(entries, profile, own)}${coverageMarkup(entries, user)}`;
+    root.hidden = !user;
+    scanRateLaterButtons();
+  }
+
+  async function saveCriteria(button) {
+    const root = ensureRoot();
+    if (!root) return;
+    const criteria = { OP: {}, ED: {} };
+    root.querySelectorAll('[data-criteria-type][data-criteria-field]').forEach(input => {
+      const type = input.dataset.criteriaType;
+      const field = input.dataset.criteriaField;
+      criteria[type][field] = field === 'note' ? String(input.value || '').trim().slice(0, 240) : Math.max(0, Math.min(100, Number(input.value) || 0));
+    });
+    ['OP', 'ED'].forEach(type => {
+      if (criteria[type].songWeight + criteria[type].visualWeight <= 0) {
+        criteria[type].songWeight = 50;
+        criteria[type].visualWeight = 50;
+      }
+    });
+    button.disabled = true;
+    button.textContent = 'Сохраняю…';
+    try {
+      await bridge()?.saveProfilePatch?.({ ratingCriteria: criteria });
+      button.textContent = 'Сохранено ✓';
+      window.setTimeout(render, 500);
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = 'Не удалось сохранить';
+      console.error(error);
+    }
+  }
+
+  function scanRateLaterButtons() {
+    if (!currentName()) return;
+    document.querySelectorAll('.oc-unified-card[data-id], .oc-eval-modal[data-entry-id]').forEach(card => {
+      const id = String(card.dataset.id || card.dataset.entryId || '');
+      if (!id || bridge()?.userScore?.(id, currentName()) !== null) return;
+      let actions = card.querySelector('.oc-card-actions, .oc-eval-actions, .oc-opening-rate-actions');
+      if (!actions && card.classList.contains('oc-unified-card')) {
+        actions = document.createElement('div');
+        actions.className = 'oc-card-actions';
+        card.append(actions);
+      }
+      if (!actions || actions.querySelector(`[data-rate-later-toggle="${CSS.escape(id)}"]`)) return;
+      const active = Boolean(bridge()?.isRateLater?.(id));
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `oc-secondary-btn oc-rate-later-btn${active ? ' active' : ''}`;
+      button.dataset.rateLaterToggle = id;
+      button.textContent = active ? '⏱ Оценить позже ✓' : '⏱ Оценить позже';
+      actions.prepend(button);
+    });
+  }
+
+  document.addEventListener('click', async event => {
+    const save = event.target.closest('[data-criteria-save]');
+    if (save) { await saveCriteria(save); return; }
+    const coverage = event.target.closest('[data-coverage-key]');
+    if (coverage) {
+      const ids = queueMap.get(coverage.dataset.coverageKey) || [];
+      const [year, season, type] = coverage.dataset.coverageKey.split('|');
+      bridge()?.startRatingQueue?.(ids, { mode: 'coverage', label: `${type} · ${SEASON_LABELS[season]} ${year}`, context: { year, season, type } });
+      return;
+    }
+    const start = event.target.closest('[data-later-start]');
+    if (start) {
+      const ids = (profileFor(currentName())?.rateLaterIds || []).map(String).filter(id => bridge()?.userScore?.(id, currentName()) === null);
+      bridge()?.startRatingQueue?.(ids, { mode: 'rate-later', label: 'Оценить позже', context: { owner: currentName() } });
+      return;
+    }
+    const open = event.target.closest('[data-later-open]');
+    if (open) { bridge()?.openTrack?.(open.dataset.laterOpen); return; }
+    const toggle = event.target.closest('[data-rate-later-toggle]');
+    if (toggle) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggle.disabled = true;
+      try {
+        const active = await bridge()?.toggleRateLater?.(toggle.dataset.rateLaterToggle);
+        document.querySelectorAll(`[data-rate-later-toggle="${CSS.escape(toggle.dataset.rateLaterToggle)}"]`).forEach(button => {
+          button.classList.toggle('active', Boolean(active));
+          if (button.classList.contains('oc-rate-later-btn')) button.textContent = active ? '⏱ Оценить позже ✓' : '⏱ Оценить позже';
+        });
+        window.setTimeout(render, 80);
+      } catch (error) { console.error(error); }
+      finally { toggle.disabled = false; }
+    }
+  }, true);
+
+  function queueRender() {
+    window.clearTimeout(renderTimer);
+    renderTimer = window.setTimeout(render, 80);
+  }
+
+  window.addEventListener('oped:app-data-updated', queueRender);
+  window.addEventListener('oped:route-change', queueRender);
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-profile-view], #oc-profile-user')) window.setTimeout(queueRender, 0);
+  });
+  new MutationObserver(() => {
+    scanRateLaterButtons();
+    if (!document.querySelector('#oc-rating-workbench')) queueRender();
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', queueRender, { once: true });
+  else queueRender();
+})();
