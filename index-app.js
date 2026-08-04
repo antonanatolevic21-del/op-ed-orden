@@ -3644,6 +3644,18 @@
       return { matched: false, value: 0 };
     }
 
+    function ratingCriterionScore(input, rawValue) {
+      if (rawValue === null || rawValue === undefined || String(rawValue).trim() === '') return null;
+      const score = Number(String(rawValue).trim().replace(',', '.'));
+      if (!Number.isFinite(score)) return null;
+      const isModifier = Boolean(input?.hasAttribute?.('data-rating-modifier-rules'));
+      const min = isModifier ? 0 : ratingMin();
+      const max = ratingMax();
+      if (score < min || score > max) return null;
+      const step = scaleStep();
+      return Number((Math.round(score / step) * step).toFixed(1));
+    }
+
     function detailedRatingSettings(name = myName, rawType = 'OP') {
       const profile = dailyProfileFor(name);
       const type = String(rawType || '').toUpperCase() === 'ED' ? 'ED' : 'OP';
@@ -3678,16 +3690,17 @@
       const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
       const saved = customScoresFor(entry, myName);
       const calculationHint = (mode, weight, rules) => mode === 'modifier' ? `модификатор · ${rules || 'нет правил'}` : `вес ${weight}`;
+      const calculationMin = mode => mode === 'modifier' ? 0 : bounds.min;
       const calculationAttributes = (mode, weight, rules) => mode === 'modifier'
         ? `data-rating-modifier-rules="${escapeHtml(rules || '')}"`
         : `data-rating-weight="${weight}"`;
-      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(field.mode, field.weight, field.modifierRules))}</span><input type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" ${calculationAttributes(field.mode, field.weight, field.modifierRules)}></label>`).join('')}</div>` : '';
+      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(field.mode, field.weight, field.modifierRules))}</span><input type="number" min="${calculationMin(field.mode)}" max="${bounds.max}" step="${bounds.step}" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" ${calculationAttributes(field.mode, field.weight, field.modifierRules)}></label>`).join('')}</div>` : '';
       return `<div class="oc-eval-parts">
         <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.songMode, settings.songWeight, settings.songModifierRules))}</span>
-          <input id="${prefix}-song-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" ${calculationAttributes(settings.songMode, settings.songWeight, settings.songModifierRules)} />
+          <input id="${prefix}-song-score" type="number" min="${calculationMin(settings.songMode)}" max="${bounds.max}" step="${bounds.step}" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" ${calculationAttributes(settings.songMode, settings.songWeight, settings.songModifierRules)} />
         </label>
         <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.visualMode, settings.visualWeight, settings.visualModifierRules))}</span>
-          <input id="${prefix}-visual-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" ${calculationAttributes(settings.visualMode, settings.visualWeight, settings.visualModifierRules)} />
+          <input id="${prefix}-visual-score" type="number" min="${calculationMin(settings.visualMode)}" max="${bounds.max}" step="${bounds.step}" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" ${calculationAttributes(settings.visualMode, settings.visualWeight, settings.visualModifierRules)} />
         </label>
       </div>${custom}<div class="oc-detailed-rating-suggestion" data-detailed-rating-suggestion="${escapeHtml(prefix)}"><span data-detailed-rating-value>Заполни критерии, чтобы получить подсказку итогового балла</span><button type="button" class="oc-secondary-btn" data-detailed-rating-apply disabled>Подставить итог</button></div>`;
     }
@@ -3706,7 +3719,7 @@
         let usedWeight = 0;
         weightInputs.forEach(input => {
           const raw = String(input.value || '').trim();
-          const score = raw ? clampScore(raw) : null;
+          const score = ratingCriterionScore(input, raw);
           const weight = Math.max(0, Number(input.dataset.ratingWeight) || 0);
           if (score === null || weight <= 0) return;
           weightedTotal += score * weight;
@@ -3717,7 +3730,7 @@
         let modifierMatches = 0;
         modifierInputs.forEach(input => {
           const raw = String(input.value || '').trim();
-          const score = raw ? clampScore(raw) : null;
+          const score = ratingCriterionScore(input, raw);
           if (score === null) return;
           const result = ratingModifierForScore(input.dataset.ratingModifierRules, score);
           if (!result.matched) return;
@@ -3749,17 +3762,20 @@
       const visualInput = root?.querySelector?.(`#${prefix}-visual-score`);
       const rawSong = songInput ? String(songInput.value || '').trim() : '';
       const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
-      const songScore = rawSong ? clampScore(rawSong) : null;
-      const visualScore = rawVisual ? clampScore(rawVisual) : null;
-      if (rawSong && songScore === null) return { error: `Введите «${settings.songLabel}» от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
-      if (rawVisual && visualScore === null) return { error: `Введите «${settings.visualLabel}» от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
+      const songScore = ratingCriterionScore(songInput, rawSong);
+      const visualScore = ratingCriterionScore(visualInput, rawVisual);
+      const songMin = songInput?.hasAttribute('data-rating-modifier-rules') ? 0 : ratingMin();
+      const visualMin = visualInput?.hasAttribute('data-rating-modifier-rules') ? 0 : ratingMin();
+      if (rawSong && songScore === null) return { error: `Введите «${settings.songLabel}» от ${formatScore(songMin)} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
+      if (rawVisual && visualScore === null) return { error: `Введите «${settings.visualLabel}» от ${formatScore(visualMin)} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
       const customScores = {};
       for (const input of root?.querySelectorAll?.('[data-custom-rating-id]') || []) {
         const raw = String(input.value || '').trim();
         if (!raw) continue;
-        const score = clampScore(raw);
+        const score = ratingCriterionScore(input, raw);
         const label = String(input.dataset.customRatingLabel || 'Дополнительная оценка');
-        if (score === null) return { error: `Введите «${label}» от ${formatScore(ratingMin())} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
+        const min = input.hasAttribute('data-rating-modifier-rules') ? 0 : ratingMin();
+        if (score === null) return { error: `Введите «${label}» от ${formatScore(min)} до ${formatScore(ratingMax())} или оставьте поле пустым.` };
         customScores[input.dataset.customRatingId] = score;
       }
       return { songScore, visualScore, customScores, error: '' };
