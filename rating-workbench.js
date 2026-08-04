@@ -24,7 +24,8 @@
       if (!id) id = `field-${index + 1}`;
       while (used.has(id)) id = `${id}-${index + 1}`;
       used.add(id);
-      return { id, label };
+      const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
+      return { id, label, weight };
     }).filter(row => row.label);
   }
 
@@ -47,8 +48,10 @@
 
   function ratingFieldRow(field = {}) {
     const id = String(field.id || `field-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    const weight = Math.max(0, Math.min(100, Number(field.weight ?? 50) || 0));
     return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}">
       <input type="text" maxlength="48" value="${esc(field.label || '')}" data-rating-field-label placeholder="Например: Личное впечатление">
+      <label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${weight}" data-rating-field-weight></label>
       <button type="button" data-rating-field-remove aria-label="Удалить поле">×</button>
     </div>`;
   }
@@ -59,13 +62,16 @@
     const rows = fields.map(ratingFieldRow).join('');
     const songLabel = String(profile?.songScoreLabel || 'Песня').trim().slice(0, 48) || 'Песня';
     const visualLabel = String(profile?.visualScoreLabel || 'Визуал').trim().slice(0, 48) || 'Визуал';
+    const songWeight = Math.max(0, Math.min(100, Number(profile?.songScoreWeight ?? 50) || 0));
+    const visualWeight = Math.max(0, Math.min(100, Number(profile?.visualScoreWeight ?? 50) || 0));
     return `<section class="oc-workbench-block oc-criteria-settings" id="oc-rating-fields-settings">
       <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание</h3><p>По умолчанию скрыто во всех формах. Можно переименовать базовые поля и добавить до восьми собственных.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div>
       <label class="oc-detailed-rating-switch"><input type="checkbox" data-detailed-rating-enabled ${profile?.detailedRatingEnabled ? 'checked' : ''}><span><b>Включить детальное оценивание</b><small>Показывать дополнительные поля в карточках, дейликах и сезонной оценке</small></span></label>
       <div class="oc-base-rating-fields">
-        <label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(songLabel)}" data-song-score-label></label>
-        <label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(visualLabel)}" data-visual-score-label></label>
+        <div class="oc-base-rating-field"><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(songLabel)}" data-song-score-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${songWeight}" data-song-score-weight></label></div>
+        <div class="oc-base-rating-field"><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(visualLabel)}" data-visual-score-label></label><label class="oc-rating-weight-field"><span>Вес</span><input type="number" min="0" max="100" step="5" value="${visualWeight}" data-visual-score-weight></label></div>
       </div>
+      <div class="oc-rating-weight-hint">Вес относительный: значения не обязаны складываться в 100. Нулевой вес исключает критерий из подсказки итогового балла.</div>
       <div class="oc-custom-fields-head"><b>Собственные критерии</b><span>необязательно</span></div>
       <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
       <button type="button" class="oc-secondary-btn oc-custom-field-add" data-rating-field-add>+ Добавить поле</button>
@@ -137,7 +143,8 @@
     root.querySelectorAll('[data-rating-field-row]').forEach(row => {
       const label = String(row.querySelector('[data-rating-field-label]')?.value || '').trim().slice(0, 48);
       const id = String(row.dataset.fieldId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
-      if (label && id) fields.push({ id, label });
+      const weight = Math.max(0, Math.min(100, Number(row.querySelector('[data-rating-field-weight]')?.value ?? 50) || 0));
+      if (label && id) fields.push({ id, label, weight });
     });
     button.disabled = true;
     button.textContent = 'Сохраняю…';
@@ -145,7 +152,9 @@
       const detailedRatingEnabled = Boolean(root.querySelector('[data-detailed-rating-enabled]')?.checked);
       const songScoreLabel = String(root.querySelector('[data-song-score-label]')?.value || '').trim().slice(0, 48) || 'Песня';
       const visualScoreLabel = String(root.querySelector('[data-visual-score-label]')?.value || '').trim().slice(0, 48) || 'Визуал';
-      await bridge()?.saveProfilePatch?.({ ratingFields: fields.slice(0, 8), detailedRatingEnabled, songScoreLabel, visualScoreLabel });
+      const songScoreWeight = Math.max(0, Math.min(100, Number(root.querySelector('[data-song-score-weight]')?.value ?? 50) || 0));
+      const visualScoreWeight = Math.max(0, Math.min(100, Number(root.querySelector('[data-visual-score-weight]')?.value ?? 50) || 0));
+      await bridge()?.saveProfilePatch?.({ ratingFields: fields.slice(0, 8), detailedRatingEnabled, songScoreLabel, visualScoreLabel, songScoreWeight, visualScoreWeight });
       button.textContent = 'Сохранено ✓';
       window.setTimeout(render, 500);
     } catch (error) {
