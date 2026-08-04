@@ -4,7 +4,9 @@
 
   const SEASONS = ['winter', 'spring', 'summer', 'fall'];
   const SEASON_LABELS = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
+  const CRITERIA_DRAFT_PREFIX = 'oc-detailed-rating-draft-v1:';
   let renderTimer = 0;
+  let renderPendingAfterEdit = false;
   let queueMap = new Map();
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -19,6 +21,27 @@
   };
   const viewedName = () => String(document.querySelector('#oc-profile-user')?.value || currentName()).trim();
   const sameUser = (left, right) => String(left || '').trim().toLowerCase().replace(/ё/g, 'е') === String(right || '').trim().toLowerCase().replace(/ё/g, 'е');
+
+  function criteriaDraftKey(name = currentName()) {
+    const normalized = String(name || '').trim().toLowerCase().replace(/ё/g, 'е');
+    return normalized ? `${CRITERIA_DRAFT_PREFIX}${encodeURIComponent(normalized)}` : '';
+  }
+
+  function readCriteriaDraft(name = currentName()) {
+    const key = criteriaDraftKey(name);
+    if (!key) return null;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+      if (!parsed || typeof parsed !== 'object' || !parsed.settings || typeof parsed.settings !== 'object') return null;
+      return parsed;
+    } catch (_) { return null; }
+  }
+
+  function clearCriteriaDraft(name = currentName()) {
+    const key = criteriaDraftKey(name);
+    if (!key) return;
+    try { localStorage.removeItem(key); } catch (_) {}
+  }
 
   function normalizeRatingFields(value) {
     const source = Array.isArray(value) ? value : [];
@@ -78,8 +101,10 @@
 
   function criteriaMarkup(profile, own) {
     if (!own) return '';
+    const draft = readCriteriaDraft();
+    const sourceProfile = draft ? { ...profile, detailedRatingByType: draft.settings } : profile;
     const panel = type => {
-      const settings = normalizeTypeSettings(profile, type);
+      const settings = normalizeTypeSettings(sourceProfile, type);
       const rows = settings.fields.map(field => ratingFieldRow(type, field)).join('');
       const title = type === 'OP' ? 'Опенинги' : 'Эндинги';
       return `<fieldset class="oc-criteria-card ${type.toLowerCase()}" data-rating-type-panel="${type}">
@@ -95,7 +120,7 @@
       </fieldset>`;
     };
     return `<section class="oc-workbench-block oc-criteria-settings" id="oc-rating-fields-settings">
-      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание OP и ED</h3><p>Каждый тип включается и настраивается отдельно. Старые общие настройки автоматически подставлены в обе колонки.</p></div><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div>
+      <div class="oc-workbench-head"><div><span>личные настройки</span><h3>Детальное оценивание OP и ED</h3><p>Каждый тип включается и настраивается отдельно. Несохранённые изменения остаются в локальном черновике и не пропадают при обновлении профиля.</p></div><div class="oc-criteria-actions"><span class="oc-criteria-draft-state" data-criteria-draft-state ${draft ? '' : 'hidden'}>Черновик сохранён локально</span><button type="button" class="oc-secondary-btn" data-criteria-discard ${draft ? '' : 'hidden'}>Вернуть сохранённое</button><button type="button" class="oc-addbtn" data-criteria-save>Сохранить настройки</button></div></div>
       <div class="oc-rating-weight-hint">Вес относительный: значения не обязаны складываться в 100. Нулевой вес исключает критерий из подсказки итогового балла.</div>
       <div class="oc-criteria-grid">${panel('OP')}${panel('ED')}</div>
     </section>`;
@@ -147,7 +172,11 @@
     </section>`;
   }
 
-  function render() {
+  function render(options = {}) {
+    if (!options.force && document.activeElement?.closest?.('#oc-rating-fields-settings')) {
+      renderPendingAfterEdit = true;
+      return;
+    }
     const root = ensureRoot();
     if (!root) return;
     const data = snapshot();
@@ -160,11 +189,9 @@
     scanRateLaterButtons();
   }
 
-  async function saveCriteria(button) {
-    const root = ensureRoot();
-    if (!root) return;
+  function collectCriteriaSettings(root = ensureRoot()) {
     const detailedRatingByType = {};
-    root.querySelectorAll('[data-rating-type-panel]').forEach(panel => {
+    root?.querySelectorAll('[data-rating-type-panel]').forEach(panel => {
       const type = panel.dataset.ratingTypePanel === 'ED' ? 'ED' : 'OP';
       const fields = [];
       panel.querySelectorAll('[data-rating-field-row]').forEach(row => {
@@ -182,12 +209,32 @@
         fields: fields.slice(0, 8)
       };
     });
+    return detailedRatingByType;
+  }
+
+  function persistCriteriaDraft() {
+    const settings = collectCriteriaSettings();
+    if (!settings.OP || !settings.ED) return;
+    const key = criteriaDraftKey();
+    if (!key) return;
+    try { localStorage.setItem(key, JSON.stringify({ settings, updatedAt: Date.now() })); } catch (_) {}
+    document.querySelector('[data-criteria-draft-state]')?.removeAttribute('hidden');
+    document.querySelector('[data-criteria-discard]')?.removeAttribute('hidden');
+  }
+
+  async function saveCriteria(button) {
+    const root = ensureRoot();
+    if (!root) return;
+    const detailedRatingByType = collectCriteriaSettings(root);
+    persistCriteriaDraft();
     button.disabled = true;
     button.textContent = 'Сохраняю…';
     try {
       await bridge()?.saveProfilePatch?.({ detailedRatingByType });
+      clearCriteriaDraft();
+      renderPendingAfterEdit = false;
       button.textContent = 'Сохранено ✓';
-      window.setTimeout(render, 500);
+      window.setTimeout(() => render({ force: true }), 500);
     } catch (error) {
       button.disabled = false;
       button.textContent = 'Не удалось сохранить';
@@ -245,6 +292,7 @@
       if (!list || list.querySelectorAll('[data-rating-field-row]').length >= 8) return;
       list.querySelector('[data-rating-fields-empty]')?.remove();
       list.insertAdjacentHTML('beforeend', ratingFieldRow(type));
+      persistCriteriaDraft();
       list.lastElementChild?.querySelector('input')?.focus();
       return;
     }
@@ -253,6 +301,15 @@
       const list = removeField.closest('[data-rating-fields-list]');
       removeField.closest('[data-rating-field-row]')?.remove();
       if (list && !list.querySelector('[data-rating-field-row]')) list.innerHTML = '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>';
+      persistCriteriaDraft();
+      return;
+    }
+    const discard = event.target.closest('[data-criteria-discard]');
+    if (discard) {
+      if (!window.confirm('Отменить несохранённые изменения детального оценивания?')) return;
+      clearCriteriaDraft();
+      renderPendingAfterEdit = false;
+      render({ force: true });
       return;
     }
     const save = event.target.closest('[data-criteria-save]');
@@ -290,9 +347,28 @@
   }, true);
 
   function queueRender() {
+    if (document.activeElement?.closest?.('#oc-rating-fields-settings')) {
+      renderPendingAfterEdit = true;
+      return;
+    }
     window.clearTimeout(renderTimer);
     renderTimer = window.setTimeout(render, 80);
   }
+
+  document.addEventListener('input', event => {
+    if (event.target?.closest?.('#oc-rating-fields-settings [data-rating-type-panel]')) persistCriteriaDraft();
+  });
+  document.addEventListener('change', event => {
+    if (event.target?.closest?.('#oc-rating-fields-settings [data-rating-type-panel]')) persistCriteriaDraft();
+  });
+  document.addEventListener('focusout', event => {
+    if (!event.target?.closest?.('#oc-rating-fields-settings')) return;
+    window.setTimeout(() => {
+      if (!renderPendingAfterEdit || document.activeElement?.closest?.('#oc-rating-fields-settings')) return;
+      renderPendingAfterEdit = false;
+      queueRender();
+    }, 0);
+  });
 
   window.addEventListener('oped:app-data-updated', queueRender);
   window.addEventListener('oped-account-restored', queueRender);
