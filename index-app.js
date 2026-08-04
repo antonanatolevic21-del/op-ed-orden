@@ -255,6 +255,7 @@
     let activeEntityCardId = '';
     let entityFiltersExpanded = false;
     let activeEntityQueueLabel = '';
+    let activeRatingQueueContext = {};
     let activeEntityFilteredEntries = [];
     let entityCardRenderLimit = 40;
     let entityTrackRenderLimit = 30;
@@ -419,6 +420,46 @@
         if (profileIndex >= 0) firebaseUserProfiles[profileIndex] = { ...firebaseUserProfiles[profileIndex], collections: rows };
         publishAppData('collections-saved');
         return rows;
+      },
+      profileData(name = myName) {
+        return dailyProfileFor(name) || null;
+      },
+      userScore(id, name = myName) {
+        const entry = entriesById.get(String(id || ''));
+        return entry ? scoreFor(entry, name) : null;
+      },
+      isRateLater(id) {
+        return rateLaterIdsFor(myName).includes(String(id || ''));
+      },
+      async toggleRateLater(id) {
+        return toggleRateLaterEntry(String(id || ''));
+      },
+      async saveProfilePatch(patch) {
+        if (!myName || !currentPersonalUid()) throw new Error('Для сохранения войди в личный аккаунт.');
+        await saveDailyProfilePatch(patch && typeof patch === 'object' ? patch : {});
+        publishAppData('profile-settings-saved');
+        return dailyProfileFor(myName);
+      },
+      startRatingQueue(ids, options = {}) {
+        if (!ensureNickname()) return false;
+        const mode = String(options.mode || 'collection');
+        const label = String(options.label || 'Очередь оценки');
+        const context = options.context && typeof options.context === 'object' ? options.context : {};
+        const rows = Array.from(new Set((ids || []).map(String))).map(id => entriesById.get(id)).filter(Boolean);
+        if (!rows.length) {
+          setStatus('В этой очереди не осталось неоценённых треков.', true);
+          return false;
+        }
+        startPersistentRatingQueue(rows, mode, label, context);
+        return true;
+      },
+      renderCatalogEditor(id) {
+        if (!isCatalogAdmin()) return '';
+        const entry = entriesById.get(String(id || ''));
+        return entry ? renderEditCard(entry) : '';
+      },
+      async saveCatalogEditor(id, card) {
+        return saveExternalTrackEditor(String(id || ''), card);
       },
       watchJournal(callback) {
         if (!window.OPED_DB?.watchCatalogJournal) {
@@ -691,6 +732,7 @@
       if (comment) entry.comments[myName] = comment; else delete entry.comments[myName];
       await window.OPED_DB.saveRating(entry.id, myName, score);
       await saveRatingExtras(entry.id, myName, { songScore, visualScore, comment });
+      await removeRateLaterEntry(entry.id);
       appendManualOrderIfMissing(myName, entry.type, entry.id);
       touchEntryCache(entry);
       markRatingDataChanged();
@@ -3529,6 +3571,53 @@
       </details>`;
     }
 
+    function ratingCriteriaMarkup(entry, prefix) {
+      if (!entry || isPersonalScale()) return '';
+      const criteria = ratingCriteriaFor(entry.type);
+      const total = criteria.songWeight + criteria.visualWeight;
+      const songPercent = Math.round(criteria.songWeight / total * 100);
+      const visualPercent = 100 - songPercent;
+      return `<div class="oc-rating-criteria" data-rating-criteria-prefix="${escapeHtml(prefix)}" data-song-weight="${criteria.songWeight}" data-visual-weight="${criteria.visualWeight}">
+        <div><strong>${entry.type === 'ED' ? 'Критерии эндинга' : 'Критерии опенинга'}</strong><span>песня ${songPercent}% · визуал ${visualPercent}%</span></div>
+        ${criteria.note ? `<p>${escapeHtml(criteria.note)}</p>` : ''}
+        <div class="oc-rating-criteria-suggestion"><span data-rating-criteria-value>Заполни песню и визуал, чтобы получить подсказку</span><button type="button" class="oc-secondary-btn" data-rating-criteria-apply disabled>Подставить итог</button></div>
+      </div>`;
+    }
+
+    function bindRatingCriteriaSuggestion(root, prefix) {
+      const box = root?.querySelector?.(`[data-rating-criteria-prefix="${prefix}"]`);
+      const song = root?.querySelector?.(`#${prefix}-song-score`);
+      const visual = root?.querySelector?.(`#${prefix}-visual-score`);
+      const totalInput = root?.querySelector?.(`#${prefix}-score`);
+      if (!box || !song || !visual || !totalInput) return;
+      const value = box.querySelector('[data-rating-criteria-value]');
+      const apply = box.querySelector('[data-rating-criteria-apply]');
+      let suggested = null;
+      const update = () => {
+        const songValue = clampScore(song.value);
+        const visualValue = clampScore(visual.value);
+        if (songValue === null || visualValue === null) {
+          suggested = null;
+          if (value) value.textContent = 'Заполни песню и визуал, чтобы получить подсказку';
+          if (apply) apply.disabled = true;
+          return;
+        }
+        const songWeight = Number(box.dataset.songWeight) || 0;
+        const visualWeight = Number(box.dataset.visualWeight) || 0;
+        suggested = clampScore((songValue * songWeight + visualValue * visualWeight) / Math.max(1, songWeight + visualWeight));
+        if (value) value.textContent = `Предлагаемый итог: ${formatScore(suggested)}`;
+        if (apply) apply.disabled = false;
+      };
+      song.addEventListener('input', update);
+      visual.addEventListener('input', update);
+      apply?.addEventListener('click', () => {
+        if (suggested === null) return;
+        totalInput.value = String(suggested);
+        totalInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      update();
+    }
+
     function hasRated(entry, name) {
       return scoreFor(entry, name) !== null;
     }
@@ -3642,6 +3731,49 @@
       }) || null;
     }
 
+    function rateLaterIdsFor(name = myName) {
+      const profile = dailyProfileFor(name);
+      return Array.from(new Set((Array.isArray(profile?.rateLaterIds) ? profile.rateLaterIds : []).map(String).filter(Boolean)));
+    }
+
+    async function toggleRateLaterEntry(entryId) {
+      if (!myName || !currentPersonalUid()) throw new Error('Для очереди войди в личный аккаунт.');
+      const id = String(entryId || '');
+      if (!id || !entriesById.has(id)) return false;
+      const ids = new Set(rateLaterIdsFor(myName));
+      const added = !ids.has(id);
+      if (added) ids.add(id); else ids.delete(id);
+      await saveDailyProfilePatch({ rateLaterIds: [...ids].slice(-500) });
+      publishAppData('rate-later-saved');
+      return added;
+    }
+
+    async function removeRateLaterEntry(entryId) {
+      const ids = rateLaterIdsFor(myName);
+      const id = String(entryId || '');
+      if (!ids.includes(id)) return false;
+      await saveDailyProfilePatch({ rateLaterIds: ids.filter(value => value !== id) });
+      publishAppData('rate-later-saved');
+      return true;
+    }
+
+    function normalizeRatingCriteria(value) {
+      const source = value && typeof value === 'object' ? value : {};
+      const normalizeType = row => {
+        const item = row && typeof row === 'object' ? row : {};
+        let songWeight = Math.max(0, Math.min(100, Number(item.songWeight ?? 50) || 0));
+        let visualWeight = Math.max(0, Math.min(100, Number(item.visualWeight ?? 50) || 0));
+        if (songWeight + visualWeight <= 0) { songWeight = 50; visualWeight = 50; }
+        return { songWeight, visualWeight, note: String(item.note || '').trim().slice(0, 240) };
+      };
+      return { OP: normalizeType(source.OP), ED: normalizeType(source.ED) };
+    }
+
+    function ratingCriteriaFor(type, name = myName) {
+      const profile = dailyProfileFor(name);
+      return normalizeRatingCriteria(profile?.ratingCriteria)[type === 'ED' ? 'ED' : 'OP'];
+    }
+
     function normalizeDailySettings(raw = {}) {
       return {
         enabled: Boolean(raw.enabled),
@@ -3653,7 +3785,9 @@
         enabledAt: String(raw.enabledAt || ''),
         firstRequiredKey: String(raw.firstRequiredKey || ''),
         optionalKey: String(raw.optionalKey || ''),
-        publicCalendar: Boolean(raw.publicCalendar)
+        publicCalendar: Boolean(raw.publicCalendar),
+        count: [10, 12, 15].includes(Number(raw.count)) ? Number(raw.count) : 10,
+        selectionMode: ['random', 'balanced', 'diverse', 'coverage'].includes(raw.selectionMode) ? raw.selectionMode : 'random'
       };
     }
 
@@ -3690,19 +3824,88 @@
 
     function dailyAssignmentFor(name, key, settings, savedIds = null, progressedIds = null) {
       const candidates = dailyEligibleEntries(settings, name);
-      const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}`;
+      const count = Math.max(10, Math.min(15, Number(settings.count) || 10));
+      if (candidates.length < count) return [];
+      const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}|${settings.selectionMode}|${count}`;
       const shuffled = candidates.slice().sort((a, b) => dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`));
+
+      function balancedRows() {
+        if (settings.type !== 'both') return shuffled;
+        const op = shuffled.filter(entry => entry.type === 'OP');
+        const ed = shuffled.filter(entry => entry.type === 'ED');
+        const result = [];
+        let opIndex = 0;
+        let edIndex = 0;
+        while (result.length < shuffled.length && (opIndex < op.length || edIndex < ed.length)) {
+          if (opIndex < op.length) result.push(op[opIndex++]);
+          if (edIndex < ed.length) result.push(ed[edIndex++]);
+        }
+        return result;
+      }
+
+      function diverseRows() {
+        const pool = shuffled.slice();
+        const result = [];
+        const usedFranchises = new Map();
+        const usedYears = new Map();
+        while (pool.length) {
+          let bestIndex = 0;
+          let bestPenalty = Infinity;
+          pool.forEach((entry, index) => {
+            const franchises = (entry.franchises || []).map(value => String(value).toLowerCase());
+            const franchisePenalty = franchises.reduce((sum, value) => sum + (usedFranchises.get(value) || 0) * 5, 0);
+            const year = String(entry.year || '');
+            const yearPenalty = (usedYears.get(year) || 0) * 2;
+            const typePenalty = result.length && result[result.length - 1].type === entry.type ? 1 : 0;
+            const penalty = franchisePenalty + yearPenalty + typePenalty;
+            if (penalty < bestPenalty) { bestPenalty = penalty; bestIndex = index; }
+          });
+          const [chosen] = pool.splice(bestIndex, 1);
+          result.push(chosen);
+          (chosen.franchises || []).forEach(value => {
+            const key = String(value).toLowerCase();
+            usedFranchises.set(key, (usedFranchises.get(key) || 0) + 1);
+          });
+          const year = String(chosen.year || '');
+          usedYears.set(year, (usedYears.get(year) || 0) + 1);
+        }
+        return result;
+      }
+
+      function coverageRows() {
+        const totals = new Map();
+        const rated = new Map();
+        dailyEligibleEntries(settings, name, true).forEach(entry => {
+          const group = `${entry.type}|${entry.year}|${entry.season}`;
+          totals.set(group, (totals.get(group) || 0) + 1);
+          if (dailyEntryHasUserScore(entry, name)) rated.set(group, (rated.get(group) || 0) + 1);
+        });
+        return shuffled.slice().sort((a, b) => {
+          const aKey = `${a.type}|${a.year}|${a.season}`;
+          const bKey = `${b.type}|${b.year}|${b.season}`;
+          const aRatio = (rated.get(aKey) || 0) / Math.max(1, totals.get(aKey) || 0);
+          const bRatio = (rated.get(bKey) || 0) / Math.max(1, totals.get(bKey) || 0);
+          return aRatio - bRatio || dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`);
+        });
+      }
+
+      const ordered = settings.selectionMode === 'balanced'
+        ? balancedRows()
+        : settings.selectionMode === 'diverse'
+          ? diverseRows()
+          : settings.selectionMode === 'coverage'
+            ? coverageRows()
+            : shuffled;
+
       if (Array.isArray(savedIds) && savedIds.length) {
         const progressed = new Set(Array.isArray(progressedIds) ? progressedIds.map(String) : []);
         const saved = savedIds.map(String).filter(id => entriesById.has(id));
-        const kept = saved.filter(id => progressed.has(id) || !dailyEntryHasUserScore(entriesById.get(id), name));
+        const kept = saved.filter(id => progressed.has(id) || !dailyEntryHasUserScore(entriesById.get(id), name)).slice(0, count);
         const used = new Set(kept);
-        const refill = shuffled.filter(entry => !used.has(String(entry.id))).slice(0, Math.max(0, saved.length - kept.length));
+        const refill = ordered.filter(entry => !used.has(String(entry.id))).slice(0, Math.max(0, count - kept.length));
         return kept.concat(refill.map(entry => String(entry.id)));
       }
-      if (candidates.length < 10) return [];
-      const count = Math.min(candidates.length, 10 + dailyHash(seed) % 6);
-      return shuffled.slice(0, count).map(entry => String(entry.id));
+      return ordered.slice(0, count).map(entry => String(entry.id));
     }
 
     function trimDailyMap(value, limit = 62) {
@@ -3742,7 +3945,7 @@
       const ids = settings.enabled ? dailyAssignmentFor(name, clock.key, settings, assignments[clock.key], progress[clock.key]) : [];
       const required = Boolean(settings.enabled && settings.firstRequiredKey && clock.key >= settings.firstRequiredKey);
       const offered = required || settings.optionalKey === clock.key;
-      return { profile, settings, clock, assignments, completed, ids, required, offered, available: offered && ids.length >= 10, done: Boolean(completed[clock.key]) };
+      return { profile, settings, clock, assignments, completed, ids, required, offered, available: offered && ids.length >= settings.count, done: Boolean(completed[clock.key]) };
     }
 
     async function saveDailySettingsFromPanel() {
@@ -3762,6 +3965,8 @@
         enabled: true,
         type: String($('#oc-daily-type')?.value || 'both'),
         fromYear, fromSeason, toYear, toSeason,
+        count: Number($('#oc-daily-count')?.value || 10),
+        selectionMode: String($('#oc-daily-selection-mode')?.value || 'random'),
         enabledAt: old.enabledAt || new Date().toISOString(),
         firstRequiredKey: old.firstRequiredKey || clock.nextKey,
         optionalKey: old.optionalKey || (clock.released ? clock.key : ''),
@@ -3803,7 +4008,7 @@
       const progressMap = { ...(profile?.dailyProgress || {}) };
       const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
       let ids = dailyAssignmentFor(myName, key, settings, assignments[key], [...progressed]);
-      if (ids.length < 10) { setStatus('Под выбранные критерии нашлось меньше 10 песен — дейлик сегодня не сформировался.', true); return; }
+      if (ids.length < settings.count) { setStatus(`Под выбранные критерии нашлось меньше ${settings.count} песен — дейлик сегодня не сформировался.`, true); return; }
       const savedIds = Array.isArray(assignments[key]) ? assignments[key].map(String) : [];
       if (savedIds.length !== ids.length || savedIds.some((id, index) => id !== ids[index])) {
         assignments[key] = ids;
@@ -3892,8 +4097,8 @@
       const todayButton = own && settings.enabled && state.available && !state.done
         ? `<button type="button" class="oc-addbtn" id="oc-daily-start-today">Пройти текущий дейлик (${state.ids.length})</button>` : '';
       const unsubscribeButton = settings.enabled ? '<button type="button" class="oc-soft-btn" id="oc-daily-unsubscribe">Отписаться от дейлика</button>' : '';
-      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">Что оцениваем<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label><label>Начальный год<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, 'С самого раннего')}</select></label><label>Начальный сезон<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>Конечный год<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, 'По самый поздний')}</select></label><label>Конечный сезон<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>Видимость календаря</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> показывать календарь всем в моём профиле</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? 'Сохранить настройки' : 'Запустить ежедневную оценку'}</button>${todayButton}${unsubscribeButton}</div>` : '';
-      dailyPanel.innerHTML = `<div class="oc-daily-head"><div><div class="oc-section-label">ежедневная оценка</div><h3>${own ? 'Твой дейлик' : `Календарь · ${escapeHtml(viewed)}`}</h3><div class="oc-hint">Новый набор появляется ежедневно в 18:00 МСК. В наборе — от 10 до 15 случайных песен.</div></div></div>${settingsHtml}${settings.enabled && maySeeCalendar ? dailyCalendarHtml(viewed, settings, profile) : ''}`;
+      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">Что оцениваем<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>Опенинги и эндинги</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>Только опенинги</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>Только эндинги</option></select></label><label>Количество<select id="oc-daily-count"><option value="10" ${settings.count === 10 ? 'selected' : ''}>10 треков</option><option value="12" ${settings.count === 12 ? 'selected' : ''}>12 треков</option><option value="15" ${settings.count === 15 ? 'selected' : ''}>15 треков</option></select></label><label class="wide">Способ отбора<select id="oc-daily-selection-mode"><option value="random" ${settings.selectionMode === 'random' ? 'selected' : ''}>Случайный</option><option value="balanced" ${settings.selectionMode === 'balanced' ? 'selected' : ''}>Баланс OP и ED</option><option value="diverse" ${settings.selectionMode === 'diverse' ? 'selected' : ''}>Разные годы и франшизы</option><option value="coverage" ${settings.selectionMode === 'coverage' ? 'selected' : ''}>Закрывать пробелы каталога</option></select></label><label>Начальный год<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, 'С самого раннего')}</select></label><label>Начальный сезон<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>Конечный год<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, 'По самый поздний')}</select></label><label>Конечный сезон<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>Видимость календаря</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> показывать календарь всем в моём профиле</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? 'Сохранить настройки' : 'Запустить ежедневную оценку'}</button>${todayButton}${unsubscribeButton}</div>` : '';
+      dailyPanel.innerHTML = `<div class="oc-daily-head"><div><div class="oc-section-label">ежедневная оценка</div><h3>${own ? 'Твой дейлик' : `Календарь · ${escapeHtml(viewed)}`}</h3><div class="oc-hint">Новый набор появляется ежедневно в 18:00 МСК. Количество и способ отбора настраиваются отдельно; уже оценённые треки в набор не попадают.</div></div></div>${settingsHtml}${settings.enabled && maySeeCalendar ? dailyCalendarHtml(viewed, settings, profile) : ''}`;
       $('#oc-daily-save-settings')?.addEventListener('click', () => saveDailySettingsFromPanel().catch(error => { console.error(error); setStatus('Не удалось сохранить настройки дейлика.', true); }));
       $('#oc-daily-start-today')?.addEventListener('click', () => startDailyRating().catch(error => { console.error(error); setStatus('Не удалось открыть дейлик.', true); }));
       $('#oc-daily-unsubscribe')?.addEventListener('click', () => unsubscribeFromDaily().catch(error => { console.error(error); setStatus('Не удалось отключить дейлик.', true); }));
@@ -4495,12 +4700,13 @@
       if (!card || !ensureNickname()) return;
       const related = activeEntityFilteredEntries.slice();
       const remaining = related.filter(entry => !entityHasRating(entry));
-      evaluatorMode = 'entity';
-      activeEntityQueueLabel = card.value;
-      seasonQueue = (remaining.length ? remaining : related).slice();
-      seasonQueueIndex = 0;
-      if (!seasonQueue.length) return;
-      renderEvaluator();
+      const queue = (remaining.length ? remaining : related).slice();
+      if (!queue.length) return;
+      startPersistentRatingQueue(queue, 'entity', card.value, {
+        entityType: activeEntityType,
+        entityId: activeEntityCardId,
+        scale: ratingScale
+      });
     }
 
     async function saveEntityAlbum(event) {
@@ -4564,23 +4770,95 @@
       return Math.max(ratingMin(), Math.min(ratingMax(), Number(rounded.toFixed(1))));
     }
 
+    const PERSISTENT_RATING_MODES = new Set(['season', 'season-all', 'entity', 'collection', 'coverage', 'rate-later']);
+
+    function ratingSessionStorageKey() {
+      return 'op-ed-rating-session-v2:' + manualUserSafeKey(myName);
+    }
+
+    function ratingSessionContextKey(mode, context = {}) {
+      const clean = Object.keys(context || {}).sort().reduce((result, key) => {
+        const value = context[key];
+        if (value !== undefined && value !== null && value !== '') result[key] = String(value);
+        return result;
+      }, {});
+      return `${mode}|${JSON.stringify(clean)}`;
+    }
+
+    function savedRatingSession() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(ratingSessionStorageKey()) || 'null');
+        if (!saved || !PERSISTENT_RATING_MODES.has(String(saved.mode)) || !Array.isArray(saved.ids) || !saved.ids.length) return null;
+        return saved;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function persistRatingSession() {
+      if (!PERSISTENT_RATING_MODES.has(evaluatorMode) || !seasonQueue.length) return;
+      try {
+        localStorage.setItem(ratingSessionStorageKey(), JSON.stringify({
+          mode: evaluatorMode,
+          label: activeEntityQueueLabel,
+          context: activeRatingQueueContext,
+          contextKey: ratingSessionContextKey(evaluatorMode, activeRatingQueueContext),
+          ids: seasonQueue.map(entry => String(entry.id)),
+          index: seasonQueueIndex,
+          savedAt: Date.now()
+        }));
+      } catch (_) {}
+    }
+
+    function clearRatingSession() {
+      try { localStorage.removeItem(ratingSessionStorageKey()); } catch (_) {}
+    }
+
+    function startPersistentRatingQueue(rows, mode, label, context = {}) {
+      evaluatorMode = PERSISTENT_RATING_MODES.has(mode) ? mode : 'collection';
+      activeEntityQueueLabel = String(label || 'Очередь оценки');
+      activeRatingQueueContext = context && typeof context === 'object' ? { ...context } : {};
+      const saved = savedRatingSession();
+      const expectedKey = ratingSessionContextKey(evaluatorMode, activeRatingQueueContext);
+      if (saved?.contextKey === expectedKey) {
+        const restored = saved.ids.map(id => entriesById.get(String(id))).filter(Boolean);
+        if (restored.length) {
+          seasonQueue = restored;
+          seasonQueueIndex = Math.max(0, Math.min(restored.length - 1, Number(saved.index) || 0));
+        } else {
+          seasonQueue = rows.slice();
+          seasonQueueIndex = 0;
+        }
+      } else {
+        seasonQueue = rows.slice();
+        seasonQueueIndex = 0;
+      }
+      persistRatingSession();
+      renderEvaluator();
+    }
+
     function startSeasonRating(includeAll = false) {
       if (!selectedSeason) return;
       if (!ensureNickname()) return;
-      evaluatorMode = includeAll ? 'season-all' : 'season';
-      seasonQueue = includeAll
+      const mode = includeAll ? 'season-all' : 'season';
+      const queue = includeAll
         ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType).slice().sort((a, b) => compareNatural(a.title, b.title))
         : (isPersonalScale()
           ? personalOpeningQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType)
           : openingQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType));
-      seasonQueueIndex = 0;
-      if (!seasonQueue.length) {
+      if (!queue.length) {
         setStatus(isPersonalScale()
           ? `У всех ${typeLabel(seasonType)} этого сезона уже есть твоя оценка ✓`
           : `Все ${typeLabel(seasonType)} этого сезона уже оценены с текущего ника ✓`);
         return;
       }
-      renderEvaluator();
+      startPersistentRatingQueue(queue, mode, `${typeLabel(seasonType)} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`, {
+        year: selectedSeason.year,
+        season: selectedSeason.season,
+        type: seasonType,
+        includeAll: includeAll ? '1' : '0',
+        scale: ratingScale
+      });
     }
 
     function startOpeningRating(entryId) {
@@ -4594,6 +4872,7 @@
     }
 
     function closeEvaluator() {
+      persistRatingSession();
       evaluatorEl.classList.add('hidden');
       evaluatorEl.innerHTML = '';
       seasonQueue = [];
@@ -4792,6 +5071,7 @@
         const completedDailyKey = dailyActiveKey;
         const completedBlindStats = blindSessionStats ? { ...blindSessionStats } : null;
         closeEvaluator();
+        if (PERSISTENT_RATING_MODES.has(completedMode)) clearRatingSession();
         renderSeasonViews();
         if (completedMode === 'entity') renderEntityAlbums();
         if (completedMode === 'daily') {
@@ -4806,12 +5086,15 @@
         }
         setStatus(completedMode === 'entity'
           ? 'Альбом полностью просмотрен ✓'
+          : ['collection', 'coverage', 'rate-later'].includes(completedMode)
+            ? `${activeEntityQueueLabel || 'Очередь'} полностью оценена ✓`
           : isPersonalScale()
             ? (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Оценки сезона проставлены ✓')
             : (completedMode === 'single' ? 'Оценка сохранена ✓' : 'Сезонная оценка завершена ✓'));
         return;
       }
       const entry = seasonQueue[seasonQueueIndex];
+      persistRatingSession();
       if (evaluatorMode === 'blind' && renderBlindComparison(entry)) return;
       const existingScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
       const blindMode = evaluatorMode === 'blind';
@@ -4825,7 +5108,7 @@
       const inputStep = scaleStep();
       const progressText = evaluatorMode === 'blind'
         ? `Слепая переоценка · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
-        : evaluatorMode === 'entity'
+        : ['entity', 'collection', 'coverage', 'rate-later'].includes(evaluatorMode)
         ? `${activeEntityQueueLabel} · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
         : evaluatorMode === 'single'
         ? `Переоценка · ${entry.year || 'год не указан'}${entry.season ? ' · ' + SEASON_LABEL[entry.season] : ''}`
@@ -4833,7 +5116,7 @@
           ? `Ежедневная оценка · ${entry.type === 'ED' ? 'ED — эндинг' : 'OP — опенинг'} · ${seasonQueueIndex + 1} из ${seasonQueue.length} оставшихся`
           : `${seasonQueueIndex + 1} из ${seasonQueue.length} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`;
       evaluatorEl.classList.remove('hidden');
-      evaluatorEl.innerHTML = `<div class="oc-eval-modal">
+      evaluatorEl.innerHTML = `<div class="oc-eval-modal" data-entry-id="${escapeHtml(entry.id)}">
         <div class="oc-eval-top">
           <div>
             <div class="oc-eval-progress">${escapeHtml(progressText)}</div>
@@ -4859,6 +5142,7 @@
             </label>
           </div>
           ${ratingCommentEditorMarkup('oc-eval', savedComment)}
+          ${ratingCriteriaMarkup(entry, 'oc-eval')}
           ${blindMode ? '<div class="oc-blind-comment-hint">Пустое поле сохранит прежний комментарий.</div>' : ''}` : ''}
         </div>
         <div class="oc-eval-actions">
@@ -4877,6 +5161,7 @@
         const val = clampScore(score.value);
         if (val !== null) { range.value = String(val); updateWord(val); }
       });
+      bindRatingCriteriaSuggestion(evaluatorEl, 'oc-eval');
       bindVideoEmbeds(evaluatorEl);
     }
 
@@ -4915,6 +5200,7 @@
           entry.personalScores = entry.personalScores || {};
           entry.personalScores[myName] = score;
           await saveRatingExtras(entry.id, myName, { personalScore: score });
+          await removeRateLaterEntry(entry.id);
         } else {
           await persistCompleteRating(entry, { score, songScore, visualScore, comment });
         }
@@ -4977,6 +5263,60 @@
             <button class="oc-save-btn" data-action="save-edit" data-id="${entry.id}">Сохранить</button>
           </div>
         </div>`;
+    }
+
+    async function saveExternalTrackEditor(id, card) {
+      if (!ensureCatalogAdmin()) return false;
+      const entry = entriesById.get(String(id || ''));
+      if (!entry || !(card instanceof Element)) throw new Error('Редактор трека не найден.');
+      const value = selector => String(card.querySelector(selector)?.value || '').trim();
+      const title = value('.oc-e-title');
+      const type = value('.oc-e-type') === 'ED' ? 'ED' : 'OP';
+      if (!title) throw new Error('Название не может быть пустым.');
+      if (isDuplicateTitle(title, type, id)) throw new Error(`Такой ${type} уже есть.`);
+      const updatedEntry = {
+        ...entry,
+        title,
+        type,
+        year: value('.oc-e-year') ? Number(value('.oc-e-year')) : null,
+        season: value('.oc-e-season'),
+        studios: parseList(value('.oc-e-studio')),
+        directors: parseList(value('.oc-e-director')),
+        performers: parseList(value('.oc-e-performer')),
+        franchises: uniqueFranchiseList(cleanFranchiseList(value('.oc-e-franchise'))),
+        ...sameSongFields(value('.oc-e-same-song')),
+        image: value('.oc-e-image'),
+        fallbackImage: value('.oc-e-fallback-image'),
+        link: value('.oc-e-link'),
+        notes: value('.oc-e-notes'),
+        alternativeTitles: alternativeTitlesForSave(title, value('.oc-e-alt-titles')),
+        isChinese: Boolean(card.querySelector('.oc-e-chinese')?.checked),
+        isMovie: Boolean(card.querySelector('.oc-e-movie')?.checked),
+        isShortened: Boolean(card.querySelector('.oc-e-shortened')?.checked),
+        uncertainPerformer: Boolean(card.querySelector('.oc-e-uncertain-performer')?.checked),
+        uncertainDirector: Boolean(card.querySelector('.oc-e-uncertain-director')?.checked),
+        uncertainImage: Boolean(card.querySelector('.oc-e-uncertain-image')?.checked)
+      };
+      await window.OPED_DB.updateOpening(id, updatedEntry);
+      await saveOpeningExtras(id, {
+        franchises: updatedEntry.franchises,
+        alternativeTitles: updatedEntry.alternativeTitles,
+        isChinese: updatedEntry.isChinese,
+        isMovie: updatedEntry.isMovie,
+        isShortened: updatedEntry.isShortened,
+        sameSongGroupId: updatedEntry.sameSongGroupId,
+        sameSongTitle: updatedEntry.sameSongTitle,
+        uncertainPerformer: updatedEntry.uncertainPerformer,
+        uncertainDirector: updatedEntry.uncertainDirector,
+        uncertainImage: updatedEntry.uncertainImage
+      });
+      Object.assign(entry, updatedEntry);
+      touchEntryCache(entry);
+      populateFilterOptions();
+      render();
+      publishAppData('catalog-inline-edit-saved');
+      setStatus('Изменения сохранены ✓');
+      return true;
     }
 
     // ---------- manual (user-curated) top-100 ----------
@@ -6296,7 +6636,7 @@
       const savedScore = myPublicScore !== null ? clampOpeningModalScore(myPublicScore) : 5;
       const hasAnyMyRating = myPublicScore !== null || mySongScore !== null || myVisualScore !== null;
       openingModal.classList.remove('hidden');
-      openingModal.innerHTML = `<div class="oc-eval-modal oc-opening-detail-modal">
+      openingModal.innerHTML = `<div class="oc-eval-modal oc-opening-detail-modal" data-entry-id="${escapeHtml(entry.id)}">
         <div class="oc-eval-top">
           <div class="oc-opening-title-block">
             <div class="oc-eval-progress">${escapeHtml(progressText)}</div>
@@ -6332,6 +6672,7 @@
               </label>
             </div>
             ${ratingCommentEditorMarkup('oc-card', myComment)}
+            ${ratingCriteriaMarkup(entry, 'oc-card')}
           </div>
           <div class="oc-opening-rate-actions">
             ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
@@ -6349,6 +6690,7 @@
       </div>`;
 
       bindOpeningVideoEmbed();
+      bindRatingCriteriaSuggestion(openingModal, 'oc-card');
       const range = $('#oc-card-range');
       const scoreInput = $('#oc-card-score');
       const word = $('#oc-card-word');
