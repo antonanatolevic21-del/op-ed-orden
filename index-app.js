@@ -426,7 +426,9 @@
       },
       userScore(id, name = myName) {
         const entry = entriesById.get(String(id || ''));
-        return entry ? scoreFor(entry, name) : null;
+        if (!entry) return null;
+        const publicScore = scoreFor(entry, name);
+        return publicScore !== null ? publicScore : personalScoreFor(entry, name);
       },
       isRateLater(id) {
         return rateLaterIdsFor(myName).includes(String(id || ''));
@@ -3899,8 +3901,9 @@
 
       if (Array.isArray(savedIds) && savedIds.length) {
         const progressed = new Set(Array.isArray(progressedIds) ? progressedIds.map(String) : []);
+        const eligibleIds = new Set(candidates.map(entry => String(entry.id)));
         const saved = savedIds.map(String).filter(id => entriesById.has(id));
-        const kept = saved.filter(id => progressed.has(id) || !dailyEntryHasUserScore(entriesById.get(id), name)).slice(0, count);
+        const kept = saved.filter(id => progressed.has(id) || (eligibleIds.has(id) && !dailyEntryHasUserScore(entriesById.get(id), name))).slice(0, count);
         const used = new Set(kept);
         const refill = ordered.filter(entry => !used.has(String(entry.id))).slice(0, Math.max(0, count - kept.length));
         return kept.concat(refill.map(entry => String(entry.id)));
