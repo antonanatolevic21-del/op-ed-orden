@@ -16,6 +16,8 @@
   const ratingWorkbenchVersion = '20260804-rating-modifiers-save1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
   const profileVersion = '20260804-profile-stats-stable1';
+  const adminVersion = '20260805-same-song-groups1';
+  const helpTourVersion = '20260805-guided-help1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
@@ -77,6 +79,9 @@
   addStyle('rating-workbench.css', ratingWorkbenchVersion);
   void addScript('rating-workbench.js', ratingWorkbenchVersion, true)
     .catch(error => console.error('Rating workbench load failed', error));
+  addStyle('help-tour.css', helpTourVersion);
+  void addScript('help-tour.js', helpTourVersion, true)
+    .catch(error => console.error('Help tour load failed', error));
 
   ['oc-f-score-cmp', 'oc-p-score-cmp'].forEach(id => {
     const option = document.querySelector(`#${id} option[value="="]`);
@@ -177,8 +182,9 @@
 
   function loadAdminPackage() {
     if (adminPromise) return adminPromise;
-    addStyle('admin-enhancements.css', primaryVersion);
-    adminPromise = addScript('admin-enhancements.js', primaryVersion, true)
+    addStyle('admin-enhancements.css', adminVersion);
+    addStyle('quality-same-song-groups.css', adminVersion);
+    adminPromise = addScript('admin-enhancements.js', adminVersion, true)
       .catch(error => {
         console.error('Admin package load failed', error);
         throw error;

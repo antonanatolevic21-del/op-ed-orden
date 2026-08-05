@@ -413,7 +413,13 @@
               <option value="visual">Показывать: визуал</option>
             </select>
             <select id="oc-ar-score"><option value="">Любая оценка</option></select>
-            <button class="oc-sort-toggle-btn" id="oc-ar-sort">По убыванию ↓</button>
+            <select id="oc-ar-sort-mode" title="Как сортировать оценки">
+              <option value="score">Сортировка: по оценке</option>
+              <option value="recent">Сортировка: последние оценки</option>
+              <option value="title">Сортировка: по названию</option>
+              <option value="release">Сортировка: по дате выхода</option>
+            </select>
+            <button class="oc-sort-toggle-btn" id="oc-ar-sort">Сначала высокие ↓</button>
           </div>
         </div>
         <div class="oc-allratings-columns" id="oc-allratings-columns">
@@ -695,8 +701,8 @@
   </div>
 
   <script src="catalog-store.js?v=20260729-performance1" defer></script>
-  <script type="module" src="index-app.js?v=20260804-rating-decimal-criteria1"></script>
+  <script type="module" src="index-app.js?v=20260805-all-ratings-sorts1"></script>
   <script type="module" src="firebase-app.js?v=20260803-uncertain-comments1"></script>
-  <script src="sw-register.js?v=20260805-middle-click-navigation1" defer></script>
+  <script src="sw-register.js?v=20260805-quality-sorts-help1" defer></script>
 </body>
 </html>

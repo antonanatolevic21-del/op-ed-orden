@@ -1,0 +1,43 @@
+.oc-quality-song-group{
+  display:grid;
+  gap:8px;
+  padding:10px;
+  border:1px solid #352b40;
+  border-radius:11px;
+  background:linear-gradient(135deg,#17111f,#121019);
+}
+.oc-quality-song-group>header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:2px 2px 7px;
+  border-bottom:1px solid #30283a;
+}
+.oc-quality-song-group>header strong{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  color:#f5f3fa;
+  font:750 12px/1.35 Inter,sans-serif;
+  white-space:nowrap;
+}
+.oc-quality-song-group>header span{
+  flex:none;
+  color:#08d9d6;
+  font:700 9px/1.35 'Space Mono',monospace;
+}
+.oc-quality-song-group-tracks{
+  display:grid;
+  gap:6px;
+}
+.oc-quality-song-group .oc-quality-track{
+  background:#100d16;
+}
+@media(max-width:760px){
+  .oc-quality-song-group>header{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:4px;
+  }
+}

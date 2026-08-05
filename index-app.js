@@ -82,6 +82,7 @@
     let arTypeFilter = '';
     let arScoreFilter = '';
     let arScoreMetric = 'total';
+    let arSortMode = 'score';
     let arSortDir = 'desc';
     let profileUser = '';
     let globalTopType = 'OP';
@@ -734,7 +735,9 @@
       entry.visualScores = entry.visualScores || {};
       entry.customScores = entry.customScores || {};
       entry.comments = entry.comments || {};
+      entry.ratingUpdatedAt = entry.ratingUpdatedAt || {};
       entry.scores[myName] = score;
+      entry.ratingUpdatedAt[myName] = new Date();
       if (songScore === null || !Number.isFinite(songScore)) delete entry.songScores[myName]; else entry.songScores[myName] = songScore;
       if (visualScore === null || !Number.isFinite(visualScore)) delete entry.visualScores[myName]; else entry.visualScores[myName] = visualScore;
       if (Object.keys(customScores).length) entry.customScores[myName] = customScores; else delete entry.customScores[myName];
@@ -762,6 +765,7 @@
           if (entry.songScores) delete entry.songScores[name];
           if (entry.visualScores) delete entry.visualScores[name];
           if (entry.comments) delete entry.comments[name];
+          if (entry.ratingUpdatedAt) delete entry.ratingUpdatedAt[name];
           if (window.OPED_DB && typeof window.OPED_DB.deleteRating === 'function') {
             await window.OPED_DB.deleteRating(entry.id, name, ['score', 'songScore', 'visualScore', 'comment']);
           } else {
@@ -1155,7 +1159,8 @@
         visualScores: aggregateScoreMap(row, 'visual'),
         customScores: {},
         comments: {},
-        personalScores: {}
+        personalScores: {},
+        ratingUpdatedAt: {}
       };
     }
 
@@ -1186,6 +1191,8 @@
         const comment = String(r.comment || '').trim();
 
         if (!entry || !nickname) return;
+        entry.ratingUpdatedAt = entry.ratingUpdatedAt || {};
+        entry.ratingUpdatedAt[nickname] = r.updatedAt || r.createdAt || null;
         if (r.avatar) {
           const av = String(r.avatar).trim();
           const hasCanonicalAvatar = profileAvatarNames.has(normalizedAccountName(nickname));
@@ -5888,6 +5895,37 @@
       arScoreFilter = sel.value;
     }
 
+    function ratingTimestampFor(entry, user) {
+      const values = entry?.ratingUpdatedAt || {};
+      const direct = values[user];
+      if (direct) return entryTimestamp({ createdAt: direct });
+      const normalizedUser = normalizedAccountName(user);
+      const matchedKey = Object.keys(values).find(key => normalizedAccountName(key) === normalizedUser);
+      return matchedKey ? entryTimestamp({ createdAt: values[matchedKey] }) : 0;
+    }
+
+    function formatRatingDate(timestamp) {
+      if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+      return new Intl.DateTimeFormat('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }).format(new Date(timestamp));
+    }
+
+    function updateAllRatingsSortLabel() {
+      const button = $('#oc-ar-sort');
+      if (!button) return;
+      const descending = arSortDir === 'desc';
+      const labels = {
+        score: descending ? 'Сначала высокие ↓' : 'Сначала низкие ↑',
+        recent: descending ? 'Сначала новые ↓' : 'Сначала старые ↑',
+        title: descending ? 'От Я до А ↓' : 'От А до Я ↑',
+        release: descending ? 'Сначала новые ↓' : 'Сначала старые ↑'
+      };
+      button.textContent = labels[arSortMode] || labels.score;
+    }
+
     function renderAllRatings(user, list) {
       const opContainer = $('#oc-allratings-op') || $('#oc-allratings-list');
       const edContainer = $('#oc-allratings-ed');
@@ -5905,8 +5943,22 @@
         let rated = ratedListForMetric(user, list, arScoreMetric).filter(r => r.entry.type === type);
         if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
         rated.sort((a, b) => {
-          const scoreDiff = arSortDir === 'asc' ? a.score - b.score : b.score - a.score;
-          if (scoreDiff !== 0) return scoreDiff;
+          const direction = arSortDir === 'asc' ? 1 : -1;
+          if (arSortMode === 'recent') {
+            const timeDiff = ratingTimestampFor(a.entry, user) - ratingTimestampFor(b.entry, user);
+            if (timeDiff !== 0) return timeDiff * direction;
+          } else if (arSortMode === 'title') {
+            const titleDiff = compareNatural(a.entry.title, b.entry.title);
+            if (titleDiff !== 0) return titleDiff * direction;
+          } else if (arSortMode === 'release') {
+            const yearDiff = (Number(a.entry.year) || 0) - (Number(b.entry.year) || 0);
+            if (yearDiff !== 0) return yearDiff * direction;
+            const seasonDiff = SEASON_ORDER.indexOf(a.entry.season) - SEASON_ORDER.indexOf(b.entry.season);
+            if (seasonDiff !== 0) return seasonDiff * direction;
+          } else {
+            const scoreDiff = a.score - b.score;
+            if (scoreDiff !== 0) return scoreDiff * direction;
+          }
           return compareNatural(a.entry.title, b.entry.title);
         });
 
@@ -5943,6 +5995,10 @@
           if (arScoreMetric !== 'total' && totalVal !== null) detailBits.push('общая: ' + formatScore(totalVal));
           if (arScoreMetric !== 'song' && songVal !== null) detailBits.push('песня: ' + formatScore(songVal));
           if (arScoreMetric !== 'visual' && visualVal !== null) detailBits.push('визуал: ' + formatScore(visualVal));
+          if (arSortMode === 'recent') {
+            const ratedAt = formatRatingDate(ratingTimestampFor(e, user));
+            if (ratedAt) detailBits.push('оценено: ' + ratedAt);
+          }
           const comment = ratingCommentFor(e, user);
           const extraHtml = (detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' · '))}</div>` : '') +
             (comment ? `<div class="oc-profile-rating-comment">💬 ${escapeHtml(comment)}</div>` : '');
@@ -8330,10 +8386,19 @@
     const tierDownloadBtn = $('#oc-tier-download-btn');
     if (tierDownloadBtn) tierDownloadBtn.addEventListener('click', downloadCurrentTierList);
 
+    const arSortModeEl = $('#oc-ar-sort-mode');
+    if (arSortModeEl) arSortModeEl.addEventListener('change', (event) => {
+      arSortMode = event.target.value || 'score';
+      arSortDir = 'desc';
+      allRatingsPage = { OP: 1, ED: 1 };
+      updateAllRatingsSortLabel();
+      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
+    });
+
     $('#oc-ar-sort').addEventListener('click', () => {
       arSortDir = arSortDir === 'desc' ? 'asc' : 'desc';
       allRatingsPage = { OP: 1, ED: 1 };
-      $('#oc-ar-sort').textContent = arSortDir === 'desc' ? 'По убыванию ↓' : 'По возрастанию ↑';
+      updateAllRatingsSortLabel();
       renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
     });
 
