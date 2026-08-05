@@ -743,6 +743,7 @@
   }
 
   function init() {
+    document.querySelector('.oc-tab-btn[data-tab="tournaments"]')?.addEventListener('click', event => event.preventDefault());
     if (new URL(location.href).searchParams.get('view') === 'tournaments') {
       window.setTimeout(() => document.querySelector('.oc-tab-btn[data-tab="tournaments"]')?.click(), 0);
     }
