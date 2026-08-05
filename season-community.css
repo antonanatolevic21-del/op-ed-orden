@@ -1,0 +1,37 @@
+.oc-season-community-button { border-color: rgba(255,211,105,.45); }
+.oc-season-community { position:fixed;inset:0;z-index:12100;display:grid;place-items:center;padding:20px;box-sizing:border-box;background:rgba(5,3,9,.86);backdrop-filter:blur(12px) }
+.oc-community-card { width:min(1180px,100%);max-height:calc(100vh - 40px);overflow:auto;box-sizing:border-box;padding:24px;border:1px solid rgba(255,211,105,.3);border-radius:22px;background:linear-gradient(145deg,rgba(255,211,105,.035),rgba(139,92,246,.06)),#100b17;color:#f4eef8;box-shadow:0 28px 90px rgba(0,0,0,.56) }
+.oc-community-head,.oc-tournament-toolbar { display:flex;align-items:flex-start;justify-content:space-between;gap:18px }
+.oc-community-head h2,.oc-community-intro h3,.oc-tournament-toolbar h3 { margin:7px 0 8px }
+.oc-community-x { width:36px;height:36px;padding:0;border:1px solid #40334c;border-radius:11px;background:#17101f;color:#b9adc5;font-size:23px;line-height:1;cursor:pointer }
+.oc-community-tabs { display:flex;gap:8px;margin:18px 0;padding:5px;border:1px solid #30253a;border-radius:13px;background:#0b0810 }
+.oc-community-tabs button { flex:1;min-height:40px;border:0;border-radius:9px;background:transparent;color:#8f8499;font-weight:850;cursor:pointer }
+.oc-community-tabs button.active { background:linear-gradient(135deg,rgba(255,211,105,.16),rgba(139,92,246,.15));color:#fff2c8 }
+.oc-community-intro p,.oc-award-card>p,.oc-tournament-track p { margin:0 0 14px;color:#918699;font-size:12px;line-height:1.5 }
+.oc-award-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px }
+.oc-award-card { padding:16px;border:1px solid #30263a;border-radius:15px;background:rgba(10,7,14,.66) }
+.oc-award-card h4 { margin:0 0 4px }
+.oc-award-options { display:grid;gap:7px }
+.oc-award-options button { display:grid;grid-template-columns:minmax(0,1fr) auto 28px;align-items:center;gap:10px;width:100%;padding:9px 10px;border:1px solid #33283e;border-radius:9px;background:#120d18;color:#eae3ef;text-align:left;cursor:pointer }
+.oc-award-options button:hover,.oc-award-options button.active { border-color:#ffd369;background:rgba(255,211,105,.09) }
+.oc-award-options small { color:#817689;white-space:nowrap }.oc-award-options b { color:#ffd369;text-align:right }
+.oc-community-empty { padding:14px;color:#776d80;text-align:center }
+.oc-prediction-editor { display:grid;gap:9px;max-width:780px }
+.oc-prediction-editor label { display:grid;grid-template-columns:34px 1fr;align-items:center;gap:10px }
+.oc-prediction-editor b { display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:rgba(139,92,246,.15);color:#cbb6e2 }
+.oc-prediction-editor select,.oc-tournament-create-row input,.oc-tournament-create-row select { width:100%;box-sizing:border-box;padding:11px;border:1px solid #40334c;border-radius:10px;background:#0c0911;color:#eee8f2 }
+.oc-prediction-save { margin-top:14px }.oc-community-error { min-height:20px;margin-top:10px;color:#ff7188 }
+.oc-prediction-compare { display:grid;grid-template-columns:1fr 1fr;gap:14px }
+.oc-prediction-compare section { padding:14px;border:1px solid #30253a;border-radius:14px;background:#0c0911 }.oc-prediction-compare h4 { margin:0 0 10px }
+.oc-prediction-compare section>div { display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:8px 0;border-bottom:1px solid #211a29 }.oc-prediction-compare section>div:last-child { border-bottom:0 }.oc-prediction-compare small { color:#08d9d6 }
+.oc-prediction-score { display:flex;align-items:center;gap:14px;margin-top:14px;padding:14px;border:1px solid rgba(8,217,214,.28);border-radius:14px;background:rgba(8,217,214,.06) }.oc-prediction-score strong { color:#08d9d6;font-size:28px }.oc-prediction-score span { color:#8c8296;font-size:11px }
+.oc-tournament-create-row { display:grid;grid-template-columns:1fr 180px auto;align-items:end;gap:12px }.oc-tournament-create-row label { display:grid;gap:7px;color:#9b90a4;font-size:11px;font-weight:800 }
+.oc-tournament-counter { margin:13px 0;color:#91869a }.oc-tournament-counter b { color:#ffd369 }
+.oc-tournament-picker { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:380px;overflow:auto;padding:8px;border:1px solid #2e2437;border-radius:13px;background:#0a0710 }
+.oc-tournament-picker label { display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;color:#cfc5d5;cursor:pointer }.oc-tournament-picker label:hover { background:rgba(139,92,246,.09) }
+.oc-community-actions { display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-top:15px }
+.oc-tournament-toolbar>div:last-child { display:flex;gap:8px }.oc-tournament-pair { display:grid;grid-template-columns:1fr 54px 1fr;align-items:stretch;gap:12px;margin-top:16px }.oc-tournament-vs { display:grid;place-items:center;color:#6f6479;font:900 14px 'Space Mono',monospace }
+.oc-tournament-track { display:grid;grid-template-columns:140px 1fr;gap:14px;overflow:hidden;min-height:160px;padding:12px;border:1px solid #342940;border-radius:15px;background:#0b0810 }.oc-tournament-track.voted { border-color:#ffd369;box-shadow:0 0 0 2px rgba(255,211,105,.09) }.oc-tournament-track.champion { max-width:720px;margin:18px auto;border-color:#ffd369 }
+.oc-tournament-track img { width:140px;height:100%;min-height:136px;object-fit:cover;border-radius:10px;background:#050407 }.oc-tournament-track h4 { margin:5px 0 7px }.oc-tournament-track small { color:#08d9d6 }.oc-tournament-track button { grid-column:1/-1;min-height:40px;border:1px solid #4a3b56;border-radius:9px;background:#17101f;color:#eee7f2;cursor:pointer }.oc-tournament-track button:hover:not(:disabled) { border-color:#ffd369;color:#ffd369 }
+.oc-tournament-status { margin:13px 0;color:#8c8195;text-align:center;font-size:11px }.oc-tournament-log { margin-top:17px;padding-top:15px;border-top:1px solid #2a2132 }.oc-tournament-log h4 { margin:0 0 8px }.oc-tournament-log>div { display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:7px 0;color:#8e8397;font-size:11px }.oc-tournament-log b { color:#d6c9df }.oc-tournament-finished { text-align:center }
+@media(max-width:800px){.oc-season-community{padding:7px}.oc-community-card{max-height:calc(100vh - 14px);padding:16px;border-radius:16px}.oc-award-grid,.oc-prediction-compare,.oc-tournament-picker{grid-template-columns:1fr}.oc-tournament-create-row{grid-template-columns:1fr}.oc-tournament-pair{grid-template-columns:1fr}.oc-tournament-vs{min-height:30px}.oc-tournament-track{grid-template-columns:90px 1fr;min-height:120px}.oc-tournament-track img{width:90px;min-height:96px}.oc-community-tabs{overflow-x:auto}.oc-community-tabs button{min-width:110px}}
