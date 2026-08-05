@@ -1,5 +1,6 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
+  const primaryScriptVersion = '20260805-middle-click-navigation1';
   const discoveryVersion = '20260803-existing-corrections1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
@@ -68,7 +69,7 @@
 
   void addScript('image-upload-secret-memory.js', imageUploadSecretVersion, true)
     .catch(error => console.error('Image upload secret memory load failed', error));
-  void addScript('primary-enhancements.js', primaryVersion, true)
+  void addScript('primary-enhancements.js', primaryScriptVersion, true)
     .catch(error => console.error('Primary UI bundle load failed', error))
     .finally(() => document.documentElement.classList.remove('oc-enhancements-loading'));
   void addScript('profile-top-candidates.js', top100CandidatesVersion, true)
