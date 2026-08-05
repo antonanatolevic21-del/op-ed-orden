@@ -24,12 +24,6 @@
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const normalizeName = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '');
 
-  function itemTerms(type) {
-    return String(type || '').toUpperCase() === 'ED'
-      ? { one: 'эндинг', genitive: 'эндинга', plural: 'эндингов' }
-      : { one: 'опенинг', genitive: 'опенинга', plural: 'опенингов' };
-  }
-
   function bridgeSnapshot() {
     return window.OC_APP_BRIDGE?.snapshot?.() || window.OC_APP_DATA || { entries: [], currentUser: {} };
   }
@@ -194,7 +188,7 @@
       <button type="button" class="oc-shared-x" data-shared-close aria-label="Закрыть">×</button>
       <div class="oc-section-label">совместная оценка сезона</div>
       <h2 id="oc-shared-setup-title">${escapeHtml(context.type)} · ${escapeHtml(SEASON_LABELS[context.season])} ${context.year}</h2>
-      <p>Выбери отрезок. По умолчанию начинаем с первого ${itemTerms(context.type).genitive} без твоей оценки; завершить комнату можно и раньше.</p>
+      <p>Выбери отрезок. По умолчанию начинаем с первого трека без твоей оценки; завершить комнату можно и раньше.</p>
       <div class="oc-shared-range">
         <label>Начать с<select data-shared-start>${options}</select></label>
         <label>Закончить на<select data-shared-end>${options}</select></label>
@@ -243,7 +237,7 @@
     const code = roomCode();
     const id = roomDocId(code);
     const tracks = context.tracks.slice(fromIndex, toIndex + 1);
-    if (!tracks.length) throw new Error(`В выбранном отрезке нет ${itemTerms(context.type).plural}.`);
+    if (!tracks.length) throw new Error('В выбранном отрезке нет треков.');
     await api.setDoc(api.doc(api.db, ROOM_COLLECTION, id), {
       roomType: 'season-rating',
       code,
@@ -341,7 +335,7 @@
 
   function playerMarkup(entry) {
     const link = clean(entry?.link);
-    if (!link) return `<div class="oc-shared-no-video">У ${itemTerms(entry?.type).genitive} нет ссылки на видео.</div>`;
+    if (!link) return `<div class="oc-shared-no-video">У трека нет ссылки на видео.</div>`;
     preconnect(link);
     const type = directVideoType(link);
     if (type) return `<video class="oc-shared-video" controls playsinline preload="auto"><source src="${escapeHtml(link)}" type="${type}"></video>`;
@@ -380,7 +374,7 @@
         <button type="button" class="oc-shared-x" data-room-close aria-label="Закрыть">×</button>
         <div class="oc-section-label">совместная оценка завершена</div>
         <h2>${escapeHtml(room.type)} · ${escapeHtml(SEASON_LABELS[room.season])} ${escapeHtml(room.year)}</h2>
-        <p>Пройдено ${Math.min(index + (entry ? 0 : 1), ids.length)} из ${ids.length} выбранных ${itemTerms(room.type).plural}.</p>
+        <p>Пройдено ${Math.min(index + (entry ? 0 : 1), ids.length)} из ${ids.length} выбранных треков.</p>
         <button type="button" class="oc-addbtn" data-room-close>Вернуться к сезону</button>
       </div>`;
       bindRoomActions(root);
@@ -419,9 +413,9 @@
       ${isHost ? `<div class="oc-shared-host-actions">
         <button type="button" class="oc-secondary-btn" data-room-finish>Завершить сейчас</button>
         ${room.status === 'revealed'
-          ? `<button type="button" class="oc-addbtn" data-room-next>${index + 1 >= ids.length ? 'Завершить' : `Следующий ${itemTerms(room.type).one} →`}</button>`
+          ? `<button type="button" class="oc-addbtn" data-room-next>${index + 1 >= ids.length ? 'Завершить' : 'Следующий трек →'}</button>`
           : '<button type="button" class="oc-addbtn" data-room-reveal>Показать оценки</button>'}
-      </div>` : `<div class="oc-shared-guest-note">Следующий ${itemTerms(room.type).one} переключает хост.</div>`}
+      </div>` : '<div class="oc-shared-guest-note">Следующий трек переключает хост.</div>'}
     </div>`;
     bindRoomActions(root);
   }
@@ -500,14 +494,8 @@
   }
 
   function mountButton() {
-    const head = document.querySelector('.oc-season-head');
-    if (!head || document.querySelector('[data-shared-season-open]')) return;
-    let actions = document.querySelector('.oc-season-extra-actions');
-    if (!actions) {
-      actions = document.createElement('div');
-      actions.className = 'oc-season-extra-actions';
-      head.insertAdjacentElement('afterend', actions);
-    }
+    const actions = document.querySelector('.oc-season-head-actions');
+    if (!actions || actions.querySelector('[data-shared-season-open]')) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'oc-secondary-btn oc-shared-season-button';

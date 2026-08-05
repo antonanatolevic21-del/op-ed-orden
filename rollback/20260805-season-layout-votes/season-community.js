@@ -8,7 +8,7 @@
   const VOTE_COLLECTION = 'bestWorstSubmissions';
   const SEASON_LABEL = { winter: 'Зима', spring: 'Весна', summer: 'Лето', fall: 'Осень' };
   const AWARDS = [
-    { id: 'overall', title: '', note: 'По общему среднему баллу' },
+    { id: 'overall', title: 'Лучший трек', note: 'По общему среднему баллу' },
     { id: 'song', title: 'Лучшая песня', note: 'По отдельным оценкам песни' },
     { id: 'visual', title: 'Лучший визуал', note: 'По отдельным оценкам визуала' },
     { id: 'controversial', title: 'Самый спорный', note: 'Наибольший разброс оценок' },
@@ -30,12 +30,6 @@
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const safePart = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 70);
   const natural = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
-
-  function itemTerms(type) {
-    return String(type || '').toUpperCase() === 'ED'
-      ? { one: 'эндинг', capital: 'Эндинг', genitive: 'эндинга', plural: 'эндингов', instrumental: 'эндингами' }
-      : { one: 'опенинг', capital: 'Опенинг', genitive: 'опенинга', plural: 'опенингов', instrumental: 'опенингами' };
-  }
 
   function snapshot() {
     return window.OC_APP_BRIDGE?.snapshot?.() || window.OC_APP_DATA || { entries: [], currentUser: {} };
@@ -156,7 +150,7 @@
     if (!user) return;
     const context = state.room ? contextFromRoom(state.room) : selectedContext();
     if (!state.room && (!context.key || !context.tracks.length)) {
-      alert(`Сначала выбери сезон с ${itemTerms(context.type).instrumental}.`);
+      alert('Сначала выбери сезон с треками.');
       return;
     }
     state.tab = tab;
@@ -204,15 +198,13 @@
   function awardsMarkup(context) {
     const rows = awardRows(context);
     const user = currentUser();
-    const terms = itemTerms(context.type);
-    return `<div class="oc-community-intro"><h3>Сезонные награды</h3><p>Номинанты рассчитаны автоматически. Повторное нажатие снимает голос, выбор другого варианта переносит его.</p></div>
+    return `<div class="oc-community-intro"><h3>Сезонные награды</h3><p>Номинанты рассчитаны автоматически. Голос можно менять — итог обновляется сразу.</p></div>
       <div class="oc-award-grid">${AWARDS.map(category => {
         const choices = nominees(context, category.id);
         const mine = rows.find(row => row.category === category.id && row.ownerUid === user.uid)?.openingId || '';
         const counts = new Map();
         rows.filter(row => row.category === category.id).forEach(row => counts.set(String(row.openingId), (counts.get(String(row.openingId)) || 0) + 1));
-        const title = category.id === 'overall' ? `Лучший ${terms.one}` : category.title;
-        return `<section class="oc-award-card"><h4>${escapeHtml(title)}</h4><p>${escapeHtml(category.note)}</p>
+        return `<section class="oc-award-card"><h4>${escapeHtml(category.title)}</h4><p>${escapeHtml(category.note)}</p>
           ${choices.length ? `<div class="oc-award-options">${choices.map(choice => {
             const id = String(choice.track.id);
             return `<button type="button" data-award-category="${category.id}" data-award-track="${escapeHtml(id)}" class="${mine === id ? 'active' : ''}">
@@ -228,11 +220,6 @@
     if (!user) return;
     const api = await firebase();
     const id = `community-award-${safePart(context.key)}-${safePart(category)}-${user.uid}`;
-    const previous = awardRows(context).find(row => row.category === category && row.ownerUid === user.uid);
-    if (String(previous?.openingId || '') === String(openingId)) {
-      await api.deleteDoc(api.doc(api.db, PERSONAL_COLLECTION, id));
-      return;
-    }
     await api.setDoc(api.doc(api.db, PERSONAL_COLLECTION, id), {
       ownerUid: user.uid,
       nickname: user.name,
@@ -276,11 +263,10 @@
     const saved = predictionRow(context);
     const count = Math.min(5, context.tracks.length);
     const actual = actualPersonalTop(context);
-    const terms = itemTerms(context.type);
     const options = context.tracks.map(track => `<option value="${escapeHtml(track.id)}">${escapeHtml(track.title)}</option>`).join('');
     if (!saved) {
       return `<div class="oc-community-intro"><h3>Прогноз личного топа</h3><p>Расставь будущий топ-${count}. После сохранения прогноз фиксируется и сравнивается с твоими реальными оценками.</p></div>
-        <div class="oc-prediction-editor">${Array.from({ length: count }, (_, index) => `<label><b>${index + 1}</b><select data-prediction-position="${index}"><option value="">Выбрать ${terms.one}</option>${options}</select></label>`).join('')}</div>
+        <div class="oc-prediction-editor">${Array.from({ length: count }, (_, index) => `<label><b>${index + 1}</b><select data-prediction-position="${index}"><option value="">Выбрать трек</option>${options}</select></label>`).join('')}</div>
         <button type="button" class="oc-addbtn oc-prediction-save" data-prediction-save>Зафиксировать прогноз</button>
         <div class="oc-community-error" aria-live="polite"></div>`;
     }
@@ -289,7 +275,7 @@
     const complete = scored === context.tracks.length;
     const accuracy = predictionAccuracy(ids, actual);
     return `<div class="oc-community-intro"><h3>Прогноз зафиксирован</h3><p>${complete ? `Сезон оценён полностью: точность ${accuracy.points} из ${accuracy.maximum}.` : `Оценено ${scored} из ${context.tracks.length}. Итоговая точность появится после оценки всего сезона.`}</p></div>
-      <div class="oc-prediction-compare"><section><h4>Прогноз</h4>${ids.map((id, index) => `<div><b>${index + 1}</b><span>${escapeHtml(trackById(id)?.title || `${terms.capital} удалён`)}</span></div>`).join('')}</section>
+      <div class="oc-prediction-compare"><section><h4>Прогноз</h4>${ids.map((id, index) => `<div><b>${index + 1}</b><span>${escapeHtml(trackById(id)?.title || 'Трек удалён')}</span></div>`).join('')}</section>
       <section><h4>Фактический топ</h4>${actual.slice(0, ids.length).map((row, index) => `<div><b>${index + 1}</b><span>${escapeHtml(row.track.title)}</span><small>${formatScore(row.score)}</small></div>`).join('') || '<div class="oc-community-empty">Оценок пока нет.</div>'}</section></div>
       ${complete ? `<div class="oc-prediction-score"><strong>${accuracy.points}/${accuracy.maximum}</strong><span>5 очков за точное место, 3 — за соседнее, 1 — за попадание в топ.</span></div>` : ''}`;
   }
@@ -300,7 +286,7 @@
     const ids = [...modal.querySelectorAll('[data-prediction-position]')].map(select => clean(select.value));
     const error = modal.querySelector('.oc-community-error');
     if (ids.some(id => !id) || new Set(ids).size !== ids.length) {
-      if (error) error.textContent = `Каждое место нужно заполнить разными ${itemTerms(context.type).instrumental}.`;
+      if (error) error.textContent = 'Каждое место нужно заполнить разными треками.';
       return;
     }
     if (!confirm('Зафиксировать прогноз? После сохранения изменить его нельзя.')) return;
@@ -338,11 +324,10 @@
   function tournamentMarkup(context) {
     if (state.room) return activeTournamentMarkup(state.room);
     const availableCounts = [8, 16, 32].filter(count => context.tracks.length >= count);
-    const terms = itemTerms(context.type);
-    if (!availableCounts.length) return `<div class="oc-community-empty">Для турнира в сезоне нужно хотя бы 8 ${terms.plural}.</div>`;
-    return `<div class="oc-community-intro"><h3>Пользовательский турнир</h3><p>Выбери 8, 16 или 32 ${terms.plural}. Участники голосуют по одной паре, хост закрывает матч и ведёт сетку дальше.</p></div>
+    if (!availableCounts.length) return '<div class="oc-community-empty">Для турнира в сезоне нужно хотя бы 8 треков.</div>';
+    return `<div class="oc-community-intro"><h3>Пользовательский турнир</h3><p>Выбери 8, 16 или 32 трека. Участники голосуют по одной паре, хост закрывает матч и ведёт сетку дальше.</p></div>
       <div class="oc-tournament-create-row"><label>Название<input data-tournament-title maxlength="80" value="Турнир · ${escapeHtml(context.type)} ${escapeHtml(SEASON_LABEL[context.season])} ${context.year}"></label>
-      <label>Размер<select data-tournament-size>${availableCounts.map(count => `<option value="${count}">${count} ${terms.plural}</option>`).join('')}</select></label>
+      <label>Размер<select data-tournament-size>${availableCounts.map(count => `<option value="${count}">${count} треков</option>`).join('')}</select></label>
       <button type="button" class="oc-secondary-btn" data-tournament-autofill>Выбрать первые</button></div>
       <div class="oc-tournament-counter">Выбрано: <b data-tournament-count>0</b></div>
       <div class="oc-tournament-picker">${context.tracks.map(track => `<label><input type="checkbox" data-tournament-track value="${escapeHtml(track.id)}"><span>${escapeHtml(track.title)}</span></label>`).join('')}</div>
@@ -369,9 +354,9 @@
       <div class="oc-tournament-toolbar"><div><div class="oc-section-label">код ${escapeHtml(room.code)} · ${escapeHtml(room.title)}</div><h3>Раунд ${Number(room.roundNumber || 0) + 1} · матч ${Number(room.matchNumber || 0) + 1}</h3></div>
       <div><button type="button" class="oc-secondary-btn" data-tournament-copy>Скопировать ссылку</button><button type="button" class="oc-community-x" data-tournament-leave>×</button></div></div>
       <div class="oc-tournament-pair">
-        ${trackCard(first, mine === String(pair[0]) ? 'voted' : '', `<button type="button" data-tournament-vote="${escapeHtml(pair[0])}">${mine === String(pair[0]) ? 'Снять голос' : 'Голосовать'} · ${firstVotes}</button>`)}
+        ${trackCard(first, mine === String(pair[0]) ? 'voted' : '', `<button type="button" data-tournament-vote="${escapeHtml(pair[0])}" ${mine ? 'disabled' : ''}>Голосовать · ${firstVotes}</button>`)}
         <div class="oc-tournament-vs">VS</div>
-        ${trackCard(second, mine === String(pair[1]) ? 'voted' : '', `<button type="button" data-tournament-vote="${escapeHtml(pair[1])}">${mine === String(pair[1]) ? 'Снять голос' : 'Голосовать'} · ${secondVotes}</button>`)}
+        ${trackCard(second, mine === String(pair[1]) ? 'voted' : '', `<button type="button" data-tournament-vote="${escapeHtml(pair[1])}" ${mine ? 'disabled' : ''}>Голосовать · ${secondVotes}</button>`)}
       </div>
       <div class="oc-tournament-status">Проголосовало: ${votes.length} · участников в комнате: ${(room.players || []).length}</div>
       ${isHost ? `<div class="oc-community-actions">${leader
@@ -382,7 +367,7 @@
   }
 
   function trackCard(track, className = '', action = '') {
-    if (!track) return `<article class="oc-tournament-track"><div class="oc-community-empty">${itemTerms(state.room?.type || selectedContext().type).capital} не найден.</div></article>`;
+    if (!track) return '<article class="oc-tournament-track"><div class="oc-community-empty">Трек не найден.</div></article>';
     return `<article class="oc-tournament-track ${className}">${track.image ? `<img src="${escapeHtml(track.image)}" alt="" loading="lazy">` : ''}<div><small>${escapeHtml(track.type || '')}</small><h4>${escapeHtml(track.title)}</h4><p>${escapeHtml((track.performers || []).join(', '))}</p></div>${action}</article>`;
   }
 
@@ -409,7 +394,7 @@
     const ids = selectedTournamentIds(modal);
     const error = modal.querySelector('.oc-community-error');
     if (ids.length !== size) {
-      if (error) error.textContent = `Нужно выбрать ровно ${size} ${itemTerms(context.type).plural}.`;
+      if (error) error.textContent = `Нужно выбрать ровно ${size} треков.`;
       return;
     }
     const shuffled = ids.slice();
@@ -491,11 +476,6 @@
     if (!room || !user || !room.currentPair?.includes(String(choice))) return;
     const api = await firebase();
     const id = `${room.id}-${room.matchSerial}-${user.uid}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 220);
-    const previous = tournamentVotes(room).find(row => row.ownerUid === user.uid);
-    if (String(previous?.choice || '') === String(choice)) {
-      await api.deleteDoc(api.doc(api.db, VOTE_COLLECTION, id));
-      return;
-    }
     await api.setDoc(api.doc(api.db, VOTE_COLLECTION, id), {
       ownerUid: user.uid,
       gameId: room.id,
@@ -577,14 +557,8 @@
   }
 
   function mountButton() {
-    const head = document.querySelector('.oc-season-head');
-    if (!head || document.querySelector('[data-season-community-open]')) return;
-    let actions = document.querySelector('.oc-season-extra-actions');
-    if (!actions) {
-      actions = document.createElement('div');
-      actions.className = 'oc-season-extra-actions';
-      head.insertAdjacentElement('afterend', actions);
-    }
+    const actions = document.querySelector('.oc-season-head-actions');
+    if (!actions || actions.querySelector('[data-season-community-open]')) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'oc-secondary-btn oc-season-community-button';
