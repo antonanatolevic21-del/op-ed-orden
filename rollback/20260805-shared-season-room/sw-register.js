@@ -6,7 +6,6 @@
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
-  const sharedSeasonVersion = '20260805-shared-season-room1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
@@ -123,12 +122,10 @@
     if (seasonPromise) return seasonPromise;
     addStyle('season-quality-fill.css', seasonFillVersion);
     addStyle('season-navigation.css', primaryVersion);
-    addStyle('season-shared-rating.css', sharedSeasonVersion);
     seasonPromise = addScriptsOrdered([
       ['catalog-cache.js', primaryVersion],
       ['season-quality-fill.js', seasonFillVersion],
-      ['season-navigation.js', primaryVersion],
-      ['season-shared-rating.js', sharedSeasonVersion]
+      ['season-navigation.js', primaryVersion]
     ]).catch(error => { console.error('Season package load failed', error); throw error; });
     return seasonPromise;
   }
