@@ -23,10 +23,6 @@
     roomUnsub: null,
     votes: [],
     votesUnsub: null,
-    tournamentIndexes: [],
-    tournamentIndexesUnsub: null,
-    tournamentListMode: 'active',
-    creatorSelectedIds: new Set(),
     autoJoinTried: false
   };
 
@@ -83,9 +79,7 @@
       year: Number(room?.year || 0),
       season: clean(room?.season),
       type: clean(room?.type || 'OP'),
-      key: room?.year && room?.season ? `${room.type}-${room.year}-${room.season}` : '',
-      sourceKind: clean(room?.sourceKind || 'season'),
-      sourceLabel: clean(room?.sourceLabel),
+      key: room ? `${room.type}-${room.year}-${room.season}` : '',
       tracks: (room?.originalTrackIds || []).map(id => map.get(String(id))).filter(Boolean)
     };
   }
@@ -343,10 +337,10 @@
 
   function tournamentMarkup(context) {
     if (state.room) return activeTournamentMarkup(state.room);
-    const availableCounts = [8, 16, 32, 64, 128].filter(count => context.tracks.length >= count);
+    const availableCounts = [8, 16, 32].filter(count => context.tracks.length >= count);
     const terms = itemTerms(context.type);
     if (!availableCounts.length) return `<div class="oc-community-empty">Для турнира в сезоне нужно хотя бы 8 ${terms.plural}.</div>`;
-    return `<div class="oc-community-intro"><h3>Пользовательский турнир</h3><p>Выбери размер сетки от 8 до 128 ${terms.plural}. Участники голосуют по одной паре, хост закрывает матч и ведёт сетку дальше.</p></div>
+    return `<div class="oc-community-intro"><h3>Пользовательский турнир</h3><p>Выбери 8, 16 или 32 ${terms.plural}. Участники голосуют по одной паре, хост закрывает матч и ведёт сетку дальше.</p></div>
       <div class="oc-tournament-create-row"><label>Название<input data-tournament-title maxlength="80" value="Турнир · ${escapeHtml(context.type)} ${escapeHtml(SEASON_LABEL[context.season])} ${context.year}"></label>
       <label>Размер<select data-tournament-size>${availableCounts.map(count => `<option value="${count}">${count} ${terms.plural}</option>`).join('')}</select></label>
       <button type="button" class="oc-secondary-btn" data-tournament-autofill>Выбрать первые</button></div>
@@ -393,7 +387,6 @@
   }
 
   function selectedTournamentIds(modal) {
-    if (modal?.id === 'oc-tournaments-panel') return [...state.creatorSelectedIds];
     return [...modal.querySelectorAll('[data-tournament-track]:checked')].map(input => String(input.value));
   }
 
@@ -427,11 +420,10 @@
     const code = roomCode();
     const id = roomId(code);
     const api = await firebase();
-    const title = clean(modal.querySelector('[data-tournament-title]')?.value).slice(0, 80) || `Турнир ${context.type}`;
-    const roomData = {
+    await api.setDoc(api.doc(api.db, ROOM_COLLECTION, id), {
       roomType: 'track-tournament',
       code,
-      title,
+      title: clean(modal.querySelector('[data-tournament-title]')?.value).slice(0, 80) || `Турнир ${context.type}`,
       hostUid: user.uid,
       hostName: user.name,
       memberUids: [user.uid],
@@ -439,8 +431,6 @@
       year: context.year,
       season: context.season,
       type: context.type,
-      sourceKind: clean(context.sourceKind || 'season'),
-      sourceLabel: clean(context.sourceLabel || (context.year && context.season ? `${SEASON_LABEL[context.season]} ${context.year}` : 'Своя подборка')),
       originalTrackIds: shuffled,
       currentPair: shuffled.slice(0, 2),
       remainingRoundIds: shuffled.slice(2),
@@ -451,27 +441,10 @@
       bracketLog: [],
       status: 'voting',
       createdAt: api.serverTimestamp(),
-      createdAtLocal: new Date().toISOString(),
       updatedAt: api.serverTimestamp(),
       updatedAtLocal: new Date().toISOString()
-    };
-    await api.setDoc(api.doc(api.db, ROOM_COLLECTION, id), roomData);
-    await saveTournamentIndex(api, id, roomData, user);
+    });
     await watchTournament(id);
-  }
-
-  async function saveTournamentIndex(api, roomIdValue, room, user = currentUser()) {
-    const indexId = `track-tournament-index-${roomIdValue}`;
-    await api.setDoc(api.doc(api.db, PERSONAL_COLLECTION, indexId), {
-      kind: 'track-tournament-index', ownerUid: room.hostUid || user.uid, hostName: room.hostName || user.name,
-      roomId: roomIdValue, code: room.code, title: room.title, status: room.status || 'voting',
-      year: Number(room.year || 0), season: clean(room.season), type: clean(room.type || 'OP'),
-      sourceKind: clean(room.sourceKind || 'season'), sourceLabel: clean(room.sourceLabel),
-      participantCount: Number((room.originalTrackIds || []).length), championId: clean(room.championId),
-      roundNumber: Number(room.roundNumber || 0), matchNumber: Number(room.matchNumber || 0),
-      updatedAt: api.serverTimestamp(), updatedAtLocal: new Date().toISOString(),
-      createdAtLocal: room.createdAtLocal || new Date().toISOString()
-    }, { merge: true });
   }
 
   async function joinTournament(code) {
@@ -500,7 +473,7 @@
       state.room = { id: snap.id, ...snap.data() };
       state.tab = 'tournament';
       const url = new URL(location.href);
-      if (!url.searchParams.get('view')) url.searchParams.set('view', 'tournaments');
+      url.searchParams.set('view', 'season');
       url.searchParams.set('tournament', state.room.code);
       history.replaceState(history.state, '', url);
       if (!root()) openHub('tournament'); else renderHub();
@@ -553,7 +526,6 @@
       patch = { currentPair: next.slice(0, 2), remainingRoundIds: next.slice(2), nextRoundIds: [], roundNumber: Number(room.roundNumber || 0) + 1, matchNumber: 0, matchSerial: Number(room.matchSerial || 0) + 1, bracketLog: log };
     }
     await api.updateDoc(api.doc(api.db, ROOM_COLLECTION, room.id), { ...patch, updatedAt: api.serverTimestamp(), updatedAtLocal: new Date().toISOString() });
-    await saveTournamentIndex(api, room.id, { ...room, ...patch });
   }
 
   function leaveTournament(shouldRender = true) {
@@ -576,107 +548,6 @@
     state.personalUnsub = api.onSnapshot(query, snap => {
       state.personalRows = snap.docs.map(row => ({ id: row.id, ...row.data() }));
       if (root() && !state.room) renderHub();
-    });
-  }
-
-  function ownCollections() {
-    const data = snapshot();
-    const user = currentUser();
-    const profile = (data.userProfiles || []).find(row => clean(row.authUid || row.uid) === user.uid)
-      || (data.userProfiles || []).find(row => clean(row.nickname).toLocaleLowerCase('ru') === user.name.toLocaleLowerCase('ru'));
-    return Array.isArray(profile?.collections) ? profile.collections : [];
-  }
-
-  function collectionIds(collection) {
-    const rows = collection?.trackIds || collection?.openingIds || collection?.ids || collection?.entries || [];
-    return rows.map(row => String(typeof row === 'object' ? row.id : row)).filter(Boolean);
-  }
-
-  function creatorContext(panel) {
-    const sourceKind = panel.querySelector('[data-tournament-source]')?.value || 'season';
-    const type = panel.querySelector('[data-tournament-source-type]')?.value || 'OP';
-    const entries = (snapshot().entries || []).filter(entry => clean(entry.type).toUpperCase() === type);
-    let tracks = entries;
-    let sourceLabel = 'Своя подборка';
-    let year = 0;
-    let season = '';
-    if (sourceKind === 'season') {
-      const value = panel.querySelector('[data-tournament-season]')?.value || '';
-      [year, season] = value.split('|');
-      year = Number(year || 0);
-      tracks = entries.filter(entry => Number(entry.year) === year && clean(entry.season) === season);
-      sourceLabel = `${SEASON_LABEL[season] || season} ${year}`;
-    } else if (sourceKind === 'collection') {
-      const collection = ownCollections().find(row => String(row.id) === panel.querySelector('[data-tournament-collection]')?.value);
-      const ids = new Set(collectionIds(collection));
-      tracks = entries.filter(entry => ids.has(String(entry.id)));
-      sourceLabel = clean(collection?.title || collection?.name || 'Коллекция');
-    }
-    const search = clean(panel.querySelector('[data-tournament-search]')?.value).toLocaleLowerCase('ru');
-    if (search) tracks = tracks.filter(entry => `${entry.title || ''} ${(entry.performers || []).join(' ')}`.toLocaleLowerCase('ru').includes(search));
-    return { year, season, type, sourceKind, sourceLabel, key: year && season ? `${type}-${year}-${season}` : '', tracks };
-  }
-
-  function tournamentPanelMarkup() {
-    const user = currentUser();
-    const mode = state.tournamentListMode;
-    const rows = state.tournamentIndexes
-      .filter(row => mode === 'mine' ? row.ownerUid === user.uid : mode === 'completed' ? row.status === 'finished' : row.status !== 'finished')
-      .sort((a, b) => clean(b.updatedAtLocal).localeCompare(clean(a.updatedAtLocal)));
-    const seasons = [...new Set((snapshot().entries || []).map(entry => `${entry.year}|${entry.season}`).filter(value => !value.startsWith('0|')))]
-      .sort((a, b) => b.localeCompare(a));
-    const collections = ownCollections();
-    return `<div class="oc-tournaments-page"><header><div><div class="oc-section-label">общие активности</div><h1>Турниры</h1><p>Создавай сетки из сезона, своей коллекции или любых опенингов и эндингов каталога.</p></div>
-      <div class="oc-tournaments-join"><input data-tournaments-code maxlength="12" placeholder="Код турнира"><button class="oc-addbtn" data-tournaments-join>Войти</button></div></header>
-      <div class="oc-tournaments-tabs"><button data-tournaments-mode="active" class="${mode === 'active' ? 'active' : ''}">Активные</button><button data-tournaments-mode="completed" class="${mode === 'completed' ? 'active' : ''}">Завершённые</button><button data-tournaments-mode="mine" class="${mode === 'mine' ? 'active' : ''}">Мои</button></div>
-      <div class="oc-tournaments-grid">${rows.map(row => `<article><div><small>${escapeHtml(row.type)} · ${escapeHtml(row.sourceLabel || 'Своя подборка')}</small><h3>${escapeHtml(row.title)}</h3><p>Хост: ${escapeHtml(row.hostName)} · сетка на ${Number(row.participantCount || 0)} · раунд ${Number(row.roundNumber || 0) + 1}</p></div><button class="oc-secondary-btn" data-tournaments-open="${escapeHtml(row.code)}">${row.status === 'finished' ? 'Посмотреть' : 'Войти'}</button></article>`).join('') || '<div class="oc-community-empty">Здесь пока нет турниров.</div>'}</div>
-      <section class="oc-tournament-builder"><div><div class="oc-section-label">новый турнир</div><h2>Собрать сетку</h2></div>
-        <div class="oc-tournament-source-row"><label>Источник<select data-tournament-source><option value="season">Сезон</option><option value="collection">Моя коллекция</option><option value="custom">Произвольный выбор</option></select></label><label>Тип<select data-tournament-source-type><option>OP</option><option>ED</option></select></label>
-        <label data-source-season-wrap>Сезон<select data-tournament-season>${seasons.map(value => { const [year, season] = value.split('|'); return `<option value="${value}">${SEASON_LABEL[season] || season} ${year}</option>`; }).join('')}</select></label>
-        <label data-source-collection-wrap class="hidden">Коллекция<select data-tournament-collection>${collections.map(row => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.title || row.name || 'Без названия')}</option>`).join('')}</select></label></div>
-        <div class="oc-tournament-create-row"><label>Название<input data-tournament-title maxlength="80" placeholder="Название турнира"></label><label>Размер<select data-tournament-size>${[8,16,32,64,128].map(count => `<option value="${count}">${count}</option>`).join('')}</select></label><label>Поиск<input data-tournament-search placeholder="Название или исполнитель"></label></div>
-        <div class="oc-tournament-counter">Выбрано: <b data-tournament-count>${state.creatorSelectedIds.size}</b></div><div class="oc-tournament-picker" data-tournament-global-picker></div>
-        <div class="oc-community-actions"><button class="oc-secondary-btn" data-tournament-autofill>Выбрать первые</button><button class="oc-addbtn" data-tournament-create>Создать турнир</button></div><div class="oc-community-error"></div>
-      </section></div>`;
-  }
-
-  function renderTournamentPanel() {
-    const panel = document.querySelector('#oc-tournaments-panel');
-    if (!panel) return;
-    panel.innerHTML = tournamentPanelMarkup();
-    const renderPicker = () => {
-      const context = creatorContext(panel);
-      const picker = panel.querySelector('[data-tournament-global-picker]');
-      picker.innerHTML = context.tracks.map(track => `<label><input type="checkbox" data-tournament-track value="${escapeHtml(track.id)}" ${state.creatorSelectedIds.has(String(track.id)) ? 'checked' : ''}><span><b>${escapeHtml(track.title)}</b><small>${escapeHtml((track.performers || []).join(', '))}</small></span></label>`).join('') || '<div class="oc-community-empty">Подходящих позиций нет.</div>';
-      picker.querySelectorAll('[data-tournament-track]').forEach(input => input.addEventListener('change', () => {
-        if (input.checked) state.creatorSelectedIds.add(String(input.value)); else state.creatorSelectedIds.delete(String(input.value));
-        updateTournamentCount(panel);
-      }));
-    };
-    const sourceChanged = () => {
-      const source = panel.querySelector('[data-tournament-source]').value;
-      panel.querySelector('[data-source-season-wrap]').classList.toggle('hidden', source !== 'season');
-      panel.querySelector('[data-source-collection-wrap]').classList.toggle('hidden', source !== 'collection');
-      state.creatorSelectedIds.clear(); renderPicker(); updateTournamentCount(panel);
-    };
-    panel.querySelectorAll('[data-tournaments-mode]').forEach(button => button.addEventListener('click', () => { state.tournamentListMode = button.dataset.tournamentsMode; renderTournamentPanel(); }));
-    panel.querySelectorAll('[data-tournaments-open]').forEach(button => button.addEventListener('click', () => void joinTournament(button.dataset.tournamentsOpen)));
-    panel.querySelector('[data-tournaments-join]')?.addEventListener('click', () => void joinTournament(panel.querySelector('[data-tournaments-code]').value).catch(error => alert(error.message)));
-    panel.querySelector('[data-tournament-source]')?.addEventListener('change', sourceChanged);
-    panel.querySelectorAll('[data-tournament-source-type],[data-tournament-season],[data-tournament-collection]').forEach(input => input.addEventListener('change', () => { state.creatorSelectedIds.clear(); renderPicker(); updateTournamentCount(panel); }));
-    panel.querySelector('[data-tournament-search]')?.addEventListener('input', renderPicker);
-    panel.querySelector('[data-tournament-autofill]')?.addEventListener('click', () => { const context = creatorContext(panel); const size = Number(panel.querySelector('[data-tournament-size]').value); state.creatorSelectedIds = new Set(context.tracks.slice(0, size).map(track => String(track.id))); renderPicker(); updateTournamentCount(panel); });
-    panel.querySelector('[data-tournament-create]')?.addEventListener('click', () => void createTournament(creatorContext(panel), panel));
-    sourceChanged();
-  }
-
-  async function watchTournamentIndexes() {
-    if (state.tournamentIndexesUnsub) return;
-    const api = await firebase();
-    const query = api.query(api.collection(api.db, PERSONAL_COLLECTION), api.where('kind', '==', 'track-tournament-index'));
-    state.tournamentIndexesUnsub = api.onSnapshot(query, snap => {
-      state.tournamentIndexes = snap.docs.map(row => ({ id: row.id, ...row.data() }));
-      renderTournamentPanel();
     });
   }
 
@@ -721,13 +592,6 @@
     button.textContent = 'Сезонный центр';
     button.addEventListener('click', () => openHub('awards'));
     actions.append(button);
-    const tournamentButton = document.createElement('button');
-    tournamentButton.type = 'button';
-    tournamentButton.className = 'oc-secondary-btn oc-season-tournament-button';
-    tournamentButton.dataset.seasonTournamentOpen = '1';
-    tournamentButton.textContent = 'Турнир сезона';
-    tournamentButton.addEventListener('click', () => openHub('tournament'));
-    actions.append(tournamentButton);
   }
 
   function maybeAutoJoin() {
@@ -745,12 +609,8 @@
   function init() {
     mountButton();
     new MutationObserver(mountButton).observe(document.body, { childList: true, subtree: true });
-    window.addEventListener('oped:app-data-updated', () => { if (root()) renderHub(); if (!document.querySelector('#oc-tournaments-panel')?.classList.contains('hidden')) renderTournamentPanel(); maybeAutoJoin(); });
-    window.addEventListener('oped:route-change', event => {
-      if (event.detail?.tab === 'tournaments') { renderTournamentPanel(); void watchTournamentIndexes().catch(error => console.error(error)); }
-    });
+    window.addEventListener('oped:app-data-updated', () => { if (root()) renderHub(); maybeAutoJoin(); });
     window.addEventListener('oped:route-ready', maybeAutoJoin);
-    if (new URL(location.href).searchParams.get('view') === 'tournaments') { renderTournamentPanel(); void watchTournamentIndexes().catch(error => console.error(error)); }
     window.setTimeout(maybeAutoJoin, 300);
   }
 

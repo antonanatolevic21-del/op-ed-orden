@@ -1,13 +1,13 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
-  const primaryScriptVersion = '20260805-tournaments-hub1';
+  const primaryScriptVersion = '20260805-middle-click-navigation1';
   const discoveryVersion = '20260803-existing-corrections1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const sharedSeasonVersion = '20260805-season-layout-votes1';
-  const seasonCommunityVersion = '20260805-tournaments-hub1';
+  const seasonCommunityVersion = '20260805-season-layout-votes1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
@@ -36,9 +36,6 @@
   document.documentElement.classList.remove('oc-primary-booting');
   document.documentElement.classList.add('oc-primary-ready', 'oc-primary-progressive');
   document.querySelector('#oc-primary-boot')?.remove();
-
-  addStyle('season-community.css', seasonCommunityVersion);
-  void addScript('season-community.js', seasonCommunityVersion, true);
 
   function addStyle(file, version = primaryVersion) {
     const key = `${file}?v=${version}`;
@@ -128,11 +125,13 @@
     addStyle('season-quality-fill.css', seasonFillVersion);
     addStyle('season-navigation.css', primaryVersion);
     addStyle('season-shared-rating.css', sharedSeasonVersion);
+    addStyle('season-community.css', seasonCommunityVersion);
     seasonPromise = addScriptsOrdered([
       ['catalog-cache.js', primaryVersion],
       ['season-quality-fill.js', seasonFillVersion],
       ['season-navigation.js', primaryVersion],
-      ['season-shared-rating.js', sharedSeasonVersion]
+      ['season-shared-rating.js', sharedSeasonVersion],
+      ['season-community.js', seasonCommunityVersion]
     ]).catch(error => { console.error('Season package load failed', error); throw error; });
     return seasonPromise;
   }

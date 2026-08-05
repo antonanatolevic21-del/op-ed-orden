@@ -1,8546 +1,2338 @@
-  import { adminUids } from './firebase-config.js';
-
-  (function() {
-    if (!window.storage) {
-      window.storage = {
-        async get(key, shared) {
-          const value = localStorage.getItem(key);
-          return value === null ? null : { value };
-        },
-        async set(key, value, shared) {
-          localStorage.setItem(key, value);
-          return true;
-        }
-      };
-    }
-
-    const KEY = 'op-ed-entries';
-    const NAME_KEY = 'my-display-name';
-    const AVATAR_KEY = 'my-avatar';
-    const AVATARS_MAP_KEY = 'avatars-map';
-    const DEMO_KEY = 'op-ed-demo-loaded';
-    const MANUAL_RANKS_KEY = 'manual-ranks';
-    const SCALE_KEY = 'rating-scale';
-    const CONTENT_FILTER_KEY = 'content-filter-mode';
-    const TIER_ORDERS_KEY = 'tier-orders';
-    const TIER_LABELS_KEY = 'tier-labels';
-    const TIER_PLACEMENTS_KEY = 'tier-placements';
-    const ACCESS_KEY = 'op-ed-access-level';
-    const PRIMARY_NAME_KEY = 'op-ed-primary-account-name';
-    const PERSONAL_ACCOUNT_AUTH_ENABLED = true;
-    const PERSONAL_ACCOUNT_DISABLED_MESSAGE = '–†–µ–≥–∏—Å—Ç—Ä–∞—Ü–∏—è —Å–µ–π—á–∞—Å –Ω–µ–¥–æ—Å—Ç—É–ø–Ω–∞. –ü–æ–ø—Ä–æ–±—É–π—Ç–µ –ø–æ–∑–∂–µ.';
-    const ADMIN_NICKNAMES = new Set(['–ø–µ—Å_–∫–æ—à–∞—á–∏–π', '–ø—ë—Å_–∫–æ—à–∞—á–∏–π', 'toxexex', 'egortos', '–∫–æ—Ñ–∞']);
-    const ADMIN_UIDS = new Set(adminUids);
-    const CONFIRMED_LEGACY_MANUAL_TOP_KEYS = new Set(['–ø—ë—Å_–∫–æ—à–∞—á–∏–π', '–ø–µ—Å_–∫–æ—à–∞—á–∏–π', 'egortos', '–∫–æ—Ñ–∞', 'holdes']);
-    const EVENT_BASKET_KEY = 'aboba-events-basket-v1';
-    const IMAGE_UPLOAD_WORKER = 'https://oped-image-upload.keeperkeeper2003-01e.workers.dev';
-    const IMAGE_UPLOAD_SECRET_KEY = 'op-ed-image-upload-secret';
-    const DAILY_DISMISSED_KEY = 'op-ed-daily-dismissed-v1';
-    const CATALOG_VIEW_KEY = 'op-ed-catalog-view-v1';
-    const WELCOME_ACK_KEY = 'op-ed-welcome-ack-v1';
-    const CATALOG_ADMIN_WORKSPACE = window.OC_CATALOG_ADMIN_WORKSPACE === true;
-    const DAILY_MSK_OFFSET_HOURS = 3;
-    const DAILY_RELEASE_HOUR = 18;
-    const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
-    const compareNatural = (left, right) => NATURAL_COLLATOR.compare(String(left ?? ''), String(right ?? ''));
-
-    const EVENT_BASKET_ALLOWED = new Set(['–ø–µ—Å–∫–æ—à–∞—á–∏–π', 'egortos']);
-    const MIN_PUBLIC_VOTES = 3;
-    const FIVE_SCORE_LABELS = { 1: '–∑–∞–ª—É–ø–∞', 2: '–Ω–µ –æ—á–µ–Ω—å', 3: '50/50', 4: '–Ω–æ—Ä–º', 5: '–∑–∞–µ–±–∏—Å—å' };
-    const AVATAR_OPTIONS = ['üôÇ','üòé','ü¶ä','üê±','üêß','üêâ','üëπ','üå∏','üéß','üé§','üéµ','üî•','üíø','üìº','üåô','‚≠ê','üì∫','üé¨','üç•','‚öîÔ∏è','üëæ','ü¶Ñ','üê∫','üçú'];
-    let entries = [];
-    let myName = '';
-    let myAvatar = 'üôÇ';
-    let authenticatedUid = '';
-    let avatarsMap = {};
-    let ratingScale = 'int'; // 'int', 'half' or personal 'five'
-    let accessLevel = sessionStorage.getItem(ACCESS_KEY) || '';
-    let catalogView = localStorage.getItem(CATALOG_VIEW_KEY) === 'compact' ? 'compact' : 'detailed';
-    const FILTER_DEFAULTS = { search: '', type: '', fromYear: '', fromSeason: 'winter', toYear: '', toSeason: 'fall', scoreCmp: '', scoreValue: '', missingOnly: false, hideChinese: true, hideMovie: true, hideShortened: true, studios: [], directors: [], performers: [], franchises: [] };
-    const cloneFilterState = source => ({ ...source, studios: [...(source.studios || [])], directors: [...(source.directors || [])], performers: [...(source.performers || [])], franchises: [...(source.franchises || [])] });
-    function loadFilterState(key) {
-      try {
-        const saved = JSON.parse(localStorage.getItem(key) || 'null');
-        return cloneFilterState(saved && typeof saved === 'object' ? { ...FILTER_DEFAULTS, ...saved } : FILTER_DEFAULTS);
-      } catch (_) {
-        return cloneFilterState(FILTER_DEFAULTS);
-      }
-    }
-    const catalogFilters = loadFilterState('op-ed-catalog-filters-v1');
-    const profileFilters = loadFilterState('op-ed-profile-filters-v1');
-    function persistFilterStates() {
-      try {
-        localStorage.setItem('op-ed-catalog-filters-v1', JSON.stringify(catalogFilters));
-        localStorage.setItem('op-ed-profile-filters-v1', JSON.stringify(profileFilters));
-      } catch (_) {}
-    }
-    let filters = catalogFilters;
-    let sortMode = 'added_desc';
-    let editingId = null;
-    let manualRanks = {};
-    let topMode = 'manual'; // manual top is the main profile mode
-    let arTypeFilter = '';
-    let arScoreFilter = '';
-    let arScoreMetric = 'total';
-    let arSortMode = 'score';
-    let arSortDir = 'desc';
-    let profileUser = '';
-    let globalTopType = 'OP';
-    let globalTopMode = 'manual';
-    let globalTopScope = 'all';
-    let globalTopRenderLimit = 30;
-    const PAGE_SIZE = 50;
-    let chartPage = 1;
-    let profileTopPage = { OP: 1, ED: 1 };
-    let allRatingsPage = { OP: 1, ED: 1 };
-    let profileTopExpanded = { OP: false, ED: false };
-    let manualEditMode = false;
-    let manualDirty = false;
-    let manualShowHidden = false;
-    let manualHiddenForEdit = {};
-
-    const SEASON_LABEL = { winter: '–ó–∏–º–∞', spring: '–í–µ—Å–Ω–∞', summer: '–õ–µ—Ç–æ', fall: '–û—Å–µ–Ω—å' };
-    const $ = (sel) => document.querySelector(sel);
-
-    function fitDisplayedTrackImage(image) {
-      if (!(image instanceof HTMLImageElement)) return;
-      const applyFit = () => requestAnimationFrame(() => {
-        const box = image.parentElement?.getBoundingClientRect();
-        if (!image.naturalWidth || !image.naturalHeight || !box?.width || !box?.height) return;
-        const sourceRatio = image.naturalWidth / image.naturalHeight;
-        const targetRatio = box.width / box.height;
-        const isTooNarrow = sourceRatio < targetRatio;
-        const isTooWideAndFlat = sourceRatio > targetRatio * 1.15;
-        image.classList.toggle('oc-track-image-crop', isTooNarrow || isTooWideAndFlat);
-      });
-      if (image.complete) applyFit();
-      else image.addEventListener('load', applyFit, { once: true });
-    }
-
-    document.addEventListener('load', event => {
-      if (event.target?.matches?.('img.oc-track-image')) fitDisplayedTrackImage(event.target);
-    }, true);
-    new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
-      if (!(node instanceof Element)) return;
-      if (node.matches('img.oc-track-image')) fitDisplayedTrackImage(node);
-      node.querySelectorAll?.('img.oc-track-image').forEach(fitDisplayedTrackImage);
-    }))).observe(document.documentElement, { childList: true, subtree: true });
-
-    const listContainer = $('#oc-list-container');
-    const statusEl = $('#oc-status');
-    const resultCountEl = $('#oc-resultcount');
-    const nameInput = $('#oc-myname');
-    const avatarBtn = $('#oc-avatar-btn');
-    const avatarPicker = $('#oc-avatar-picker');
-    const dailyBell = $('#oc-daily-bell');
-    const dailyBellDot = $('#oc-daily-bell-dot');
-    const accountWelcome = $('#oc-account-welcome');
-    const welcomeAck = $('#oc-welcome-ack');
-    const catalogProgress = $('#oc-catalog-progress');
-    const detailedViewBtn = $('#oc-view-detailed');
-    const compactViewBtn = $('#oc-view-compact');
-    const dailyPanel = $('#oc-daily-panel');
-    const dailyToast = $('#oc-daily-toast');
-    const scaleSelect = $('#oc-scale-select');
-    const contentFilterSelect = $('#oc-content-filter-select');
-    const filterStatEl = $('#oc-filterstat');
-    const mainPanel = $('#oc-main-panel');
-    const profilePanel = $('#oc-profile-panel');
-    const reratingPanel = $('#oc-rerating-panel');
-    const discoveryPanel = $('#oc-discovery-panel');
-    const top100Panel = $('#oc-top100-panel');
-    const seasonPanel = $('#oc-season-panel');
-    const tierPanel = $('#oc-tier-panel');
-    const statsPanel = $('#oc-stats-panel');
-    const entityPanel = $('#oc-entity-panel');
-    const entityTitleEl = $('#oc-entity-title');
-    const entitySubtitleEl = $('#oc-entity-subtitle');
-    const entityBackBtn = $('#oc-entity-back');
-    const entityCreateForm = $('#oc-entity-create');
-    const entityValueSelect = $('#oc-entity-value');
-    const entityImageInput = $('#oc-entity-image');
-    const entityFiltersEl = $('#oc-entity-filters');
-    const entityFiltersToggle = $('#oc-entity-filters-toggle');
-    const entityAlbumTools = $('#oc-entity-album-tools');
-    const entityAlbumSearchInput = $('#oc-entity-album-search');
-    const entityAlbumSortSelect = $('#oc-entity-album-sort');
-    const entityTrackSortSelect = $('#oc-entity-track-sort');
-    const entitySearchInput = $('#oc-entity-search');
-    const entityTrackTypeSelect = $('#oc-entity-track-type');
-    const entityFromYearSelect = $('#oc-entity-from-year');
-    const entityFromSeasonSelect = $('#oc-entity-from-season');
-    const entityToYearSelect = $('#oc-entity-to-year');
-    const entityToSeasonSelect = $('#oc-entity-to-season');
-    const entityProgressSelect = $('#oc-entity-progress');
-    const entityRateAllBtn = $('#oc-entity-rate-all');
-    const entityGridEl = $('#oc-entity-grid');
-    const entityTracksEl = $('#oc-entity-tracks');
-    const openingModal = $('#oc-opening-modal');
-    const confirmModal = $('#oc-confirm-modal');
-    const franchiseRepairModal = $('#oc-franchise-repair-modal');
-    const imageMigrationBtn = $('#oc-image-migration-btn');
-    const imageMigrationInlineBtn = $('#oc-image-migration-inline-btn');
-    const imageMigrationModal = $('#oc-image-migration-modal');
-    let imageMigrationRunning = false;
-    let imageMigrationStopRequested = false;
-
-
-    const authModal = $('#oc-auth-modal');
-    const authIdentifierInput = $('#oc-auth-identifier');
-    const authPassInput = $('#oc-auth-pass');
-    const authRememberInput = $('#oc-auth-remember');
-    const authSaveBtn = $('#oc-auth-save');
-    const authForgotBtn = $('#oc-auth-forgot');
-    const authLogoutBtn = $('#oc-auth-logout');
-    const authRegisterOpenBtn = $('#oc-auth-register-open');
-    const registerModal = $('#oc-register-modal');
-    const registerCloseBtn = $('#oc-register-close');
-    const authError = $('#oc-auth-error');
-    const authCloseBtn = $('#oc-auth-close');
-    const accessBadge = $('#oc-access-badge');
-    const franchiseRepairBtn = $('#oc-franchise-repair-btn');
-    const profileUserSelect = $('#oc-profile-user');
-    const manualHiddenToggleBtn = $('#oc-manual-hidden-toggle-btn');
-    const profileDeleteBtn = $('#oc-profile-delete-btn');
-    const seasonYearsEl = $('#oc-season-years');
-    const seasonTitleEl = $('#oc-season-title');
-    const seasonSubtitleEl = $('#oc-season-subtitle');
-    const seasonListEl = $('#oc-season-list');
-    const seasonRateBtn = $('#oc-season-rate-btn');
-    const seasonRateAllBtn = $('#oc-season-rate-all-btn');
-    const seasonPrevBtn = $('#oc-season-prev-btn');
-    const seasonTierBtn = $('#oc-season-tier-btn');
-    const evaluatorEl = $('#oc-season-evaluator');
-    const nameModal = $('#oc-name-modal');
-    const modalNameInput = $('#oc-modal-name');
-    const modalNameSave = $('#oc-modal-name-save');
-    const modalNameClose = $('#oc-modal-name-close');
-    const modalAccountEmail = $('#oc-modal-account-email');
-    const modalAccountPass = $('#oc-modal-account-pass');
-    const forgotPasswordBtn = $('#oc-forgot-password');
-    const rememberAccountInput = $('#oc-remember-account');
-    const modalNameError = $('#oc-modal-name-error');
-    const registerNameInput = $('#oc-register-name');
-    const registerEmailInput = $('#oc-register-email');
-    const registerPassInput = $('#oc-register-pass');
-    const registerPassConfirmInput = $('#oc-register-pass-confirm');
-    const registerRememberInput = $('#oc-register-remember');
-    const registerSaveBtn = $('#oc-register-save');
-    const registerError = $('#oc-register-error');
-
-    const SEASON_ORDER = ['winter', 'spring', 'summer', 'fall'];
-    const SEASON_START_MONTH = { winter: 0, spring: 3, summer: 6, fall: 9 };
-    let activeTab = 'chart';
-    let expandedYear = new Date().getFullYear();
-    let selectedSeason = null;
-    let seasonType = 'OP';
-    let seasonHideChinese = true;
-    let seasonHideMovie = true;
-    let seasonHideShortened = true;
-    let seasonQueue = [];
-    let seasonQueueIndex = 0;
-    let evaluatorMode = 'season';
-    let blindPendingRating = null;
-    let blindSessionStats = null;
-    let dailyActiveKey = '';
-    let dailyCalendarMonth = null;
-    let dailyRefreshTimer = null;
-    let firebaseOpenings = [];
-    let firebaseRatings = [];
-    let firebaseRatingsScope = 'none';
-    let firebaseManualRanks = [];
-    let firebaseUserProfiles = [];
-    let firebaseEntityCards = [];
-    let firebaseUnsubEntityCards = null;
-    let activeEntityType = 'studios';
-    let activeEntityCardId = '';
-    let entityFiltersExpanded = false;
-    let activeEntityQueueLabel = '';
-    let activeRatingQueueContext = {};
-    let activeEntityFilteredEntries = [];
-    let entityCardRenderLimit = 40;
-    let entityTrackRenderLimit = 30;
-    let firebaseUnsubOpenings = null;
-    let firebaseUnsubRatings = null;
-    let firebaseUnsubManualRanks = null;
-    let firebaseUnsubUserProfiles = null;
-    let firebaseUnsubTierOrders = null;
-    let firebaseUnsubEventBasket = null;
-    let firebaseEventBasket = {};
-    let firebaseEventBasketLoaded = false;
-    let firebaseDbInstance = null;
-    const remoteDataState = {
-      openings: { started: false, ready: false, promise: null, resolve: null },
-      ratings: { started: false, ready: false, promise: null, resolve: null },
-      manualRanks: { started: false, ready: false, promise: null, resolve: null },
-      userProfiles: { started: false, ready: false, promise: null, resolve: null },
-      entityCards: { started: false, ready: false, promise: null, resolve: null },
-      tier: { started: false, ready: false, promise: null, resolve: null },
-      eventBasket: { started: false, ready: false, promise: null, resolve: null }
-    };
-    let routeDataSyncId = 0;
-    let tierOrders = {};
-    let tierLabels = {};
-    let tierPlacements = {};
-    let statsTypeFilter = '';
-    let tierSelection = { type: 'OP', year: new Date().getFullYear(), season: 'winter' };
-    let extendedDbCache = null;
-
-    // ---------- performance layer for large catalogs ----------
-    // UI shows only paginated cards, but with thousands of tracks the expensive part is
-    // repeated filtering/statistics over the whole in-memory catalog. These counters and
-    // caches keep repeated renders cheap and coalesce several Firestore snapshots into one UI refresh.
-    let dataVersion = 0;
-    let catalogVersion = 0;
-    let manualRanksVersion = 0;
-    let avatarsVersion = 0;
-    let entriesById = new Map();
-    let filterOptionsVersion = -1;
-    let categoryCacheVersion = -1;
-    let categoryCache = { studios: [], directors: [], performers: [], franchises: [], years: [] };
-    let profileUsersCache = { key: '', names: [] };
-    let filteredCache = { key: '', value: null };
-    let sortedCache = { key: '', input: null, value: null };
-    let globalTopCache = new Map();
-    let uiRefreshTimer = null;
-    let uiRefreshNeedsFilterOptions = false;
-    let suppressChartRatingRefreshUntil = 0;
-    let lastOpeningsSnapshotKey = '';
-
-    function dispatchAppEvent(name, detail = {}) {
-      const payload = { activeTab, ...detail };
-      window.dispatchEvent(new CustomEvent(name, { detail: payload }));
-      document.dispatchEvent(new CustomEvent(name, { detail: payload }));
-    }
-
-    function appDataSnapshot() {
-      return {
-        entries,
-        ratings: firebaseRatings,
-        manualRanks,
-        userProfiles: firebaseUserProfiles,
-        currentUser: {
-          nickname: myName,
-          uid: currentPersonalUid(),
-          avatar: myAvatar,
-          accessLevel,
-          authenticated: Boolean(accessLevel && currentPersonalUid() && myName)
-        },
-        activeTab
-      };
-    }
-
-    function publishAppData(reason = 'update') {
-      const snapshot = appDataSnapshot();
-      window.OC_APP_DATA = window.OC_APP_DATA || {};
-      Object.assign(window.OC_APP_DATA, snapshot);
-      dispatchAppEvent('oped:app-data-updated', { reason, snapshot });
-      return snapshot;
-    }
-
-    window.OC_APP_BRIDGE = {
-      snapshot: appDataSnapshot,
-      openTrack: id => openCardModal(String(id || '')),
-      rateTrack: id => startOpeningRating(String(id || '')),
-      top100Meta(type) {
-        const cleanType = type === 'ED' ? 'ED' : 'OP';
-        const row = getManualRanksForUser(myName) || {};
-        return {
-          candidates: Array.from(new Set((row[`candidates${cleanType}`] || []).map(String).filter(Boolean))),
-          pins: sanitizeTopPins(row[`pins${cleanType}`])
-        };
-      },
-      isTopCandidate(id, type) {
-        const cleanType = type === 'ED' ? 'ED' : 'OP';
-        const row = getManualRanksForUser(myName) || {};
-        return (row[`candidates${cleanType}`] || []).map(String).includes(String(id));
-      },
-      async toggleTopCandidate(id, type) {
-        if (!myName || !currentPersonalUid()) throw new Error('–î–ª—è –∫–∞–Ω–¥–∏–¥–∞—Ç–æ–≤ –≤–æ–π–¥–∏ –≤ –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-        const cleanType = type === 'ED' ? 'ED' : 'OP';
-        const openingId = String(id || '');
-        const current = getManualRanksForUser(myName) || {};
-        const field = `candidates${cleanType}`;
-        const candidates = new Set((current[field] || []).map(String));
-        if (candidates.has(openingId)) candidates.delete(openingId);
-        else candidates.add(openingId);
-        const next = { ...current, [field]: [...candidates] };
-        rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
-        publishAppData('top100-candidates-saved');
-        return candidates.has(openingId);
-      },
-      async addTopCandidates(type) {
-        if (!myName || !currentPersonalUid()) throw new Error('–î–ª—è –∏–∑–º–µ–Ω–µ–Ω–∏—è —Ç–æ–ø–∞ –≤–æ–π–¥–∏ –≤ –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-        const cleanType = type === 'ED' ? 'ED' : 'OP';
-        const current = getManualRanksForUser(myName) || {};
-        const candidates = (current[`candidates${cleanType}`] || []).map(String);
-        const order = applyTopPins(
-          Array.from(new Set([...candidates, ...(current[cleanType] || []).map(String)])),
-          current[`pins${cleanType}`]
-        );
-        const next = { ...current, [cleanType]: order };
-        rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
-        publishAppData('top100-candidates-added');
-        return next;
-      },
-      async saveTopPins(type, pins) {
-        if (!myName || !currentPersonalUid()) throw new Error('–î–ª—è –∑–∞–∫—Ä–µ–ø–ª–µ–Ω–∏—è –≤–æ–π–¥–∏ –≤ –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-        const cleanType = type === 'ED' ? 'ED' : 'OP';
-        const current = getManualRanksForUser(myName) || {};
-        const cleanPins = sanitizeTopPins(pins);
-        const next = {
-          ...current,
-          [cleanType]: applyTopPins(current[cleanType] || [], cleanPins),
-          [`pins${cleanType}`]: cleanPins
-        };
-        rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
-        publishAppData('top100-pins-saved');
-        return next;
-      },
-      async saveDuelRanks(type, order) {
-        if (!myName || !currentPersonalUid()) throw new Error('–î–ª—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∏—è –≤–æ–π–¥–∏ –≤ –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-        const cleanType = type === 'ED' ? 'ED' : 'OP';
-        const current = getManualRanksForUser(myName) || {};
-        const next = {
-          ...current,
-          [cleanType]: Array.from(new Set((order || []).map(String).filter(Boolean))).slice(0, 100)
-        };
-        rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
-        manualDirty = false;
-        publishAppData('manual-ranks-saved');
-        return next;
-      },
-      async saveCollections(collections) {
-        if (!window.OPED_DB?.saveUserCollections) throw new Error('–•—Ä–∞–Ω–∏–ª–∏—â–µ –ø–æ–¥–±–æ—Ä–æ–∫ –µ—â—ë –Ω–µ –ø–æ–¥–∫–ª—é—á–µ–Ω–æ.');
-        const rows = await window.OPED_DB.saveUserCollections(myName, collections);
-        const profileIndex = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(myName));
-        if (profileIndex >= 0) firebaseUserProfiles[profileIndex] = { ...firebaseUserProfiles[profileIndex], collections: rows };
-        publishAppData('collections-saved');
-        return rows;
-      },
-      profileData(name = myName) {
-        return dailyProfileFor(name) || null;
-      },
-      userScore(id, name = myName) {
-        const entry = entriesById.get(String(id || ''));
-        if (!entry) return null;
-        const publicScore = scoreFor(entry, name);
-        return publicScore !== null ? publicScore : personalScoreFor(entry, name);
-      },
-      isRateLater(id) {
-        return rateLaterIdsFor(myName).includes(String(id || ''));
-      },
-      async toggleRateLater(id) {
-        return toggleRateLaterEntry(String(id || ''));
-      },
-      async saveProfilePatch(patch) {
-        if (!myName || !currentPersonalUid()) throw new Error('–î–ª—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∏—è –≤–æ–π–¥–∏ –≤ –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-        await saveDailyProfilePatch(patch && typeof patch === 'object' ? patch : {});
-        publishAppData('profile-settings-saved');
-        return dailyProfileFor(myName);
-      },
-      startRatingQueue(ids, options = {}) {
-        if (!ensureNickname()) return false;
-        const mode = String(options.mode || 'collection');
-        const label = String(options.label || '–û—á–µ—Ä–µ–¥—å –æ—Ü–µ–Ω–∫–∏');
-        const context = options.context && typeof options.context === 'object' ? options.context : {};
-        const rows = Array.from(new Set((ids || []).map(String))).map(id => entriesById.get(id)).filter(Boolean);
-        if (!rows.length) {
-          setStatus('–í —ç—Ç–æ–π –æ—á–µ—Ä–µ–¥–∏ –Ω–µ –æ—Å—Ç–∞–ª–æ—Å—å –Ω–µ–æ—Ü–µ–Ω—ë–Ω–Ω—ã—Ö —Ç—Ä–µ–∫–æ–≤.', true);
-          return false;
-        }
-        startPersistentRatingQueue(rows, mode, label, context);
-        return true;
-      },
-      renderCatalogEditor(id) {
-        if (!isCatalogAdmin()) return '';
-        const entry = entriesById.get(String(id || ''));
-        return entry ? renderEditCard(entry) : '';
-      },
-      async saveCatalogEditor(id, card) {
-        return saveExternalTrackEditor(String(id || ''), card);
-      },
-      watchJournal(callback) {
-        if (!window.OPED_DB?.watchCatalogJournal) {
-          callback([]);
-          return null;
-        }
-        return window.OPED_DB.watchCatalogJournal(callback);
-      }
-    };
-
-    function markRemoteDataReady(name, detail = {}) {
-      const state = remoteDataState[name];
-      if (!state) return;
-      const firstReady = !state.ready;
-      state.ready = true;
-      if (state.resolve) {
-        state.resolve();
-        state.resolve = null;
-      }
-      dispatchAppEvent('oped:data-ready', { source: name, firstReady, ...detail });
-      if (name === 'openings') dispatchAppEvent('oped:catalog-ready', { firstReady, ...detail });
-    }
-
-    function createRemoteDataPromise(name) {
-      const state = remoteDataState[name];
-      if (!state) return Promise.resolve();
-      if (state.ready) return Promise.resolve();
-      if (!state.promise) {
-        state.promise = new Promise(resolve => {
-          state.resolve = resolve;
-        });
-      }
-      return state.promise;
-    }
-
-    function resetRemoteDataSubscription(name) {
-      const state = remoteDataState[name];
-      if (!state) return;
-      state.started = false;
-      state.promise = null;
-      state.resolve = null;
-    }
-
-    function runWhenBrowserIsIdle(callback, timeout = 1200) {
-      if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(() => callback(), { timeout });
-        return;
-      }
-      window.setTimeout(callback, Math.min(timeout, 250));
-    }
-
-    function progressiveMoreMarkup(scope, shown, total) {
-      if (shown >= total) return '';
-      return `<button type="button" class="oc-progressive-more" data-progressive-more="${scope}">–ü–æ–∫–∞–∑–∞–Ω–æ ${shown} –∏–∑ ${total} ¬∑ –∑–∞–≥—Ä—É–∑–∏—Ç—å –µ—â—ë</button>`;
-    }
-
-    function installProgressiveAutoload(container, scope, callback) {
-      const button = container?.querySelector?.(`[data-progressive-more="${scope}"]`);
-      if (!button) return;
-      button.addEventListener('click', callback, { once: true });
-      if (!('IntersectionObserver' in window)) return;
-      const observer = new IntersectionObserver(entries => {
-        if (!entries.some(entry => entry.isIntersecting)) return;
-        observer.disconnect();
-        button.click();
-      }, { rootMargin: '500px 0px' });
-      observer.observe(button);
-    }
-
-    function waitForFirebaseDb() {
-      if (window.OPED_DB) return Promise.resolve(window.OPED_DB);
-
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error('–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–¥–∫–ª—é—á–∏—Ç—å—Å—è. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –∏–Ω—Ç–µ—Ä–Ω–µ—Ç –∏ –ø–æ–ø—Ä–æ–±—É–π—Ç–µ –µ—â—ë —Ä–∞–∑.'));
-        }, 10000);
-
-        window.addEventListener('oped-db-ready', () => {
-          clearTimeout(timer);
-          resolve(window.OPED_DB);
-        }, { once: true });
-      });
-    }
-
-    async function getExtendedDb() {
-      if (extendedDbCache) return extendedDbCache;
-      const appMod = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
-      const fsMod = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js');
-      const authMod = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js');
-      const firebaseConfig = {
-        apiKey: "AIzaSyB-twjseziMOfViTBjXErqlXkSIorlAUXE",
-        authDomain: "op-ed-orden-eed04.firebaseapp.com",
-        projectId: "op-ed-orden-eed04",
-        storageBucket: "op-ed-orden-eed04.firebasestorage.app",
-        messagingSenderId: "821108008660",
-        appId: "1:821108008660:web:bab171d225e5c8cde2fd41"
-      };
-      const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(firebaseConfig);
-      try {
-        const auth = authMod.getAuth(app);
-        if (typeof auth.authStateReady === 'function') await auth.authStateReady();
-        if (!auth.currentUser) await authMod.signInAnonymously(auth);
-      } catch (e) {
-        console.warn('anonymous auth for event basket failed', e);
-      }
-      extendedDbCache = { db: fsMod.getFirestore(app), ...fsMod };
-      return extendedDbCache;
-    }
-
-
-    function makeDebounced(fn, delay = 250) {
-      let timer = null;
-      return function debounced(...args) {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
-      };
-    }
-
-    function clearDerivedCaches() {
-      filteredCache = { key: '', value: null };
-      sortedCache = { key: '', input: null, value: null };
-      globalTopCache.clear();
-    }
-
-    function touchEntryCache(entry) {
-      if (!entry) return entry;
-      ['scores', 'songScores', 'visualScores', 'customScores', 'personalScores', 'comments'].forEach(key => {
-        if (entry[key] && typeof entry[key] === 'object') {
-          try { delete entry[key].__oc_stats; } catch (e) {}
-        }
-      });
-      delete entry.__ocSearchText;
-      return entry;
-    }
-
-    function rebuildFastIndexes({ catalogChanged = true } = {}) {
-      entriesById = new Map(entries.map(e => [String(e.id), e]));
-      dataVersion += 1;
-      if (catalogChanged) {
-        catalogVersion += 1;
-        filterOptionsVersion = -1;
-        categoryCacheVersion = -1;
-      }
-      profileUsersCache.key = '';
-      clearDerivedCaches();
-    }
-
-    function markRatingDataChanged() {
-      dataVersion += 1;
-      profileUsersCache.key = '';
-      clearDerivedCaches();
-    }
-
-    function markManualRanksChanged() {
-      manualRanksVersion += 1;
-      profileUsersCache.key = '';
-      globalTopCache.clear();
-      clearDerivedCaches();
-    }
-
-    function markAvatarsChanged() {
-      avatarsVersion += 1;
-      profileUsersCache.key = '';
-    }
-
-    function refreshVisiblePanels({ forceFilters = false } = {}) {
-      if (forceFilters) populateFilterOptions(true);
-      else syncFilterControls();
-      populateProfileUsers();
-      if (activeTab === 'chart') render();
-      else if (activeTab === 'profile') renderProfile();
-      else if (activeTab === 'top100') renderGlobalTop100();
-      else if (activeTab === 'season') renderSeasonViews();
-      else if (activeTab === 'tier') renderTierList();
-      else if (activeTab === 'stats') renderStatsPage();
-      else if (activeTab === 'discovery') publishAppData('visible-refresh');
-    }
-
-    function scheduleVisibleRefresh(options = {}) {
-      uiRefreshNeedsFilterOptions = uiRefreshNeedsFilterOptions || Boolean(options.forceFilters);
-      clearTimeout(uiRefreshTimer);
-      uiRefreshTimer = setTimeout(() => {
-        uiRefreshTimer = null;
-        const forceFilters = uiRefreshNeedsFilterOptions;
-        uiRefreshNeedsFilterOptions = false;
-        refreshVisiblePanels({ forceFilters });
-      }, 50);
-    }
-
-
-    function firestoreTimeKey(value) {
-      if (!value) return '';
-      if (typeof value.toMillis === 'function') return String(value.toMillis());
-      if (typeof value.seconds === 'number') return `${value.seconds}:${value.nanoseconds || 0}`;
-      if (value instanceof Date) return String(value.getTime());
-      return String(value);
-    }
-
-    function currentPersonalUid() {
-      return String(window.OPED_DB?.currentUserUid?.() || authenticatedUid || '');
-    }
-
-    function requirePersonalUid() {
-      const uid = currentPersonalUid();
-      if (!uid) throw new Error('–î–ª—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∏—è –Ω—É–∂–µ–Ω –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-      return uid;
-    }
-
-    function openingsSnapshotKey(rows) {
-      return (rows || []).map(row => `${row.id || ''}:${firestoreTimeKey(row.updatedAt || row.createdAt || '')}`).join('|');
-    }
-
-    async function saveOpeningExtras(openingId, extras) {
-      if (!openingId || !extras) return;
-      const ext = await getExtendedDb();
-      const payload = { updatedAt: ext.serverTimestamp() };
-      if (Object.prototype.hasOwnProperty.call(extras, 'franchises')) payload.franchises = cleanFranchiseList(extras.franchises);
-      if (Object.prototype.hasOwnProperty.call(extras, 'alternativeTitles')) payload.alternativeTitles = cleanAliasList(extras.alternativeTitles);
-      if (Object.prototype.hasOwnProperty.call(extras, 'isChinese')) payload.isChinese = Boolean(extras.isChinese);
-      if (Object.prototype.hasOwnProperty.call(extras, 'isMovie')) payload.isMovie = Boolean(extras.isMovie);
-      if (Object.prototype.hasOwnProperty.call(extras, 'isShortened')) payload.isShortened = Boolean(extras.isShortened);
-      if (Object.prototype.hasOwnProperty.call(extras, 'sameSongGroupId')) payload.sameSongGroupId = String(extras.sameSongGroupId || '').trim();
-      if (Object.prototype.hasOwnProperty.call(extras, 'sameSongTitle')) payload.sameSongTitle = String(extras.sameSongTitle || '').trim();
-      if (Object.prototype.hasOwnProperty.call(extras, 'uncertainPerformer')) payload.uncertainPerformer = Boolean(extras.uncertainPerformer);
-      if (Object.prototype.hasOwnProperty.call(extras, 'uncertainDirector')) payload.uncertainDirector = Boolean(extras.uncertainDirector);
-      if (Object.prototype.hasOwnProperty.call(extras, 'uncertainImage')) payload.uncertainImage = Boolean(extras.uncertainImage);
-      await ext.setDoc(ext.doc(ext.db, 'openings', String(openingId)), payload, { merge: true });
-    }
-
-    async function saveRatingExtras(openingId, nickname, extras) {
-      if (!window.OPED_DB || typeof window.OPED_DB.normalizeNickname !== 'function') return;
-      const safeName = window.OPED_DB.normalizeNickname(nickname);
-      const safeOpeningId = String(openingId || '').trim();
-      if (!safeName || !safeOpeningId || !extras) return;
-      const ext = await getExtendedDb();
-      const payload = {
-        openingId: safeOpeningId,
-        nickname: String(nickname || '').trim(),
-        nicknameKey: safeName,
-        ownerUid: requirePersonalUid(),
-        avatar: myAvatar,
-        updatedAt: ext.serverTimestamp()
-      };
-      ['score', 'songScore', 'visualScore', 'personalScore'].forEach(key => {
-        if (!Object.prototype.hasOwnProperty.call(extras, key)) return;
-        const val = extras[key];
-        payload[key] = (val === null || val === undefined || val === '') ? ext.deleteField() : Number(val);
-      });
-      if (Object.prototype.hasOwnProperty.call(extras, 'comment')) {
-        const comment = String(extras.comment || '').trim().slice(0, 1000);
-        payload.comment = comment ? comment : ext.deleteField();
-      }
-      if (Object.prototype.hasOwnProperty.call(extras, 'customScores')) {
-        const customScores = normalizeCustomRatingScores(extras.customScores);
-        payload.customScores = Object.keys(customScores).length ? customScores : ext.deleteField();
-      }
-      await ext.setDoc(ext.doc(ext.db, 'ratings', `${safeName}__${safeOpeningId}`), payload, { merge: true });
-    }
-
-    async function persistCompleteRating(entry, values) {
-      if (!entry || !myName) throw new Error('–ù–µ –Ω–∞–π–¥–µ–Ω –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å –∏–ª–∏ —Ç—Ä–µ–∫.');
-      const score = Number(values.score);
-      if (!Number.isFinite(score)) throw new Error('–ù–µ–∫–æ—Ä—Ä–µ–∫—Ç–Ω–∞—è –æ—Ü–µ–Ω–∫–∞.');
-      const songScore = values.songScore === null || values.songScore === undefined ? null : Number(values.songScore);
-      const visualScore = values.visualScore === null || values.visualScore === undefined ? null : Number(values.visualScore);
-      const customScores = normalizeCustomRatingScores(values.customScores);
-      const comment = String(values.comment || '').trim().slice(0, 1000);
-      entry.scores = entry.scores || {};
-      entry.songScores = entry.songScores || {};
-      entry.visualScores = entry.visualScores || {};
-      entry.customScores = entry.customScores || {};
-      entry.comments = entry.comments || {};
-      entry.ratingUpdatedAt = entry.ratingUpdatedAt || {};
-      entry.scores[myName] = score;
-      entry.ratingUpdatedAt[myName] = new Date();
-      if (songScore === null || !Number.isFinite(songScore)) delete entry.songScores[myName]; else entry.songScores[myName] = songScore;
-      if (visualScore === null || !Number.isFinite(visualScore)) delete entry.visualScores[myName]; else entry.visualScores[myName] = visualScore;
-      if (Object.keys(customScores).length) entry.customScores[myName] = customScores; else delete entry.customScores[myName];
-      if (comment) entry.comments[myName] = comment; else delete entry.comments[myName];
-      await window.OPED_DB.saveRating(entry.id, myName, score);
-      await saveRatingExtras(entry.id, myName, { songScore, visualScore, customScores, comment });
-      await removeRateLaterEntry(entry.id);
-      appendManualOrderIfMissing(myName, entry.type, entry.id);
-      touchEntryCache(entry);
-      markRatingDataChanged();
-      return { score, songScore, visualScore, customScores, comment };
-    }
-
-    async function deleteCurrentRating(openingId, nickname, forceMode) {
-      const entry = entriesById.get(String(openingId));
-      const name = String(nickname || '').trim();
-      if (!entry || !name) return;
-      const mode = forceMode || (isPersonalScale() ? 'personal' : 'public');
-      try {
-        if (mode === 'personal') {
-          if (entry.personalScores) delete entry.personalScores[name];
-          await saveRatingExtras(entry.id, name, { personalScore: null });
-        } else {
-          if (entry.scores) delete entry.scores[name];
-          if (entry.songScores) delete entry.songScores[name];
-          if (entry.visualScores) delete entry.visualScores[name];
-          if (entry.comments) delete entry.comments[name];
-          if (entry.ratingUpdatedAt) delete entry.ratingUpdatedAt[name];
-          if (window.OPED_DB && typeof window.OPED_DB.deleteRating === 'function') {
-            await window.OPED_DB.deleteRating(entry.id, name, ['score', 'songScore', 'visualScore', 'comment']);
-          } else {
-            await saveRatingExtras(entry.id, name, { score: null, songScore: null, visualScore: null, comment: null });
-          }
-        }
-        touchEntryCache(entry);
-        markRatingDataChanged();
-        render();
-        renderSeasonViews();
-        if (activeTab === 'profile') renderProfile();
-        if (activeTab === 'tier') renderTierList();
-        if (activeTab === 'stats') renderStatsPage();
-      if (activeTab === 'top100') renderGlobalTop100();
-      if (activeTab.startsWith('entity-')) renderEntityAlbums();
-        setStatus(mode === 'personal' ? '–û—Ç–º–µ—Ç–∫–∞ —É–¥–∞–ª–µ–Ω–∞ ‚úì' : '–û—Ü–µ–Ω–∫–∞ —É–¥–∞–ª–µ–Ω–∞ ‚úì');
-      } catch (err) {
-        console.error(err);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å –æ—Ü–µ–Ω–∫—É.', true);
-      }
-    }
-
-    function profileNameMatchesTarget(name, target, targetSafe, targetKeys) {
-      const raw = String(name || '').trim();
-      if (!raw) return false;
-      const lower = raw.toLowerCase();
-      if (targetKeys && (targetKeys.has(raw) || targetKeys.has(lower))) return true;
-      if (lower === String(target || '').trim().toLowerCase()) return true;
-      return manualUserSafeKey(raw) === targetSafe;
-    }
-
-    function deleteMatchingKeysFromMap(map, target, targetSafe, targetKeys) {
-      if (!map) return;
-      Object.keys(map).forEach(key => {
-        if (profileNameMatchesTarget(key, target, targetSafe, targetKeys)) delete map[key];
-      });
-    }
-
-    async function deleteProfileFully(targetUser) {
-      if (!ensureAdmin()) return;
-      const target = String(targetUser || '').trim();
-      if (!target) { setStatus('–í—ã–±–µ—Ä–∏ –ø—Ä–æ—Ñ–∏–ª—å –¥–ª—è —É–¥–∞–ª–µ–Ω–∏—è.', true); return; }
-      if (!window.confirm(`–£–¥–∞–ª–∏—Ç—å –ø—Ä–æ—Ñ–∏–ª—å ¬´${target}¬ª –ø–æ–ª–Ω–æ—Å—Ç—å—é? –£–¥–∞–ª—è—Ç—Å—è –æ—Ü–µ–Ω–∫–∏, —Ä—É—á–Ω–æ–π —Ç–æ–ø-100, —Ç–∏—Ä-–ª–∏—Å—Ç—ã –∏ –∞–≤–∞—Ç–∞—Ä. –≠—Ç–æ –¥–µ–π—Å—Ç–≤–∏–µ –Ω–µ–ª—å–∑—è –æ—Ç–º–µ–Ω–∏—Ç—å.`)) return;
-      const targetSafe = manualUserSafeKey(target);
-      const targetKeys = new Set(manualCandidateKeys(target).flatMap(v => [String(v), String(v).toLowerCase()]));
-      targetKeys.add(target);
-      targetKeys.add(target.toLowerCase());
-      targetKeys.add(targetSafe);
-
-      entries.forEach(entry => {
-        deleteMatchingKeysFromMap(entry.scores, target, targetSafe, targetKeys);
-        deleteMatchingKeysFromMap(entry.songScores, target, targetSafe, targetKeys);
-        deleteMatchingKeysFromMap(entry.visualScores, target, targetSafe, targetKeys);
-        deleteMatchingKeysFromMap(entry.personalScores, target, targetSafe, targetKeys);
-        touchEntryCache(entry);
-      });
-      deleteMatchingKeysFromMap(avatarsMap, target, targetSafe, targetKeys);
-      Object.keys(manualRanks || {}).forEach(key => {
-        const row = manualRanks[key] || {};
-        if (profileNameMatchesTarget(key, target, targetSafe, targetKeys) ||
-            profileNameMatchesTarget(row.nickname, target, targetSafe, targetKeys) ||
-            profileNameMatchesTarget(row.nicknameKey, target, targetSafe, targetKeys)) {
-          delete manualRanks[key];
-        }
-      });
-      [tierOrders, tierLabels, tierPlacements].forEach(map => {
-        Object.keys(map || {}).forEach(key => {
-          const owner = String(key).split('|')[0] || '';
-          if (profileNameMatchesTarget(owner, target, targetSafe, targetKeys)) delete map[key];
-        });
-      });
-
-      persistManualRanksCache();
-      try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
-      markRatingDataChanged();
-      markManualRanksChanged();
-      markAvatarsChanged();
-      profileUsersCache = { key: '', names: [] };
-
-      const errors = [];
-      try {
-        const ext = await getExtendedDb();
-        const collectionsToScan = ['ratings', 'manualRanks', 'userProfiles', 'tierOrders', 'tierLabels', 'tierPlacements'];
-        const deletes = [];
-        for (const collectionName of collectionsToScan) {
-          const snapshot = await ext.getDocs(ext.collection(ext.db, collectionName));
-          snapshot.docs.forEach(d => {
-            const row = { id: d.id, ...d.data() };
-            const shouldDelete =
-              profileNameMatchesTarget(row.nickname, target, targetSafe, targetKeys) ||
-              profileNameMatchesTarget(row.displayName, target, targetSafe, targetKeys) ||
-              profileNameMatchesTarget(row.name, target, targetSafe, targetKeys) ||
-              profileNameMatchesTarget(row.nicknameKey, target, targetSafe, targetKeys) ||
-              profileNameMatchesTarget(row.id, target, targetSafe, targetKeys) ||
-              String(row.id || '').startsWith(`${targetSafe}__`);
-            if (shouldDelete) deletes.push(ext.deleteDoc(ext.doc(ext.db, collectionName, d.id)));
-          });
-        }
-        await Promise.allSettled(deletes).then(results => {
-          results.filter(r => r.status === 'rejected').forEach(r => { console.error('Profile delete failed', r.reason); errors.push(r.reason); });
-        });
-      } catch (e) {
-        console.error('Could not delete profile from Firebase', e);
-        errors.push(e);
-      }
-
-      populateProfileUsers(true);
-      if (profileUserSelect && profileUserSelect.value === target) profileUserSelect.value = '';
-      render();
-      renderSeasonViews();
-      renderProfile();
-      if (activeTab === 'tier') renderTierList();
-      if (activeTab === 'top100') renderGlobalTop100();
-      if (errors.length) setStatus('–ù–µ –≤—Å–µ –¥–∞–Ω–Ω—ã–µ –ø—Ä–æ—Ñ–∏–ª—è —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å.', true);
-      else setStatus(`–ü—Ä–æ—Ñ–∏–ª—å ¬´${target}¬ª —É–¥–∞–ª—ë–Ω –ø–æ–ª–Ω–æ—Å—Ç—å—é ‚úì`);
-    }
-
-    function safeDocPart(value) {
-      return String(value || '').trim().toLowerCase().replace(/[^a-z–∞-—è—ë0-9_-]+/gi, '_').slice(0, 80);
-    }
-
-    function tierModeKey() {
-      return isPersonalScale() ? 'five' : 'public';
-    }
-
-    function tierModeValue(mode) {
-      return mode || tierModeKey();
-    }
-
-    function tierOrderDocId(user, type, year, season, score, mode) {
-      const scoreKey = String(score).replace('.', '_');
-      return `${tierContextDocId(user, type, year, season, mode)}__${scoreKey}`;
-    }
-
-    function tierContextDocId(user, type, year, season, mode) {
-      const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function'
-        ? window.OPED_DB.normalizeNickname(user)
-        : safeDocPart(user);
-      return `${safeName}__${tierModeValue(mode)}__${type}__${year}__${season}`;
-    }
-
-    function tierLabelDocId(user, type, year, season, score, mode) {
-      const scoreKey = String(score).replace('.', '_');
-      return `${tierContextDocId(user, type, year, season, mode)}__${scoreKey}`;
-    }
-
-    function tierOrderKey(user, type, year, season, score, mode) {
-      return `${user || ''}|${tierModeValue(mode)}|${type}|${year}|${season}|${score}`;
-    }
-
-    async function startTierOrderWatcher() {
-      const state = remoteDataState.tier;
-      if (state.started) return createRemoteDataPromise('tier');
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('tier');
-      try {
-        const ext = await getExtendedDb();
-        if (firebaseUnsubTierOrders) firebaseUnsubTierOrders();
-        const unsubs = [];
-        const readyParts = new Set();
-        const markPartReady = name => {
-          readyParts.add(name);
-          if (readyParts.size === 3) markRemoteDataReady('tier');
-        };
-
-        unsubs.push(ext.onSnapshot(ext.collection(ext.db, 'tierOrders'), snapshot => {
-          const next = {};
-          snapshot.docs.forEach(d => {
-            const row = { id: d.id, ...d.data() };
-            next[tierOrderKey(row.nickname, row.type, row.year, row.season, row.score, row.mode || 'public')] = Array.isArray(row.order) ? row.order.map(String) : [];
-          });
-          tierOrders = next;
-          if (activeTab === 'tier') renderTierList();
-          markPartReady('orders');
-        }, err => {
-          console.error('tierOrders watch error', err);
-          markPartReady('orders');
-        }));
-
-        unsubs.push(ext.onSnapshot(ext.collection(ext.db, 'tierLabels'), snapshot => {
-          const next = {};
-          snapshot.docs.forEach(d => {
-            const row = { id: d.id, ...d.data() };
-            const val = String(row.label || '').trim();
-            if (!val) return;
-            next[tierLabelKey(row.nickname, row.type, row.year, row.season, row.score, row.mode || 'public')] = val;
-          });
-          tierLabels = next;
-          if (activeTab === 'tier') renderTierList();
-          markPartReady('labels');
-        }, err => {
-          console.error('tierLabels watch error', err);
-          markPartReady('labels');
-        }));
-
-        unsubs.push(ext.onSnapshot(ext.collection(ext.db, 'tierPlacements'), snapshot => {
-          const next = {};
-          snapshot.docs.forEach(d => {
-            const row = { id: d.id, ...d.data() };
-            const placements = row.placements && typeof row.placements === 'object' ? row.placements : {};
-            next[tierContextKey(row.nickname, row.type, row.year, row.season, row.mode || 'public')] = placements;
-          });
-          tierPlacements = next;
-          if (activeTab === 'tier') renderTierList();
-          markPartReady('placements');
-        }, err => {
-          console.error('tierPlacements watch error', err);
-          markPartReady('placements');
-        }));
-
-        firebaseUnsubTierOrders = () => unsubs.forEach(unsub => { if (typeof unsub === 'function') unsub(); });
-      } catch (e) {
-        console.error('Could not watch tier data', e);
-        markRemoteDataReady('tier', { error: true });
-      }
-      return readyPromise;
-    }
-
-    function stopTierOrderWatcher() {
-      if (firebaseUnsubTierOrders) firebaseUnsubTierOrders();
-      firebaseUnsubTierOrders = null;
-      resetRemoteDataSubscription('tier');
-    }
-
-    async function saveTierOrder(user, type, year, season, score, order) {
-      const ext = await getExtendedDb();
-      const mode = tierModeKey();
-      const id = tierOrderDocId(user, type, year, season, score, mode);
-      tierOrders[tierOrderKey(user, type, year, season, score, mode)] = order.slice().map(String);
-      await ext.setDoc(ext.doc(ext.db, 'tierOrders', id), {
-        nickname: user,
-        nicknameKey: manualUserSafeKey(user),
-        ownerUid: requirePersonalUid(),
-        type,
-        year: Number(year),
-        season,
-        score: Number(score),
-        mode,
-        order: order.map(String),
-        updatedAt: ext.serverTimestamp()
-      }, { merge: true });
-    }
-
-    async function loadTierOrders() {
-      // –¢–∏—Ä-–ª–∏—Å—Ç –∑–∞–≥—Ä—É–∂–∞–µ—Ç—Å—è —á–µ—Ä–µ–∑ Firestore watcher –≤ startTierOrderWatcher().
-    }
-
-
-    function tierContextKey(user, type, year, season, mode) {
-      return `${user || ''}|${tierModeValue(mode)}|${type}|${year}|${season}`;
-    }
-
-    function tierLabelKey(user, type, year, season, score, mode) {
-      return `${tierContextKey(user, type, year, season, mode)}|${score}`;
-    }
-
-    async function loadTierLabels() {
-      // –ù–∞–∑–≤–∞–Ω–∏—è —Ç–∏—Ä–æ–≤ –∑–∞–≥—Ä—É–∂–∞—é—Ç—Å—è —á–µ—Ä–µ–∑ Firestore watcher –≤ startTierOrderWatcher().
-    }
-
-    async function saveTierLabel(user, type, year, season, score, label) {
-      const ext = await getExtendedDb();
-      const mode = tierModeKey();
-      const key = tierLabelKey(user, type, year, season, score, mode);
-      const val = String(label || '').trim();
-      if (val) tierLabels[key] = val;
-      else delete tierLabels[key];
-      const id = tierLabelDocId(user, type, year, season, score, mode);
-      const payload = {
-        nickname: user,
-        nicknameKey: manualUserSafeKey(user),
-        ownerUid: requirePersonalUid(),
-        type,
-        year: Number(year),
-        season,
-        score: Number(score),
-        mode,
-        updatedAt: ext.serverTimestamp()
-      };
-      if (val) payload.label = val;
-      else payload.label = ext.deleteField();
-      await ext.setDoc(ext.doc(ext.db, 'tierLabels', id), payload, { merge: true });
-    }
-
-    function tierDefaultLabel(score) {
-      return isPersonalScale() ? formatFiveScore(score) : formatScore(score);
-    }
-
-    function tierLabelFor(user, type, year, season, score) {
-      const keys = manualCandidateKeys(user);
-      for (const candidate of keys) {
-        const val = tierLabels[tierLabelKey(candidate, type, year, season, score)];
-        if (val) return val;
-      }
-      return tierLabels[tierLabelKey(user, type, year, season, score)] || tierDefaultLabel(score);
-    }
-
-    async function loadTierPlacements() {
-      // –ü–µ—Ä–µ–Ω–æ—Å—ã –º–µ–∂–¥—É –¥–æ–ø—É—Å—Ç–∏–º—ã–º–∏ —Ç–∏—Ä–∞–º–∏ –∑–∞–≥—Ä—É–∂–∞—é—Ç—Å—è —á–µ—Ä–µ–∑ Firestore watcher –≤ startTierOrderWatcher().
-    }
-
-    async function saveTierPlacements(user, type, year, season) {
-      try {
-        const ext = await getExtendedDb();
-        const mode = tierModeKey();
-        const ctx = tierContextKey(user, type, year, season, mode);
-        const placements = tierPlacements[ctx] || {};
-        await ext.setDoc(ext.doc(ext.db, 'tierPlacements', tierContextDocId(user, type, year, season, mode)), {
-          nickname: user,
-          nicknameKey: manualUserSafeKey(user),
-          ownerUid: requirePersonalUid(),
-          type,
-          year: Number(year),
-          season,
-          mode,
-          placements,
-          updatedAt: ext.serverTimestamp()
-        }, { merge: true });
-      } catch (e) {
-        console.error('Could not save tier placements to Firebase', e);
-        throw e;
-      }
-    }
-
-    function aggregateScoreMap(row, prefix = '') {
-      const scores = {};
-      const capitalized = prefix ? prefix[0].toUpperCase() + prefix.slice(1) : '';
-      const countKey = prefix ? `${prefix}RatingCount` : 'ratingCount';
-      const sumKey = prefix ? `${prefix}RatingSum` : 'ratingSum';
-      const averageKey = prefix ? `${prefix}RatingAverage` : 'ratingAverage';
-      const count = Number(row?.[countKey]);
-      const average = Number(row?.[averageKey]);
-      const rawSum = Number(row?.[sumKey]);
-      const sum = Number.isFinite(rawSum) ? rawSum : (Number.isFinite(count) && Number.isFinite(average) ? count * average : 0);
-      const aggregateReady = Number(row?.ratingAggregateVersion) >= 1;
-      if (aggregateReady && Number.isFinite(count) && count >= 0 && Number.isFinite(sum)) {
-        Object.defineProperty(scores, '__oc_aggregate_stats', {
-          value: { keyCount: 0, count, avgAny: count ? sum / count : null, sum, aggregate: true, prefix: capitalized },
-          configurable: true,
-          enumerable: false
-        });
-      }
-      const adminCount = Number(row?.[prefix ? `${prefix}AdminRatingCount` : 'adminRatingCount']);
-      const adminAverage = Number(row?.[prefix ? `${prefix}AdminRatingAverage` : 'adminRatingAverage']);
-      const adminRawSum = Number(row?.[prefix ? `${prefix}AdminRatingSum` : 'adminRatingSum']);
-      const adminSum = Number.isFinite(adminRawSum)
-        ? adminRawSum
-        : (Number.isFinite(adminCount) && Number.isFinite(adminAverage) ? adminCount * adminAverage : 0);
-      if (aggregateReady && Number.isFinite(adminCount) && adminCount >= 0 && Number.isFinite(adminSum)) {
-        Object.defineProperty(scores, '__oc_admin_aggregate_stats', {
-          value: { count: adminCount, avgAny: adminCount ? adminSum / adminCount : null, sum: adminSum, aggregate: true },
-          configurable: true,
-          enumerable: false
-        });
-      }
-      if (aggregateReady && firebaseRatingsScope !== 'all') {
-        Object.defineProperty(scores, '__oc_prefer_aggregate', { value: true, configurable: true, enumerable: false });
-      }
-      return scores;
-    }
-
-    function normalizeEntryFromFirebase(row) {
-      return {
-        id: row.id,
-        title: row.title || '',
-        alternativeTitles: cleanAliasList(row.alternativeTitles || row.altTitles || row.aliases || row.alternativeNames || row.altNames || []),
-        type: row.type === 'ED' ? 'ED' : 'OP',
-        year: row.year === null || row.year === undefined || row.year === '' ? null : Number(row.year),
-        season: row.season || '',
-        studios: row.studios || (row.studio ? [row.studio] : []),
-        directors: row.directors || [],
-        performers: row.performers || [],
-        franchises: cleanFranchiseList(row.franchises || row.franchise || []),
-        image: row.image || '',
-        fallbackImage: row.fallbackImage || row.imageFallback || '',
-        uncertainPerformer: Boolean(row.uncertainPerformer),
-        uncertainDirector: Boolean(row.uncertainDirector),
-        uncertainImage: Boolean(row.uncertainImage),
-        sameSongGroupId: String(row.sameSongGroupId || row.songGroupId || '').trim(),
-        sameSongTitle: String(row.sameSongTitle || row.songGroupTitle || '').trim(),
-        link: row.link || '',
-        notes: row.notes || '',
-        isChinese: Boolean(row.isChinese || row.chinese || row.isChina || row.chineseOpening),
-        isMovie: Boolean(row.isMovie || row.movie || row.isFilm || row.filmOpening),
-        isShortened: Boolean(row.isShortened || row.shortened || row.isShort || row.short || row.shortOpening || row.shortenedOpening),
-        createdAt: row.createdAt || null,
-        updatedAt: row.updatedAt || null,
-        ratingAggregateVersion: Number(row.ratingAggregateVersion || 0),
-        scores: aggregateScoreMap(row),
-        songScores: aggregateScoreMap(row, 'song'),
-        visualScores: aggregateScoreMap(row, 'visual'),
-        customScores: {},
-        comments: {},
-        personalScores: {},
-        ratingUpdatedAt: {}
-      };
-    }
-
-    function rebuildEntriesFromFirebase() {
-      const next = firebaseOpenings.map(normalizeEntryFromFirebase);
-      const byId = new Map(next.map(e => [String(e.id), e]));
-      const profileAvatarNames = new Set(
-        (firebaseUserProfiles || [])
-          .filter(row => String(row.avatar || '').trim())
-          .flatMap(row => [
-            String(row.nickname || row.displayName || row.name || row.id || '').trim(),
-            String(row.nicknameKey || '').trim()
-          ])
-          .filter(Boolean)
-          .map(normalizedAccountName)
-      );
-      let avatarChanged = false;
-
-      firebaseRatings.forEach(r => {
-        const openingId = String(r.openingId || '');
-        const entry = byId.get(openingId);
-        const nickname = String(r.nickname || '').trim();
-        const score = normalizeOptionalNumber(r.score);
-        const songScore = normalizeOptionalNumber(r.songScore);
-        const visualScore = normalizeOptionalNumber(r.visualScore);
-        const personalScore = normalizeOptionalNumber(r.personalScore);
-        const customScores = normalizeCustomRatingScores(r.customScores);
-        const comment = String(r.comment || '').trim();
-
-        if (!entry || !nickname) return;
-        entry.ratingUpdatedAt = entry.ratingUpdatedAt || {};
-        entry.ratingUpdatedAt[nickname] = r.updatedAt || r.createdAt || null;
-        if (r.avatar) {
-          const av = String(r.avatar).trim();
-          const hasCanonicalAvatar = profileAvatarNames.has(normalizedAccountName(nickname));
-          if (av && !hasCanonicalAvatar && !avatarsMap[nickname]) {
-            avatarsMap[nickname] = av;
-            avatarChanged = true;
-          }
-        }
-        if (Number.isFinite(personalScore)) {
-          entry.personalScores = entry.personalScores || {};
-          entry.personalScores[nickname] = personalScore;
-        }
-        if (comment) {
-          entry.comments = entry.comments || {};
-          entry.comments[nickname] = comment;
-        }
-        if (Object.keys(customScores).length) {
-          entry.customScores = entry.customScores || {};
-          entry.customScores[nickname] = customScores;
-        }
-        if (Number.isFinite(score)) {
-          entry.scores = entry.scores || {};
-          entry.scores[nickname] = score;
-          if (Number.isFinite(songScore)) {
-            entry.songScores = entry.songScores || {};
-            entry.songScores[nickname] = songScore;
-          }
-          if (Number.isFinite(visualScore)) {
-            entry.visualScores = entry.visualScores || {};
-            entry.visualScores[nickname] = visualScore;
-          }
-        } else {
-          if (Number.isFinite(songScore)) {
-            entry.songScores = entry.songScores || {};
-            entry.songScores[nickname] = songScore;
-          }
-          if (Number.isFinite(visualScore)) {
-            entry.visualScores = entry.visualScores || {};
-            entry.visualScores[nickname] = visualScore;
-          }
-        }
-      });
-
-      const snapshotKey = openingsSnapshotKey(firebaseOpenings);
-      const catalogChanged = snapshotKey !== lastOpeningsSnapshotKey;
-      lastOpeningsSnapshotKey = snapshotKey;
-      entries = next;
-      rebuildFastIndexes({ catalogChanged });
-      publishAppData(catalogChanged ? 'catalog-updated' : 'ratings-updated');
-      if (avatarChanged) markAvatarsChanged();
-      if (activeTab === 'chart' && !catalogChanged && Date.now() < suppressChartRatingRefreshUntil) {
-        updateAccountDashboard();
-      } else {
-        scheduleVisibleRefresh({ forceFilters: catalogChanged });
-      }
-    }
-
-    function rowHasManualTopData(row) {
-      return !!(row && (
-        Array.isArray(row.OP) || Array.isArray(row.ED) ||
-        Array.isArray(row.op) || Array.isArray(row.ed) ||
-        Array.isArray(row.manualOP) || Array.isArray(row.manualED) ||
-        Array.isArray(row.excludedOP) || Array.isArray(row.excludedED) ||
-        Array.isArray(row.candidatesOP) || Array.isArray(row.candidatesED) ||
-        Array.isArray(row.pinsOP) || Array.isArray(row.pinsED)
-      ));
-    }
-
-    function manualRankRowIdentity(row) {
-      if (!row) return { display: '', safeKey: '' };
-      const nickname = String(row.nickname || row.displayName || row.name || '').trim();
-      const rawId = String(row.id || '').trim();
-      const nicknameKeyRaw = String(row.nicknameKey || '').trim();
-      const displayName = nickname || (rawId && rawId.indexOf('__') === -1 ? rawId : '');
-      const safeKey = nicknameKeyRaw || (displayName ? manualUserSafeKey(displayName) : rawId);
-      return { display: displayName || safeKey, safeKey };
-    }
-
-    function isCurrentManualRankRow(row) {
-      if (!myName || !row) return false;
-      const identity = manualRankRowIdentity(row);
-      const raw = String(myName || '').trim();
-      const safe = manualUserSafeKey(raw);
-      const candidates = [identity.display, identity.safeKey, row.nickname, row.displayName, row.name, row.id]
-        .map(v => String(v || '').trim())
-        .filter(Boolean);
-      return candidates.some(v => v.toLowerCase() === raw.toLowerCase() || manualUserSafeKey(v) === safe);
-    }
-
-    function shouldKeepLocalManualDraft(row) {
-      return !!(manualDirty && manualEditMode && isCurrentManualRankRow(row));
-    }
-
-    function mergeManualRankRowInto(target, row) {
-      if (!row || !rowHasManualTopData(row)) return;
-      if (shouldKeepLocalManualDraft(row)) return;
-      const identity = manualRankRowIdentity(row);
-      const display = identity.display;
-      const safeKey = identity.safeKey;
-      if (!display && !safeKey) return;
-      const provenanceKey = String(safeKey || manualUserSafeKey(display)).trim().toLowerCase();
-      if (row.manualCreated !== true && !CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(provenanceKey)) return;
-      const hasOP = Array.isArray(row.OP) || Array.isArray(row.manualOP) || Array.isArray(row.op);
-      const hasED = Array.isArray(row.ED) || Array.isArray(row.manualED) || Array.isArray(row.ed);
-      const hasExcludedOP = Array.isArray(row.excludedOP);
-      const hasExcludedED = Array.isArray(row.excludedED);
-      const op = Array.isArray(row.OP) ? row.OP.map(String) : (Array.isArray(row.manualOP) ? row.manualOP.map(String) : (Array.isArray(row.op) ? row.op.map(String) : []));
-      const ed = Array.isArray(row.ED) ? row.ED.map(String) : (Array.isArray(row.manualED) ? row.manualED.map(String) : (Array.isArray(row.ed) ? row.ed.map(String) : []));
-      const excludedOP = hasExcludedOP ? row.excludedOP.map(String) : [];
-      const excludedED = hasExcludedED ? row.excludedED.map(String) : [];
-      const candidatesOP = Array.isArray(row.candidatesOP) ? row.candidatesOP.map(String) : null;
-      const candidatesED = Array.isArray(row.candidatesED) ? row.candidatesED.map(String) : null;
-      const pinsOP = Array.isArray(row.pinsOP) ? sanitizeTopPins(row.pinsOP) : null;
-      const pinsED = Array.isArray(row.pinsED) ? sanitizeTopPins(row.pinsED) : null;
-      const prev = { ...(target[display] || {}), ...(safeKey ? (target[safeKey] || {}) : {}) };
-      const profileRow = {
-        ...prev,
-        nickname: display,
-        nicknameKey: safeKey || manualUserSafeKey(display)
-      };
-      if (hasOP) profileRow.OP = op.slice(0, 100);
-      else if (!Array.isArray(profileRow.OP)) profileRow.OP = [];
-      if (hasED) profileRow.ED = ed.slice(0, 100);
-      else if (!Array.isArray(profileRow.ED)) profileRow.ED = [];
-      if (hasExcludedOP) profileRow.excludedOP = Array.from(new Set(excludedOP));
-      else if (!Array.isArray(profileRow.excludedOP)) profileRow.excludedOP = [];
-      if (hasExcludedED) profileRow.excludedED = Array.from(new Set(excludedED));
-      else if (!Array.isArray(profileRow.excludedED)) profileRow.excludedED = [];
-      if (candidatesOP) profileRow.candidatesOP = Array.from(new Set(candidatesOP));
-      if (candidatesED) profileRow.candidatesED = Array.from(new Set(candidatesED));
-      if (pinsOP) profileRow.pinsOP = pinsOP;
-      if (pinsED) profileRow.pinsED = pinsED;
-      target[display] = profileRow;
-      if (profileRow.nicknameKey && profileRow.nicknameKey !== display) target[profileRow.nicknameKey] = profileRow;
-    }
-
-    function persistManualRanksCache() {
-      try { window.storage && window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); } catch (e) {}
-    }
-
-    function refreshAfterManualRankCacheChange() {
-      markManualRanksChanged();
-      scheduleVisibleRefresh();
-    }
-
-    function rebuildManualRanksFromFirebase() {
-      if (!Array.isArray(firebaseManualRanks)) return;
-      const next = {};
-      firebaseManualRanks.forEach(row => mergeManualRankRowInto(next, row));
-      manualRanks = next;
-      persistManualRanksCache();
-      refreshAfterManualRankCacheChange();
-      publishAppData('manual-ranks-updated');
-    }
-
-    function rebuildManualRanksFromRatingDocs() {
-      if (!Array.isArray(firebaseRatings)) return;
-      const next = { ...manualRanks };
-      firebaseRatings.forEach(row => {
-        const openingId = String(row.openingId || '').trim();
-        if (openingId === '__manualRanks' || rowHasManualTopData(row)) {
-          mergeManualRankRowInto(next, row);
-        }
-      });
-      manualRanks = next;
-      persistManualRanksCache();
-      refreshAfterManualRankCacheChange();
-      publishAppData('manual-ranks-updated');
-    }
-
-    function rebuildUserProfilesFromFirebase() {
-      const next = { ...avatarsMap };
-      (firebaseUserProfiles || []).forEach(row => {
-        const nickname = String(row.nickname || row.displayName || row.name || row.id || '').trim();
-        const avatar = String(row.avatar || '').trim();
-        if (nickname && avatar) next[nickname] = avatar;
-      });
-      avatarsMap = next;
-      const currentProfile = accountProfile(myName);
-      const currentAvatar = String(currentProfile?.avatar || '').trim();
-      if (currentAvatar && String(currentProfile?.authUid || '') === String(authenticatedUid || '')) {
-        myAvatar = currentAvatar;
-        avatarBtn.textContent = currentAvatar;
-        try { window.storage && window.storage.set(AVATAR_KEY, currentAvatar, false); }
-        catch (e) { console.error('Could not cache watched profile avatar', e); }
-      }
-      markAvatarsChanged();
-      try { window.storage && window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); } catch (e) {}
-      scheduleVisibleRefresh();
-      refreshDailyUi();
-      publishAppData('user-profiles-updated');
-    }
-
-    function setStatus(msg, isError) {
-      statusEl.textContent = msg;
-      statusEl.style.color = isError ? '#FF2E63' : '#8B8698';
-      if (msg) setTimeout(() => { if (statusEl.textContent === msg) statusEl.textContent = ''; }, 3000);
-    }
-
-    function normalizedAccountName(name) {
-      return String(name || '').trim().toLowerCase().replace(/[^a-z–∞-—è—ë0-9_-]+/gi, '_').slice(0, 60);
-    }
-
-    function isAdminNickname(name = myName) {
-      return ADMIN_NICKNAMES.has(normalizedAccountName(name));
-    }
-
-    function isAdminUid(uid = authenticatedUid) {
-      return ADMIN_UIDS.has(String(uid || ''));
-    }
-
-    function isAdmin() {
-      return accessLevel === 'admin' && isAdminUid();
-    }
-
-    function isCatalogAdmin() {
-      return isAdmin() && CATALOG_ADMIN_WORKSPACE;
-    }
-
-    function updateAccessUi() {
-      document.querySelectorAll('.oc-admin-only').forEach(el => el.classList.toggle('oc-locked', !isAdmin()));
-      document.querySelectorAll('.oc-catalog-admin-only').forEach(el => el.classList.toggle('oc-locked', !isCatalogAdmin()));
-      if (accessBadge) {
-        accessBadge.textContent = isAdmin() ? '–∞–¥–º–∏–Ω' : (accessLevel ? '–≤—Ö–æ–¥' : '–≥–æ—Å—Ç—å');
-        accessBadge.classList.toggle('admin', isAdmin());
-      }
-      updateAccountDashboard();
-      publishAppData('account-updated');
-    }
-
-    function welcomeStorageKey() {
-      return `${WELCOME_ACK_KEY}:${normalizedAccountName(myName)}`;
-    }
-
-    function updateAccountDashboard() {
-      const signedIn = Boolean(accessLevel && authenticatedUid && myName);
-      if (accountWelcome) {
-        const acknowledged = signedIn && (localStorage.getItem(welcomeStorageKey()) === '1' || accountProfile(myName)?.welcomeAcknowledged === true);
-        accountWelcome.classList.toggle('hidden', !signedIn || acknowledged);
-      }
-      if (catalogProgress) catalogProgress.classList.toggle('hidden', !signedIn);
-      if (!signedIn || !entries.length) return;
-      const visibleEntries = entries.filter(entry => entryPassesHiddenFlags(entry, filters.hideChinese, filters.hideMovie, filters.hideShortened));
-      const rated = visibleEntries.filter(entry => scoreFor(entry, myName) !== null);
-      const ratedOp = rated.filter(entry => entry.type === 'OP').length;
-      const ratedEd = rated.filter(entry => entry.type === 'ED').length;
-      const percent = visibleEntries.length ? Math.round(rated.length * 100 / visibleEntries.length) : 0;
-      $('#oc-catalog-progress-title').textContent = `–û—Ü–µ–Ω–µ–Ω–æ ${rated.length} –∏–∑ ${visibleEntries.length} ¬∑ ${percent}%`;
-      $('#oc-catalog-progress-detail').textContent = `OP ${ratedOp} ¬∑ ED ${ratedEd} ¬∑ –æ—Å—Ç–∞–ª–æ—Å—å ${Math.max(0, visibleEntries.length - rated.length)}`;
-      $('#oc-catalog-progress-fill').style.width = `${percent}%`;
-    }
-
-    function showAuthModal(message) {
-      if (!authModal) return;
-      authError.textContent = message || '';
-      if (authPassInput) authPassInput.disabled = false;
-      authModal.classList.remove('hidden');
-      setTimeout(() => authIdentifierInput && authIdentifierInput.focus(), 0);
-    }
-
-    function hideAuthModal() {
-      if (authModal) authModal.classList.add('hidden');
-      if (authError) authError.textContent = '';
-      if (authPassInput) {
-        authPassInput.value = '';
-        authPassInput.disabled = true;
-      }
-    }
-
-    function showRegistrationModal() {
-      hideAuthModal();
-      if (registerError) registerError.textContent = '';
-      if (registerNameInput && !registerNameInput.value) registerNameInput.value = '';
-      if (registerPassInput) registerPassInput.disabled = false;
-      if (registerPassConfirmInput) registerPassConfirmInput.disabled = false;
-      registerModal?.classList.remove('hidden');
-      setTimeout(() => registerNameInput?.focus(), 0);
-    }
-
-    function hideRegistrationModal() {
-      registerModal?.classList.add('hidden');
-      if (registerError) registerError.textContent = '';
-      if (registerPassInput) {
-        registerPassInput.value = '';
-        registerPassInput.disabled = true;
-      }
-      if (registerPassConfirmInput) {
-        registerPassConfirmInput.value = '';
-        registerPassConfirmInput.disabled = true;
-      }
-    }
-
-    function requireAccount(message = '–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –æ—Ç–∫—Ä—ã—Ç—å —ç—Ç–æ—Ç —Ä–∞–∑–¥–µ–ª.') {
-      if (accessLevel) return true;
-      showAuthModal(message);
-      return false;
-    }
-
-    async function applyPersonalAccountSession(result, remember = true) {
-      const profile = result?.profile;
-      const nickname = String(profile?.nickname || profile?.nicknameKey || profile?.id || '').trim();
-      if (!nickname) throw new Error('–ù–µ —É–¥–∞–ª–æ—Å—å –æ–ø—Ä–µ–¥–µ–ª–∏—Ç—å –∞–∫–∫–∞—É–Ω—Ç.');
-      authenticatedUid = String(result?.user?.uid || profile?.authUid || '');
-      const index = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(nickname));
-      if (index >= 0) firebaseUserProfiles[index] = { ...firebaseUserProfiles[index], ...profile };
-      else firebaseUserProfiles.push(profile);
-      const profileAvatar = String(profile?.avatar || '').trim();
-      if (profileAvatar) {
-        myAvatar = profileAvatar;
-        avatarBtn.textContent = profileAvatar;
-        try { await window.storage.set(AVATAR_KEY, profileAvatar, false); }
-        catch (e) { console.error('Could not cache profile avatar', e); }
-      }
-      await saveName(nickname);
-      localStorage.setItem(PRIMARY_NAME_KEY, nickname);
-      nameInput.value = nickname;
-      accessLevel = isAdminUid() ? 'admin' : 'user';
-      sessionStorage.setItem(ACCESS_KEY, accessLevel);
-      hideAuthModal();
-      updateAccessUi();
-      render();
-      if (activeTab === 'profile') renderProfile();
-      setStatus(`–í—Ö–æ–¥ –≤—ã–ø–æ–ª–Ω–µ–Ω: ${nickname} ‚úì`);
-      return true;
-    }
-
-    async function commitPersonalLogin() {
-      const identifier = String(authIdentifierInput?.value || '').trim();
-      const password = String(authPassInput?.value || '');
-      if (!identifier || !password) { showAuthModal('–í–≤–µ–¥–∏ email –∏ –ª–∏—á–Ω—ã–π –ø–∞—Ä–æ–ª—å.'); return false; }
-      if (!identifier.includes('@')) { showAuthModal('–î–ª—è –±–µ–∑–æ–ø–∞—Å–Ω–æ–≥–æ –≤—Ö–æ–¥–∞ —Ç–µ–ø–µ—Ä—å –Ω—É–∂–Ω–æ —É–∫–∞–∑—ã–≤–∞—Ç—å email.'); return false; }
-      const originalText = authSaveBtn?.textContent || '–í–æ–π—Ç–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç';
-      if (authSaveBtn) { authSaveBtn.disabled = true; authSaveBtn.textContent = '–í—Ö–æ–¥–∏–º‚Ä¶'; }
-      if (authError) authError.textContent = '–ü—Ä–æ–≤–µ—Ä—è–µ–º –¥–∞–Ω–Ω—ã–µ‚Ä¶';
-      try {
-        const db = await waitForFirebaseDb();
-        const result = await db.loginPersonalAccount(identifier, password, Boolean(authRememberInput?.checked));
-        return await applyPersonalAccountSession(result, Boolean(authRememberInput?.checked));
-      } catch (error) {
-        console.error('Personal account login failed', error);
-        const code = String(error?.code || '');
-        const message = code === 'auth/invalid-credential' || code === 'auth/wrong-password' ? '–ù–µ–≤–µ—Ä–Ω—ã–π email –∏–ª–∏ –ª–∏—á–Ω—ã–π –ø–∞—Ä–æ–ª—å.' : (error?.message || '–ù–µ —É–¥–∞–ª–æ—Å—å –≤–æ–π—Ç–∏.');
-        showAuthModal(message);
-        return false;
-      } finally {
-        if (authSaveBtn) { authSaveBtn.disabled = false; authSaveBtn.textContent = originalText; }
-      }
-    }
-
-    function ensureAdmin() {
-      if (isAdmin()) return true;
-      setStatus('–ù—É–∂–µ–Ω –∞–¥–º–∏–Ω-–ø–∞—Ä–æ–ª—å: –¥–æ–±–∞–≤–ª–µ–Ω–∏–µ, —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏–µ –∏ —É–¥–∞–ª–µ–Ω–∏–µ –¥–æ—Å—Ç—É–ø–Ω—ã —Ç–æ–ª—å–∫–æ –∞–¥–º–∏–Ω—É.', true);
-      return false;
-    }
-
-    function ensureCatalogAdmin() {
-      if (isCatalogAdmin()) return true;
-      setStatus('–†–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏–µ –∫–∞—Ç–∞–ª–æ–≥–∞ –¥–æ—Å—Ç—É–ø–Ω–æ —Ç–æ–ª—å–∫–æ –≤ –∞–¥–º–∏–Ω-–ø–∞–Ω–µ–ª–∏.', true);
-      return false;
-    }
-
-    function accountProfile(name) {
-      const safe = normalizedAccountName(name);
-      return firebaseUserProfiles.find(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === safe) || null;
-    }
-
-    function knownLegacyAccount(name) {
-      const safe = normalizedAccountName(name);
-      if (!safe) return false;
-      if (accountProfile(name)) return true;
-      if (Object.keys(avatarsMap || {}).some(key => normalizedAccountName(key) === safe)) return true;
-      return entries.some(entry => ['scores', 'songScores', 'visualScores', 'personalScores'].some(field =>
-        entry[field] && Object.keys(entry[field]).some(key => normalizedAccountName(key) === safe)
-      ));
-    }
-
-    function showNameModal(message, candidate = '') {
-      if (!nameModal) return;
-      modalNameError.textContent = message || '';
-      modalNameInput.value = String(candidate || myName || nameInput.value.trim() || '').trim();
-      if (modalAccountEmail) modalAccountEmail.value = '';
-      if (modalAccountPass) {
-        modalAccountPass.value = '';
-        modalAccountPass.disabled = false;
-      }
-      nameModal.classList.remove('hidden');
-      setTimeout(() => modalNameInput.focus(), 0);
-    }
-
-    function hideNameModal() {
-      if (nameModal) nameModal.classList.add('hidden');
-      if (modalNameError) modalNameError.textContent = '';
-      if (modalAccountEmail) modalAccountEmail.value = '';
-      if (modalAccountPass) {
-        modalAccountPass.value = '';
-        modalAccountPass.disabled = true;
-      }
-      nameInput.value = myName || localStorage.getItem(PRIMARY_NAME_KEY) || '';
-    }
-
-    async function commitNickname(value) {
-      const val = (value || '').trim();
-      if (!val) {
-        showNameModal('–í–≤–µ–¥–∏—Ç–µ –Ω–∏–∫–Ω–µ–π–º, —á—Ç–æ–±—ã –ø—Ä–æ–¥–æ–ª–∂–∏—Ç—å.');
-        return false;
-      }
-      if (accessLevel === 'admin' && !isAdminNickname(val)) {
-        showNameModal('–ê–¥–º–∏–Ω—Å–∫–∏–π —Ä–µ–∂–∏–º –∑–∞–∫—Ä–µ–ø–ª—ë–Ω —Ç–æ–ª—å–∫–æ –∑–∞ –∞–∫–∫–∞—É–Ω—Ç–∞–º–∏: –ü—ë—Å –∫–æ—à–∞—á–∏–π, Toxexex, Egortos –∏ –ö–æ—Ñ–∞.', val);
-        return false;
-      }
-      const profile = accountProfile(val);
-      if (profile && profile.authUid) {
-        if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
-          showNameModal(PERSONAL_ACCOUNT_DISABLED_MESSAGE, val);
-          return false;
-        }
-        const email = String(modalAccountEmail?.value || '').trim();
-        const password = String(modalAccountPass?.value || '');
-        if (!email) {
-          showNameModal('–í–≤–µ–¥–∏—Ç–µ email, –ø—Ä–∏–≤—è–∑–∞–Ω–Ω—ã–π –∫ —ç—Ç–æ–º—É –∞–∫–∫–∞—É–Ω—Ç—É.', val);
-          return false;
-        }
-        if (!password) {
-          showNameModal('–î–ª—è —ç—Ç–æ–≥–æ –∞–∫–∫–∞—É–Ω—Ç–∞ —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω –ª–∏—á–Ω—ã–π –ø–∞—Ä–æ–ª—å.', val);
-          return false;
-        }
-        try {
-          if (!window.OPED_DB || typeof window.OPED_DB.loginAccount !== 'function') throw new Error('–°–µ—Ä–≤–∏—Å –µ—â—ë –∑–∞–≥—Ä—É–∂–∞–µ—Ç—Å—è. –ü–æ–ø—Ä–æ–±—É–π —á–µ—Ä–µ–∑ –ø–∞—Ä—É —Å–µ–∫—É–Ω–¥.');
-          const user = await window.OPED_DB.loginAccount(email, password, Boolean(rememberAccountInput?.checked));
-          if (profile.authUid && user.uid !== profile.authUid) throw new Error('–ü–∞—Ä–æ–ª—å –æ—Ç–Ω–æ—Å–∏—Ç—Å—è –∫ –¥—Ä—É–≥–æ–º—É –∞–∫–∫–∞—É–Ω—Ç—É.');
-          authenticatedUid = String(user.uid || '');
-          accessLevel = isAdminUid() ? 'admin' : 'user';
-          sessionStorage.setItem(ACCESS_KEY, accessLevel);
-        } catch (error) {
-          showNameModal('–ù–µ —É–¥–∞–ª–æ—Å—å –≤–æ–π—Ç–∏: ' + (error?.code === 'auth/invalid-credential' ? '–Ω–µ–≤–µ—Ä–Ω—ã–π –ø–∞—Ä–æ–ª—å.' : (error?.message || error)), val);
-          return false;
-        }
-      } else if (!knownLegacyAccount(val) && normalizedAccountName(val) !== normalizedAccountName(myName)) {
-        showNameModal('–¢–∞–∫–æ–≥–æ –∞–∫–∫–∞—É–Ω—Ç–∞ –µ—â—ë –Ω–µ—Ç. –ó–∞—Ä–µ–≥–∏—Å—Ç—Ä–∏—Ä—É–π –µ–≥–æ –≤ –±–ª–æ–∫–µ ¬´–õ–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç¬ª –Ω–∞ —Å—Ç—Ä–∞–Ω–∏—Ü–µ –ø—Ä–æ—Ñ–∏–ª—è.', val);
-        return false;
-      }
-      nameInput.value = val;
-      await saveName(val);
-      localStorage.setItem(PRIMARY_NAME_KEY, val);
-      hideNameModal();
-      populateFilterOptions();
-      render();
-      renderSeasonViews();
-      if (activeTab === 'profile') renderProfile();
-      refreshDailyUi();
-      setStatus('–í—Ö–æ–¥ –≤—ã–ø–æ–ª–Ω–µ–Ω: ' + val + ' ‚úì');
-      return true;
-    }
-
-    function ensureNickname() {
-      if (!requireAccount('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –ø—Ä–æ–¥–æ–ª–∂–∏—Ç—å.')) return false;
-      if (myName) return true;
-      showNameModal('–í–≤–µ–¥–∏—Ç–µ –Ω–∏–∫–Ω–µ–π–º, —á—Ç–æ–±—ã –æ—Ü–µ–Ω–∏–≤–∞—Ç—å —Ç—Ä–µ–∫–∏.');
-      return false;
-    }
-
-    function uid() {
-      return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    }
-
-    function isPersonalScale() {
-      return ratingScale === 'five';
-    }
-
-    function normalizePublicScore(value) {
-      const num = normalizeOptionalNumber(value);
-      if (num === null) return null;
-      return Math.max(0.5, Math.min(10, Number(num.toFixed(1))));
-    }
-
-    function scoreStats(scores) {
-      if (!scores || typeof scores !== 'object') return { keyCount: 0, count: 0, avgAny: null, sum: 0 };
-      const keys = Object.keys(scores);
-      const cached = scores.__oc_stats;
-      if (cached && cached.keyCount === keys.length) return cached;
-      const aggregate = scores.__oc_aggregate_stats;
-      if (scores.__oc_prefer_aggregate && aggregate) return aggregate;
-      if (!keys.length && aggregate && Number(aggregate.count) > 0) return aggregate;
-      let sum = 0;
-      let count = 0;
-      keys.forEach(key => {
-        const val = normalizePublicScore(scores[key]);
-        if (val !== null) { sum += val; count += 1; }
-      });
-      const stats = { keyCount: keys.length, count, avgAny: count ? sum / count : null, sum };
-      try { Object.defineProperty(scores, '__oc_stats', { value: stats, configurable: true, enumerable: false }); }
-      catch (e) { scores.__oc_stats = stats; }
-      return stats;
-    }
-
-    function scoreValues(scores) {
-      return Object.keys(scores || {}).map(k => normalizePublicScore(scores[k])).filter(v => v !== null);
-    }
-
-    function ratingCount(scores) {
-      return scoreStats(scores).count;
-    }
-
-    function avg(scores, minVotes = MIN_PUBLIC_VOTES) {
-      const stats = scoreStats(scores);
-      if (stats.count < minVotes) return null;
-      return stats.avgAny;
-    }
-
-    function avgAny(scores) {
-      return scoreStats(scores).avgAny;
-    }
-
-    function adminScoreStats(scores) {
-      if (scores?.__oc_prefer_aggregate && scores.__oc_admin_aggregate_stats) return scores.__oc_admin_aggregate_stats;
-      const values = Object.entries(scores || {})
-        .filter(([nickname]) => isAdminNickname(nickname))
-        .map(([,value]) => normalizePublicScore(value))
-        .filter(value => value !== null);
-      if (!values.length && scores?.__oc_admin_aggregate_stats) return scores.__oc_admin_aggregate_stats;
-      return {
-        count: values.length,
-        avgAny: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
-      };
-    }
-
-    function adminAvg(scores, minVotes = 1) {
-      const stats = adminScoreStats(scores);
-      return stats.count >= minVotes ? stats.avgAny : null;
-    }
-
-    function adminRatingCount(scores) {
-      return adminScoreStats(scores).count;
-    }
-
-    function visibleAverageMarkup(entry, generalScore = avg(entry?.scores)) {
-      const general = formatScore(generalScore);
-      if (!isAdmin()) return general;
-      const adminScore = adminAvg(entry?.scores);
-      const adminCount = adminRatingCount(entry?.scores);
-      return `${general}<span class="oc-season-score-sub">–∞–¥–º. ${formatScore(adminScore)} ¬∑ ${adminCount}</span>`;
-    }
-
-    function normalizedPublicScoreRatio(score) {
-      const n = Number(score);
-      if (!Number.isFinite(n)) return 0;
-      return Math.max(0, Math.min(1, (n - 1) / 9));
-    }
-
-    function ringColor(score) {
-      if (score === null) return '#2A2435';
-      const ratio = normalizedPublicScoreRatio(score);
-      if (ratio >= 0.75) return '#08D9D6';
-      if (ratio >= 0.45) return '#FFC857';
-      return '#FF2E63';
-    }
-
-    function formatScore(v) {
-      if (v === null || v === undefined || v === '') return '‚Äî';
-      const n = Number(v);
-      if (!Number.isFinite(n)) return '‚Äî';
-      return Number.isInteger(n) ? String(n) : n.toFixed(1);
-    }
-
-    function formatFiveScore(v) {
-      const score = Math.max(1, Math.min(5, Math.round(Number(v) || 1)));
-      return FIVE_SCORE_LABELS[score] || String(score);
-    }
-
-    function formatInputScore(v) {
-      return isPersonalScale() ? formatFiveScore(v) : formatScore(v);
-    }
-
-    function scaleStep() {
-      return ratingScale === 'half' ? 0.5 : 1;
-    }
-
-    function ratingMax() {
-      return ratingScale === 'five' ? 5 : 10;
-    }
-
-    function defaultScore() {
-      return ratingScale === 'five' ? 3 : 5;
-    }
-
-    function normalizedScoreRatio(score) {
-      const min = ratingMin();
-      const max = ratingMax();
-      const n = Number(score);
-      if (!Number.isFinite(n) || max <= min) return 0;
-      return Math.max(0, Math.min(1, (n - min) / (max - min)));
-    }
-
-    function normalizeOptionalNumber(value) {
-      if (value === null || value === undefined || String(value).trim() === '') return null;
-      const num = Number(value);
-      return Number.isFinite(num) ? num : null;
-    }
-
-    function scoreToCurrentScale(value) {
-      const num = normalizeOptionalNumber(value);
-      if (num === null) return null;
-      return Math.max(ratingMin(), Math.min(ratingMax(), Number(num.toFixed(1))));
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str || '';
-      return div.innerHTML;
-    }
-
-    function normalizeUrl(url) {
-      if (!url) return '';
-      const clean = String(url).trim();
-      if (/^(?:\.{0,2}\/|images\/)/i.test(clean)) return clean;
-      if (!/^https?:\/\//i.test(clean)) return 'https://' + clean;
-      return clean;
-    }
-
-    window.ocUseFallbackImage = function(img) {
-      if (!img) return;
-      const fallback = String(img.dataset.fallback || '').trim();
-      if (fallback && img.dataset.fallbackTried !== '1') {
-        img.dataset.fallbackTried = '1';
-        img.src = fallback;
-        return;
-      }
-      img.replaceWith(document.createTextNode('–Ω–µ—Ç –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏—è'));
-    };
-
-    document.addEventListener('error', event => {
-      const image = event.target;
-      if (!(image instanceof HTMLImageElement)) return;
-      if (image.dataset.removeOnError === '1') image.remove();
-      else window.ocUseFallbackImage(image);
-    }, true);
-
-    function safeExternalUrl(url) {
-      const normalized = normalizeUrl(String(url || '').trim());
-      if (!normalized) return '';
-      try {
-        const parsed = new URL(normalized);
-        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
-        return parsed.href;
-      } catch (e) {
-        return '';
-      }
-    }
-
-    function getDirectVideoType(url) {
-      const href = safeExternalUrl(url);
-      if (!href) return '';
-      try {
-        const parsed = new URL(href);
-        const text = `${parsed.pathname} ${parsed.search}`.toLowerCase();
-        if (/\.webm(?:$|[?#&\s])/.test(text) || text.includes('.webm')) return 'video/webm';
-        if (/\.mp4(?:$|[?#&\s])/.test(text) || text.includes('.mp4')) return 'video/mp4';
-        if (/\.ogg(?:$|[?#&\s])/.test(text) || text.includes('.ogv')) return 'video/ogg';
-      } catch (e) {}
-      return '';
-    }
-
-    function getVideoEmbedUrl(url) {
-      const href = safeExternalUrl(url);
-      if (!href || getDirectVideoType(href)) return '';
-      try {
-        const parsed = new URL(href);
-        const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
-        if (host === 'youtu.be') {
-          const id = parsed.pathname.split('/').filter(Boolean)[0];
-          return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
-        }
-        if (host.endsWith('youtube.com')) {
-          if (parsed.pathname.startsWith('/embed/')) return `${parsed.origin}${parsed.pathname}?autoplay=1&rel=0`;
-          if (parsed.pathname.startsWith('/shorts/')) {
-            const id = parsed.pathname.split('/').filter(Boolean)[1];
-            return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
-          }
-          const id = parsed.searchParams.get('v');
-          return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
-        }
-        if (host.endsWith('vimeo.com')) {
-          const id = parsed.pathname.split('/').filter(Boolean).find(part => /^\d+$/.test(part));
-          return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}?autoplay=1` : '';
-        }
-        if (host.endsWith('rutube.ru')) {
-          const parts = parsed.pathname.split('/').filter(Boolean);
-          const idx = parts.findIndex(part => part === 'video');
-          const id = idx >= 0 ? parts[idx + 1] : '';
-          return id ? `https://rutube.ru/play/embed/${encodeURIComponent(id)}` : '';
-        }
-      } catch (e) {}
-      return '';
-    }
-
-    function renderOpeningVideoBlock(entry) {
-      const imageInner = entry.image
-        ? `<img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${escapeHtml(entry.title)}">`
-        : escapeHtml(entry.type || 'OP');
-      const imageBlock = `<div class="oc-eval-image oc-opening-plain-image">${imageInner}</div>`;
-      const href = safeExternalUrl(entry.link);
-      if (!href) return imageBlock;
-      const directType = getDirectVideoType(href);
-      const embedUrl = directType ? '' : getVideoEmbedUrl(href);
-      return `<button type="button" class="oc-video-cover" data-video-url="${escapeHtml(href)}" data-video-type="${escapeHtml(directType)}" data-embed-url="${escapeHtml(embedUrl)}" title="–ó–∞–ø—É—Å—Ç–∏—Ç—å –≤–∏–¥–µ–æ">${imageBlock}</button>`;
-    }
-
-    function bindVideoEmbeds(root) {
-      const scope = root || document;
-      scope.querySelectorAll('.oc-video-cover').forEach(videoCover => {
-        if (videoCover.dataset.videoBound === '1') return;
-        videoCover.dataset.videoBound = '1';
-        videoCover.addEventListener('click', () => {
-          const videoUrl = videoCover.dataset.videoUrl || '';
-          const videoType = videoCover.dataset.videoType || '';
-          const embedUrl = videoCover.dataset.embedUrl || '';
-          if (videoType && videoUrl) {
-            videoCover.outerHTML = `<div class="oc-video-frame"><video controls autoplay playsinline preload="metadata"><source src="${escapeHtml(videoUrl)}" type="${escapeHtml(videoType)}">–í–∏–¥–µ–æ –Ω–µ —É–¥–∞–ª–æ—Å—å –≤—Å—Ç—Ä–æ–∏—Ç—å. –û—Ç–∫—Ä–æ–π—Ç–µ —Å—Å—ã–ª–∫—É –æ—Ç–¥–µ–ª—å–Ω–æ.</video></div>`;
-          } else if (embedUrl) {
-            videoCover.outerHTML = `<div class="oc-video-frame"><iframe src="${escapeHtml(embedUrl)}" title="–í–∏–¥–µ–æ" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
-          } else if (videoUrl) {
-            window.open(videoUrl, '_blank', 'noopener,noreferrer');
-          }
-        });
-      });
-    }
-
-    function bindOpeningVideoEmbed() {
-      if (!openingModal) return;
-      bindVideoEmbeds(openingModal);
-    }
-
-    function parseList(str) {
-      return (str || '').split(',').map(s => s.trim()).filter(Boolean);
-    }
-
-    function parseAliasList(str) {
-      return String(str || '')
-        .split(/\n|;/)
-        .flatMap(part => part.split(' / '))
-        .map(s => s.trim())
-        .filter(Boolean);
-    }
-
-    function cleanList(value) {
-      return Array.isArray(value) ? value.map(v => String(v).trim()).filter(Boolean) : parseList(value);
-    }
-
-    function parseFranchiseList(str) {
-      return String(str || '')
-        .replace(/\r\n/g, '\n')
-        .split('\n')
-        .map(s => s.trim())
-        .filter(Boolean);
-    }
-
-    function cleanFranchiseList(value) {
-      const raw = Array.isArray(value)
-        ? value.flatMap(v => parseFranchiseList(String(v || '')))
-        : parseFranchiseList(value);
-      return Array.from(new Set(raw.map(v => String(v).trim()).filter(Boolean)));
-    }
-
-    function cleanAliasList(value) {
-      const raw = Array.isArray(value) ? value : parseAliasList(value);
-      return Array.from(new Set(raw.map(v => String(v).trim()).filter(Boolean)));
-    }
-
-    function cleanTitleForAutoAlias(title) {
-      let value = String(title || '').trim();
-      if (!value) return '';
-      const noisyBlock = /(?:\b(?:ncop|nced|op|ed|opening|ending|open|version|ver|tv\s*size|creditless|clean|–æ–ø–µ–Ω–∏–Ω–≥|–æ–ø–µ–Ω|—ç–Ω–¥–∏–Ω–≥|–≤–µ—Ä—Å–∏—è|–≤–µ—Ä—Å|–≤–µ—Ä)\b|\d)/i;
-      value = value.replace(/[\(\[\{„ÄêÔºª][^\)\]\}„ÄëÔºΩ]*[\)\]\}„ÄëÔºΩ]/g, part => noisyBlock.test(part) ? ' ' : part);
-      value = value
-        .replace(/\b(?:ncop|nced)\b/gi, ' ')
-        .replace(/\b(?:op|ed)\s*\d*[a-z–∞-—è—ë]?\b/gi, ' ')
-        .replace(/\b(?:opening|ending|open)\s*\d*[a-z–∞-—è—ë]?\b/gi, ' ')
-        .replace(/\b(?:version|ver)\.?\s*\d*[a-z–∞-—è—ë]?\b/gi, ' ')
-        .replace(/\b(?:–æ–ø–µ–Ω–∏–Ω–≥|–æ–ø–µ–Ω|—ç–Ω–¥–∏–Ω–≥)\s*\d*[a-z–∞-—è—ë]?\b/gi, ' ')
-        .replace(/\b(?:–≤–µ—Ä—Å–∏—è|–≤–µ—Ä—Å|–≤–µ—Ä)\.?\s*\d*[a-z–∞-—è—ë]?\b/gi, ' ')
-        .replace(/\b(?:tv\s*size|creditless|clean)\b/gi, ' ')
-        .replace(/[‚Ññ#]?\s*\b\d+(?:\.\d+)?\b/g, ' ')
-        .replace(/\b(?:v|vol)\.?\s*\d+\b/gi, ' ')
-        .replace(/\s*[\-‚Äì‚Äî:|/\\]+\s*$/g, ' ')
-        .replace(/^[\s\-‚Äì‚Äî:|/\\]+|[\s\-‚Äì‚Äî:|/\\]+$/g, ' ')
-        .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, ' ')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-      return value;
-    }
-
-    function alternativeTitlesForSave(title, value) {
-      return cleanAliasList(value);
-    }
-
-    function compactFranchiseForCompare(name) {
-      return String(name || '')
-        .trim()
-        .toLowerCase()
-        .replace(/—ë/g, '–µ')
-        .replace(/&/g, 'and')
-        .replace(/[^a-z–∞-—è–µ0-9]+/gi, '')
-        .trim();
-    }
-
-    function franchiseWordsForCompare(name) {
-      return String(name || '')
-        .trim()
-        .toLowerCase()
-        .replace(/—ë/g, '–µ')
-        .split(/[^a-z–∞-—è–µ0-9]+/gi)
-        .map(w => w.trim())
-        .filter(w => w && !['the', 'a', 'an', 'season', '—Å–µ–∑–æ–Ω', 'tv', 'ova', 'ona', 'movie', '—Ñ–∏–ª—å–º'].includes(w));
-    }
-
-    function knownFranchiseNames(exceptId = null) {
-      const names = [];
-      const seen = new Set();
-      entries.forEach(entry => {
-        if (exceptId && String(entry.id) === String(exceptId)) return;
-        (entry.franchises || []).forEach(name => {
-          const clean = String(name || '').trim();
-          const key = clean.toLowerCase().replace(/—ë/g, '–µ').replace(/\s+/g, ' ');
-          if (!clean || seen.has(key)) return;
-          seen.add(key);
-          names.push(clean);
-        });
-      });
-      return names;
-    }
-
-    function findSimilarFranchiseName(name, exceptId = null) {
-      const source = String(name || '').trim();
-      const target = compactFranchiseForCompare(source);
-      if (target.length < 4) return null;
-
-      const targetWords = franchiseWordsForCompare(source);
-      let best = null;
-
-      knownFranchiseNames(exceptId).forEach(existing => {
-        const other = compactFranchiseForCompare(existing);
-        if (!other || other.length < 4) return;
-
-        if (other === target) {
-          best = { name: existing, score: 999, distance: 0 };
-          return;
-        }
-
-        let score = 0;
-        const maxLen = Math.max(target.length, other.length);
-        const minLen = Math.min(target.length, other.length);
-
-        if (minLen >= 5 && (target.includes(other) || other.includes(target))) {
-          score = 86 + (minLen / maxLen) * 10;
-        } else {
-          const lengthDiff = Math.abs(target.length - other.length);
-          if (lengthDiff > Math.max(4, Math.floor(maxLen * 0.35))) return;
-          const dist = levenshteinDistance(target, other);
-          const ratio = 1 - dist / maxLen;
-          const allowedDistance = maxLen <= 8 ? 2 : (maxLen <= 14 ? 3 : 4);
-          if (dist <= allowedDistance || ratio >= 0.82) score = 70 + ratio * 20 - dist;
-        }
-
-        const otherWords = franchiseWordsForCompare(existing);
-        if (targetWords.length && otherWords.length) {
-          const otherSet = new Set(otherWords);
-          const common = targetWords.filter(w => otherSet.has(w)).length;
-          const coverage = common / Math.min(targetWords.length, otherWords.length);
-          if (common >= 2 && coverage >= 0.55) score = Math.max(score, 78 + coverage * 14);
-        }
-
-        if (score <= 0) return;
-        if (!best || score > best.score || (score === best.score && existing.length < best.name.length)) {
-          best = { name: existing, score };
-        }
-      });
-
-      return best && best.score >= 78 ? best.name : null;
-    }
-
-    function canonicalFranchiseName(name, exceptId = null) {
-      const clean = String(name || '').trim();
-      if (!clean) return '';
-      return findSimilarFranchiseName(clean, exceptId) || clean;
-    }
-
-    function uniqueFranchiseList(values) {
-      const result = [];
-      const seen = new Set();
-      values.forEach(value => {
-        const clean = String(value || '').trim();
-        if (!clean) return;
-        const key = clean.toLowerCase().replace(/—ë/g, '–µ').replace(/\s+/g, ' ');
-        if (seen.has(key)) return;
-        seen.add(key);
-        result.push(clean);
-      });
-      return result;
-    }
-
-    function franchisesForSave(value) {
-      return uniqueFranchiseList(cleanFranchiseList(value));
-    }
-
-    function normalizeFranchiseRepairText(value) {
-      return String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/—ë/g, '–µ')
-        .replace(/[¬´¬ª‚Äû‚Äú‚Äù]/g, '"')
-        .replace(/[‚Äô‚Äò]/g, "'")
-        .replace(/\s*,\s*/g, ',')
-        .replace(/\s+/g, ' ')
-        .replace(/^[\s"'\[\](){}`]+|[\s"'\[\](){}`]+$/g, '')
-        .trim();
-    }
-
-    function franchiseCandidateMatchesTitle(title, candidate) {
-      const normalizedCandidate = normalizeFranchiseRepairText(candidate);
-      if (!normalizedCandidate || !normalizedCandidate.includes(',')) return false;
-
-      const autoTitle = normalizeFranchiseRepairText(cleanTitleForAutoAlias(title));
-      if (autoTitle === normalizedCandidate) return true;
-
-      const rawTitle = normalizeFranchiseRepairText(title);
-      if (!rawTitle.startsWith(normalizedCandidate)) return false;
-      let remainder = rawTitle.slice(normalizedCandidate.length).trim();
-      remainder = remainder.replace(/^[\s\-‚Äì‚Äî:|/\\¬∑‚Ä¢]+/, '').trim();
-      if (!remainder) return true;
-
-      return /^(?:(?:ncop|nced|op|ed|opening|ending|open|–æ–ø–µ–Ω–∏–Ω–≥|–æ–ø–µ–Ω|—ç–Ω–¥–∏–Ω–≥)\b|(?:version|ver|–≤–µ—Ä—Å–∏—è|–≤–µ—Ä—Å|–≤–µ—Ä)\.?\s*\d*\b|(?:tv\s*size|creditless|clean)\b)/i.test(remainder);
-    }
-
-    function buildFranchiseRepairPlan() {
-      const repairs = [];
-      const knownWholeFranchises = new Set();
-      const knownFullTitles = new Set();
-
-      entries.forEach(entry => {
-        const titleKey = normalizeFranchiseRepairText(cleanTitleForAutoAlias(entry.title));
-        if (titleKey) knownFullTitles.add(titleKey);
-        cleanFranchiseList(entry.franchises || []).forEach(name => {
-          const key = normalizeFranchiseRepairText(name);
-          if (key) knownWholeFranchises.add(key);
-        });
-      });
-
-      entries.forEach(entry => {
-        const current = cleanFranchiseList(entry.franchises || []);
-        const rawTitle = String(entry.title || '');
-        if (!rawTitle.includes(',')) return;
-
-        const fixed = current.slice();
-        let changed = false;
-
-        if (current.length >= 2) {
-          for (let start = 0; start < fixed.length - 1; start++) {
-            let bestEnd = -1;
-            let bestCandidate = '';
-
-            for (let end = fixed.length; end >= start + 2; end--) {
-              const parts = fixed.slice(start, end);
-              const candidate = parts.join(', ');
-              if (!franchiseCandidateMatchesTitle(entry.title, candidate)) continue;
-
-              const candidateKey = normalizeFranchiseRepairText(candidate);
-              const alreadyKnownAsWhole = knownWholeFranchises.has(candidateKey);
-              const standaloneTitleMatches = parts.reduce((count, part) =>
-                count + (knownFullTitles.has(normalizeFranchiseRepairText(part)) ? 1 : 0), 0
-              );
-
-              if (!alreadyKnownAsWhole && standaloneTitleMatches >= 2) continue;
-              bestEnd = end;
-              bestCandidate = candidate;
-              break;
-            }
-
-            if (bestEnd < 0) continue;
-            fixed.splice(start, bestEnd - start, bestCandidate);
-            changed = true;
-          }
-        }
-
-        let after = uniqueFranchiseList(fixed);
-        let kind = 'split';
-
-        // –î–æ–ø–æ–ª–Ω–∏—Ç–µ–ª—å–Ω–∞—è –ø—Ä–æ–≤–µ—Ä–∫–∞: –≤ –Ω–∞–∑–≤–∞–Ω–∏–∏ —Ç—Ä–µ–∫–∞ –µ—Å—Ç—å –∑–∞–ø—è—Ç–∞—è,
-        // –Ω–æ –Ω–∏ –æ–¥–Ω–∞ –∑–∞–ø–∏—Å–∞–Ω–Ω–∞—è —Ñ—Ä–∞–Ω—à–∏–∑–∞ –µ—ë –Ω–µ —Å–æ–¥–µ—Ä–∂–∏—Ç.
-        if (!after.some(name => String(name || '').includes(','))) {
-          const titleFranchise = cleanTitleForAutoAlias(entry.title);
-          if (String(titleFranchise || '').includes(',')) {
-            after = [String(titleFranchise).trim()];
-            changed = true;
-            kind = current.length ? 'missing-comma' : 'empty';
-          }
-        }
-
-        if (!changed || (after.length === current.length && after.every((value, index) => value === current[index]))) return;
-        repairs.push({
-          id: String(entry.id),
-          title: rawTitle,
-          type: entry.type === 'ED' ? 'ED' : 'OP',
-          kind,
-          before: current,
-          after
-        });
-      });
-
-      return repairs;
-    }
-
-    function closeFranchiseRepairModal() {
-      if (!franchiseRepairModal) return;
-      franchiseRepairModal.classList.add('hidden');
-      franchiseRepairModal.innerHTML = '';
-    }
-
-    function repairKindLabel(kind) {
-      if (kind === 'split') return '—Ä–∞–∑–¥—Ä–æ–±–ª–µ–Ω–∞ –ø–æ –∑–∞–ø—è—Ç–æ–π';
-      if (kind === 'empty') return '—Ñ—Ä–∞–Ω—à–∏–∑–∞ –æ—Ç—Å—É—Ç—Å—Ç–≤—É–µ—Ç';
-      return '–≤ –Ω–∞–∑–≤–∞–Ω–∏–∏ –µ—Å—Ç—å –∑–∞–ø—è—Ç–∞—è, –≤–æ —Ñ—Ä–∞–Ω—à–∏–∑–µ –Ω–µ—Ç';
-    }
-
-    function renderFranchiseRepairModal(repairs) {
-      if (!franchiseRepairModal) return;
-      const rows = repairs.map((repair, index) => `
-        <div class="oc-franchise-repair-row" data-repair-id="${escapeHtml(repair.id)}">
-          <input class="oc-franchise-repair-check" type="checkbox" checked aria-label="–í—ã–±—Ä–∞—Ç—å –∏—Å–ø—Ä–∞–≤–ª–µ–Ω–∏–µ ${index + 1}" />
-          <div>
-            <div class="oc-franchise-repair-track">${escapeHtml(repair.title)}</div>
-            <span class="oc-franchise-repair-kind">${escapeHtml(repair.type)} ¬∑ ${escapeHtml(repairKindLabel(repair.kind))}</span>
-          </div>
-          <div>
-            <div class="oc-franchise-repair-label">–°–µ–π—á–∞—Å</div>
-            <div class="oc-franchise-repair-before">${repair.before.length ? repair.before.map(escapeHtml).join('<br>') : '‚Äî –ø—É—Å—Ç–æ ‚Äî'}</div>
-          </div>
-          <div>
-            <div class="oc-franchise-repair-label">–ë—É–¥–µ—Ç –ø–æ—Å–ª–µ –∏—Å–ø—Ä–∞–≤–ª–µ–Ω–∏—è ¬∑ –º–æ–∂–Ω–æ –∏–∑–º–µ–Ω–∏—Ç—å</div>
-            <textarea class="oc-franchise-repair-input" data-repair-value="${escapeHtml(repair.id)}">${escapeHtml(repair.after.join('\n'))}</textarea>
-          </div>
-        </div>`).join('');
-
-      franchiseRepairModal.innerHTML = `
-        <div class="oc-modal-card oc-franchise-repair-card">
-          <div class="oc-modal-head">
-            <div>
-              <div class="oc-section-label">–ø—Ä–æ–≤–µ—Ä–∫–∞ –±–∞–∑—ã</div>
-              <div class="oc-modal-title">–ü–æ—á–∏–Ω–∫–∞ —Ñ—Ä–∞–Ω—à–∏–∑</div>
-            </div>
-            <button class="oc-modal-close" type="button" data-franchise-repair-close>–ó–∞–∫—Ä—ã—Ç—å ‚úï</button>
-          </div>
-          <div class="oc-franchise-repair-summary">
-            –ù–∞–π–¥–µ–Ω–æ –ø–æ–¥–æ–∑—Ä–∏—Ç–µ–ª—å–Ω—ã—Ö —Ç—Ä–µ–∫–æ–≤: ${repairs.length}. –ü—Ä–æ–≤–µ—Ä—å –ø—Ä–µ–¥–ª–∞–≥–∞–µ–º—ã–µ –∑–Ω–∞—á–µ–Ω–∏—è –∏ —Å–Ω–∏–º–∏ –≥–∞–ª–æ—á–∫–∏ —Ç–∞–º, –≥–¥–µ –º–µ–Ω—è—Ç—å –Ω–∏—á–µ–≥–æ –Ω–µ –Ω—É–∂–Ω–æ.
-          </div>
-          <div class="oc-franchise-repair-tools">
-            <label class="oc-franchise-repair-select-all"><input type="checkbox" data-franchise-repair-select-all checked /> –≤—ã–±—Ä–∞—Ç—å –≤—Å–µ</label>
-            <span class="oc-hint" style="margin:0">–û–¥–Ω–∞ —Å—Ç—Ä–æ–∫–∞ –≤ –ø–æ–ª–µ = –æ–¥–Ω–∞ —Ñ—Ä–∞–Ω—à–∏–∑–∞</span>
-          </div>
-          <div class="oc-franchise-repair-list">${rows}</div>
-          <div class="oc-franchise-repair-actions">
-            <button class="oc-cancel-btn" type="button" data-franchise-repair-close>–û—Ç–º–µ–Ω–∞</button>
-            <button class="oc-save-btn" type="button" data-franchise-repair-apply>–í–Ω–µ—Å—Ç–∏ –≤—ã–±—Ä–∞–Ω–Ω—ã–µ –∏–∑–º–µ–Ω–µ–Ω–∏—è</button>
-          </div>
-        </div>`;
-      franchiseRepairModal.classList.remove('hidden');
-    }
-
-    function repairBrokenFranchises() {
-      if (!ensureCatalogAdmin()) return;
-      const repairs = buildFranchiseRepairPlan();
-      if (!repairs.length) {
-        setStatus('–ü–æ–¥–æ–∑—Ä–∏—Ç–µ–ª—å–Ω—ã—Ö —Ñ—Ä–∞–Ω—à–∏–∑ –ø–æ –Ω–∞–∑–≤–∞–Ω–∏—é –Ω–µ –Ω–∞–π–¥–µ–Ω–æ ‚úì');
-        return;
-      }
-      renderFranchiseRepairModal(repairs);
-    }
-
-    async function applyFranchiseRepairsFromModal() {
-      if (!ensureCatalogAdmin() || !franchiseRepairModal) return;
-      const selectedRows = Array.from(franchiseRepairModal.querySelectorAll('.oc-franchise-repair-row'))
-        .filter(row => {
-          const checkbox = row.querySelector('.oc-franchise-repair-check');
-          return checkbox && checkbox.checked;
-        });
-
-      if (!selectedRows.length) {
-        setStatus('–ù–µ –≤—ã–±—Ä–∞–Ω–æ –Ω–∏ –æ–¥–Ω–æ–≥–æ –∏—Å–ø—Ä–∞–≤–ª–µ–Ω–∏—è.', true);
-        return;
-      }
-
-      const applyBtn = franchiseRepairModal.querySelector('[data-franchise-repair-apply]');
-      if (applyBtn) {
-        applyBtn.disabled = true;
-        applyBtn.textContent = '–°–æ—Ö—Ä–∞–Ω—è—é‚Ä¶';
-      }
-
-      let fixedCount = 0;
-      const failed = [];
-      for (const row of selectedRows) {
-        const id = row.getAttribute('data-repair-id');
-        const input = row.querySelector('.oc-franchise-repair-input');
-        const franchises = uniqueFranchiseList(cleanFranchiseList(input ? input.value : ''));
-        try {
-          await saveOpeningExtras(id, { franchises });
-          const localEntry = entriesById.get(String(id));
-          if (localEntry) {
-            localEntry.franchises = franchises.slice();
-            touchEntryCache(localEntry);
-          }
-          fixedCount += 1;
-          row.remove();
-        } catch (error) {
-          console.error('Could not repair franchise', id, error);
-          failed.push(id);
-        }
-      }
-
-      if (fixedCount) {
-        rebuildFastIndexes({ catalogChanged: true });
-        refreshVisiblePanels({ forceFilters: true });
-      }
-
-      if (!failed.length) {
-        closeFranchiseRepairModal();
-        setStatus(`–§—Ä–∞–Ω—à–∏–∑—ã –∏—Å–ø—Ä–∞–≤–ª–µ–Ω—ã: ${fixedCount} ‚úì`);
-      } else {
-        if (applyBtn) {
-          applyBtn.disabled = false;
-          applyBtn.textContent = '–ü–æ–≤—Ç–æ—Ä–∏—Ç—å –¥–ª—è –æ—Å—Ç–∞–≤—à–∏—Ö—Å—è';
-        }
-        setStatus(`–ò—Å–ø—Ä–∞–≤–ª–µ–Ω–æ: ${fixedCount}. –ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å: ${failed.length}.`, true);
-      }
-    }
-
-    function normalizeTitleForDuplicate(title) {
-      return String(title || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-
-    function isDuplicateTitle(title, type, exceptId) {
-      const normalized = normalizeTitleForDuplicate(title);
-      return entries.some(e => e.id !== exceptId && e.type === type && normalizeTitleForDuplicate(e.title) === normalized);
-    }
-
-    function compactTitleForCompare(title) {
-      return normalizeTitleForDuplicate(title).replace(/[^a-z–∞-—è—ë0-9]+/gi, '');
-    }
-
-    function levenshteinDistance(a, b) {
-      a = String(a || ''); b = String(b || '');
-      const m = a.length, n = b.length;
-      if (!m) return n;
-      if (!n) return m;
-      const prev = Array.from({ length: n + 1 }, (_, i) => i);
-      const cur = new Array(n + 1);
-      for (let i = 1; i <= m; i++) {
-        cur[0] = i;
-        for (let j = 1; j <= n; j++) {
-          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-          cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
-        }
-        for (let j = 0; j <= n; j++) prev[j] = cur[j];
-      }
-      return prev[n];
-    }
-
-    function findSimilarTitle(title, type, exceptId) {
-      const target = compactTitleForCompare(title);
-      if (target.length < 6) return null;
-      let best = null;
-      entries.forEach(e => {
-        if (String(e.id) === String(exceptId || '') || e.type !== type) return;
-        const other = compactTitleForCompare(e.title);
-        if (!other || other === target) return;
-        const lengthDiff = Math.abs(target.length - other.length);
-        if (lengthDiff > 3) return;
-        const dist = levenshteinDistance(target, other);
-        const maxLen = Math.max(target.length, other.length);
-        const ratio = 1 - dist / maxLen;
-        const closeEnough = dist <= 2 || (dist === 3 && maxLen >= 14 && ratio >= 0.92);
-        if (closeEnough) {
-          if (!best || dist < best.distance || (dist === best.distance && ratio > best.ratio)) best = { entry: e, distance: dist, ratio };
-        }
-      });
-      return best;
-    }
-
-    function titleMatchesFuzzySearch(title, query) {
-      const raw = String(query || '').trim().toLowerCase();
-      if (!raw) return true;
-      const titleRaw = String(title || '').toLowerCase();
-      if (titleRaw.includes(raw)) return true;
-      const target = compactTitleForCompare(raw);
-      const other = compactTitleForCompare(title);
-      if (target.length < 4 || other.length < 4) return false;
-      if (other.includes(target) || target.includes(other)) return true;
-
-      const titleWords = normalizeTitleForDuplicate(title).split(/[^a-z–∞-—è—ë0-9]+/gi).filter(Boolean);
-      const candidates = new Set([other]);
-      for (let i = 0; i < titleWords.length; i++) {
-        candidates.add(compactTitleForCompare(titleWords[i]));
-        if (i + 1 < titleWords.length) candidates.add(compactTitleForCompare(titleWords[i] + titleWords[i + 1]));
-        if (i + 2 < titleWords.length) candidates.add(compactTitleForCompare(titleWords[i] + titleWords[i + 1] + titleWords[i + 2]));
-      }
-      const minLen = Math.max(4, target.length - 2);
-      const maxLenWindow = Math.min(other.length, target.length + 3);
-      for (let len = minLen; len <= maxLenWindow; len++) {
-        for (let i = 0; i + len <= other.length; i++) candidates.add(other.slice(i, i + len));
-      }
-
-      for (const candidate of candidates) {
-        if (!candidate || candidate.length < 4) continue;
-        if (candidate.includes(target) || target.includes(candidate)) return true;
-        const lengthDiff = Math.abs(target.length - candidate.length);
-        if (lengthDiff > 3) continue;
-        const dist = levenshteinDistance(target, candidate);
-        const maxLen = Math.max(target.length, candidate.length);
-        const ratio = 1 - dist / maxLen;
-        const allowedDistance = target.length <= 5 ? 1 : (target.length <= 8 ? 2 : 3);
-        if (dist <= allowedDistance || (dist <= 3 && ratio >= 0.88)) return true;
-      }
-      return false;
-    }
-
-    function confirmModalChoice({ title, body, okText = '–ü–æ–¥—Ç–≤–µ—Ä–¥–∏—Ç—å', cancelText = '–û—Ç–º–µ–Ω–∞' }) {
-      return new Promise(resolve => {
-        if (!confirmModal) {
-          resolve(window.confirm(`${title}\n\n${body}`));
-          return;
-        }
-        confirmModal.innerHTML = `<div class="oc-modal-card oc-confirm-box">
-          <div class="oc-modal-head">
-            <div>
-              <div class="oc-section-label">–ø–æ—Ö–æ–∂–µ –Ω–∞ –¥—É–±–ª—å</div>
-              <div class="oc-modal-title">${escapeHtml(title)}</div>
-            </div>
-          </div>
-          <div class="oc-warning-text">${escapeHtml(body)}</div>
-          <div class="oc-confirm-actions">
-            <button type="button" class="oc-secondary-btn" data-confirm="cancel">${escapeHtml(cancelText)}</button>
-            <button type="button" class="oc-addbtn" data-confirm="ok">${escapeHtml(okText)}</button>
-          </div>
-        </div>`;
-        confirmModal.classList.remove('hidden');
-        const cleanup = (answer) => {
-          confirmModal.classList.add('hidden');
-          confirmModal.innerHTML = '';
-          resolve(answer);
-        };
-        confirmModal.querySelector('[data-confirm="cancel"]').addEventListener('click', () => cleanup(false), { once: true });
-        confirmModal.querySelector('[data-confirm="ok"]').addEventListener('click', () => cleanup(true), { once: true });
-        confirmModal.addEventListener('click', function onBg(e) {
-          if (e.target === confirmModal) { confirmModal.removeEventListener('click', onBg); cleanup(false); }
-        });
-      });
-    }
-
-    function showMissingFieldsModal(fields) {
-      const title = '–ù–µ –≤—Å–µ –ø–æ–ª—è –∑–∞–ø–æ–ª–Ω–µ–Ω—ã';
-      const body = `–í—ã –Ω–µ –∑–∞–ø–æ–ª–Ω–∏–ª–∏ —Å–ª–µ–¥—É—é—â–∏–µ –ø–æ–ª—è: ${fields.join(', ')}`;
-      if (!confirmModal) {
-        window.alert(body);
-        return;
-      }
-      confirmModal.innerHTML = `<div class="oc-modal-card oc-confirm-box">
-        <div class="oc-modal-head">
-          <div>
-            <div class="oc-section-label">–ø—Ä–æ–≤–µ—Ä–∫–∞ –∫–∞—Ä—Ç–æ—á–∫–∏</div>
-            <div class="oc-modal-title">${escapeHtml(title)}</div>
-          </div>
-        </div>
-        <div class="oc-warning-text">${escapeHtml(body)}</div>
-        <div class="oc-confirm-actions">
-          <button type="button" class="oc-addbtn" data-missing-close>–í–µ—Ä–Ω—É—Ç—å—Å—è –∫ –∑–∞–ø–æ–ª–Ω–µ–Ω–∏—é</button>
-        </div>
-      </div>`;
-      confirmModal.classList.remove('hidden');
-      const close = () => {
-        confirmModal.classList.add('hidden');
-        confirmModal.innerHTML = '';
-      };
-      confirmModal.querySelector('[data-missing-close]').addEventListener('click', close, { once: true });
-      confirmModal.addEventListener('click', function onBg(event) {
-        if (event.target === confirmModal) {
-          confirmModal.removeEventListener('click', onBg);
-          close();
-        }
-      });
-    }
-
-    async function confirmSimilarTitleIfNeeded(title, type, exceptId) {
-      const similar = findSimilarTitle(title, type, exceptId);
-      if (!similar) return true;
-      return confirmModalChoice({
-        title: '–ï—Å—Ç—å –ø–æ—Ö–æ–∂–µ–µ –Ω–∞–∑–≤–∞–Ω–∏–µ',
-        body: `–ü–æ—Ö–æ–∂–µ –Ω–∞ —É–∂–µ –¥–æ–±–∞–≤–ª–µ–Ω–Ω—ã–π ${type}: ¬´${similar.entry.title}¬ª. –†–∞–∑–Ω–∏—Ü–∞ –ø—Ä–∏–º–µ—Ä–Ω–æ ${similar.distance} –±—É–∫–≤(—ã). –ú–æ–∂–Ω–æ –ø—Ä–æ–¥–æ–ª–∂–∏—Ç—å, –Ω–æ –ø—Ä–æ–≤–µ—Ä—å, —á—Ç–æ —ç—Ç–æ –Ω–µ –¥—É–±–ª—å.`,
-        okText: '–í—Å—ë —Ä–∞–≤–Ω–æ –¥–æ–±–∞–≤–∏—Ç—å',
-        cancelText: '–ù–µ –¥–æ–±–∞–≤–ª—è—Ç—å'
-      });
-    }
-
-    function ratingMin() {
-      return ratingScale === 'half' ? 0.5 : 1;
-    }
-
-    function demoEntries() {
-      return [
-        { id: 'demo1', title: 'Kaguya-sama: Love is War ‚Äî OP 1', type: 'OP', year: 2019, season: 'winter', studios: ['A-1 Pictures'], directors: ['Mamoru Hatakeyama'], performers: ['Masayuki Suzuki'], link: 'https://anisongdb.com/', image: '', notes: '–î–µ–º–æ-–∑–∞–ø–∏—Å—å –¥–ª—è –ø—Ä–µ–¥–ø—Ä–æ—Å–º–æ—Ç—Ä–∞.', scores: { '–ò–≤–∞–Ω': 10, '–ê–Ω—è': 9, '–ú–∞–∫—Å': 8 } },
-        { id: 'demo2', title: 'Samurai Champloo ‚Äî ED', type: 'ED', year: 2004, season: 'spring', studios: ['Manglobe'], directors: ['Shinichir≈ç Watanabe'], performers: ['MINMI'], link: 'https://anisongdb.com/', image: '', notes: '–ú–æ–∂–Ω–æ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å –∏–ª–∏ —É–¥–∞–ª–∏—Ç—å.', scores: { '–ò–≤–∞–Ω': 9, '–ê–Ω—è': 8 } },
-        { id: 'demo3', title: 'Bleach ‚Äî OP 13', type: 'OP', year: 2010, season: 'fall', studios: ['Studio Pierrot'], directors: ['Noriyuki Abe'], performers: ['SID'], link: 'https://anisongdb.com/', image: '', notes: '', scores: { '–ò–≤–∞–Ω': 8, '–ú–∞–∫—Å': 7 } }
-      ];
-    }
-
-    async function maybeLoadDemo() {
-      try {
-        const res = await window.storage.get(DEMO_KEY, false);
-        if (!entries.length && !(res && res.value)) {
-          entries = demoEntries();
-          await saveEntries();
-          await window.storage.set(DEMO_KEY, '1', false);
-        }
-      } catch (e) {
-        if (!entries.length) entries = demoEntries();
-      }
-    }
-
-    async function loadName() {
-      try {
-        const res = await window.storage.get(NAME_KEY, false);
-        if (res && res.value) {
-          myName = res.value;
-          nameInput.value = myName;
-        }
-      } catch (e) { }
-    }
-
-    async function saveName(val) {
-      myName = val;
-      try { await window.storage.set(NAME_KEY, val, false); }
-      catch (e) { console.error('Could not save name', e); }
-      await syncMyAvatarIntoMap();
-    }
-
-    async function loadAvatar() {
-      let storedAvatar = '';
-      try {
-        const res = await window.storage.get(AVATAR_KEY, false);
-        storedAvatar = String(res?.value || '').trim();
-      } catch (e) { }
-      const profileAvatar = String(accountProfile(myName)?.avatar || '').trim();
-      myAvatar = profileAvatar || storedAvatar || myAvatar;
-      if (profileAvatar && profileAvatar !== storedAvatar) {
-        try { await window.storage.set(AVATAR_KEY, profileAvatar, false); }
-        catch (e) { console.error('Could not refresh cached profile avatar', e); }
-      }
-      avatarBtn.textContent = myAvatar;
-    }
-
-    async function saveAvatar(emoji) {
-      const nextAvatar = String(emoji || '').trim();
-      if (!nextAvatar) return false;
-      if (!authenticatedUid || !accessLevel) {
-        showAuthModal('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –∞–≤–∞—Ç–∞—Ä.');
-        return false;
-      }
-      const previousAvatar = myAvatar;
-      myAvatar = nextAvatar;
-      avatarBtn.textContent = nextAvatar;
-      try {
-        await window.storage.set(AVATAR_KEY, nextAvatar, false);
-        await syncMyAvatarIntoMap(true);
-        return true;
-      } catch (e) {
-        console.error('Could not persist avatar', e);
-        myAvatar = previousAvatar;
-        avatarBtn.textContent = previousAvatar;
-        if (myName) avatarsMap[myName] = previousAvatar;
-        try {
-          await window.storage.set(AVATAR_KEY, previousAvatar, false);
-          await window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true);
-        } catch (_) {}
-        render();
-        if (activeTab === 'profile') renderProfile();
-        if (activeTab === 'top100') renderGlobalTop100();
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –∞–≤–∞—Ç–∞—Ä –≤ –∞–∫–∫–∞—É–Ω—Ç–µ.', true);
-        return false;
-      }
-    }
-
-    async function loadAvatarsMap() {
-      try {
-        const res = await window.storage.get(AVATARS_MAP_KEY, true);
-        avatarsMap = res && res.value ? JSON.parse(res.value) : {};
-      } catch (e) { avatarsMap = {}; }
-    }
-
-    async function loadScale() {
-      try {
-        const res = await window.storage.get(SCALE_KEY, false);
-        if (res && ['int', 'half', 'five'].includes(res.value)) ratingScale = res.value;
-      } catch (e) { /* default scale stays */ }
-      if (scaleSelect) scaleSelect.value = ratingScale;
-    }
-
-    async function saveScale(val) {
-      ratingScale = val;
-      try { await window.storage.set(SCALE_KEY, val, false); }
-      catch (e) { console.error('Could not save rating scale', e); }
-    }
-
-    async function loadContentFilterMode() {
-      try {
-        const res = await window.storage.get(CONTENT_FILTER_KEY, false);
-        if (res && res.value) setContentFilterMode(res.value, false, false);
-      } catch (e) { /* default visibility stays */ }
-      syncContentFilterSelect();
-    }
-
-    async function saveContentFilterMode(mode) {
-      try { await window.storage.set(CONTENT_FILTER_KEY, normalizeContentFilterMode(mode), false); }
-      catch (e) { console.error('Could not save content filter mode', e); }
-    }
-
-    async function loadManualRanks() {
-      try {
-        const res = await window.storage.get(MANUAL_RANKS_KEY, true);
-        manualRanks = res && res.value ? JSON.parse(res.value) : {};
-      } catch (e) { manualRanks = {}; }
-    }
-
-    async function saveManualRanks() {
-      try { await window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); }
-      catch (e) { console.error('Could not save manual ranks locally', e); }
-
-      if (!myName) return;
-      const ranks = getManualRanksForUser(myName) || {};
-      const excludedOP = Array.from(new Set((Array.isArray(ranks.excludedOP) ? ranks.excludedOP : []).map(String).filter(Boolean)));
-      const excludedED = Array.from(new Set((Array.isArray(ranks.excludedED) ? ranks.excludedED : []).map(String).filter(Boolean)));
-      const cleanRanks = {
-        OP: Array.isArray(ranks.OP) ? ranks.OP.map(String).filter(id => !excludedOP.includes(id)).slice(0, 100) : [],
-        ED: Array.isArray(ranks.ED) ? ranks.ED.map(String).filter(id => !excludedED.includes(id)).slice(0, 100) : [],
-        excludedOP,
-        excludedED,
-        candidatesOP: Array.from(new Set((ranks.candidatesOP || []).map(String).filter(Boolean))),
-        candidatesED: Array.from(new Set((ranks.candidatesED || []).map(String).filter(Boolean))),
-        pinsOP: sanitizeTopPins(ranks.pinsOP),
-        pinsED: sanitizeTopPins(ranks.pinsED)
-      };
-      rememberManualRanksForUser(myName, cleanRanks);
-      const errors = [];
-      let savedRemote = false;
-
-      if (window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
-        try {
-          await window.OPED_DB.saveManualRanks(myName, cleanRanks);
-          savedRemote = true;
-        } catch (e) {
-          console.error('Could not save manual ranks through OPED_DB', e);
-          errors.push(e);
-        }
-      }
-
-      try {
-        const ext = await getExtendedDb();
-        const safeName = manualUserSafeKey(myName);
-        const payload = {
-          nickname: myName,
-          nicknameKey: safeName,
-          ownerUid: requirePersonalUid(),
-          OP: cleanRanks.OP,
-          ED: cleanRanks.ED,
-          manualOP: cleanRanks.OP,
-          manualED: cleanRanks.ED,
-          excludedOP: cleanRanks.excludedOP,
-          excludedED: cleanRanks.excludedED,
-          candidatesOP: cleanRanks.candidatesOP,
-          candidatesED: cleanRanks.candidatesED,
-          pinsOP: cleanRanks.pinsOP,
-          pinsED: cleanRanks.pinsED,
-          avatar: myAvatar,
-          updatedAt: ext.serverTimestamp()
-        };
-        await Promise.allSettled([
-          ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
-          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true })
-        ]).then(results => {
-          if (results.some(r => r.status === 'fulfilled')) savedRemote = true;
-          results.filter(r => r.status === 'rejected').forEach(r => { console.error('Manual rank mirror save failed', r.reason); errors.push(r.reason); });
-        });
-      } catch (e) {
-        console.error('Could not mirror manual ranks to Firebase', e);
-        errors.push(e);
-      }
-
-      if (!savedRemote) {
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ä—É—á–Ω–æ–π —Ç–æ–ø.', true);
-        if (errors.length) throw errors[0];
-      }
-    }
-
-    async function syncMyAvatarIntoMap(requireRemote = false) {
-      if (!myName) return false;
-      avatarsMap[myName] = myAvatar;
-      try { await window.storage.set(AVATARS_MAP_KEY, JSON.stringify(avatarsMap), true); }
-      catch (e) { console.error('Could not sync avatar map', e); }
-      let remoteSaved = false;
-      let remoteError = null;
-      try {
-        let savedProfile = null;
-        if (window.OPED_DB && typeof window.OPED_DB.saveUserProfile === 'function') {
-          savedProfile = await window.OPED_DB.saveUserProfile(myName, myAvatar);
-        } else {
-          const ext = await getExtendedDb();
-          const safeName = window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function' ? window.OPED_DB.normalizeNickname(myName) : safeDocPart(myName);
-          const uid = requirePersonalUid();
-          await ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), { nickname: myName, nicknameKey: safeName, authUid: uid, avatar: myAvatar, updatedAt: ext.serverTimestamp() }, { merge: true });
-          savedProfile = { id: safeName, nickname: myName, nicknameKey: safeName, authUid: uid, avatar: myAvatar };
-        }
-        if (savedProfile) {
-          const profileIndex = firebaseUserProfiles.findIndex(row => normalizedAccountName(row.nicknameKey || row.nickname || row.id) === normalizedAccountName(myName));
-          if (profileIndex >= 0) firebaseUserProfiles[profileIndex] = { ...firebaseUserProfiles[profileIndex], ...savedProfile };
-          else firebaseUserProfiles.push(savedProfile);
-        }
-        remoteSaved = true;
-      } catch (e) {
-        remoteError = e;
-        console.error('Could not sync avatar to Firebase', e);
-      }
-      render();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'top100') renderGlobalTop100();
-      if (requireRemote && !remoteSaved) throw remoteError || new Error('Avatar was not saved remotely');
-      return remoteSaved;
-    }
-
-    function avatarFor(name) {
-      return avatarsMap[name] || (name === '–ò–≤–∞–Ω' ? 'üê∫' : 'üôÇ');
-    }
-
-
-    async function startEventBasketWatcher() {
-      const state = remoteDataState.eventBasket;
-      if (state.started) return createRemoteDataPromise('eventBasket');
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('eventBasket');
-      try {
-        const ext = await getExtendedDb();
-        if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
-        firebaseUnsubEventBasket = ext.onSnapshot(ext.collection(ext.db, 'eventBasket'), snapshot => {
-          firebaseEventBasket = {};
-          snapshot.docs.forEach(d => { firebaseEventBasket[d.id] = { id: d.id, ...d.data() }; });
-          firebaseEventBasketLoaded = true;
-          if (activeTab === 'season') renderSeasonViews();
-          markRemoteDataReady('eventBasket');
-        }, err => {
-          console.error('eventBasket watch error', err);
-          firebaseEventBasketLoaded = true;
-          markRemoteDataReady('eventBasket', { error: true });
-          setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–≥—Ä—É–∑–∏—Ç—å –∫–æ—Ä–∑–∏–Ω—É –∏–≤–µ–Ω—Ç–æ–≤.', true);
-        });
-      } catch (e) {
-        console.error('eventBasket watcher setup failed', e);
-        firebaseEventBasketLoaded = true;
-        markRemoteDataReady('eventBasket', { error: true });
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–≥—Ä—É–∑–∏—Ç—å –∫–æ—Ä–∑–∏–Ω—É –∏–≤–µ–Ω—Ç–æ–≤.', true);
-      }
-      return readyPromise;
-    }
-
-    function stopEventBasketWatcher() {
-      if (firebaseUnsubEventBasket) firebaseUnsubEventBasket();
-      firebaseUnsubEventBasket = null;
-      resetRemoteDataSubscription('eventBasket');
-    }
-
-    function ensureOpeningsWatcher(db = firebaseDbInstance) {
-      const state = remoteDataState.openings;
-      if (state.started) return createRemoteDataPromise('openings');
-      if (!db || typeof db.watchOpenings !== 'function') return Promise.reject(new Error('–ö–∞—Ç–∞–ª–æ–≥ –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω.'));
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('openings');
-      if (firebaseUnsubOpenings) firebaseUnsubOpenings();
-      firebaseUnsubOpenings = db.watchOpenings((rows, meta = {}) => {
-        firebaseOpenings = rows || [];
-        rebuildEntriesFromFirebase();
-        populateFilterOptions(true);
-        markRemoteDataReady('openings', { cached: Boolean(meta.cached), count: firebaseOpenings.length });
-      });
-      return readyPromise;
-    }
-
-    function catalogHasRatingAggregates() {
-      if (!firebaseOpenings.length) return false;
-      const covered = firebaseOpenings.reduce((count, row) => count + (Number(row.ratingAggregateVersion || 0) >= 1 ? 1 : 0), 0);
-      return covered / firebaseOpenings.length >= 0.9;
-    }
-
-    function preferredRatingsScope(tab = activeTab) {
-      if (!catalogHasRatingAggregates()) return 'all';
-      if (tab === 'profile' || tab === 'stats' || tab === 'discovery') return 'all';
-      if (myName || authenticatedUid) return 'user';
-      return 'none';
-    }
-
-    function ensureRatingsWatcher(db = firebaseDbInstance, requestedScope = preferredRatingsScope()) {
-      const state = remoteDataState.ratings;
-      const nextScope = requestedScope === 'all' ? 'all' : requestedScope === 'none' ? 'none' : 'user';
-      if (nextScope === 'none') {
-        if (firebaseRatingsScope === 'none' && !firebaseUnsubRatings) return Promise.resolve();
-        if (firebaseUnsubRatings) firebaseUnsubRatings();
-        firebaseUnsubRatings = null;
-        firebaseRatings = [];
-        firebaseRatingsScope = 'none';
-        resetRemoteDataSubscription('ratings');
-        rebuildEntriesFromFirebase();
-        return Promise.resolve();
-      }
-      if (state.started && firebaseRatingsScope === nextScope) return createRemoteDataPromise('ratings');
-      if (!db || typeof db.watchRatings !== 'function') return Promise.reject(new Error('–û—Ü–µ–Ω–∫–∏ –Ω–µ–¥–æ—Å—Ç—É–ø–Ω—ã.'));
-      if (firebaseUnsubRatings) firebaseUnsubRatings();
-      firebaseUnsubRatings = null;
-      firebaseRatings = [];
-      firebaseRatingsScope = nextScope;
-      resetRemoteDataSubscription('ratings');
-      state.ready = false;
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('ratings');
-      const callback = rows => {
-        firebaseRatings = rows || [];
-        rebuildEntriesFromFirebase();
-        rebuildManualRanksFromRatingDocs();
-        markRemoteDataReady('ratings', { count: firebaseRatings.length, scope: firebaseRatingsScope });
-      };
-      firebaseUnsubRatings = nextScope === 'user' && typeof db.watchRatingsForUser === 'function'
-        ? db.watchRatingsForUser({ uid: currentPersonalUid(), nickname: myName }, callback)
-        : db.watchRatings(callback);
-      return readyPromise;
-    }
-
-    function ensureManualRanksWatcher(db = firebaseDbInstance) {
-      const state = remoteDataState.manualRanks;
-      if (state.started) return createRemoteDataPromise('manualRanks');
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('manualRanks');
-      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
-      if (db && typeof db.watchManualRanks === 'function') {
-        firebaseUnsubManualRanks = db.watchManualRanks(rows => {
-          firebaseManualRanks = rows || [];
-          rebuildManualRanksFromFirebase();
-          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
-        });
-        return readyPromise;
-      }
-      void getExtendedDb().then(ext => {
-        firebaseUnsubManualRanks = ext.onSnapshot(ext.collection(ext.db, 'manualRanks'), snapshot => {
-          firebaseManualRanks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          rebuildManualRanksFromFirebase();
-          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
-        }, err => {
-          console.error('manualRanks watch error', err);
-          markRemoteDataReady('manualRanks', { error: true });
-        });
-      }).catch(err => {
-        console.error('manualRanks watch setup error', err);
-        markRemoteDataReady('manualRanks', { error: true });
-      });
-      return readyPromise;
-    }
-
-    function ensureUserProfilesWatcher(db = firebaseDbInstance) {
-      const state = remoteDataState.userProfiles;
-      if (state.started) return createRemoteDataPromise('userProfiles');
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('userProfiles');
-      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
-      if (db && typeof db.watchUserProfiles === 'function') {
-        firebaseUnsubUserProfiles = db.watchUserProfiles(rows => {
-          firebaseUserProfiles = rows || [];
-          window.OC_APP_DATA = window.OC_APP_DATA || {};
-          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
-          rebuildUserProfilesFromFirebase();
-          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
-          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
-        });
-        return readyPromise;
-      }
-      void getExtendedDb().then(ext => {
-        firebaseUnsubUserProfiles = ext.onSnapshot(ext.collection(ext.db, 'userProfiles'), snapshot => {
-          firebaseUserProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          window.OC_APP_DATA = window.OC_APP_DATA || {};
-          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
-          rebuildUserProfilesFromFirebase();
-          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
-          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
-        }, err => {
-          console.error('userProfiles watch error', err);
-          markRemoteDataReady('userProfiles', { error: true });
-        });
-      }).catch(err => {
-        console.error('userProfiles watch setup error', err);
-        markRemoteDataReady('userProfiles', { error: true });
-      });
-      return readyPromise;
-    }
-
-    function ensureEntityCardsWatcher(db = firebaseDbInstance) {
-      const state = remoteDataState.entityCards;
-      if (state.started) return createRemoteDataPromise('entityCards');
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('entityCards');
-      if (!db || typeof db.watchEntityCards !== 'function') {
-        markRemoteDataReady('entityCards', { error: true });
-        return readyPromise;
-      }
-      if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
-      firebaseUnsubEntityCards = db.watchEntityCards(rows => {
-        firebaseEntityCards = rows || [];
-        window.OC_APP_DATA = window.OC_APP_DATA || {};
-        window.OC_APP_DATA.entityCards = firebaseEntityCards;
-        if (activeTab.startsWith('entity-')) renderEntityAlbums();
-        dispatchAppEvent('oped:entity-cards-updated', { rows: firebaseEntityCards });
-        markRemoteDataReady('entityCards', { count: firebaseEntityCards.length });
-      });
-      return readyPromise;
-    }
-
-    function stopManualRanksWatcher() {
-      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
-      firebaseUnsubManualRanks = null;
-      resetRemoteDataSubscription('manualRanks');
-    }
-
-    function stopUserProfilesWatcher() {
-      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
-      firebaseUnsubUserProfiles = null;
-      resetRemoteDataSubscription('userProfiles');
-    }
-
-    function stopEntityCardsWatcher() {
-      if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
-      firebaseUnsubEntityCards = null;
-      resetRemoteDataSubscription('entityCards');
-    }
-
-    async function syncRouteDataSubscriptions(tab = activeTab) {
-      if (!firebaseDbInstance) return;
-      const syncId = ++routeDataSyncId;
-      const needsProfileData = tab === 'profile' || tab === 'top100' || tab === 'discovery';
-      const needsEntityCards = tab.startsWith('entity-');
-      const needsTierData = tab === 'tier';
-      const needsEventBasket = tab === 'season' && Boolean(accessLevel);
-
-      if (!needsProfileData) {
-        stopManualRanksWatcher();
-        stopUserProfilesWatcher();
-      }
-      if (!needsEntityCards) stopEntityCardsWatcher();
-      if (!needsTierData) stopTierOrderWatcher();
-      if (!needsEventBasket) stopEventBasketWatcher();
-
-      const required = [];
-      const ratingsScope = preferredRatingsScope(tab);
-      if (ratingsScope !== 'none') required.push(ensureRatingsWatcher(firebaseDbInstance, ratingsScope));
-      else required.push(ensureRatingsWatcher(firebaseDbInstance, 'none'));
-      if (needsProfileData) {
-        required.push(ensureManualRanksWatcher(firebaseDbInstance));
-        required.push(ensureUserProfilesWatcher(firebaseDbInstance));
-      }
-      if (needsEntityCards) required.push(ensureEntityCardsWatcher(firebaseDbInstance));
-      if (needsTierData) required.push(startTierOrderWatcher());
-      if (needsEventBasket) required.push(startEventBasketWatcher());
-
-      await Promise.allSettled(required);
-      if (syncId !== routeDataSyncId || tab !== activeTab) return;
-      refreshVisiblePanels({ forceFilters: false });
-      dispatchAppEvent('oped:route-ready', { tab });
-    }
-
-    async function loadEntries() {
-      try {
-        const db = await waitForFirebaseDb();
-        firebaseDbInstance = db;
-        await db.init();
-        await ensureOpeningsWatcher(db);
-        dispatchAppEvent('oped:app-ready', { stage: 'catalog' });
-        runWhenBrowserIsIdle(() => {
-          void syncRouteDataSubscriptions(activeTab);
-        });
-      } catch (e) {
-        console.error(e);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –ø–æ–¥–∫–ª—é—á–∏—Ç—å—Å—è. –û–±–Ω–æ–≤–∏—Ç–µ —Å—Ç—Ä–∞–Ω–∏—Ü—É.', true);
-        entries = [];
-        populateFilterOptions();
-        render();
-      }
-    }
-
-    async function saveEntries() {
-      console.warn('saveEntries() –±–æ–ª—å—à–µ –Ω–µ –∏—Å–ø–æ–ª—å–∑—É–µ—Ç—Å—è –¥–ª—è —Ç—Ä–µ–∫–æ–≤. –¢—Ä–µ–∫–∏ –∏ –æ—Ü–µ–Ω–∫–∏ —Å–æ—Ö—Ä–∞–Ω—è—é—Ç—Å—è —á–µ—Ä–µ–∑ Firebase.');
-      return true;
-    }
-
-    function uniqueSorted(values) {
-      return Array.from(new Set(values.filter(Boolean))).sort(compareNatural);
-    }
-
-    function buildCategoryCache(force = false) {
-      if (!force && categoryCacheVersion === catalogVersion) return categoryCache;
-      const years = uniqueSorted(entries.map(e => e.year ? String(e.year) : '')).sort((a, b) => b - a);
-      categoryCache = {
-        years,
-        studios: uniqueSorted(entries.flatMap(e => e.studios || [])),
-        directors: uniqueSorted(entries.flatMap(e => e.directors || [])),
-        performers: uniqueSorted(entries.flatMap(e => e.performers || [])),
-        franchises: uniqueSorted(entries.flatMap(e => e.franchises || []))
-      };
-      categoryCacheVersion = catalogVersion;
-      return categoryCache;
-    }
-
-    function populateFilterOptions(force = false) {
-      const groups = buildCategoryCache(force);
-      if (!force && filterOptionsVersion === catalogVersion) {
-        syncFilterControls();
-        return;
-      }
-      fillRangeYearSelect('#oc-f-from-year', groups.years, 'fromYear', '–° —Å–∞–º–æ–≥–æ —Ä–∞–Ω–Ω–µ–≥–æ');
-      fillRangeYearSelect('#oc-f-to-year', groups.years, 'toYear', '–ü–æ —Å–∞–º—ã–π –ø–æ–∑–¥–Ω–∏–π');
-      fillRangeYearSelect('#oc-p-from-year', groups.years, 'fromYear', '–° —Å–∞–º–æ–≥–æ —Ä–∞–Ω–Ω–µ–≥–æ');
-      fillRangeYearSelect('#oc-p-to-year', groups.years, 'toYear', '–ü–æ —Å–∞–º—ã–π –ø–æ–∑–¥–Ω–∏–π');
-      fillTierYearSelect(groups.years);
-
-      fillMultiSelect('#oc-f-studio', groups.studios, filters.studios);
-      fillMultiSelect('#oc-f-director', groups.directors, filters.directors);
-      fillMultiSelect('#oc-f-performer', groups.performers, filters.performers);
-      fillMultiSelect('#oc-f-franchise', groups.franchises, filters.franchises);
-      fillMultiSelect('#oc-p-studio', groups.studios, filters.studios);
-      fillMultiSelect('#oc-p-director', groups.directors, filters.directors);
-      fillMultiSelect('#oc-p-performer', groups.performers, filters.performers);
-      fillMultiSelect('#oc-p-franchise', groups.franchises, filters.franchises);
-      refreshDatalists(groups);
-      filterOptionsVersion = catalogVersion;
-      syncFilterControls();
-    }
-
-    function fillRangeYearSelect(selector, years, filterKey, emptyLabel) {
-      const yearSel = $(selector);
-      if (!yearSel) return;
-      const prevYear = String(filters[filterKey] || yearSel.value || '');
-      yearSel.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>` + years.map(y => `<option value="${y}">${y}</option>`).join('');
-      yearSel.value = years.includes(prevYear) ? prevYear : '';
-      if (prevYear && !years.includes(prevYear)) filters[filterKey] = '';
-    }
-
-    function fillTierYearSelect(years) {
-      const sel = $('#oc-tier-year');
-      if (!sel) return;
-      const allYears = years.length ? years : [String(currentYear())];
-      const current = String(tierSelection.year || allYears[0]);
-      sel.innerHTML = allYears.map(y => `<option value="${y}">${y}</option>`).join('');
-      if (!allYears.includes(current)) tierSelection.year = Number(allYears[0]);
-      sel.value = String(tierSelection.year);
-    }
-
-    function syncFilterControls() {
-      const pairs = [
-        ['#oc-f-search', catalogFilters.search], ['#oc-p-search', profileFilters.search],
-        ['#oc-f-type', catalogFilters.type], ['#oc-p-type', profileFilters.type],
-        ['#oc-f-from-year', catalogFilters.fromYear], ['#oc-p-from-year', profileFilters.fromYear],
-        ['#oc-f-from-season', catalogFilters.fromSeason], ['#oc-p-from-season', profileFilters.fromSeason],
-        ['#oc-f-to-year', catalogFilters.toYear], ['#oc-p-to-year', profileFilters.toYear],
-        ['#oc-f-to-season', catalogFilters.toSeason], ['#oc-p-to-season', profileFilters.toSeason],
-        ['#oc-f-score-cmp', catalogFilters.scoreCmp], ['#oc-p-score-cmp', profileFilters.scoreCmp],
-        ['#oc-f-score-value', catalogFilters.scoreValue], ['#oc-p-score-value', profileFilters.scoreValue]
-      ];
-      pairs.forEach(([selector, value]) => { const el = $(selector); if (el) el.value = value; });
-      const catalogMissing = $('#oc-f-missing'); if (catalogMissing) catalogMissing.checked = Boolean(catalogFilters.missingOnly);
-      const profileMissing = $('#oc-p-missing'); if (profileMissing) profileMissing.checked = Boolean(profileFilters.missingOnly);
-      const multiPairs = [
-        ['#oc-f-studio', catalogFilters.studios], ['#oc-p-studio', profileFilters.studios],
-        ['#oc-f-director', catalogFilters.directors], ['#oc-p-director', profileFilters.directors],
-        ['#oc-f-performer', catalogFilters.performers], ['#oc-p-performer', profileFilters.performers],
-        ['#oc-f-franchise', catalogFilters.franchises], ['#oc-p-franchise', profileFilters.franchises]
-      ];
-      syncContentFilterSelect();
-      multiPairs.forEach(([selector, selected]) => {
-        const el = $(selector);
-        if (!el) return;
-        const selectedSet = new Set(selected || []);
-        Array.from(el.options).forEach(opt => { opt.selected = selectedSet.has(opt.value); });
-      });
-    }
-
-    function fillMultiSelect(selector, values, currentSelection) {
-      const el = $(selector);
-      if (!el) return;
-      el.innerHTML = values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
-      Array.from(el.options).forEach(opt => { opt.selected = currentSelection.includes(opt.value); });
-    }
-
-    function fillDatalist(selector, values) {
-      const el = $(selector);
-      if (!el) return;
-      el.innerHTML = uniqueSorted(values).slice(0, 80).map(v => `<option value="${escapeHtml(v)}"></option>`).join('');
-    }
-
-    const DATALIST_CATEGORY = {
-      'oc-dl-studios': 'studios',
-      'oc-dl-directors': 'directors',
-      'oc-dl-performers': 'performers',
-      'oc-dl-franchises': 'franchises'
-    };
-
-    function sameSongGroupIdForTitle(value) {
-      const normalized = String(value || '').trim().toLocaleLowerCase('ru').replace(/—ë/g, '–µ').replace(/\s+/g, ' ');
-      if (!normalized) return '';
-      let hash = 2166136261;
-      for (let i = 0; i < normalized.length; i++) {
-        hash ^= normalized.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-      }
-      return 'song-' + (hash >>> 0).toString(36);
-    }
-
-    function sameSongFields(value) {
-      const title = String(value || '').trim();
-      return { sameSongGroupId: sameSongGroupIdForTitle(title), sameSongTitle: title };
-    }
-
-    function normalizeSuggestionText(value) {
-      return String(value || '').trim().toLowerCase().replace(/—ë/g, '–µ');
-    }
-
-    function refreshDynamicDatalist(input) {
-      if (!input) return;
-      const listId = input.getAttribute('list') || '';
-      const category = DATALIST_CATEGORY[listId];
-      const datalist = category ? document.getElementById(listId) : null;
-      if (!category || !datalist) return;
-
-      const raw = String(input.value || '');
-      const commaAt = raw.lastIndexOf(',');
-      const prefix = commaAt >= 0 ? raw.slice(0, commaAt + 1) : '';
-      const query = normalizeSuggestionText(commaAt >= 0 ? raw.slice(commaAt + 1) : raw);
-      const values = allCategoryValues(category);
-      const starts = [];
-      const contains = [];
-
-      values.forEach(value => {
-        const normalized = normalizeSuggestionText(value);
-        if (!query || normalized.startsWith(query)) starts.push(value);
-        else if (normalized.includes(query)) contains.push(value);
-      });
-
-      const matches = starts.concat(contains).slice(0, 80);
-      datalist.innerHTML = matches.map(value => {
-        const optionValue = prefix ? `${prefix} ${value}` : value;
-        return `<option value="${escapeHtml(optionValue)}"></option>`;
-      }).join('');
-    }
-
-    function refreshDatalists(groups) {
-      // –ü–æ–¥—Å–∫–∞–∑–∫–∏ –æ–±–Ω–æ–≤–ª—è—é—Ç—Å—è –¥–∏–Ω–∞–º–∏—á–µ—Å–∫–∏ –ø–æ –≤–≤–µ–¥—ë–Ω–Ω–æ–º—É —Ç–µ–∫—Å—Ç—É, —á—Ç–æ–±—ã —Å–ø–∏—Å–æ–∫ –Ω–µ –∑–∞–≤–∏—Å–∞–ª
-      // –∏ –≤–∞—Ä–∏–∞–Ω—Ç—ã –∑–∞ –ø—Ä–µ–¥–µ–ª–∞–º–∏ –ø–µ—Ä–≤—ã—Ö 500 –∑–Ω–∞—á–µ–Ω–∏–π —Ç–æ–∂–µ –≤—Å–µ–≥–¥–∞ –Ω–∞—Ö–æ–¥–∏–ª–∏—Å—å.
-      fillDatalist('#oc-dl-titles', []);
-      fillDatalist('#oc-dl-search', []);
-      fillDatalist('#oc-dl-studios', groups.studios || []);
-      fillDatalist('#oc-dl-directors', groups.directors || []);
-      fillDatalist('#oc-dl-performers', groups.performers || []);
-      fillDatalist('#oc-dl-franchises', groups.franchises || []);
-      fillDatalist('#oc-dl-same-songs', entries.map(entry => entry.sameSongTitle).filter(Boolean));
-    }
-
-    function allCategoryValues(key) {
-      const groups = buildCategoryCache(false);
-      return groups[key] || [];
-    }
-
-    function entrySearchText(entry) {
-      if (!entry) return '';
-      if (entry.__ocSearchText) return entry.__ocSearchText;
-      const text = [
-        entry.title, ...(entry.alternativeTitles || []), entry.type, entry.year, SEASON_LABEL[entry.season], entryIsChinese(entry) ? '–∫–∏—Ç–∞–π—Å–∫–∏–π' : '', entryIsMovie(entry) ? '—Ñ–∏–ª—å–º movie' : '', entryIsShortened(entry) ? '—É–∫–æ—Ä–æ—á–µ–Ω–Ω—ã–π –∫–æ—Ä–æ—Ç–∫–∏–π short shortened 30sec' : '',
-        entry.image || '', ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
-      ].join(' ').toLowerCase();
-      try { Object.defineProperty(entry, '__ocSearchText', { value: text, configurable: true, enumerable: false }); }
-      catch (e) { entry.__ocSearchText = text; }
-      return text;
-    }
-
-    function filtersCacheKey() {
-      return [
-        dataVersion, filters.search, filters.type, filters.fromYear, filters.fromSeason, filters.toYear, filters.toSeason,
-        filters.scoreCmp, filters.scoreValue, filters.missingOnly ? 'missing' : 'allfields', filters.hideChinese ? 'hideCN' : 'showCN', filters.hideMovie ? 'hideMovie' : 'showMovie', filters.hideShortened ? 'hideShort' : 'showShort',
-        filters.studios.join('¬¶'), filters.directors.join('¬¶'), filters.performers.join('¬¶'), filters.franchises.join('¬¶')
-      ].join('|');
-    }
-
-    function entryInMainFilterSeasonRange(entry) {
-      const year = Number(entry?.year);
-      const seasonIndex = SEASON_ORDER.indexOf(String(entry?.season || ''));
-      if (!Number.isFinite(year) || seasonIndex < 0) return !filters.fromYear && !filters.toYear;
-      const point = year * 4 + seasonIndex;
-      let start = filters.fromYear ? Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason) : null;
-      let end = filters.toYear ? Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason) : null;
-      if (start !== null && end !== null && start > end) [start, end] = [end, start];
-      return (start === null || point >= start) && (end === null || point <= end);
-    }
-
-    function addFilterValueFromInput(input) {
-      const key = input.getAttribute('data-filter-suggest');
-      const raw = String(input.value || '').trim();
-      if (!key || raw.length < 2) return;
-      const values = allCategoryValues(key);
-      const exact = values.find(v => v.toLowerCase() === raw.toLowerCase());
-      const partial = values.find(v => v.toLowerCase().includes(raw.toLowerCase()));
-      const chosen = exact || partial || raw;
-      filters[key] = filters[key] || [];
-      if (filters[key].includes(chosen)) {
-        filters[key] = filters[key].filter(v => v !== chosen);
-      } else {
-        filters[key].push(chosen);
-      }
-      input.value = '';
-      populateFilterOptions();
-      applyFilterChange();
-    }
-
-    function allVoterNames() {
-      const names = new Set();
-      entries.forEach(e => {
-        Object.keys(e.scores || {}).forEach(n => names.add(n));
-        Object.keys(e.songScores || {}).forEach(n => names.add(n));
-        Object.keys(e.visualScores || {}).forEach(n => names.add(n));
-        Object.keys(e.personalScores || {}).forEach(n => names.add(n));
-      });
-      Object.keys(manualRanks || {}).forEach(n => {
-        const row = manualRanks[n] || {};
-        const display = String(row.nickname || row.displayName || row.name || '').trim();
-        const key = String(row.nicknameKey || '').trim();
-        const looksLikeTechnicalAlias = key && key === n && display;
-        names.add(looksLikeTechnicalAlias ? display : (display || n));
-      });
-      Object.keys(avatarsMap || {}).forEach(n => names.add(n));
-      if (myName) names.add(myName);
-      return Array.from(names).sort(compareNatural);
-    }
-
-    function populateProfileUsers(force = false) {
-      if (!profileUserSelect) return;
-      const key = `${dataVersion}|${manualRanksVersion}|${avatarsVersion}|${myName}`;
-      const prev = profileUserSelect.value;
-      let names;
-      if (!force && profileUsersCache.key === key && profileUsersCache.names.length) {
-        names = profileUsersCache.names;
-      } else {
-        names = allVoterNames();
-        profileUsersCache = { key, names };
-      }
-      if (!names.length) {
-        profileUserSelect.innerHTML = '<option value="">–Ω–µ—Ç –æ—Ü–µ–Ω–∏–≤—à–∏—Ö</option>';
-        profileUser = '';
-        return;
-      }
-      const currentOptionsKey = profileUserSelect.getAttribute('data-options-key') || '';
-      const nextOptionsKey = key + '|' + names.join('¬¶');
-      if (force || currentOptionsKey !== nextOptionsKey) {
-        profileUserSelect.innerHTML = names.map(n => `<option value="${escapeHtml(n)}">${avatarFor(n)} ${escapeHtml(n)}</option>`).join('');
-        profileUserSelect.setAttribute('data-options-key', nextOptionsKey);
-      }
-      let next = prev && names.includes(prev) ? prev : (myName && names.includes(myName) ? myName : names[0]);
-      profileUserSelect.value = next;
-      profileUser = next;
-    }
-
-    function titleMatchesAnySearch(entry, query) {
-      if (!entry) return false;
-      if (titleMatchesFuzzySearch(entry.title, query)) return true;
-      return (entry.alternativeTitles || []).some(title => titleMatchesFuzzySearch(title, query));
-    }
-
-    function normalizedSearchValue(value) {
-      return String(value || '').trim().toLocaleLowerCase('ru').replace(/—ë/g, '–µ').replace(/\s+/g, ' ');
-    }
-
-    function fuzzySearchPosition(value, query) {
-      const text = normalizedSearchValue(value);
-      const target = normalizedSearchValue(query);
-      if (!target || target.includes(' ') || target.length < 4) return null;
-      const words = [...text.matchAll(/[a-z–∞-—è0-9]+/giu)];
-      let best = null;
-      words.forEach(match => {
-        const word = match[0];
-        if (!word || word[0] !== target[0] || Math.abs(word.length - target.length) > 2) return;
-        const distance = levenshteinDistance(target, word);
-        const allowed = target.length <= 8 ? 1 : 2;
-        const ratio = 1 - distance / Math.max(target.length, word.length);
-        if (distance > allowed || ratio < .78) return;
-        const candidate = { distance, position: match.index || 0 };
-        if (!best || candidate.distance < best.distance || (candidate.distance === best.distance && candidate.position < best.position)) best = candidate;
-      });
-      return best;
-    }
-
-    function entrySearchRelevance(entry, query) {
-      const target = normalizedSearchValue(query);
-      if (!entry || !target) return 0;
-      const title = normalizedSearchValue(entry.title);
-      const titlePosition = title.indexOf(target);
-      if (titlePosition >= 0) return titlePosition;
-
-      let bestAlternative = Infinity;
-      (entry.alternativeTitles || []).forEach(value => {
-        const position = normalizedSearchValue(value).indexOf(target);
-        if (position >= 0) bestAlternative = Math.min(bestAlternative, position);
-      });
-      if (bestAlternative < Infinity) return 100000 + bestAlternative;
-
-      const titleFuzzy = fuzzySearchPosition(entry.title, target);
-      if (titleFuzzy) return 200000 + titleFuzzy.distance * 1000 + titleFuzzy.position;
-
-      const metadata = [
-        entry.type, entry.year, SEASON_LABEL[entry.season], entry.image,
-        entryIsChinese(entry) ? '–∫–∏—Ç–∞–π—Å–∫–∏–π' : '', entryIsMovie(entry) ? '—Ñ–∏–ª—å–º movie' : '', entryIsShortened(entry) ? '—É–∫–æ—Ä–æ—á–µ–Ω–Ω—ã–π –∫–æ—Ä–æ—Ç–∫–∏–π short shortened 30sec' : '',
-        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
-      ].map(normalizedSearchValue).filter(Boolean);
-      let bestMetadata = Infinity;
-      if (target.length >= 3) {
-        metadata.forEach(value => {
-          const position = value.indexOf(target);
-          if (position >= 0) bestMetadata = Math.min(bestMetadata, position);
-        });
-      }
-      if (bestMetadata < Infinity) return 300000 + bestMetadata;
-
-      let bestFuzzyAlternative = null;
-      (entry.alternativeTitles || []).forEach(value => {
-        const candidate = fuzzySearchPosition(value, target);
-        if (!candidate) return;
-        if (!bestFuzzyAlternative || candidate.distance < bestFuzzyAlternative.distance || (candidate.distance === bestFuzzyAlternative.distance && candidate.position < bestFuzzyAlternative.position)) bestFuzzyAlternative = candidate;
-      });
-      return bestFuzzyAlternative ? 400000 + bestFuzzyAlternative.distance * 1000 + bestFuzzyAlternative.position : Infinity;
-    }
-
-    function missingRequiredFields(entry) {
-      const missing = [];
-      if (!String(entry.title || '').trim()) missing.push('–Ω–∞–∑–≤–∞–Ω–∏–µ');
-      if (!String(entry.type || '').trim()) missing.push('—Ç–∏–ø');
-      if (entry.year === null || entry.year === undefined || entry.year === '' || Number.isNaN(Number(entry.year))) missing.push('–≥–æ–¥');
-      if (!String(entry.season || '').trim()) missing.push('—Å–µ–∑–æ–Ω');
-      if (!(entry.studios || []).length) missing.push('—Å—Ç—É–¥–∏–∏');
-      if (!(entry.directors || []).length) missing.push('—Ä–µ–∂–∏—Å—Å—ë—Ä—ã');
-      if (!(entry.performers || []).length) missing.push('–∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª–∏');
-      if (!(entry.franchises || []).length) missing.push('—Ñ—Ä–∞–Ω—à–∏–∑—ã');
-      if (!String(entry.image || '').trim()) missing.push('–∫–∞—Ä—Ç–∏–Ω–∫–∞');
-      if (!String(entry.link || '').trim()) missing.push('—Å—Å—ã–ª–∫–∞');
-      return missing;
-    }
-
-    function missingAddFormFields(entry) {
-      const missing = [];
-      const hasYear = entry.year !== null && entry.year !== undefined && entry.year !== '' && !Number.isNaN(Number(entry.year));
-      const hasSeason = Boolean(String(entry.season || '').trim());
-      if (!String(entry.title || '').trim()) missing.push('–Ω–∞–∑–≤–∞–Ω–∏–µ');
-      if (!String(entry.type || '').trim()) missing.push('—Ç–∏–ø');
-      if (!hasYear) missing.push('–≥–æ–¥');
-      if (!hasSeason) missing.push('—Å–µ–∑–æ–Ω');
-      if (!(entry.directors || []).length) missing.push('—Ä–µ–∂–∏—Å—Å—ë—Ä');
-
-      const now = new Date();
-      const currentOpenSeasonPoint = now.getFullYear() * 4 + Math.floor(now.getMonth() / 3);
-      const seasonPoint = hasYear && hasSeason ? Number(entry.year) * 4 + SEASON_ORDER.indexOf(entry.season) : null;
-      if (seasonPoint !== null && seasonPoint > currentOpenSeasonPoint) {
-        return missing.length === 1 && missing[0] === '—Ä–µ–∂–∏—Å—Å—ë—Ä' ? [] : missing;
-      }
-
-      if (!(entry.studios || []).length) missing.push('—Å—Ç—É–¥–∏—è');
-      if (!(entry.performers || []).length) missing.push('–∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª—å');
-      if (!(entry.franchises || []).length) missing.push('—Ñ—Ä–∞–Ω—à–∏–∑–∞');
-      if (seasonPoint === null || seasonPoint < currentOpenSeasonPoint) {
-        if (!String(entry.image || '').trim()) missing.push('–∫–∞—Ä—Ç–∏–Ω–∫–∞');
-        if (!String(entry.link || '').trim()) missing.push('—Å—Å—ã–ª–∫–∞ –Ω–∞ –≤–∏–¥–µ–æ');
-      }
-      return missing.length === 1 && missing[0] === '—Ä–µ–∂–∏—Å—Å—ë—Ä' ? [] : missing;
-    }
-
-    function entryHasMissingRequiredFields(entry) {
-      return missingRequiredFields(entry).length > 0;
-    }
-
-    function applyFilters(list) {
-      const q = normalizedSearchValue(filters.search);
-      const cacheKey = list === entries ? filtersCacheKey() : '';
-      if (cacheKey && filteredCache.key === cacheKey && Array.isArray(filteredCache.value)) return filteredCache.value;
-      const result = list.filter(e => {
-        if (q) {
-          if (!Number.isFinite(entrySearchRelevance(e, q))) return false;
-        }
-        if (filters.type && e.type !== filters.type) return false;
-        if (!entryPassesHiddenFlags(e, filters.hideChinese, filters.hideMovie, filters.hideShortened)) return false;
-        if (filters.missingOnly && !entryHasMissingRequiredFields(e)) return false;
-        if (!entryInMainFilterSeasonRange(e)) return false;
-        if (filters.scoreCmp && String(filters.scoreValue || '').trim() !== '') {
-          const score = avgAny(e.scores);
-          const target = Number(String(filters.scoreValue).replace(',', '.'));
-          if (score === null || !Number.isFinite(target)) return false;
-          if (filters.scoreCmp === '>=' && !(score >= target)) return false;
-          if (filters.scoreCmp === '>' && !(score > target)) return false;
-          if (filters.scoreCmp === '<=' && !(score <= target)) return false;
-          if (filters.scoreCmp === '<' && !(score < target)) return false;
-          if (filters.scoreCmp === '=' && !(Math.abs(score - target) < 0.05)) return false;
-        }
-        if (filters.studios.length && !filters.studios.some(s => (e.studios || []).includes(s))) return false;
-        if (filters.directors.length && !filters.directors.some(s => (e.directors || []).includes(s))) return false;
-        if (filters.performers.length && !filters.performers.some(s => (e.performers || []).includes(s))) return false;
-        if (filters.franchises.length && !filters.franchises.some(s => (e.franchises || []).includes(s))) return false;
-        return true;
-      });
-      if (cacheKey) filteredCache = { key: cacheKey, value: result };
-      return result;
-    }
-
-    function applyFiltersIgnoringType(list) {
-      const oldType = filters.type;
-      filters.type = '';
-      const out = applyFilters(list);
-      filters.type = oldType;
-      return out;
-    }
-
-    function entryTimestamp(entry, fallbackIndex = 0) {
-      const raw = entry ? (entry.createdAt || entry.updatedAt || '') : '';
-      if (raw && typeof raw.toMillis === 'function') return raw.toMillis();
-      if (raw && typeof raw.seconds === 'number') return raw.seconds * 1000;
-      if (raw instanceof Date) return raw.getTime();
-      const parsed = Date.parse(raw);
-      if (Number.isFinite(parsed)) return parsed;
-      return fallbackIndex;
-    }
-
-    function applySort(list) {
-      const cacheKey = `${dataVersion}|${sortMode}|${list.length}|${list === filteredCache.value ? filteredCache.key : ''}`;
-      if (sortedCache.input === list && sortedCache.key === cacheKey && Array.isArray(sortedCache.value)) return sortedCache.value;
-      const searchQuery = normalizedSearchValue(filters.search);
-      const withScore = list.map((e, idx) => ({ e, score: avg(e.scores), ts: entryTimestamp(e, idx), relevance: searchQuery ? entrySearchRelevance(e, searchQuery) : 0 }));
-      const compareSeason = (left, right, direction) => {
-        const leftIndex = SEASON_ORDER.indexOf(String(left || ''));
-        const rightIndex = SEASON_ORDER.indexOf(String(right || ''));
-        if (leftIndex < 0 && rightIndex < 0) return 0;
-        if (leftIndex < 0) return 1;
-        if (rightIndex < 0) return -1;
-        return (leftIndex - rightIndex) * direction;
-      };
-      withScore.sort((a, b) => {
-        if (searchQuery && a.relevance !== b.relevance) return a.relevance - b.relevance;
-        if (sortMode === 'added_desc') return (b.ts || 0) - (a.ts || 0) || compareNatural(b.e.title, a.e.title);
-        if (sortMode === 'year_desc') return (b.e.year || 0) - (a.e.year || 0) || compareSeason(a.e.season, b.e.season, -1) || (b.ts || 0) - (a.ts || 0);
-        if (sortMode === 'year_asc') return (a.e.year || 0) - (b.e.year || 0) || compareSeason(a.e.season, b.e.season, 1) || (b.ts || 0) - (a.ts || 0);
-        if (sortMode === 'title') return compareNatural(a.e.title, b.e.title);
-        if (sortMode === 'score_asc') {
-          if (a.score === null && b.score === null) return (b.ts || 0) - (a.ts || 0);
-          if (a.score === null) return 1;
-          if (b.score === null) return -1;
-          return a.score - b.score || (b.ts || 0) - (a.ts || 0);
-        }
-        if (a.score === null && b.score === null) return (b.ts || 0) - (a.ts || 0);
-        if (a.score === null) return 1;
-        if (b.score === null) return -1;
-        return b.score - a.score || (b.ts || 0) - (a.ts || 0);
-      });
-      const result = withScore.map(x => x.e);
-      sortedCache = { key: cacheKey, input: list, value: result };
-      return result;
-    }
-
-    function clampPage(page, totalItems) {
-      const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-      const n = Number(page);
-      return Math.max(1, Math.min(totalPages, Number.isFinite(n) ? Math.round(n) : 1));
-    }
-
-    function pageSlice(list, page) {
-      const safePage = clampPage(page, list.length);
-      const start = (safePage - 1) * PAGE_SIZE;
-      return { safePage, start, items: list.slice(start, start + PAGE_SIZE), totalPages: Math.max(1, Math.ceil(list.length / PAGE_SIZE)) };
-    }
-
-    function paginationHtml(scope, page, totalItems) {
-      if (totalItems <= 0) return '';
-      const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-      const safePage = clampPage(page, totalItems);
-      const from = (safePage - 1) * PAGE_SIZE + 1;
-      const to = Math.min(totalItems, safePage * PAGE_SIZE);
-      return `<div class="oc-pagination" data-page-scope="${scope}">
-        <button type="button" class="oc-page-btn" data-page-dir="prev" ${safePage <= 1 ? 'disabled' : ''}>‚Üê –Ω–∞–∑–∞–¥</button>
-        <span>${from}‚Äì${to} –∏–∑ ${totalItems} ¬∑ —Å—Ç—Ä. ${safePage}/${totalPages}</span>
-        <button type="button" class="oc-page-btn" data-page-dir="next" ${safePage >= totalPages ? 'disabled' : ''}>–≤–ø–µ—Ä—ë–¥ ‚Üí</button>
-      </div>`;
-    }
-
-    function bindPagination(container, scope, getPage, setPage, rerender) {
-      if (!container) return;
-      container.querySelectorAll(`[data-page-scope="${scope}"] [data-page-dir]`).forEach(btn => {
-        btn.addEventListener('click', () => {
-          const delta = btn.getAttribute('data-page-dir') === 'next' ? 1 : -1;
-          setPage(getPage() + delta);
-          rerender();
-        });
-      });
-    }
-
-    function renderFilterStat(filteredList) {
-      if (!filterStatEl) return;
-      const filterActive = filters.search || filters.type || filters.fromYear || filters.toYear || filters.scoreCmp || filters.scoreValue || filters.missingOnly || filters.hideChinese || filters.hideMovie || filters.hideShortened || filters.studios.length || filters.directors.length || filters.performers.length || filters.franchises.length;
-      if (!filterActive) {
-        filterStatEl.classList.remove('show');
-        filterStatEl.textContent = '';
-        return;
-      }
-      const scored = filteredList.map(e => avg(e.scores)).filter(s => s !== null);
-      if (!scored.length) {
-        filterStatEl.textContent = `‚òÖ –°—Ä–µ–¥–Ω—è—è –æ—Ü–µ–Ω–∫–∞ –ø–æ —Ñ–∏–ª—å—Ç—Ä—É: –Ω–µ—Ç –æ—Ü–µ–Ω–æ–∫ –ø–æ–∫–∞ (${filteredList.length} —Ç—Ä–µ–∫(–æ–≤) –±–µ–∑ –æ—Ü–µ–Ω–æ–∫)`;
-      } else {
-        const mean = scored.reduce((a, b) => a + b, 0) / scored.length;
-        filterStatEl.textContent = `‚òÖ –°—Ä–µ–¥–Ω—è—è –æ—Ü–µ–Ω–∫–∞ –ø–æ —Ñ–∏–ª—å—Ç—Ä—É: ${formatScore(mean)} (–æ—Ü–µ–Ω–µ–Ω–æ ${scored.length} –∏–∑ ${filteredList.length})`;
-      }
-      filterStatEl.classList.add('show');
-    }
-
-
-    function currentYear() {
-      return new Date().getFullYear();
-    }
-
-    function seasonHasStarted(year, season) {
-      const start = new Date(year, SEASON_START_MONTH[season], 1, 0, 0, 0, 0);
-      return start <= new Date();
-    }
-
-    function isOp(entry) {
-      return String(entry.type || '').toUpperCase() === 'OP';
-    }
-
-    function entryTypeMatches(entry, type) {
-      return String(entry.type || '').toUpperCase() === String(type || seasonType || 'OP').toUpperCase();
-    }
-
-    function typeLabel(type) {
-      return String(type || seasonType) === 'ED' ? 'ED' : 'OP';
-    }
-
-    function typeLabelRu(type) {
-      return String(type || seasonType) === 'ED' ? '—ç–Ω–¥–∏–Ω–≥–æ–≤' : '–æ–ø–µ–Ω–∏–Ω–≥–æ–≤';
-    }
-
-    function scoreFor(entry, name) {
-      const val = valueForUserMap(entry && entry.scores, name);
-      return val !== undefined ? normalizePublicScore(val) : null;
-    }
-
-    function personalScoreFor(entry, name) {
-      const val = valueForUserMap(entry && entry.personalScores, name);
-      return val !== undefined ? Math.max(1, Math.min(5, Math.round(Number(val)))) : null;
-    }
-
-    function songScoreFor(entry, name) {
-      const val = valueForUserMap(entry && entry.songScores, name);
-      return val !== undefined ? normalizePublicScore(val) : null;
-    }
-
-    function visualScoreFor(entry, name) {
-      const val = valueForUserMap(entry && entry.visualScores, name);
-      return val !== undefined ? normalizePublicScore(val) : null;
-    }
-
-    function ratingCommentFor(entry, name) {
-      const value = valueForUserMap(entry && entry.comments, name);
-      return value === undefined ? '' : String(value || '').trim();
-    }
-
-    function uncertaintyFields(entry) {
-      const fields = [];
-      if (entry?.uncertainPerformer) fields.push('–∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª—å');
-      if (entry?.uncertainDirector) fields.push('—Ä–µ–∂–∏—Å—Å—ë—Ä');
-      if (entry?.uncertainImage) fields.push('–æ—Å–Ω–æ–≤–Ω–æ–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ');
-      return fields;
-    }
-
-    function uncertaintyMarker(entry) {
-      const fields = uncertaintyFields(entry);
-      return fields.length ? `<span class="oc-missing-link oc-uncertain-link" title="–ù–µ—É–≤–µ—Ä–µ–Ω–Ω—ã–µ –¥–∞–Ω–Ω—ã–µ: ${escapeHtml(fields.join(', '))}">ü§î</span>` : '';
-    }
-
-    function ratingCommentEditorMarkup(prefix, comment) {
-      const cleanComment = String(comment || '').trim();
-      return `<details class="oc-rating-comment-editor${cleanComment ? ' has-comment' : ''}">
-        <summary>${cleanComment ? 'üí¨ –ö–æ–º–º–µ–Ω—Ç–∞—Ä–∏–π –¥–æ–±–∞–≤–ª–µ–Ω' : 'üí¨ –î–æ–±–∞–≤–∏—Ç—å –∫–æ–º–º–µ–Ω—Ç–∞—Ä–∏–π'}</summary>
-        <textarea id="${prefix}-comment" maxlength="1000" rows="3" placeholder="–ö–æ–º–º–µ–Ω—Ç–∞—Ä–∏–π –Ω–µ–æ–±—è–∑–∞—Ç–µ–ª–µ–Ω‚Ä¶">${escapeHtml(cleanComment)}</textarea>
-      </details>`;
-    }
-
-    function normalizeRatingFields(value) {
-      const source = Array.isArray(value) ? value : [];
-      const used = new Set();
-      return source.slice(0, 8).map((row, index) => {
-        const item = row && typeof row === 'object' ? row : {};
-        const label = String(item.label || item.name || '').trim().slice(0, 48);
-        let id = String(item.id || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
-        if (!id) id = `field-${index + 1}`;
-        while (used.has(id)) id = `${id}-${index + 1}`;
-        used.add(id);
-        const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
-        const mode = item.mode === 'modifier' ? 'modifier' : 'weight';
-        const modifierRules = String(item.modifierRules || item.rules || '').trim().slice(0, 240);
-        return { id, label, weight, mode, modifierRules };
-      }).filter(row => row.label);
-    }
-
-    function normalizeCustomRatingScores(value) {
-      const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-      const result = {};
-      Object.entries(source).slice(0, 8).forEach(([rawId, rawValue]) => {
-        const id = String(rawId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
-        const score = normalizeOptionalNumber(rawValue);
-        if (id && Number.isFinite(score)) result[id] = score;
-      });
-      return result;
-    }
-
-    function ratingModifierForScore(rules, rawScore) {
-      const score = Number(rawScore);
-      if (!Number.isFinite(score)) return { matched: false, value: 0 };
-      const numberValue = value => Number(String(value || '').trim().replace(',', '.'));
-      const rows = String(rules || '').split(/;|\n/).map(row => row.trim()).filter(Boolean);
-      for (const row of rows) {
-        const separator = row.lastIndexOf(':');
-        if (separator <= 0) continue;
-        const condition = row.slice(0, separator).trim();
-        const modifier = numberValue(row.slice(separator + 1));
-        if (!Number.isFinite(modifier)) continue;
-        let matches = condition === '*';
-        const comparison = condition.match(/^(<=|>=|<|>)\s*([+-]?\d+(?:[.,]\d+)?)$/);
-        if (comparison) {
-          const limit = numberValue(comparison[2]);
-          matches = comparison[1] === '<=' ? score <= limit : comparison[1] === '>=' ? score >= limit : comparison[1] === '<' ? score < limit : score > limit;
-        }
-        const range = condition.match(/^([+-]?\d+(?:[.,]\d+)?)\s*(?:-|‚Äì|‚Äî|\.\.)\s*([+-]?\d+(?:[.,]\d+)?)$/);
-        if (range) {
-          const left = numberValue(range[1]);
-          const right = numberValue(range[2]);
-          matches = score >= Math.min(left, right) && score <= Math.max(left, right);
-        } else if (!comparison && condition !== '*' && /^[+-]?\d+(?:[.,]\d+)?$/.test(condition)) {
-          matches = score === numberValue(condition);
-        }
-        if (matches) return { matched: true, value: modifier };
-      }
-      return { matched: false, value: 0 };
-    }
-
-    function ratingCriterionScore(input, rawValue) {
-      if (rawValue === null || rawValue === undefined || String(rawValue).trim() === '') return null;
-      const score = Number(String(rawValue).trim().replace(',', '.'));
-      if (!Number.isFinite(score)) return null;
-      const isModifier = Boolean(input?.hasAttribute?.('data-rating-modifier-rules'));
-      const min = isModifier ? 0 : ratingMin();
-      const max = ratingMax();
-      if (score < min || score > max) return null;
-      const step = scaleStep();
-      return Number((Math.round(score / step) * step).toFixed(1));
-    }
-
-    function detailedRatingSettings(name = myName, rawType = 'OP') {
-      const profile = dailyProfileFor(name);
-      const type = String(rawType || '').toUpperCase() === 'ED' ? 'ED' : 'OP';
-      const stored = profile?.detailedRatingByType?.[type];
-      const source = stored && typeof stored === 'object' ? stored : null;
-      const oldType = profile?.ratingCriteria?.[type];
-      return {
-        type,
-        enabled: source ? Boolean(source.enabled) : Boolean(profile?.detailedRatingEnabled),
-        songLabel: String(source?.songLabel || profile?.songScoreLabel || '–ü–µ—Å–Ω—è').trim().slice(0, 48) || '–ü–µ—Å–Ω—è',
-        visualLabel: String(source?.visualLabel || profile?.visualScoreLabel || '–í–∏–∑—É–∞–ª').trim().slice(0, 48) || '–í–∏–∑—É–∞–ª',
-        songWeight: Math.max(0, Math.min(100, Number(source?.songWeight ?? oldType?.songWeight ?? profile?.songScoreWeight ?? 50) || 0)),
-        visualWeight: Math.max(0, Math.min(100, Number(source?.visualWeight ?? oldType?.visualWeight ?? profile?.visualScoreWeight ?? 50) || 0)),
-        songMode: source?.songMode === 'modifier' ? 'modifier' : 'weight',
-        visualMode: source?.visualMode === 'modifier' ? 'modifier' : 'weight',
-        songModifierRules: String(source?.songModifierRules || '').trim().slice(0, 240),
-        visualModifierRules: String(source?.visualModifierRules || '').trim().slice(0, 240),
-        fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
-      };
-    }
-
-    function customScoresFor(entry, name) {
-      return normalizeCustomRatingScores(valueForUserMap(entry && entry.customScores, name));
-    }
-
-    function detailedRatingMarkup(entry, prefix, songScore, visualScore) {
-      if (!entry || isPersonalScale()) return '';
-      const settings = detailedRatingSettings(myName, entry.type);
-      if (!settings.enabled) {
-        return `<div class="oc-detailed-rating-off"><span><b>–î–µ—Ç–∞–ª—å–Ω–æ–µ –æ—Ü–µ–Ω–∏–≤–∞–Ω–∏–µ ${settings.type} –≤—ã–∫–ª—é—á–µ–Ω–æ</b><small>–î–æ–ø–æ–ª–Ω–∏—Ç–µ–ª—å–Ω—ã–µ –∫—Ä–∏—Ç–µ—Ä–∏–∏ –¥–ª—è ${settings.type} —Å–∫—Ä—ã—Ç—ã</small></span><button type="button" class="oc-secondary-btn" data-open-rating-fields-settings data-rating-settings-type="${settings.type}">–ù–∞—Å—Ç—Ä–æ–∏—Ç—å ${settings.type}</button></div>`;
-      }
-      const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
-      const saved = customScoresFor(entry, myName);
-      const calculationHint = (mode, weight, rules) => mode === 'modifier' ? `–º–æ–¥–∏—Ñ–∏–∫–∞—Ç–æ—Ä ¬∑ ${rules || '–Ω–µ—Ç –ø—Ä–∞–≤–∏–ª'}` : `–≤–µ—Å ${weight}`;
-      const calculationMin = mode => mode === 'modifier' ? 0 : bounds.min;
-      const calculationAttributes = (mode, weight, rules) => mode === 'modifier'
-        ? `data-rating-modifier-rules="${escapeHtml(rules || '')}"`
-        : `data-rating-weight="${weight}"`;
-      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">–Ω–µ–æ–±—è–∑. ¬∑ ${escapeHtml(calculationHint(field.mode, field.weight, field.modifierRules))}</span><input type="number" min="${calculationMin(field.mode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="‚Äî" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" ${calculationAttributes(field.mode, field.weight, field.modifierRules)}></label>`).join('')}</div>` : '';
-      return `<div class="oc-eval-parts">
-        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">–Ω–µ–æ–±—è–∑. ¬∑ ${escapeHtml(calculationHint(settings.songMode, settings.songWeight, settings.songModifierRules))}</span>
-          <input id="${prefix}-song-score" type="number" min="${calculationMin(settings.songMode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="‚Äî" ${calculationAttributes(settings.songMode, settings.songWeight, settings.songModifierRules)} />
-        </label>
-        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">–Ω–µ–æ–±—è–∑. ¬∑ ${escapeHtml(calculationHint(settings.visualMode, settings.visualWeight, settings.visualModifierRules))}</span>
-          <input id="${prefix}-visual-score" type="number" min="${calculationMin(settings.visualMode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="‚Äî" ${calculationAttributes(settings.visualMode, settings.visualWeight, settings.visualModifierRules)} />
-        </label>
-      </div>${custom}<div class="oc-detailed-rating-suggestion" data-detailed-rating-suggestion="${escapeHtml(prefix)}"><span data-detailed-rating-value>–ó–∞–ø–æ–ª–Ω–∏ –∫—Ä–∏—Ç–µ—Ä–∏–∏, —á—Ç–æ–±—ã –ø–æ–ª—É—á–∏—Ç—å –ø–æ–¥—Å–∫–∞–∑–∫—É –∏—Ç–æ–≥–æ–≤–æ–≥–æ –±–∞–ª–ª–∞</span><button type="button" class="oc-secondary-btn" data-detailed-rating-apply disabled>–ü–æ–¥—Å—Ç–∞–≤–∏—Ç—å –∏—Ç–æ–≥</button></div>`;
-    }
-
-    function bindDetailedRatingSuggestion(root, prefix) {
-      const box = root?.querySelector?.(`[data-detailed-rating-suggestion="${prefix}"]`);
-      const totalInput = root?.querySelector?.(`#${prefix}-score`);
-      if (!box || !totalInput) return;
-      const weightInputs = [...root.querySelectorAll('[data-rating-weight]')];
-      const modifierInputs = [...root.querySelectorAll('[data-rating-modifier-rules]')];
-      const value = box.querySelector('[data-detailed-rating-value]');
-      const apply = box.querySelector('[data-detailed-rating-apply]');
-      let suggested = null;
-      const update = () => {
-        let weightedTotal = 0;
-        let usedWeight = 0;
-        weightInputs.forEach(input => {
-          const raw = String(input.value || '').trim();
-          const score = ratingCriterionScore(input, raw);
-          const weight = Math.max(0, Number(input.dataset.ratingWeight) || 0);
-          if (score === null || weight <= 0) return;
-          weightedTotal += score * weight;
-          usedWeight += weight;
-        });
-        const base = usedWeight > 0 ? weightedTotal / usedWeight : null;
-        let modifierTotal = 0;
-        let modifierMatches = 0;
-        modifierInputs.forEach(input => {
-          const raw = String(input.value || '').trim();
-          const score = ratingCriterionScore(input, raw);
-          if (score === null) return;
-          const result = ratingModifierForScore(input.dataset.ratingModifierRules, score);
-          if (!result.matched) return;
-          modifierTotal += result.value;
-          modifierMatches += 1;
-        });
-        suggested = base !== null ? clampScore(base + modifierTotal) : null;
-        const signedModifier = modifierTotal > 0 ? `+${formatScore(modifierTotal)}` : formatScore(modifierTotal);
-        if (value) value.textContent = suggested === null
-          ? '–ó–∞–ø–æ–ª–Ω–∏ —Ö–æ—Ç—è –±—ã –æ–¥–∏–Ω –∫—Ä–∏—Ç–µ—Ä–∏–π –≤ —Ä–µ–∂–∏–º–µ ¬´–í–µ—Å¬ª, —á—Ç–æ–±—ã –ø–æ–ª—É—á–∏—Ç—å –æ—Å–Ω–æ–≤—É'
-          : `–ü—Ä–µ–¥–ª–∞–≥–∞–µ–º—ã–π –∏—Ç–æ–≥: ${formatScore(suggested)} ¬∑ –æ—Å–Ω–æ–≤–∞ ${formatScore(base)}${modifierMatches ? ` ¬∑ –º–æ–¥–∏—Ñ–∏–∫–∞—Ç–æ—Ä—ã ${signedModifier}` : ''}`;
-        if (apply) apply.disabled = suggested === null;
-      };
-      [...weightInputs, ...modifierInputs].forEach(input => input.addEventListener('input', update));
-      apply?.addEventListener('click', () => {
-        if (suggested === null) return;
-        totalInput.value = String(suggested);
-        totalInput.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-      update();
-    }
-
-    function readDetailedRating(root, entry, prefix) {
-      const settings = detailedRatingSettings(myName, entry?.type);
-      if (!settings.enabled) {
-        return { songScore: songScoreFor(entry, myName), visualScore: visualScoreFor(entry, myName), customScores: customScoresFor(entry, myName), error: '' };
-      }
-      const songInput = root?.querySelector?.(`#${prefix}-song-score`);
-      const visualInput = root?.querySelector?.(`#${prefix}-visual-score`);
-      const rawSong = songInput ? String(songInput.value || '').trim() : '';
-      const rawVisual = visualInput ? String(visualInput.value || '').trim() : '';
-      const songScore = ratingCriterionScore(songInput, rawSong);
-      const visualScore = ratingCriterionScore(visualInput, rawVisual);
-      const songMin = songInput?.hasAttribute('data-rating-modifier-rules') ? 0 : ratingMin();
-      const visualMin = visualInput?.hasAttribute('data-rating-modifier-rules') ? 0 : ratingMin();
-      if (rawSong && songScore === null) return { error: `–í–≤–µ–¥–∏—Ç–µ ¬´${settings.songLabel}¬ª –æ—Ç ${formatScore(songMin)} –¥–æ ${formatScore(ratingMax())} –∏–ª–∏ –æ—Å—Ç–∞–≤—å—Ç–µ –ø–æ–ª–µ –ø—É—Å—Ç—ã–º.` };
-      if (rawVisual && visualScore === null) return { error: `–í–≤–µ–¥–∏—Ç–µ ¬´${settings.visualLabel}¬ª –æ—Ç ${formatScore(visualMin)} –¥–æ ${formatScore(ratingMax())} –∏–ª–∏ –æ—Å—Ç–∞–≤—å—Ç–µ –ø–æ–ª–µ –ø—É—Å—Ç—ã–º.` };
-      const customScores = {};
-      for (const input of root?.querySelectorAll?.('[data-custom-rating-id]') || []) {
-        const raw = String(input.value || '').trim();
-        if (!raw) continue;
-        const score = ratingCriterionScore(input, raw);
-        const label = String(input.dataset.customRatingLabel || '–î–æ–ø–æ–ª–Ω–∏—Ç–µ–ª—å–Ω–∞—è –æ—Ü–µ–Ω–∫–∞');
-        const min = input.hasAttribute('data-rating-modifier-rules') ? 0 : ratingMin();
-        if (score === null) return { error: `–í–≤–µ–¥–∏—Ç–µ ¬´${label}¬ª –æ—Ç ${formatScore(min)} –¥–æ ${formatScore(ratingMax())} –∏–ª–∏ –æ—Å—Ç–∞–≤—å—Ç–µ –ø–æ–ª–µ –ø—É—Å—Ç—ã–º.` };
-        customScores[input.dataset.customRatingId] = score;
-      }
-      return { songScore, visualScore, customScores, error: '' };
-    }
-
-    function hasRated(entry, name) {
-      return scoreFor(entry, name) !== null;
-    }
-
-    function hasPersonalRated(entry, name) {
-      return personalScoreFor(entry, name) !== null;
-    }
-
-    function entryIsChinese(entry) {
-      return Boolean(entry && (entry.isChinese || entry.chinese || entry.isChina || entry.chineseOpening));
-    }
-
-    function entryIsMovie(entry) {
-      return Boolean(entry && (entry.isMovie || entry.movie || entry.isFilm || entry.filmOpening));
-    }
-
-    function entryIsShortened(entry) {
-      return Boolean(entry && (entry.isShortened || entry.shortened || entry.isShort || entry.short || entry.shortOpening || entry.shortenedOpening));
-    }
-
-    function normalizeContentFilterMode(mode) {
-      return ['default', 'chinese', 'movie', 'shortened', 'chinese-movie', 'chinese-shortened', 'movie-shortened', 'all'].includes(mode) ? mode : 'default';
-    }
-
-    function contentFilterModeToFlags(mode) {
-      const normalized = normalizeContentFilterMode(mode);
-      const showChinese = normalized === 'chinese' || normalized === 'chinese-movie' || normalized === 'chinese-shortened' || normalized === 'all';
-      const showMovie = normalized === 'movie' || normalized === 'chinese-movie' || normalized === 'movie-shortened' || normalized === 'all';
-      const showShortened = normalized === 'shortened' || normalized === 'chinese-shortened' || normalized === 'movie-shortened' || normalized === 'all';
-      return { hideChinese: !showChinese, hideMovie: !showMovie, hideShortened: !showShortened };
-    }
-
-    function contentFilterModeFromFlags(hideChinese, hideMovie, hideShortened) {
-      const showChinese = !hideChinese;
-      const showMovie = !hideMovie;
-      const showShortened = !hideShortened;
-      if (showChinese && showMovie && showShortened) return 'all';
-      if (showChinese && showMovie) return 'chinese-movie';
-      if (showChinese && showShortened) return 'chinese-shortened';
-      if (showMovie && showShortened) return 'movie-shortened';
-      if (showChinese) return 'chinese';
-      if (showMovie) return 'movie';
-      if (showShortened) return 'shortened';
-      return 'default';
-    }
-
-    function currentContentFilterMode() {
-      return contentFilterModeFromFlags(filters.hideChinese, filters.hideMovie, filters.hideShortened);
-    }
-
-    function syncContentFilterSelect() {
-      if (contentFilterSelect) contentFilterSelect.value = currentContentFilterMode();
-    }
-
-    function setContentFilterMode(mode, shouldRender = true, shouldSave = true) {
-      const normalizedMode = normalizeContentFilterMode(mode);
-      const flags = contentFilterModeToFlags(normalizedMode);
-      filters.hideChinese = flags.hideChinese;
-      filters.hideMovie = flags.hideMovie;
-      filters.hideShortened = flags.hideShortened;
-      seasonHideChinese = flags.hideChinese;
-      seasonHideMovie = flags.hideMovie;
-      seasonHideShortened = flags.hideShortened;
-      syncContentFilterSelect();
-      if (shouldSave) saveContentFilterMode(normalizedMode);
-      if (!shouldRender) return;
-      chartPage = 1;
-      profileTopPage = { OP: 1, ED: 1 };
-      allRatingsPage = { OP: 1, ED: 1 };
-      render();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'season') renderSeasonViews();
-    }
-
-    function entryPassesHiddenFlags(entry, hideChinese, hideMovie, hideShortened) {
-      if (hideChinese && entryIsChinese(entry)) return false;
-      if (hideMovie && entryIsMovie(entry)) return false;
-      if (hideShortened && entryIsShortened(entry)) return false;
-      return true;
-    }
-
-    function dailyDateKeyFromDate(date) {
-      return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
-    }
-
-    function dailyDateFromKey(key) {
-      const parts = String(key || '').split('-').map(Number);
-      return parts.length === 3 && parts.every(Number.isFinite) ? new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])) : null;
-    }
-
-    function dailyShiftKey(key, days) {
-      const date = dailyDateFromKey(key);
-      if (!date) return '';
-      date.setUTCDate(date.getUTCDate() + Number(days || 0));
-      return dailyDateKeyFromDate(date);
-    }
-
-    function dailyClock(now = new Date()) {
-      const msk = new Date(now.getTime() + DAILY_MSK_OFFSET_HOURS * 3600000);
-      const today = dailyDateKeyFromDate(msk);
-      const released = msk.getUTCHours() >= DAILY_RELEASE_HOUR;
-      return { msk, today, released, key: released ? today : dailyShiftKey(today, -1), nextKey: released ? dailyShiftKey(today, 1) : today };
-    }
-
-    function dailyProfileFor(name = myName) {
-      const safe = manualUserSafeKey(name);
-      return firebaseUserProfiles.find(row => {
-        const display = String(row.nickname || row.displayName || row.name || '').trim();
-        const key = String(row.nicknameKey || row.id || '').trim();
-        return manualSameUser(display, name) || key === safe;
-      }) || null;
-    }
-
-    function rateLaterIdsFor(name = myName) {
-      const profile = dailyProfileFor(name);
-      return Array.from(new Set((Array.isArray(profile?.rateLaterIds) ? profile.rateLaterIds : []).map(String).filter(Boolean)));
-    }
-
-    async function toggleRateLaterEntry(entryId) {
-      if (!myName || !currentPersonalUid()) throw new Error('–î–ª—è –æ—á–µ—Ä–µ–¥–∏ –≤–æ–π–¥–∏ –≤ –ª–∏—á–Ω—ã–π –∞–∫–∫–∞—É–Ω—Ç.');
-      const id = String(entryId || '');
-      if (!id || !entriesById.has(id)) return false;
-      const ids = new Set(rateLaterIdsFor(myName));
-      const added = !ids.has(id);
-      if (added) ids.add(id); else ids.delete(id);
-      await saveDailyProfilePatch({ rateLaterIds: [...ids].slice(-500) });
-      publishAppData('rate-later-saved');
-      return added;
-    }
-
-    async function removeRateLaterEntry(entryId) {
-      const ids = rateLaterIdsFor(myName);
-      const id = String(entryId || '');
-      if (!ids.includes(id)) return false;
-      await saveDailyProfilePatch({ rateLaterIds: ids.filter(value => value !== id) });
-      publishAppData('rate-later-saved');
-      return true;
-    }
-
-    function normalizeDailySettings(raw = {}) {
-      return {
-        enabled: Boolean(raw.enabled),
-        type: ['OP', 'ED', 'both'].includes(raw.type) ? raw.type : 'both',
-        fromYear: String(raw.fromYear || ''),
-        fromSeason: SEASON_ORDER.includes(raw.fromSeason) ? raw.fromSeason : 'winter',
-        toYear: String(raw.toYear || ''),
-        toSeason: SEASON_ORDER.includes(raw.toSeason) ? raw.toSeason : 'fall',
-        enabledAt: String(raw.enabledAt || ''),
-        firstRequiredKey: String(raw.firstRequiredKey || ''),
-        optionalKey: String(raw.optionalKey || ''),
-        publicCalendar: Boolean(raw.publicCalendar),
-        count: [10, 12, 15].includes(Number(raw.count)) ? Number(raw.count) : 10,
-        selectionMode: ['random', 'balanced', 'diverse', 'coverage'].includes(raw.selectionMode) ? raw.selectionMode : 'random'
-      };
-    }
-
-    function dailySeasonPoint(entry) {
-      const year = Number(entry?.year);
-      const season = SEASON_ORDER.indexOf(String(entry?.season || ''));
-      return Number.isFinite(year) && season >= 0 ? year * 4 + season : null;
-    }
-
-    function dailyEntryHasUserScore(entry, name) {
-      return hasRated(entry, name) || hasPersonalRated(entry, name);
-    }
-
-    function dailyEligibleEntries(settings, name = myName, includeRated = false) {
-      const from = settings.fromYear ? Number(settings.fromYear) * 4 + SEASON_ORDER.indexOf(settings.fromSeason) : null;
-      const to = settings.toYear ? Number(settings.toYear) * 4 + SEASON_ORDER.indexOf(settings.toSeason) : null;
-      return entries.filter(entry => {
-        if (settings.type !== 'both' && entry.type !== settings.type) return false;
-        const point = dailySeasonPoint(entry);
-        if (point === null) return false;
-        if (from !== null && point < from) return false;
-        if (to !== null && point > to) return false;
-        if (!includeRated && dailyEntryHasUserScore(entry, name)) return false;
-        return true;
-      });
-    }
-
-    function dailyHash(text) {
-      let hash = 2166136261;
-      const source = String(text || '');
-      for (let i = 0; i < source.length; i += 1) { hash ^= source.charCodeAt(i); hash = Math.imul(hash, 16777619); }
-      return hash >>> 0;
-    }
-
-    function dailyAssignmentFor(name, key, settings, savedIds = null, progressedIds = null) {
-      const candidates = dailyEligibleEntries(settings, name);
-      const count = Math.max(10, Math.min(15, Number(settings.count) || 10));
-      if (candidates.length < count) return [];
-      const seed = `${manualUserSafeKey(name)}|${key}|${settings.type}|${settings.fromYear}|${settings.fromSeason}|${settings.toYear}|${settings.toSeason}|${settings.selectionMode}|${count}`;
-      const shuffled = candidates.slice().sort((a, b) => dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`));
-
-      function balancedRows() {
-        if (settings.type !== 'both') return shuffled;
-        const op = shuffled.filter(entry => entry.type === 'OP');
-        const ed = shuffled.filter(entry => entry.type === 'ED');
-        const result = [];
-        let opIndex = 0;
-        let edIndex = 0;
-        while (result.length < shuffled.length && (opIndex < op.length || edIndex < ed.length)) {
-          if (opIndex < op.length) result.push(op[opIndex++]);
-          if (edIndex < ed.length) result.push(ed[edIndex++]);
-        }
-        return result;
-      }
-
-      function diverseRows() {
-        const pool = shuffled.slice();
-        const result = [];
-        const usedFranchises = new Map();
-        const usedYears = new Map();
-        while (pool.length) {
-          let bestIndex = 0;
-          let bestPenalty = Infinity;
-          pool.forEach((entry, index) => {
-            const franchises = (entry.franchises || []).map(value => String(value).toLowerCase());
-            const franchisePenalty = franchises.reduce((sum, value) => sum + (usedFranchises.get(value) || 0) * 5, 0);
-            const year = String(entry.year || '');
-            const yearPenalty = (usedYears.get(year) || 0) * 2;
-            const typePenalty = result.length && result[result.length - 1].type === entry.type ? 1 : 0;
-            const penalty = franchisePenalty + yearPenalty + typePenalty;
-            if (penalty < bestPenalty) { bestPenalty = penalty; bestIndex = index; }
-          });
-          const [chosen] = pool.splice(bestIndex, 1);
-          result.push(chosen);
-          (chosen.franchises || []).forEach(value => {
-            const key = String(value).toLowerCase();
-            usedFranchises.set(key, (usedFranchises.get(key) || 0) + 1);
-          });
-          const year = String(chosen.year || '');
-          usedYears.set(year, (usedYears.get(year) || 0) + 1);
-        }
-        return result;
-      }
-
-      function coverageRows() {
-        const totals = new Map();
-        const rated = new Map();
-        dailyEligibleEntries(settings, name, true).forEach(entry => {
-          const group = `${entry.type}|${entry.year}|${entry.season}`;
-          totals.set(group, (totals.get(group) || 0) + 1);
-          if (dailyEntryHasUserScore(entry, name)) rated.set(group, (rated.get(group) || 0) + 1);
-        });
-        return shuffled.slice().sort((a, b) => {
-          const aKey = `${a.type}|${a.year}|${a.season}`;
-          const bKey = `${b.type}|${b.year}|${b.season}`;
-          const aRatio = (rated.get(aKey) || 0) / Math.max(1, totals.get(aKey) || 0);
-          const bRatio = (rated.get(bKey) || 0) / Math.max(1, totals.get(bKey) || 0);
-          return aRatio - bRatio || dailyHash(`${seed}|${a.id}`) - dailyHash(`${seed}|${b.id}`);
-        });
-      }
-
-      const ordered = settings.selectionMode === 'balanced'
-        ? balancedRows()
-        : settings.selectionMode === 'diverse'
-          ? diverseRows()
-          : settings.selectionMode === 'coverage'
-            ? coverageRows()
-            : shuffled;
-
-      if (Array.isArray(savedIds) && savedIds.length) {
-        const progressed = new Set(Array.isArray(progressedIds) ? progressedIds.map(String) : []);
-        const eligibleIds = new Set(candidates.map(entry => String(entry.id)));
-        const saved = savedIds.map(String).filter(id => entriesById.has(id));
-        const kept = saved.filter(id => progressed.has(id) || (eligibleIds.has(id) && !dailyEntryHasUserScore(entriesById.get(id), name))).slice(0, count);
-        const used = new Set(kept);
-        const refill = ordered.filter(entry => !used.has(String(entry.id))).slice(0, Math.max(0, count - kept.length));
-        return kept.concat(refill.map(entry => String(entry.id)));
-      }
-      return ordered.slice(0, count).map(entry => String(entry.id));
-    }
-
-    function trimDailyMap(value, limit = 62) {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-      const keys = Object.keys(value).sort().slice(-limit);
-      return Object.fromEntries(keys.map(key => [key, value[key]]));
-    }
-
-    async function saveDailyProfilePatch(patch) {
-      if (!myName) return;
-      const compactPatch = { ...patch };
-      ['dailyAssignments', 'dailyProgress', 'dailyCompleted'].forEach(key => {
-        if (compactPatch[key]) compactPatch[key] = trimDailyMap(compactPatch[key]);
-      });
-      patch = compactPatch;
-      const ext = await getExtendedDb();
-      const safe = manualUserSafeKey(myName);
-      await ext.setDoc(ext.doc(ext.db, 'userProfiles', safe), {
-        nickname: myName,
-        nicknameKey: safe,
-        avatar: myAvatar,
-        ...patch,
-        updatedAt: ext.serverTimestamp()
-      }, { merge: true });
-      const existing = dailyProfileFor(myName);
-      if (existing) Object.assign(existing, patch);
-      else firebaseUserProfiles.push({ id: safe, nickname: myName, nicknameKey: safe, avatar: myAvatar, ...patch });
-    }
-
-    function dailyCurrentState(name = myName) {
-      const profile = dailyProfileFor(name);
-      const settings = normalizeDailySettings(profile?.dailySettings || {});
-      const clock = dailyClock();
-      const assignments = profile?.dailyAssignments && typeof profile.dailyAssignments === 'object' ? profile.dailyAssignments : {};
-      const progress = profile?.dailyProgress && typeof profile.dailyProgress === 'object' ? profile.dailyProgress : {};
-      const completed = profile?.dailyCompleted && typeof profile.dailyCompleted === 'object' ? profile.dailyCompleted : {};
-      const ids = settings.enabled ? dailyAssignmentFor(name, clock.key, settings, assignments[clock.key], progress[clock.key]) : [];
-      const required = Boolean(settings.enabled && settings.firstRequiredKey && clock.key >= settings.firstRequiredKey);
-      const offered = required || settings.optionalKey === clock.key;
-      return { profile, settings, clock, assignments, completed, ids, required, offered, available: offered && ids.length >= settings.count, done: Boolean(completed[clock.key]) };
-    }
-
-    async function saveDailySettingsFromPanel() {
-      if (!ensureNickname()) return;
-      const old = normalizeDailySettings(dailyProfileFor(myName)?.dailySettings || {});
-      const clock = dailyClock();
-      let fromYear = String($('#oc-daily-from-year')?.value || '');
-      let toYear = String($('#oc-daily-to-year')?.value || '');
-      let fromSeason = String($('#oc-daily-from-season')?.value || 'winter');
-      let toSeason = String($('#oc-daily-to-season')?.value || 'fall');
-      if (fromYear && toYear && Number(fromYear) * 4 + SEASON_ORDER.indexOf(fromSeason) > Number(toYear) * 4 + SEASON_ORDER.indexOf(toSeason)) {
-        [fromYear, toYear] = [toYear, fromYear];
-        [fromSeason, toSeason] = [toSeason, fromSeason];
-      }
-      const firstStart = !old.enabled;
-      const settings = {
-        enabled: true,
-        type: String($('#oc-daily-type')?.value || 'both'),
-        fromYear, fromSeason, toYear, toSeason,
-        count: Number($('#oc-daily-count')?.value || 10),
-        selectionMode: String($('#oc-daily-selection-mode')?.value || 'random'),
-        enabledAt: old.enabledAt || new Date().toISOString(),
-        firstRequiredKey: old.firstRequiredKey || clock.nextKey,
-        optionalKey: old.optionalKey || (clock.released ? clock.key : ''),
-        publicCalendar: Boolean($('#oc-daily-public')?.checked)
-      };
-      await saveDailyProfilePatch({ dailySettings: settings });
-      setStatus(firstStart ? '–ï–∂–µ–¥–Ω–µ–≤–Ω–∞—è –æ—Ü–µ–Ω–∫–∞ –ø–æ–¥–∫–ª—é—á–µ–Ω–∞ ‚úì' : '–ù–∞—Å—Ç—Ä–æ–π–∫–∏ –µ–∂–µ–¥–Ω–µ–≤–Ω–æ–π –æ—Ü–µ–Ω–∫–∏ —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì');
-      renderDailyProfilePanel();
-      refreshDailyUi();
-    }
-
-    async function unsubscribeFromDaily() {
-      if (!ensureNickname()) return;
-      const old = normalizeDailySettings(dailyProfileFor(myName)?.dailySettings || {});
-      if (!old.enabled) return;
-      if (!window.confirm('–û—Ç–ø–∏—Å–∞—Ç—å—Å—è –æ—Ç –µ–∂–µ–¥–Ω–µ–≤–Ω–æ–π –æ—Ü–µ–Ω–∫–∏? –ù–æ–≤—ã–µ –¥–µ–π–ª–∏–∫–∏ –∏ —É–≤–µ–¥–æ–º–ª–µ–Ω–∏—è –±–æ–ª—å—à–µ –Ω–µ –±—É–¥—É—Ç –ø–æ—è–≤–ª—è—Ç—å—Å—è.')) return;
-      await saveDailyProfilePatch({
-        dailySettings: {
-          ...old,
-          enabled: false,
-          enabledAt: '',
-          firstRequiredKey: '',
-          optionalKey: ''
-        }
-      });
-      dailyActiveKey = '';
-      if (dailyToast) dailyToast.classList.add('hidden');
-      setStatus('–ï–∂–µ–¥–Ω–µ–≤–Ω–∞—è –æ—Ü–µ–Ω–∫–∞ –æ—Ç–∫–ª—é—á–µ–Ω–∞.');
-      renderDailyProfilePanel();
-      refreshDailyUi();
-    }
-
-    async function startDailyRating(key = dailyClock().key) {
-      if (!ensureNickname()) return;
-      const profile = dailyProfileFor(myName);
-      const settings = normalizeDailySettings(profile?.dailySettings || {});
-      if (!settings.enabled) { switchTab('profile'); setStatus('–°–Ω–∞—á–∞–ª–∞ –ø–æ–¥–∫–ª—é—á–∏ –µ–∂–µ–¥–Ω–µ–≤–Ω—É—é –æ—Ü–µ–Ω–∫—É –≤ —Å–≤–æ—ë–º –ø—Ä–æ—Ñ–∏–ª–µ.', true); return; }
-      const assignments = { ...(profile?.dailyAssignments || {}) };
-      const progressMap = { ...(profile?.dailyProgress || {}) };
-      const progressed = new Set(Array.isArray(progressMap[key]) ? progressMap[key].map(String) : []);
-      let ids = dailyAssignmentFor(myName, key, settings, assignments[key], [...progressed]);
-      if (ids.length < settings.count) { setStatus(`–ü–æ–¥ –≤—ã–±—Ä–∞–Ω–Ω—ã–µ –∫—Ä–∏—Ç–µ—Ä–∏–∏ –Ω–∞—à–ª–æ—Å—å –º–µ–Ω—å—à–µ ${settings.count} –ø–µ—Å–µ–Ω ‚Äî –¥–µ–π–ª–∏–∫ —Å–µ–≥–æ–¥–Ω—è –Ω–µ —Å—Ñ–æ—Ä–º–∏—Ä–æ–≤–∞–ª—Å—è.`, true); return; }
-      const savedIds = Array.isArray(assignments[key]) ? assignments[key].map(String) : [];
-      if (savedIds.length !== ids.length || savedIds.some((id, index) => id !== ids[index])) {
-        assignments[key] = ids;
-        await saveDailyProfilePatch({ dailyAssignments: assignments });
-      }
-      seasonQueue = ids.filter(id => !progressed.has(String(id))).map(id => entriesById.get(String(id))).filter(Boolean);
-      if (!seasonQueue.length) { await finalizeDaily(key); return; }
-      dailyActiveKey = key;
-      evaluatorMode = 'daily';
-      seasonQueueIndex = 0;
-      localStorage.setItem(DAILY_DISMISSED_KEY, `${manualUserSafeKey(myName)}|${key}`);
-      if (dailyToast) dailyToast.classList.add('hidden');
-      renderEvaluator();
-    }
-
-    async function markDailyEntryDone(entryId) {
-      if (!dailyActiveKey) return;
-      const profile = dailyProfileFor(myName) || {};
-      const progress = { ...(profile.dailyProgress || {}) };
-      const ids = new Set(Array.isArray(progress[dailyActiveKey]) ? progress[dailyActiveKey].map(String) : []);
-      ids.add(String(entryId));
-      progress[dailyActiveKey] = [...ids];
-      await saveDailyProfilePatch({ dailyProgress: progress });
-    }
-
-    async function finalizeDaily(key) {
-      const profile = dailyProfileFor(myName) || {};
-      const assigned = Array.isArray(profile.dailyAssignments?.[key]) ? profile.dailyAssignments[key].map(String) : [];
-      const progressed = new Set(Array.isArray(profile.dailyProgress?.[key]) ? profile.dailyProgress[key].map(String) : []);
-      if (!assigned.length || !assigned.every(id => progressed.has(id))) {
-        setStatus('–î–µ–π–ª–∏–∫ –ø–æ–∫–∞ –Ω–µ –∑–∞–≤–µ—Ä—à—ë–Ω: –ø—Ä–æ–ø—É—â–µ–Ω–Ω—ã–µ –ø–µ—Å–Ω–∏ –º–æ–∂–Ω–æ –æ—Ü–µ–Ω–∏—Ç—å —á–µ—Ä–µ–∑ –∫–æ–ª–æ–∫–æ–ª—å—á–∏–∫.', true);
-        refreshDailyUi();
-        return;
-      }
-      const completed = { ...(profile.dailyCompleted || {}), [key]: new Date().toISOString() };
-      await saveDailyProfilePatch({ dailyCompleted: completed });
-      setStatus('–ï–∂–µ–¥–Ω–µ–≤–Ω–∞—è –æ—Ü–µ–Ω–∫–∞ –∑–∞–≤–µ—Ä—à–µ–Ω–∞ ‚úì');
-      refreshDailyUi();
-      if (activeTab === 'profile') renderDailyProfilePanel();
-    }
-
-    function dailyYearOptions(selected, emptyText) {
-      const years = Array.from(new Set(entries.map(entry => Number(entry.year)).filter(Number.isFinite))).sort((a, b) => a - b);
-      return `<option value="">${escapeHtml(emptyText)}</option>${years.map(year => `<option value="${year}" ${String(selected) === String(year) ? 'selected' : ''}>${year}</option>`).join('')}`;
-    }
-
-    function dailySeasonOptions(selected) {
-      return SEASON_ORDER.map(season => `<option value="${season}" ${season === selected ? 'selected' : ''}>${escapeHtml(SEASON_LABEL[season])}</option>`).join('');
-    }
-
-    function dailyCalendarHtml(name, settings, profile) {
-      const now = dailyClock();
-      const currentMsk = now.msk;
-      if (!dailyCalendarMonth) dailyCalendarMonth = new Date(Date.UTC(currentMsk.getUTCFullYear(), currentMsk.getUTCMonth(), 1));
-      const year = dailyCalendarMonth.getUTCFullYear();
-      const month = dailyCalendarMonth.getUTCMonth();
-      const firstWeekday = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
-      const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-      const completed = profile?.dailyCompleted || {};
-      const assignments = profile?.dailyAssignments || {};
-      const eligible = dailyEligibleEntries(settings, name, true).length >= 10;
-      const cells = Array.from({ length:firstWeekday }, () => '<div class="oc-daily-day empty"></div>');
-      for (let day = 1; day <= days; day += 1) {
-        const key = dailyDateKeyFromDate(new Date(Date.UTC(year, month, day)));
-        let cls = '';
-        let mark = '';
-        if (completed[key]) { cls = 'done'; mark = '‚úì'; }
-        else if (settings.firstRequiredKey && key >= settings.firstRequiredKey && key < now.key && (Array.isArray(assignments[key]) ? assignments[key].length >= 10 : eligible)) { cls = 'missed'; mark = '√ó'; }
-        else if (key === now.key && settings.firstRequiredKey && key >= settings.firstRequiredKey && eligible) { cls = 'pending'; mark = '‚Ä¢'; }
-        cells.push(`<div class="oc-daily-day ${cls}"><span>${day}</span><strong>${mark}</strong></div>`);
-      }
-      const monthName = new Intl.DateTimeFormat('ru-RU', { month:'long', year:'numeric', timeZone:'UTC' }).format(dailyCalendarMonth);
-      return `<div class="oc-daily-calendar-wrap"><div class="oc-daily-calendar-head"><button class="oc-daily-calendar-nav" data-daily-month="-1">‚Üê</button><strong>${escapeHtml(monthName)}</strong><button class="oc-daily-calendar-nav" data-daily-month="1">‚Üí</button></div><div class="oc-daily-calendar">${['–ü–Ω','–í—Ç','–°—Ä','–ß—Ç','–ü—Ç','–°–±','–í—Å'].map(day => `<div class="oc-daily-calendar-weekday">${day}</div>`).join('')}${cells.join('')}</div></div>`;
-    }
-
-    function renderDailyProfilePanel() {
-      if (!dailyPanel) return;
-      const viewed = profileUser || myName;
-      const profile = dailyProfileFor(viewed);
-      const settings = normalizeDailySettings(profile?.dailySettings || {});
-      const own = Boolean(myName && manualSameUser(viewed, myName));
-      const maySeeCalendar = own || settings.publicCalendar;
-      if (!own && (!settings.enabled || !maySeeCalendar)) { dailyPanel.classList.add('hidden'); dailyPanel.innerHTML = ''; return; }
-      dailyPanel.classList.remove('hidden');
-      const state = own ? dailyCurrentState(myName) : null;
-      const todayButton = own && settings.enabled && state.available && !state.done
-        ? `<button type="button" class="oc-addbtn" id="oc-daily-start-today">–ü—Ä–æ–π—Ç–∏ —Ç–µ–∫—É—â–∏–π –¥–µ–π–ª–∏–∫ (${state.ids.length})</button>` : '';
-      const unsubscribeButton = settings.enabled ? '<button type="button" class="oc-soft-btn" id="oc-daily-unsubscribe">–û—Ç–ø–∏—Å–∞—Ç—å—Å—è –æ—Ç –¥–µ–π–ª–∏–∫–∞</button>' : '';
-      const settingsHtml = own ? `<div class="oc-daily-settings"><label class="wide">–ß—Ç–æ –æ—Ü–µ–Ω–∏–≤–∞–µ–º<select id="oc-daily-type"><option value="both" ${settings.type === 'both' ? 'selected' : ''}>–û–ø–µ–Ω–∏–Ω–≥–∏ –∏ —ç–Ω–¥–∏–Ω–≥–∏</option><option value="OP" ${settings.type === 'OP' ? 'selected' : ''}>–¢–æ–ª—å–∫–æ –æ–ø–µ–Ω–∏–Ω–≥–∏</option><option value="ED" ${settings.type === 'ED' ? 'selected' : ''}>–¢–æ–ª—å–∫–æ —ç–Ω–¥–∏–Ω–≥–∏</option></select></label><label>–ö–æ–ª–∏—á–µ—Å—Ç–≤–æ<select id="oc-daily-count"><option value="10" ${settings.count === 10 ? 'selected' : ''}>10 —Ç—Ä–µ–∫–æ–≤</option><option value="12" ${settings.count === 12 ? 'selected' : ''}>12 —Ç—Ä–µ–∫–æ–≤</option><option value="15" ${settings.count === 15 ? 'selected' : ''}>15 —Ç—Ä–µ–∫–æ–≤</option></select></label><label class="wide">–°–ø–æ—Å–æ–± –æ—Ç–±–æ—Ä–∞<select id="oc-daily-selection-mode"><option value="random" ${settings.selectionMode === 'random' ? 'selected' : ''}>–°–ª—É—á–∞–π–Ω—ã–π</option><option value="balanced" ${settings.selectionMode === 'balanced' ? 'selected' : ''}>–ë–∞–ª–∞–Ω—Å OP –∏ ED</option><option value="diverse" ${settings.selectionMode === 'diverse' ? 'selected' : ''}>–†–∞–∑–Ω—ã–µ –≥–æ–¥—ã –∏ —Ñ—Ä–∞–Ω—à–∏–∑—ã</option><option value="coverage" ${settings.selectionMode === 'coverage' ? 'selected' : ''}>–ó–∞–∫—Ä—ã–≤–∞—Ç—å –ø—Ä–æ–±–µ–ª—ã –∫–∞—Ç–∞–ª–æ–≥–∞</option></select></label><label>–ù–∞—á–∞–ª—å–Ω—ã–π –≥–æ–¥<select id="oc-daily-from-year">${dailyYearOptions(settings.fromYear, '–° —Å–∞–º–æ–≥–æ —Ä–∞–Ω–Ω–µ–≥–æ')}</select></label><label>–ù–∞—á–∞–ª—å–Ω—ã–π —Å–µ–∑–æ–Ω<select id="oc-daily-from-season">${dailySeasonOptions(settings.fromSeason)}</select></label><label>–ö–æ–Ω–µ—á–Ω—ã–π –≥–æ–¥<select id="oc-daily-to-year">${dailyYearOptions(settings.toYear, '–ü–æ —Å–∞–º—ã–π –ø–æ–∑–¥–Ω–∏–π')}</select></label><label>–ö–æ–Ω–µ—á–Ω—ã–π —Å–µ–∑–æ–Ω<select id="oc-daily-to-season">${dailySeasonOptions(settings.toSeason)}</select></label><label class="wide"><span>–í–∏–¥–∏–º–æ—Å—Ç—å –∫–∞–ª–µ–Ω–¥–∞—Ä—è</span><span><input id="oc-daily-public" type="checkbox" ${settings.publicCalendar ? 'checked' : ''}> –ø–æ–∫–∞–∑—ã–≤–∞—Ç—å –∫–∞–ª–µ–Ω–¥–∞—Ä—å –≤—Å–µ–º –≤ –º–æ—ë–º –ø—Ä–æ—Ñ–∏–ª–µ</span></label></div><div class="oc-daily-actions"><button type="button" class="oc-addbtn" id="oc-daily-save-settings">${settings.enabled ? '–°–æ—Ö—Ä–∞–Ω–∏—Ç—å –Ω–∞—Å—Ç—Ä–æ–π–∫–∏' : '–ó–∞–ø—É—Å—Ç–∏—Ç—å –µ–∂–µ–¥–Ω–µ–≤–Ω—É—é –æ—Ü–µ–Ω–∫—É'}</button>${todayButton}${unsubscribeButton}</div>` : '';
-      dailyPanel.innerHTML = `<div class="oc-daily-head"><div><div class="oc-section-label">–µ–∂–µ–¥–Ω–µ–≤–Ω–∞—è –æ—Ü–µ–Ω–∫–∞</div><h3>${own ? '–¢–≤–æ–π –¥–µ–π–ª–∏–∫' : `–ö–∞–ª–µ–Ω–¥–∞—Ä—å ¬∑ ${escapeHtml(viewed)}`}</h3><div class="oc-hint">–ù–æ–≤—ã–π –Ω–∞–±–æ—Ä –ø–æ—è–≤–ª—è–µ—Ç—Å—è –µ–∂–µ–¥–Ω–µ–≤–Ω–æ –≤ 18:00 –ú–°–ö. –ö–æ–ª–∏—á–µ—Å—Ç–≤–æ –∏ —Å–ø–æ—Å–æ–± –æ—Ç–±–æ—Ä–∞ –Ω–∞—Å—Ç—Ä–∞–∏–≤–∞—é—Ç—Å—è –æ—Ç–¥–µ–ª—å–Ω–æ; —É–∂–µ –æ—Ü–µ–Ω—ë–Ω–Ω—ã–µ —Ç—Ä–µ–∫–∏ –≤ –Ω–∞–±–æ—Ä –Ω–µ –ø–æ–ø–∞–¥–∞—é—Ç.</div></div></div>${settingsHtml}${settings.enabled && maySeeCalendar ? dailyCalendarHtml(viewed, settings, profile) : ''}`;
-      $('#oc-daily-save-settings')?.addEventListener('click', () => saveDailySettingsFromPanel().catch(error => { console.error(error); setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –Ω–∞—Å—Ç—Ä–æ–π–∫–∏ –¥–µ–π–ª–∏–∫–∞.', true); }));
-      $('#oc-daily-start-today')?.addEventListener('click', () => startDailyRating().catch(error => { console.error(error); setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–∫—Ä—ã—Ç—å –¥–µ–π–ª–∏–∫.', true); }));
-      $('#oc-daily-unsubscribe')?.addEventListener('click', () => unsubscribeFromDaily().catch(error => { console.error(error); setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–∫–ª—é—á–∏—Ç—å –¥–µ–π–ª–∏–∫.', true); }));
-      dailyPanel.querySelectorAll('[data-daily-month]').forEach(button => button.addEventListener('click', () => { dailyCalendarMonth.setUTCMonth(dailyCalendarMonth.getUTCMonth() + Number(button.dataset.dailyMonth)); renderDailyProfilePanel(); }));
-    }
-
-    function refreshDailyUi() {
-      if (!dailyBellDot || !dailyToast) return;
-      const state = dailyCurrentState(myName);
-      const pending = Boolean(myName && state.required && state.available && !state.done);
-      dailyBellDot.classList.toggle('hidden', !pending);
-      const dismissal = `${manualUserSafeKey(myName)}|${state.clock.key}`;
-      const dismissed = localStorage.getItem(DAILY_DISMISSED_KEY) === dismissal;
-      if (pending && !dismissed) {
-        dailyToast.innerHTML = `<button class="oc-daily-toast-close" type="button" aria-label="–ó–∞–∫—Ä—ã—Ç—å">√ó</button><h3>–¢–≤–æ–π –Ω–æ–≤—ã–π –¥–µ–π–ª–∏–∫ –≥–æ—Ç–æ–≤</h3><p>${state.ids.length} –ø–µ—Å–µ–Ω –∂–¥—É—Ç –µ–∂–µ–¥–Ω–µ–≤–Ω–æ–π –æ—Ü–µ–Ω–∫–∏. –£–≤–µ–¥–æ–º–ª–µ–Ω–∏–µ –±–æ–ª—å—à–µ –Ω–µ –ø–æ—è–≤–∏—Ç—Å—è –¥–æ —Å–ª–µ–¥—É—é—â–µ–≥–æ –æ–±–Ω–æ–≤–ª–µ–Ω–∏—è –≤ 18:00 –ú–°–ö.</p><button class="oc-addbtn" type="button" data-daily-toast-start>–ü—Ä–æ–π—Ç–∏ –¥–µ–π–ª–∏–∫</button>`;
-        dailyToast.classList.remove('hidden');
-        dailyToast.querySelector('.oc-daily-toast-close')?.addEventListener('click', () => { localStorage.setItem(DAILY_DISMISSED_KEY, dismissal); dailyToast.classList.add('hidden'); });
-        dailyToast.querySelector('[data-daily-toast-start]')?.addEventListener('click', () => startDailyRating().catch(console.error));
-      } else dailyToast.classList.add('hidden');
-      if (activeTab === 'profile') renderDailyProfilePanel();
-      if (dailyRefreshTimer) clearTimeout(dailyRefreshTimer);
-      const nextRelease = new Date(`${state.clock.nextKey}T15:00:02.000Z`).getTime();
-      dailyRefreshTimer = setTimeout(refreshDailyUi, Math.max(1000, Math.min(2147483647, nextRelease - Date.now())));
-    }
-
-    function entryPassesSeasonVisibility(entry) {
-      return entryPassesHiddenFlags(entry, seasonHideChinese, seasonHideMovie, seasonHideShortened);
-    }
-
-    function openingListForSeason(year, season, type = seasonType) {
-      return entries
-        .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e))
-        .sort((a, b) => compareNatural(a.title, b.title));
-    }
-
-    function openingQueueForSeason(year, season, type = seasonType) {
-      return entries
-        .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e) && !hasRated(e, myName))
-        .sort((a, b) => compareNatural(a.title, b.title));
-    }
-
-    function personalOpeningQueueForSeason(year, season, type = seasonType) {
-      return entries
-        .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e) && !hasPersonalRated(e, myName))
-        .sort((a, b) => compareNatural(a.title, b.title));
-    }
-
-    function previousSeasonFor(year, season) {
-      const idx = SEASON_ORDER.indexOf(season);
-      if (idx === -1) return null;
-      const prevIdx = idx === 0 ? SEASON_ORDER.length - 1 : idx - 1;
-      const prevYear = idx === 0 ? Number(year) - 1 : Number(year);
-      if (prevYear < 1990) return null;
-      const prevSeason = SEASON_ORDER[prevIdx];
-      return seasonHasStarted(prevYear, prevSeason) ? { year: prevYear, season: prevSeason } : null;
-    }
-
-    function goToPreviousSeason() {
-      if (!selectedSeason) return;
-      const prev = previousSeasonFor(selectedSeason.year, selectedSeason.season);
-      if (!prev) return;
-      selectedSeason = prev;
-      expandedYear = prev.year;
-      renderSeasonViews();
-    }
-
-    function imgHtml(entry, className) {
-      const fallback = entry && entry.type ? escapeHtml(entry.type) : 'OP';
-      const title = escapeHtml(entry && entry.title ? entry.title : '–≤–∏–¥–µ–æ');
-      const imageBlock = entry.image
-        ? `<div class="${className} oc-image-loading"><img class="oc-track-image" loading="lazy" decoding="async" src="${escapeHtml(normalizeUrl(entry.image))}" data-fallback="${escapeHtml(normalizeUrl(entry.fallbackImage || ''))}" alt="${title}"></div>`
-        : `<div class="${className}">${fallback}</div>`;
-      if (!entry.link) return imageBlock;
-      return `<a class="oc-image-link" href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer" title="–û—Ç–∫—Ä—ã—Ç—å –≤–∏–¥–µ–æ: ${title}">${imageBlock}</a>`;
-    }
-
-
-    function entryYearSeasonTag(entry) {
-      return entry && entry.year ? `<span class="oc-yr-tag">${entry.year}${entry.season ? ' ¬∑ ' + SEASON_LABEL[entry.season] : ''}</span>` : '';
-    }
-
-    function metricLabel(metric) {
-      if (metric === 'song') return '–ø–µ—Å–Ω—è';
-      if (metric === 'visual') return '–≤–∏–∑—É–∞–ª';
-      return '–æ–±—â–∞—è';
-    }
-
-    function metricScoreFor(entry, user, metric) {
-      if (metric === 'song') return songScoreFor(entry, user);
-      if (metric === 'visual') return visualScoreFor(entry, user);
-      return scoreFor(entry, user);
-    }
-
-    function ratedListForMetric(user, list, metric) {
-      return list
-        .map(e => ({ entry: e, score: metricScoreFor(e, user, metric || 'total') }))
-        .filter(r => r.score !== null);
-    }
-
-
-    function eventBasketAccessKey(name) {
-      return String(name || '').trim().toLowerCase().replace(/—ë/g, '–µ').replace(/[^a-z–∞-—è0-9]+/gi, '');
-    }
-
-    function eventBasketCanAdd() {
-      return isAdmin();
-    }
-
-    function loadEventBasket() {
-      return firebaseEventBasket && typeof firebaseEventBasket === 'object' ? firebaseEventBasket : {};
-    }
-
-    function saveEventBasket(data) {
-      firebaseEventBasket = data && typeof data === 'object' ? data : {};
-    }
-
-    async function saveEventBasketSeasonToFirebase(key, seasonState) {
-      try {
-        const ext = await getExtendedDb();
-        const payload = {
-          ...seasonState,
-          key: String(key),
-          updatedAt: ext.serverTimestamp()
-        };
-        await ext.setDoc(ext.doc(ext.db, 'eventBasket', String(key)), payload, { merge: true });
-        firebaseEventBasket[String(key)] = { ...payload, updatedAtLocal: seasonState.updatedAtLocal || new Date().toISOString() };
-        firebaseEventBasketLoaded = true;
-        return true;
-      } catch (e) {
-        console.error('eventBasket save failed', e);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –∫–æ—Ä–∑–∏–Ω—É –∏–≤–µ–Ω—Ç–æ–≤.', true);
-        alert('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –∫–æ—Ä–∑–∏–Ω—É –∏–≤–µ–Ω—Ç–æ–≤.');
-        return false;
-      }
-    }
-
-    function basketSeasonKeyForEntry(entry) {
-      if (entry?.type === 'ED') {
-        const period = ['winter', 'spring'].includes(String(entry.season || '')) ? 'h1' : 'h2';
-        return `ending_${Number(entry.year) || ''}_${period}`;
-      }
-      return `${Number(entry.year) || ''}_${String(entry.season || '')}`;
-    }
-
-    function eventBasketHas(entry) {
-      if (!entry || !entry.id) return false;
-      const state = loadEventBasket()[basketSeasonKeyForEntry(entry)];
-      if (!state) return false;
-      const id = String(entry.id);
-      const buckets = state.buckets || {};
-      return ['unassigned', 'guaranteed', 'variable'].some(name => Array.isArray(buckets[name]) && buckets[name].map(String).includes(id));
-    }
-
-    async function toggleEntryInEventBasket(entry) {
-      if (!entry || !entry.id) return;
-      if (!['OP', 'ED'].includes(entry.type)) return;
-      if (!entry.year || !entry.season) { setStatus('–£ —Ç—Ä–µ–∫–∞ –¥–æ–ª–∂–Ω—ã –±—ã—Ç—å —É–∫–∞–∑–∞–Ω—ã –≥–æ–¥ –∏ —Å–µ–∑–æ–Ω.', true); return; }
-      const data = loadEventBasket();
-      const key = basketSeasonKeyForEntry(entry);
-      const current = data[key] || {};
-      const buckets = current.buckets || {};
-      const id = String(entry.id);
-      const nextBuckets = {
-        unassigned: Array.isArray(buckets.unassigned) ? buckets.unassigned.map(String).filter(Boolean) : [],
-        guaranteed: Array.isArray(buckets.guaranteed) ? buckets.guaranteed.map(String).filter(Boolean) : [],
-        variable: Array.isArray(buckets.variable) ? buckets.variable.map(String).filter(Boolean) : []
-      };
-      const wasInBasket = ['unassigned','guaranteed','variable'].some(name => nextBuckets[name].includes(id));
-      if (wasInBasket) {
-        Object.keys(nextBuckets).forEach(name => {
-          nextBuckets[name] = nextBuckets[name].filter(openingId => openingId !== id);
-        });
-      } else {
-        nextBuckets.unassigned.push(id);
-      }
-      data[key] = {
-        ...current,
-        key,
-        year: Number(entry.year),
-        season: String(entry.season),
-        eventKind: entry.type === 'ED' ? 'ending-year' : 'opening-year',
-        type: entry.type,
-        period: entry.type === 'ED' ? (['winter', 'spring'].includes(String(entry.season)) ? 'h1' : 'h2') : '',
-        target: Number(current.target) || 15,
-        buckets: nextBuckets,
-        updatedAtLocal: new Date().toISOString()
-      };
-      const savedToFirebase = await saveEventBasketSeasonToFirebase(key, data[key]);
-      if (savedToFirebase) {
-        saveEventBasket(data);
-        setStatus(`${wasInBasket ? '–£–±—Ä–∞–Ω–æ –∏–∑' : '–î–æ–±–∞–≤–ª–µ–Ω–æ –≤'} –∫–æ—Ä–∑–∏–Ω—É –∏–≤–µ–Ω—Ç–æ–≤: ${entry.title}`);
-      }
-      renderSeasonViews();
-    }
-
-    function renderUnifiedEntryCard(entry, opts = {}) {
-      const rankLabel = opts.rankLabel !== undefined ? opts.rankLabel : '';
-      const rankClass = opts.rankClass || '';
-      const scoreText = opts.scoreText !== undefined ? opts.scoreText : visibleAverageMarkup(entry);
-      const scoreSub = opts.scoreSub ? `<span class="oc-season-score-sub">${escapeHtml(opts.scoreSub)}</span>` : '';
-      const controlsHtml = opts.controlsHtml ? `<div class="oc-card-actions">${opts.controlsHtml}</div>` : '';
-      const className = opts.className ? ` ${opts.className}` : '';
-      const metaLines = [];
-      const fields = opts.fields || ['studios', 'directors', 'performers', 'franchises'];
-      if (fields.includes('studios') && entry.studios && entry.studios.length) metaLines.push(`<span class="oc-meta-key">—Å—Ç—É–¥–∏—è:</span> ${entityFilterValuesMarkup('studios', entry.studios)}`);
-      if (fields.includes('directors') && entry.directors && entry.directors.length) metaLines.push(`<span class="oc-meta-key">—Ä–µ–∂–∏—Å—Å—ë—Ä:</span> ${entityFilterValuesMarkup('directors', entry.directors)}`);
-      if (fields.includes('performers') && entry.performers && entry.performers.length) metaLines.push(`<span class="oc-meta-key">–∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª—å:</span> ${entityFilterValuesMarkup('performers', entry.performers)}`);
-      if (fields.includes('franchises') && entry.franchises && entry.franchises.length) metaLines.push(`<span class="oc-meta-key">—Ñ—Ä–∞–Ω—à–∏–∑–∞:</span> ${entityFilterValuesMarkup('franchises', entry.franchises)}`);
-      if (opts.showImageLink && entry.image) metaLines.push(`<span class="oc-meta-key">–∫–∞—Ä—Ç–∏–Ω–∫–∞:</span> <a href="${escapeHtml(normalizeUrl(entry.image))}" target="_blank" rel="noopener noreferrer">–æ—Ç–∫—Ä—ã—Ç—å ‚Üó</a>`);
-      if (opts.showTrackLink && entry.link) metaLines.push(`<a href="${escapeHtml(normalizeUrl(entry.link))}" target="_blank" rel="noopener noreferrer">—Å—Å—ã–ª–∫–∞ ‚Üó</a>`);
-      const extraHtml = opts.extraHtml || '';
-      const votesHtml = opts.votesHtml || '';
-      const notesHtml = opts.notes && entry.notes ? `<div class="oc-notes">${escapeHtml(entry.notes)}</div>` : '';
-      const missingFields = missingRequiredFields(entry);
-      const missing = opts.showMissingLink === false ? '' : (missingFields.length ? `<span class="oc-missing-link" title="–ù–µ –∑–∞–ø–æ–ª–Ω–µ–Ω–æ: ${escapeHtml(missingFields.join(', '))}">üò°</span>` : '');
-      const uncertain = opts.showMissingLink === false ? '' : uncertaintyMarker(entry);
-      const sameSongBadge = entry.sameSongGroupId && entry.sameSongTitle ? `<span class="oc-yr-tag" title="–°–≤—è–∑–∞–Ω–æ —Å –¥—Ä—É–≥–∏–º–∏ –≤–µ—Ä—Å–∏—è–º–∏ —ç—Ç–æ–π –ø–µ—Å–Ω–∏">–æ–¥–Ω–∞ –ø–µ—Å–Ω—è: ${escapeHtml(entry.sameSongTitle)}</span>` : '';
-      const flagBadges = `${entryIsChinese(entry) ? '<span class="oc-yr-tag">–ö–∏—Ç–∞–π</span>' : ''}${entryIsMovie(entry) ? '<span class="oc-yr-tag">—Ñ–∏–ª—å–º</span>' : ''}${entryIsShortened(entry) ? '<span class="oc-yr-tag">—É–∫–æ—Ä.</span>' : ''}${sameSongBadge}`;
-      return `<div class="oc-season-op oc-unified-card${className}" data-id="${escapeHtml(entry.id)}">
-        <div class="oc-rank ${rankClass}">${rankLabel}</div>
-        ${imgHtml(entry, 'oc-season-thumb')}
-        <div class="oc-info">
-          <div class="oc-name-row">
-            <span class="oc-name oc-clickable-title" data-action="open-card" data-id="${escapeHtml(entry.id)}">${escapeHtml(entry.title)}</span>
-            <span class="oc-type-tag ${entry.type}">${entry.type}</span>
-            ${entryYearSeasonTag(entry)}
-            ${missing}${uncertain}
-            ${flagBadges}
-          </div>
-          ${metaLines.map(l => `<div class="oc-meta oc-meta-line">${l}</div>`).join('')}
-          ${notesHtml}
-          ${extraHtml}
-          ${votesHtml}
-        </div>
-        <div class="oc-season-score">${scoreText}${scoreSub}</div>
-        ${controlsHtml}
-      </div>`;
-    }
-
-    function entityFilterValuesMarkup(kind, values) {
-      return (values || []).filter(Boolean).map((value, index) =>
-        `${index ? '<span class="oc-entity-filter-separator">, </span>' : ''}<button type="button" class="oc-entity-filter-value" data-entity-filter-kind="${escapeHtml(kind)}" data-entity-filter-value="${escapeHtml(value)}">${escapeHtml(value)}</button>`
-      ).join('');
-    }
-
-    function applyEntityCardFilter(kind, value) {
-      if (!['studios', 'directors', 'performers', 'franchises'].includes(kind) || !value) return;
-      filters.search = '';
-      filters.type = '';
-      filters.fromYear = '';
-      filters.fromSeason = 'winter';
-      filters.toYear = '';
-      filters.toSeason = 'fall';
-      filters.scoreCmp = '';
-      filters.scoreValue = '';
-      filters.missingOnly = false;
-      filters.studios = [];
-      filters.directors = [];
-      filters.performers = [];
-      filters.franchises = [];
-      filters[kind] = [value];
-      chartPage = 1;
-      closeCardModal();
-      switchTab('chart');
-      populateFilterOptions();
-      syncFilterControls();
-      render();
-      document.querySelector('#oc-main-panel .oc-filterbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    function renderSeasonViews() {
-      document.querySelectorAll('.oc-season-type-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.seasonType === seasonType));
-      syncContentFilterSelect();
-      renderSeasonBrowser();
-      renderSeasonList();
-    }
-
-    function renderSeasonBrowser() {
-      if (!seasonYearsEl) return;
-      const nowYear = currentYear();
-      if (expandedYear > nowYear) expandedYear = nowYear;
-      let html = '';
-      for (let year = nowYear; year >= 1990; year--) {
-        const yearCount = entries.filter(e => entryTypeMatches(e, seasonType) && Number(e.year) === year).length;
-        const isOpen = Number(expandedYear) === year;
-        html += `<div class="oc-year-block">
-          <button class="oc-year-btn ${isOpen ? 'active' : ''}" data-season-year="${year}">
-            <span>${year}</span><span class="oc-year-count">${yearCount} ${typeLabel(seasonType)}</span>
-          </button>`;
-        if (isOpen) {
-          html += '<div class="oc-season-buttons">';
-          SEASON_ORDER.forEach(season => {
-            const started = seasonHasStarted(year, season);
-            const count = openingListForSeason(year, season).length;
-            const unrated = myName ? openingQueueForSeason(year, season).length : count;
-            const personalUnrated = myName ? personalOpeningQueueForSeason(year, season).length : count;
-            const rateUnrated = isPersonalScale() ? personalUnrated : unrated;
-            const done = Boolean(myName && count > 0 && unrated === 0);
-            const isActive = selectedSeason && Number(selectedSeason.year) === year && selectedSeason.season === season;
-            const right = started ? `${count} ${typeLabel(seasonType)} ¬∑ ${unrated} –±–µ–∑ –æ—Ü–µ–Ω–∫–∏` : '<span class="oc-soon">–°–∫–æ—Ä–æ –±—É–¥–µ—Ç</span>';
-            const check = done ? '<span class="oc-season-check" title="–í—Å–µ OP —Å–µ–∑–æ–Ω–∞ –æ—Ü–µ–Ω–µ–Ω—ã —Å —Ç–µ–∫—É—â–µ–≥–æ –Ω–∏–∫–∞">‚úì</span>' : '';
-            const rateText = isPersonalScale() ? (rateUnrated === 0 ? '–ü—Ä–æ—Å—Ç–∞–≤–ª–µ–Ω–æ' : '–û—Ü–µ–Ω–∏—Ç—å —Å–µ–∑–æ–Ω') : (done ? '–û—Ü–µ–Ω–µ–Ω–æ' : '–û—Ü–µ–Ω–∏—Ç—å —Å–µ–∑–æ–Ω');
-            const rateButton = started && count
-              ? `<button type="button" class="oc-season-rate-mini" data-season-rate="1" data-year="${year}" data-season="${season}" ${myName && rateUnrated === 0 ? 'disabled' : ''}>${rateText}</button>`
-              : '';
-            html += `<div class="oc-season-row">
-              <button type="button" class="oc-season-select ${isActive ? 'active' : ''} ${done ? 'done' : ''}" data-season-select="1" data-year="${year}" data-season="${season}" ${started ? '' : 'disabled'}>
-                <span class="oc-season-label">${check}<span>${SEASON_LABEL[season]}</span></span>
-                <span class="oc-season-right">${right}</span>
-              </button>
-              ${rateButton}
-            </div>`;
-          });
-          html += '</div>';
-        }
-        html += '</div>';
-      }
-      seasonYearsEl.innerHTML = html;
-    }
-
-    function renderSeasonList() {
-      if (!seasonListEl || !seasonTitleEl || !seasonSubtitleEl || !seasonRateBtn) return;
-      if (!selectedSeason) {
-        seasonTitleEl.textContent = '–í—ã–±–µ—Ä–∏—Ç–µ –≥–æ–¥ –∏ —Å–µ–∑–æ–Ω';
-        seasonSubtitleEl.textContent = '–°–ø–∏—Å–æ–∫ –ª–µ—Ç –∏–¥—ë—Ç –æ—Ç –∞–∫—Ç—É–∞–ª—å–Ω–æ–≥–æ –≥–æ–¥–∞ –¥–æ 1990. –ë—É–¥—É—â–∏–µ —Å–µ–∑–æ–Ω—ã –ø–æ–º–µ—á–∞—é—Ç—Å—è –∫–∞–∫ ¬´–°–∫–æ—Ä–æ –±—É–¥–µ—Ç¬ª.';
-        seasonRateBtn.disabled = true;
-        if (seasonRateAllBtn) seasonRateAllBtn.disabled = true;
-        if (seasonPrevBtn) seasonPrevBtn.disabled = true;
-        if (seasonTierBtn) seasonTierBtn.disabled = true;
-        seasonRateBtn.textContent = '–û—Ü–µ–Ω–∏—Ç—å —Å–µ–∑–æ–Ω';
-        seasonListEl.innerHTML = '<div class="oc-empty">–ù–∞–∂–º–∏—Ç–µ –Ω–∞ –≥–æ–¥ —Å–ª–µ–≤–∞, –∑–∞—Ç–µ–º –≤—ã–±–µ—Ä–∏—Ç–µ —Å–µ–∑–æ–Ω.</div>';
-        return;
-      }
-      const { year, season } = selectedSeason;
-      const list = openingListForSeason(year, season);
-      const queue = myName ? openingQueueForSeason(year, season) : list;
-      const personalQueue = myName ? personalOpeningQueueForSeason(year, season) : list;
-      const activeQueue = isPersonalScale() ? personalQueue : queue;
-      seasonTitleEl.textContent = `${SEASON_LABEL[season]} ${year}`;
-      seasonSubtitleEl.textContent = myName
-        ? (isPersonalScale()
-          ? `${typeLabel(seasonType)}: ${list.length}. –ü—É–±–ª–∏—á–Ω–æ –Ω–µ –æ—Ü–µ–Ω–µ–Ω–æ: ${queue.length}. –ë–µ–∑ –æ—Ç–º–µ—Ç–∫–∏: ${personalQueue.length}.`
-          : `${typeLabel(seasonType)}: ${list.length}. –ù–µ –æ—Ü–µ–Ω–µ–Ω–æ —Å –Ω–∏–∫–∞ ¬´${myName}¬ª: ${queue.length}.`)
-        : `${typeLabel(seasonType)}: ${list.length}. –ß—Ç–æ–±—ã —Å–∫—Ä—ã–≤–∞—Ç—å —É–∂–µ –æ—Ü–µ–Ω—ë–Ω–Ω—ã–µ, –≤–≤–µ–¥–∏—Ç–µ –Ω–∏–∫ —Å–ø—Ä–∞–≤–∞ —Å–≤–µ—Ä—Ö—É.`;
-      seasonRateBtn.disabled = !list.length || Boolean(myName && activeQueue.length === 0);
-      if (seasonRateAllBtn) seasonRateAllBtn.disabled = !list.length;
-      if (seasonPrevBtn) seasonPrevBtn.disabled = !previousSeasonFor(year, season);
-      if (seasonTierBtn) seasonTierBtn.disabled = !list.length;
-      seasonRateBtn.textContent = isPersonalScale()
-        ? (myName && list.length && activeQueue.length === 0 ? '–ü—Ä–æ—Å—Ç–∞–≤–ª–µ–Ω–æ ‚úì' : '–û—Ü–µ–Ω–∏—Ç—å —Å–µ–∑–æ–Ω')
-        : (myName && list.length && queue.length === 0 ? '–°–µ–∑–æ–Ω –æ—Ü–µ–Ω—ë–Ω ‚úì' : '–û—Ü–µ–Ω–∏—Ç—å —Å–µ–∑–æ–Ω');
-      if (!list.length) {
-        seasonListEl.innerHTML = `<div class="oc-empty">–í —ç—Ç–æ–º —Å–µ–∑–æ–Ω–µ –ø–æ–∫–∞ –Ω–µ—Ç –¥–æ–±–∞–≤–ª–µ–Ω–Ω—ã—Ö ${typeLabel(seasonType)}.</div>`;
-        return;
-      }
-      seasonListEl.innerHTML = `<div class="oc-season-op-list">${list.map((entry, idx) => {
-        const score = avg(entry.scores);
-        const myScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
-        const myScoreText = myScore !== null ? (isPersonalScale() ? formatFiveScore(myScore) : formatScore(myScore)) : '';
-        const scoreText = visibleAverageMarkup(entry, score);
-        const extraHtml = myScore !== null ? `<div class="oc-rated-mark">—Ç–≤–æ—è –æ—Ü–µ–Ω–∫–∞: ${escapeHtml(myScoreText)}</div>` : '';
-        const basketButton = eventBasketCanAdd() && ['OP', 'ED'].includes(entry.type)
-          ? `<button type="button" class="oc-season-re-rate oc-basket-add-btn" data-basket-add="${entry.id}">${eventBasketHas(entry) ? '–í –∫–æ—Ä–∑–∏–Ω–µ ‚úì' : '–î–æ–±–∞–≤–∏—Ç—å –≤ –∫–æ—Ä–∑–∏–Ω—É'}</button>`
-          : '';
-        const controlsHtml = `${basketButton}<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? '–ü–µ—Ä–µ–æ—Ü–µ–Ω–∏—Ç—å' : '–û—Ü–µ–Ω–∏—Ç—å'}</button>`;
-        return renderUnifiedEntryCard(entry, {
-          rankLabel: idx + 1,
-          scoreText,
-          fields: ['performers'],
-          extraHtml,
-          controlsHtml,
-          className: 'season-card'
-        });
-      }).join('')}</div>`;
-    }
-
-
-    const ENTITY_ALBUM_META = {
-      studios: { title: '–°—Ç—É–¥–∏–∏', one: '—Å—Ç—É–¥–∏—é', field: 'studios', icon: 'üé¨' },
-      performers: { title: '–ò—Å–ø–æ–ª–Ω–∏—Ç–µ–ª–∏', one: '–∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª—è', field: 'performers', icon: 'üéôÔ∏è' },
-      directors: { title: '–†–µ–∂–∏—Å—Å—ë—Ä—ã', one: '—Ä–µ–∂–∏—Å—Å—ë—Ä–∞', field: 'directors', icon: 'üéûÔ∏è' },
-      franchises: { title: '–§—Ä–∞–Ω—à–∏–∑—ã', one: '—Ñ—Ä–∞–Ω—à–∏–∑—É', field: 'franchises', icon: '‚ú®' }
-    };
-    const ENTITY_MIN_TRACKS = 3;
-
-    function normalizedEntityValue(value) {
-      return String(value || '').trim().toLocaleLowerCase('ru');
-    }
-
-    function entriesForEntity(type, value) {
-      const field = (ENTITY_ALBUM_META[type] || {}).field;
-      const key = normalizedEntityValue(value);
-      if (!field || !key) return [];
-      return entries.filter(entry => (entry[field] || []).some(item => normalizedEntityValue(item) === key));
-    }
-
-    function entityHasRating(entry) {
-      return isPersonalScale() ? hasPersonalRated(entry, myName) : hasRated(entry, myName);
-    }
-
-    function entityOwnScore(entry) {
-      const value = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
-      if (value === null || value === undefined || value === '') return null;
-      return Number.isFinite(Number(value)) ? Number(value) : null;
-    }
-
-    function entityReleasePoint(entry) {
-      const seasonOrder = { winter: 0, spring: 1, summer: 2, fall: 3 };
-      const year = Number(entry?.year);
-      const season = seasonOrder[entry?.season];
-      return Number.isFinite(year) && season !== undefined ? year * 4 + season : null;
-    }
-
-    function compareEntityTracks(a, b, mode) {
-      const titleDiff = compareNatural(a?.title, b?.title);
-      if (mode === 'title_desc') return -titleDiff;
-      if (mode === 'date_desc' || mode === 'date_asc') {
-        const aPoint = entityReleasePoint(a);
-        const bPoint = entityReleasePoint(b);
-        if (aPoint === null && bPoint !== null) return 1;
-        if (bPoint === null && aPoint !== null) return -1;
-        if (aPoint !== bPoint) return mode === 'date_desc' ? bPoint - aPoint : aPoint - bPoint;
-      }
-      if (mode === 'score_desc' || mode === 'score_asc') {
-        const aScore = entityOwnScore(a);
-        const bScore = entityOwnScore(b);
-        if (aScore === null && bScore !== null) return 1;
-        if (bScore === null && aScore !== null) return -1;
-        if (aScore !== bScore) return mode === 'score_desc' ? bScore - aScore : aScore - bScore;
-      }
-      if (mode === 'unrated') {
-        const ratingDiff = Number(entityHasRating(a)) - Number(entityHasRating(b));
-        if (ratingDiff) return ratingDiff;
-      }
-      return titleDiff;
-    }
-
-    function entityCardProgress(card) {
-      const related = entriesForEntity(card.type, card.value);
-      const rated = related.filter(entityHasRating).length;
-      return { related, rated, complete: related.length >= ENTITY_MIN_TRACKS && rated === related.length };
-    }
-
-    function eligibleEntityValues(type) {
-      const field = (ENTITY_ALBUM_META[type] || {}).field;
-      const names = new Map();
-      if (!field) return [];
-      entries.forEach(entry => (entry[field] || []).forEach(raw => {
-        const value = String(raw || '').trim();
-        const key = normalizedEntityValue(value);
-        if (!key) return;
-        if (!names.has(key)) names.set(key, { value, ids: new Set() });
-        names.get(key).ids.add(String(entry.id));
-      }));
-      return Array.from(names.values()).filter(item => item.ids.size >= ENTITY_MIN_TRACKS)
-        .sort((a, b) => compareNatural(a.value, b.value)).map(item => ({ value: item.value, count: item.ids.size }));
-    }
-
-    function resetEntityAlbumFilters() {
-      entityFiltersExpanded = false;
-      entityCardRenderLimit = 40;
-      entityTrackRenderLimit = 30;
-      if (entitySearchInput) entitySearchInput.value = '';
-      if (entityTrackTypeSelect) entityTrackTypeSelect.value = '';
-      if (entityTrackSortSelect) entityTrackSortSelect.value = 'title_asc';
-      if (entityFromYearSelect) entityFromYearSelect.value = '';
-      if (entityFromSeasonSelect) entityFromSeasonSelect.value = '';
-      if (entityToYearSelect) entityToYearSelect.value = '';
-      if (entityToSeasonSelect) entityToSeasonSelect.value = '';
-      if (entityProgressSelect) entityProgressSelect.value = '';
-      activeEntityFilteredEntries = [];
-      if (entityTracksEl) entityTracksEl.replaceChildren();
-    }
-
-    function renderEntityAlbums() {
-      if (!entityPanel) return;
-      const meta = ENTITY_ALBUM_META[activeEntityType] || ENTITY_ALBUM_META.studios;
-      const albumQuery = normalizedEntityValue(entityAlbumSearchInput?.value);
-      const albumSort = String(entityAlbumSortSelect?.value || 'title');
-      const cards = firebaseEntityCards.filter(card => card.type === activeEntityType)
-        .filter(card => !albumQuery || normalizedEntityValue(card.value).includes(albumQuery))
-        .map(card => ({ card, progress: entityCardProgress(card) }))
-        .sort((a, b) => {
-          if (albumSort === 'unfinished') {
-            const completeDiff = Number(a.progress.complete) - Number(b.progress.complete);
-            if (completeDiff) return completeDiff;
-          } else if (albumSort === 'progress') {
-            const aRatio = a.progress.related.length ? a.progress.rated / a.progress.related.length : 0;
-            const bRatio = b.progress.related.length ? b.progress.rated / b.progress.related.length : 0;
-            if (aRatio !== bRatio) return aRatio - bRatio;
-          } else if (albumSort === 'tracks' && a.progress.related.length !== b.progress.related.length) {
-            return b.progress.related.length - a.progress.related.length;
-          }
-          return compareNatural(a.card.value, b.card.value);
-        })
-        .map(row => row.card);
-      const eligible = eligibleEntityValues(activeEntityType);
-      const existing = new Set(cards.map(card => normalizedEntityValue(card.value)));
-      entityValueSelect.innerHTML = '<option value="">–í—ã–±–µ—Ä–∏—Ç–µ ' + meta.one + ' (–º–∏–Ω–∏–º—É–º ' + ENTITY_MIN_TRACKS + ' —Ç—Ä–µ–∫–∞)</option>' +
-        eligible.filter(item => !existing.has(normalizedEntityValue(item.value)))
-          .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' ¬∑ ' + item.count + '</option>').join('');
-      entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId));
-      entityBackBtn.classList.remove('hidden');
-      entityBackBtn.textContent = activeEntityCardId ? '‚Üê –ö–æ –≤—Å–µ–º –∞–ª—å–±–æ–º–∞–º' : '‚Üê –ù–∞ –≥–ª–∞–≤–Ω—É—é';
-      entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
-      entityAlbumTools?.classList.toggle('hidden', Boolean(activeEntityCardId));
-      entityFiltersEl.classList.toggle('hidden', !activeEntityCardId);
-      entityFiltersEl.classList.toggle('is-expanded', Boolean(activeEntityCardId && entityFiltersExpanded));
-      if (entityFiltersToggle) {
-        entityFiltersToggle.setAttribute('aria-expanded', entityFiltersExpanded ? 'true' : 'false');
-        entityFiltersToggle.innerHTML = (entityFiltersExpanded ? '–°–∫—Ä—ã—Ç—å —Ñ–∏–ª—å—Ç—Ä—ã <span aria-hidden="true">‚åÉ</span>' : '–ü–æ–∫–∞–∑–∞—Ç—å —Ñ–∏–ª—å—Ç—Ä—ã <span aria-hidden="true">‚åÑ</span>');
-      }
-      entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
-      if (!activeEntityCardId) entityTracksEl.replaceChildren();
-
-      if (activeEntityCardId) {
-        const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
-        if (!card) { activeEntityCardId = ''; renderEntityAlbums(); return; }
-        const progress = entityCardProgress(card);
-        entityTitleEl.textContent = card.value;
-        entitySubtitleEl.textContent = progress.rated + ' –∏–∑ ' + progress.related.length + ' –æ—Ü–µ–Ω–µ–Ω–æ';
-        const search = normalizedEntityValue(entitySearchInput.value);
-        const trackType = entityTrackTypeSelect.value;
-        const fromYear = entityFromYearSelect.value;
-        const fromSeason = entityFromSeasonSelect.value;
-        const toYear = entityToYearSelect.value;
-        const toSeason = entityToSeasonSelect.value;
-        const progressFilter = entityProgressSelect.value;
-        const trackSort = String(entityTrackSortSelect?.value || 'title_asc');
-        const years = uniqueSorted(progress.related.map(entry => entry.year ? String(entry.year) : '')).sort((a, b) => Number(b) - Number(a));
-        entityFromYearSelect.innerHTML = '<option value="">–° –Ω–∞—á–∞–ª–∞</option>' + years.map(value =>
-          '<option value="' + escapeHtml(value) + '"' + (value === fromYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
-        ).join('');
-        entityToYearSelect.innerHTML = '<option value="">–ü–æ –Ω–∞—Å—Ç–æ—è—â–µ–µ –≤—Ä–µ–º—è</option>' + years.map(value =>
-          '<option value="' + escapeHtml(value) + '"' + (value === toYear ? ' selected' : '') + '>' + escapeHtml(value) + '</option>'
-        ).join('');
-        const seasonOrder = { winter: 0, spring: 1, summer: 2, fall: 3 };
-        const fromPoint = fromYear ? Number(fromYear) * 4 + (seasonOrder[fromSeason] ?? 0) : Number.NEGATIVE_INFINITY;
-        const toPoint = toYear ? Number(toYear) * 4 + (seasonOrder[toSeason] ?? 3) : Number.POSITIVE_INFINITY;
-        const rangeStart = Math.min(fromPoint, toPoint);
-        const rangeEnd = Math.max(fromPoint, toPoint);
-        const filtered = progress.related.filter(entry => {
-          if (search && !normalizedEntityValue([entry.title, ...(entry.performers || []), ...(entry.directors || []), ...(entry.studios || []), ...(entry.franchises || [])].join(' ')).includes(search)) return false;
-          if (trackType && entry.type !== trackType) return false;
-          const entryYear = Number(entry.year);
-          const entrySeason = seasonOrder[entry.season];
-          if ((fromYear || toYear) && (!Number.isFinite(entryYear) || entrySeason === undefined)) return false;
-          const entryPoint = entryYear * 4 + entrySeason;
-          if (entryPoint < rangeStart || entryPoint > rangeEnd) return false;
-          const rated = entityHasRating(entry);
-          return progressFilter === 'rated' ? rated : progressFilter === 'unrated' ? !rated : true;
-        }).sort((a, b) => compareEntityTracks(a, b, trackSort));
-        activeEntityFilteredEntries = filtered;
-        entityRateAllBtn.disabled = !filtered.length;
-        const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
-        entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + visibleTracks.map((entry, index) =>
-          renderUnifiedEntryCard(entry, {
-            rankLabel: index + 1,
-            className: entityHasRating(entry) ? 'oc-entity-track-rated' : '',
-            controlsHtml: '<button class="oc-secondary-btn" type="button" data-entity-rate="' + escapeHtml(entry.id) + '">' + (entityHasRating(entry) ? '–ò–∑–º–µ–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É' : '–û—Ü–µ–Ω–∏—Ç—å') + '</button>'
-          })
-        ).join('') + progressiveMoreMarkup('entity-tracks', visibleTracks.length, filtered.length) + '</div>' : '<div class="oc-empty">–ü–æ —ç—Ç–∏–º —Ñ–∏–ª—å—Ç—Ä–∞–º —Ç—Ä–µ–∫–æ–≤ –Ω–µ—Ç.</div>';
-        installProgressiveAutoload(entityTracksEl, 'entity-tracks', () => {
-          entityTrackRenderLimit += 30;
-          renderEntityAlbums();
-        });
-        return;
-      }
-
-      entityTitleEl.textContent = meta.title;
-      entitySubtitleEl.textContent = '–ê–ª—å–±–æ–º—ã —Å —Ç—Ä–µ–∫–∞–º–∏ –∏–∑ –∫–∞—Ç–∞–ª–æ–≥–∞. –°–æ–∑–¥–∞—Ç—å –Ω–æ–≤—ã–π –º–æ–∂–Ω–æ –¥–ª—è –æ–±—ä–µ–∫—Ç–∞, —É –∫–æ—Ç–æ—Ä–æ–≥–æ –µ—Å—Ç—å –º–∏–Ω–∏–º—É–º ' + ENTITY_MIN_TRACKS + ' —Ç—Ä–µ–∫–∞.';
-      const visibleCards = cards.slice(0, entityCardRenderLimit);
-      entityGridEl.innerHTML = cards.length ? visibleCards.map(card => {
-        const progress = entityCardProgress(card);
-        return '<article class="oc-entity-card' + (progress.complete ? ' complete' : '') + '" data-entity-open="' + escapeHtml(card.id) + '">' +
-          '<div class="oc-entity-cover">' + (card.image ? '<img src="' + escapeHtml(normalizeUrl(card.image)) + '" alt="" loading="lazy" />' : '<span>' + meta.icon + '</span>') + '</div>' +
-          '<div class="oc-entity-card-body"><h3>' + escapeHtml(card.value) + '</h3><p>' + progress.rated + ' –∏–∑ ' + progress.related.length + ' –æ—Ü–µ–Ω–µ–Ω–æ</p>' +
-          '<div class="oc-entity-progressbar"><i style="width:' + (progress.related.length ? Math.round(progress.rated / progress.related.length * 100) : 0) + '%"></i></div>' +
-          (progress.complete ? '<span class="oc-entity-done">–í—Å—ë –ø—Ä–æ—Å–º–æ—Ç—Ä–µ–Ω–æ ‚úì</span>' : '') +
-          (isCatalogAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="–†–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å –∞–ª—å–±–æ–º" aria-label="–†–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å –∞–ª—å–±–æ–º">‚úé</button>' : '') +
-          (isCatalogAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="–£–¥–∞–ª–∏—Ç—å –∞–ª—å–±–æ–º">√ó</button>' : '') +
-          '</div></article>';
-      }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : `<div class="oc-empty">${albumQuery ? '–ü–æ —ç—Ç–æ–º—É –∑–∞–ø—Ä–æ—Å—É –∞–ª—å–±–æ–º–æ–≤ –Ω–µ –Ω–∞–π–¥–µ–Ω–æ.' : '–ê–ª—å–±–æ–º–æ–≤ –ø–æ–∫–∞ –Ω–µ—Ç.'}</div>`;
-      installProgressiveAutoload(entityGridEl, 'entity-cards', () => {
-        entityCardRenderLimit += 40;
-        renderEntityAlbums();
-      });
-    }
-
-    function startEntityRating() {
-      const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
-      if (!card || !ensureNickname()) return;
-      const related = activeEntityFilteredEntries.slice();
-      const remaining = related.filter(entry => !entityHasRating(entry));
-      const queue = (remaining.length ? remaining : related).slice();
-      if (!queue.length) return;
-      startPersistentRatingQueue(queue, 'entity', card.value, {
-        entityType: activeEntityType,
-        entityId: activeEntityCardId,
-        scale: ratingScale
-      });
-    }
-
-    async function saveEntityAlbum(event) {
-      event.preventDefault();
-      if (!isCatalogAdmin()) return;
-      const value = entityValueSelect.value;
-      const image = String(entityImageInput.value || '').trim();
-      if (!value || !image) { setStatus('–í—ã–±–µ—Ä–∏—Ç–µ –æ–±—ä–µ–∫—Ç –∏ –¥–æ–±–∞–≤—å—Ç–µ —Å—Å—ã–ª–∫—É –Ω–∞ –æ–±–ª–æ–∂–∫—É.', true); return; }
-      try {
-        await window.OPED_DB.saveEntityCard({ type: activeEntityType, value, image });
-        entityCreateForm.reset();
-        setStatus('–ê–ª—å–±–æ–º —Å–æ–∑–¥–∞–Ω ‚úì');
-      } catch (error) {
-        console.error(error);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å –∞–ª—å–±–æ–º. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –¥–æ—Å—Ç—É–ø Firebase.', true);
-      }
-    }
-
-    function switchTab(tab) {
-      if (tab !== 'chart' && !requireAccount()) return;
-      activeTab = tab;
-      filters = tab === 'profile' ? profileFilters : catalogFilters;
-      syncFilterControls();
-      document.querySelectorAll('.oc-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-      mainPanel.classList.toggle('hidden', tab !== 'chart');
-      profilePanel.classList.toggle('hidden', tab !== 'profile');
-      if (reratingPanel) reratingPanel.classList.toggle('hidden', tab !== 'rerating');
-      if (discoveryPanel) discoveryPanel.classList.toggle('hidden', tab !== 'discovery');
-      if (top100Panel) top100Panel.classList.toggle('hidden', tab !== 'top100');
-      seasonPanel.classList.toggle('hidden', tab !== 'season');
-      if (tierPanel) tierPanel.classList.toggle('hidden', tab !== 'tier');
-      if (statsPanel) statsPanel.classList.toggle('hidden', tab !== 'stats');
-      const entityTab = tab.startsWith('entity-');
-      if (entityPanel) entityPanel.classList.toggle('hidden', !entityTab);
-      if (entityTab) {
-        const nextEntityType = tab.slice('entity-'.length);
-        if (activeEntityType !== nextEntityType || activeEntityCardId) resetEntityAlbumFilters();
-        activeEntityType = nextEntityType;
-        activeEntityCardId = '';
-        renderEntityAlbums();
-      } else {
-        activeEntityCardId = '';
-        resetEntityAlbumFilters();
-      }
-      if (tab === 'season') renderSeasonViews();
-      if (tab === 'profile') renderProfile();
-      if (tab === 'top100') renderGlobalTop100();
-      if (tab === 'tier') { populateFilterOptions(); renderTierList(); }
-      if (tab === 'stats') renderStatsPage();
-      if (tab === 'discovery') publishAppData('discovery-opened');
-      void syncRouteDataSubscriptions(tab);
-      dispatchAppEvent('oped:route-change', { tab });
-    }
-
-    function clampScore(value) {
-      if (value === null || value === undefined || String(value).trim() === '') return null;
-      const num = Number(value);
-      if (!Number.isFinite(num)) return null;
-      const step = scaleStep();
-      const rounded = Math.round(num / step) * step;
-      return Math.max(ratingMin(), Math.min(ratingMax(), Number(rounded.toFixed(1))));
-    }
-
-    const PERSISTENT_RATING_MODES = new Set(['season', 'season-all', 'entity', 'collection', 'coverage', 'rate-later']);
-
-    function ratingSessionStorageKey() {
-      return 'op-ed-rating-session-v2:' + manualUserSafeKey(myName);
-    }
-
-    function ratingSessionContextKey(mode, context = {}) {
-      const clean = Object.keys(context || {}).sort().reduce((result, key) => {
-        const value = context[key];
-        if (value !== undefined && value !== null && value !== '') result[key] = String(value);
-        return result;
-      }, {});
-      return `${mode}|${JSON.stringify(clean)}`;
-    }
-
-    function savedRatingSession() {
-      try {
-        const saved = JSON.parse(localStorage.getItem(ratingSessionStorageKey()) || 'null');
-        if (!saved || !PERSISTENT_RATING_MODES.has(String(saved.mode)) || !Array.isArray(saved.ids) || !saved.ids.length) return null;
-        return saved;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    function persistRatingSession() {
-      if (!PERSISTENT_RATING_MODES.has(evaluatorMode) || !seasonQueue.length) return;
-      try {
-        localStorage.setItem(ratingSessionStorageKey(), JSON.stringify({
-          mode: evaluatorMode,
-          label: activeEntityQueueLabel,
-          context: activeRatingQueueContext,
-          contextKey: ratingSessionContextKey(evaluatorMode, activeRatingQueueContext),
-          ids: seasonQueue.map(entry => String(entry.id)),
-          index: seasonQueueIndex,
-          savedAt: Date.now()
-        }));
-      } catch (_) {}
-    }
-
-    function clearRatingSession() {
-      try { localStorage.removeItem(ratingSessionStorageKey()); } catch (_) {}
-    }
-
-    function startPersistentRatingQueue(rows, mode, label, context = {}) {
-      evaluatorMode = PERSISTENT_RATING_MODES.has(mode) ? mode : 'collection';
-      activeEntityQueueLabel = String(label || '–û—á–µ—Ä–µ–¥—å –æ—Ü–µ–Ω–∫–∏');
-      activeRatingQueueContext = context && typeof context === 'object' ? { ...context } : {};
-      const saved = savedRatingSession();
-      const expectedKey = ratingSessionContextKey(evaluatorMode, activeRatingQueueContext);
-      if (saved?.contextKey === expectedKey) {
-        const restored = saved.ids.map(id => entriesById.get(String(id))).filter(Boolean);
-        if (restored.length) {
-          seasonQueue = restored;
-          seasonQueueIndex = Math.max(0, Math.min(restored.length - 1, Number(saved.index) || 0));
-        } else {
-          seasonQueue = rows.slice();
-          seasonQueueIndex = 0;
-        }
-      } else {
-        seasonQueue = rows.slice();
-        seasonQueueIndex = 0;
-      }
-      persistRatingSession();
-      renderEvaluator();
-    }
-
-    function startSeasonRating(includeAll = false) {
-      if (!selectedSeason) return;
-      if (!ensureNickname()) return;
-      const mode = includeAll ? 'season-all' : 'season';
-      const queue = includeAll
-        ? openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType).slice().sort((a, b) => compareNatural(a.title, b.title))
-        : (isPersonalScale()
-          ? personalOpeningQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType)
-          : openingQueueForSeason(selectedSeason.year, selectedSeason.season, seasonType));
-      if (!queue.length) {
-        setStatus(isPersonalScale()
-          ? `–£ –≤—Å–µ—Ö ${typeLabel(seasonType)} —ç—Ç–æ–≥–æ —Å–µ–∑–æ–Ω–∞ —É–∂–µ –µ—Å—Ç—å —Ç–≤–æ—è –æ—Ü–µ–Ω–∫–∞ ‚úì`
-          : `–í—Å–µ ${typeLabel(seasonType)} —ç—Ç–æ–≥–æ —Å–µ–∑–æ–Ω–∞ —É–∂–µ –æ—Ü–µ–Ω–µ–Ω—ã —Å —Ç–µ–∫—É—â–µ–≥–æ –Ω–∏–∫–∞ ‚úì`);
-        return;
-      }
-      startPersistentRatingQueue(queue, mode, `${typeLabel(seasonType)} ¬∑ ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`, {
-        year: selectedSeason.year,
-        season: selectedSeason.season,
-        type: seasonType,
-        includeAll: includeAll ? '1' : '0',
-        scale: ratingScale
-      });
-    }
-
-    function startOpeningRating(entryId) {
-      if (!ensureNickname()) return;
-      const entry = entriesById.get(String(entryId));
-      if (!entry) return;
-      evaluatorMode = 'single';
-      seasonQueue = [entry];
-      seasonQueueIndex = 0;
-      renderEvaluator();
-    }
-
-    function closeEvaluator() {
-      persistRatingSession();
-      evaluatorEl.classList.add('hidden');
-      evaluatorEl.innerHTML = '';
-      seasonQueue = [];
-      seasonQueueIndex = 0;
-      blindPendingRating = null;
-      blindSessionStats = null;
-      dailyActiveKey = '';
-    }
-
-    function blindSessionStorageKey() {
-      return 'op-ed-blind-rerating-v1:' + manualUserSafeKey(myName);
-    }
-
-    function savedBlindSession() {
-      try {
-        const row = JSON.parse(localStorage.getItem(blindSessionStorageKey()) || 'null');
-        if (!row || !Array.isArray(row.ids) || !row.ids.length) return null;
-        return row;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    function persistBlindSession() {
-      if (evaluatorMode !== 'blind' || !seasonQueue.length) return;
-      try {
-        localStorage.setItem(blindSessionStorageKey(), JSON.stringify({
-          ids: seasonQueue.map(entry => String(entry.id)),
-          index: seasonQueueIndex,
-          pending: blindPendingRating,
-          stats: blindSessionStats,
-          savedAt: Date.now()
-        }));
-      } catch (_) {}
-    }
-
-    function clearBlindSession() {
-      try { localStorage.removeItem(blindSessionStorageKey()); } catch (_) {}
-    }
-
-    function resumeBlindRerating() {
-      const saved = savedBlindSession();
-      if (!saved) return openBlindReratingSetup();
-      seasonQueue = saved.ids.map(id => entriesById.get(String(id))).filter(Boolean);
-      seasonQueueIndex = Math.max(0, Math.min(seasonQueue.length, Number(saved.index) || 0));
-      blindPendingRating = saved.pending || null;
-      blindSessionStats = saved.stats || { replaced: 0, kept: 0, skipped: 0, total: seasonQueue.length };
-      evaluatorMode = 'blind';
-      persistBlindSession();
-      renderEvaluator();
-    }
-
-    function openBlindReratingSetup() {
-      if (!ensureNickname() || !myName) return;
-      if (isPersonalScale()) {
-        setStatus('–°–ª–µ–ø–∞—è –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞ –ø–æ–∫–∞ —Ä–∞–±–æ—Ç–∞–µ—Ç —Å –æ–±—â–µ–π —à–∫–∞–ª–æ–π 1‚Äì10. –ü–µ—Ä–µ–∫–ª—é—á–∏ —à–∫–∞–ª—É –≤ —à–∞–ø–∫–µ.', true);
-        return;
-      }
-      const candidates = entries.filter(entry => scoreFor(entry, myName) !== null);
-      if (!candidates.length) {
-        setStatus('–ü–æ —Ç–µ–∫—É—â–∏–º —Ñ–∏–ª—å—Ç—Ä–∞–º –Ω–µ—Ç —Ä–∞–Ω–µ–µ –æ—Ü–µ–Ω—ë–Ω–Ω—ã—Ö —Ç—Ä–µ–∫–æ–≤.', true);
-        return;
-      }
-      const savedSession = savedBlindSession();
-      const years = [...new Set(candidates.map(entry => Number(entry.year)).filter(Number.isFinite))].sort((a, b) => a - b);
-      const yearOptions = years.map(year => `<option value="${year}">${year}</option>`).join('');
-      evaluatorMode = 'blind-setup';
-      evaluatorEl.classList.remove('hidden');
-      evaluatorEl.innerHTML = `<div class="oc-eval-modal oc-blind-setup">
-        <div class="oc-eval-top">
-          <div>
-            <div class="oc-eval-progress">–°–ª–µ–ø–∞—è –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞</div>
-            <div class="oc-eval-title">–ù–∞—Å—Ç—Ä–æ–π–∫–∞ –≤—ã–±–æ—Ä–∫–∏</div>
-          </div>
-          <button class="oc-eval-close" data-eval-action="close">–ó–∞–∫—Ä—ã—Ç—å</button>
-        </div>
-        <div class="oc-blind-intro">–°—Ç–∞—Ä—ã–µ –±–∞–ª–ª—ã –±—É–¥—É—Ç —Å–∫—Ä—ã—Ç—ã –¥–æ –Ω–æ–≤–æ–π –æ—Ü–µ–Ω–∫–∏. –ù–∏—á–µ–≥–æ –Ω–µ –ø–µ—Ä–µ–∑–∞–ø–∏—à–µ—Ç—Å—è –±–µ–∑ –æ—Ç–¥–µ–ª—å–Ω–æ–≥–æ –ø–æ–¥—Ç–≤–µ—Ä–∂–¥–µ–Ω–∏—è.</div>
-        <div class="oc-blind-options">
-          <label>–¢–∏–ø
-            <select id="oc-blind-type">
-              <option value="">OP –∏ ED</option>
-              <option value="OP">–¢–æ–ª—å–∫–æ OP</option>
-              <option value="ED">–¢–æ–ª—å–∫–æ ED</option>
-            </select>
-          </label>
-          <label>–û—Ç –≥–æ–¥–∞
-            <select id="oc-blind-from-year"><option value="">–ë–µ–∑ –æ–≥—Ä–∞–Ω–∏—á–µ–Ω–∏—è</option>${yearOptions}</select>
-          </label>
-          <label>–î–æ –≥–æ–¥–∞
-            <select id="oc-blind-to-year"><option value="">–ë–µ–∑ –æ–≥—Ä–∞–Ω–∏—á–µ–Ω–∏—è</option>${yearOptions}</select>
-          </label>
-          <label>–ö–æ–ª–∏—á–µ—Å—Ç–≤–æ
-            <select id="oc-blind-count">
-              <option value="5">5 —Ç—Ä–µ–∫–æ–≤</option>
-              <option value="10" selected>10 —Ç—Ä–µ–∫–æ–≤</option>
-              <option value="20">20 —Ç—Ä–µ–∫–æ–≤</option>
-              <option value="50">50 —Ç—Ä–µ–∫–æ–≤</option>
-            </select>
-          </label>
-        </div>
-        <div class="oc-blind-candidate-count">–í—Å–µ–≥–æ —Ä–∞–Ω–µ–µ –æ—Ü–µ–Ω–µ–Ω–æ: <strong>${candidates.length}</strong></div>
-        <div class="oc-eval-actions">
-          <button class="oc-secondary-btn" data-eval-action="close">–û—Ç–º–µ–Ω–∞</button>
-          ${savedSession ? '<button class="oc-secondary-btn" data-eval-action="blind-resume">–ü—Ä–æ–¥–æ–ª–∂–∏—Ç—å —Å–æ—Ö—Ä–∞–Ω—ë–Ω–Ω—É—é</button>' : ''}
-          <button class="oc-addbtn" data-eval-action="blind-start">–ù–∞—á–∞—Ç—å –∑–∞–Ω–æ–≤–æ</button>
-        </div>
-      </div>`;
-    }
-
-    function startBlindRerating() {
-      const type = String($('#oc-blind-type')?.value || '');
-      const requested = Math.max(1, Number($('#oc-blind-count')?.value || 10));
-      const fromYear = Number($('#oc-blind-from-year')?.value || 0);
-      const toYear = Number($('#oc-blind-to-year')?.value || 0);
-      const candidates = entries
-        .filter(entry => scoreFor(entry, myName) !== null)
-        .filter(entry => !type || entry.type === type)
-        .filter(entry => !fromYear || Number(entry.year) >= fromYear)
-        .filter(entry => !toYear || Number(entry.year) <= toYear);
-      for (let index = candidates.length - 1; index > 0; index -= 1) {
-        const swap = Math.floor(Math.random() * (index + 1));
-        [candidates[index], candidates[swap]] = [candidates[swap], candidates[index]];
-      }
-      seasonQueue = candidates.slice(0, requested);
-      seasonQueueIndex = 0;
-      blindPendingRating = null;
-      blindSessionStats = { replaced: 0, kept: 0, skipped: 0, total: seasonQueue.length };
-      if (!seasonQueue.length) {
-        closeEvaluator();
-        setStatus('–î–ª—è –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ —Ç–∏–ø–∞ –ø–æ —Ç–µ–∫—É—â–∏–º —Ñ–∏–ª—å—Ç—Ä–∞–º –Ω–µ—Ç –æ—Ü–µ–Ω—ë–Ω–Ω—ã—Ö —Ç—Ä–µ–∫–æ–≤.', true);
-        return;
-      }
-      evaluatorMode = 'blind';
-      renderEvaluator();
-    }
-
-    function renderBlindComparison(entry) {
-      const pending = blindPendingRating;
-      if (!pending || pending.entryId !== String(entry.id)) return false;
-      const detailSettings = detailedRatingSettings(myName, entry.type);
-      const scoreLine = (label, oldValue, newValue) => `<div class="oc-blind-compare-row"><span>${label}</span><strong>${formatScore(oldValue)}</strong><span aria-hidden="true">‚Üí</span><strong class="${Number(oldValue) === Number(newValue) ? 'same' : Number(newValue) > Number(oldValue) ? 'up' : 'down'}">${formatScore(newValue)}</strong></div>`;
-      evaluatorEl.classList.remove('hidden');
-      evaluatorEl.innerHTML = `<div class="oc-eval-modal oc-blind-review">
-        <div class="oc-eval-top">
-          <div>
-            <div class="oc-eval-progress">–°–ª–µ–ø–∞—è –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞ ¬∑ —Å—Ä–∞–≤–Ω–µ–Ω–∏–µ ¬∑ ${seasonQueueIndex + 1} –∏–∑ ${seasonQueue.length}</div>
-            <div class="oc-eval-title">${escapeHtml(entry.title)}</div>
-          </div>
-          <button class="oc-eval-close" data-eval-action="close">–ó–∞–∫—Ä—ã—Ç—å</button>
-        </div>
-        <div class="oc-blind-compare">
-          <div class="oc-blind-compare-head"><span></span><span>–ë—ã–ª–æ</span><span></span><span>–°—Ç–∞–ª–æ</span></div>
-          ${scoreLine('–ò—Ç–æ–≥', pending.old.score, pending.next.score)}
-          ${detailSettings.enabled ? `${scoreLine(detailSettings.songLabel, pending.old.songScore, pending.next.songScore)}${scoreLine(detailSettings.visualLabel, pending.old.visualScore, pending.next.visualScore)}${detailSettings.fields.map(field => scoreLine(field.label, pending.old.customScores?.[field.id], pending.next.customScores?.[field.id])).join('')}` : ''}
-          ${pending.next.comment ? `<div class="oc-blind-new-comment">üí¨ –ù–æ–≤—ã–π –∫–æ–º–º–µ–Ω—Ç–∞—Ä–∏–π: ${escapeHtml(pending.next.comment)}</div>` : ''}
-        </div>
-        <div class="oc-eval-actions">
-          <button class="oc-secondary-btn" data-eval-action="blind-skip">–ü—Ä–æ–ø—É—Å—Ç–∏—Ç—å</button>
-          <button class="oc-secondary-btn" data-eval-action="blind-keep">–û—Å—Ç–∞–≤–∏—Ç—å —Å—Ç–∞—Ä—É—é</button>
-          <button class="oc-addbtn" data-eval-action="blind-replace">–ó–∞–º–µ–Ω–∏—Ç—å –Ω–æ–≤–æ–π</button>
-        </div>
-      </div>`;
-      return true;
-    }
-
-    async function resolveBlindRating(action) {
-      const entry = seasonQueue[seasonQueueIndex];
-      const pending = blindPendingRating;
-      if (!entry || !pending) return;
-      try {
-        if (action === 'replace') {
-          const next = pending.next;
-          const finalComment = next.comment || pending.old.comment;
-          await persistCompleteRating(entry, { score: next.score, songScore: next.songScore, visualScore: next.visualScore, customScores: next.customScores, comment: finalComment });
-          blindSessionStats.replaced += 1;
-        } else if (action === 'keep') {
-          blindSessionStats.kept += 1;
-        } else {
-          blindSessionStats.skipped += 1;
-        }
-        blindPendingRating = null;
-        seasonQueueIndex += 1;
-        persistBlindSession();
-        render();
-        if (activeTab === 'profile') renderProfile();
-        renderEvaluator();
-      } catch (error) {
-        console.error(error);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ä–µ–∑—É–ª—å—Ç–∞—Ç –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∏.', true);
-      }
-    }
-
-    function renderEvaluator() {
-      if (!seasonQueue.length || seasonQueueIndex >= seasonQueue.length) {
-        const completedMode = evaluatorMode;
-        const completedDailyKey = dailyActiveKey;
-        const completedBlindStats = blindSessionStats ? { ...blindSessionStats } : null;
-        closeEvaluator();
-        if (PERSISTENT_RATING_MODES.has(completedMode)) clearRatingSession();
-        renderSeasonViews();
-        if (completedMode === 'entity') renderEntityAlbums();
-        if (completedMode === 'daily') {
-          finalizeDaily(completedDailyKey).catch(error => { console.error(error); setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–≤–µ—Ä—à–∏—Ç—å –¥–µ–π–ª–∏–∫.', true); });
-          return;
-        }
-        if (completedMode === 'blind') {
-          clearBlindSession();
-          const stats = completedBlindStats;
-          setStatus(stats ? `–°–ª–µ–ø–∞—è –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞ –∑–∞–≤–µ—Ä—à–µ–Ω–∞: –∑–∞–º–µ–Ω–µ–Ω–æ ${stats.replaced}, –æ—Å—Ç–∞–≤–ª–µ–Ω–æ ${stats.kept}, –ø—Ä–æ–ø—É—â–µ–Ω–æ ${stats.skipped} ‚úì` : '–°–ª–µ–ø–∞—è –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞ –∑–∞–≤–µ—Ä—à–µ–Ω–∞ ‚úì');
-          return;
-        }
-        setStatus(completedMode === 'entity'
-          ? '–ê–ª—å–±–æ–º –ø–æ–ª–Ω–æ—Å—Ç—å—é –ø—Ä–æ—Å–º–æ—Ç—Ä–µ–Ω ‚úì'
-          : ['collection', 'coverage', 'rate-later'].includes(completedMode)
-            ? `${activeEntityQueueLabel || '–û—á–µ—Ä–µ–¥—å'} –ø–æ–ª–Ω–æ—Å—Ç—å—é –æ—Ü–µ–Ω–µ–Ω–∞ ‚úì`
-          : isPersonalScale()
-            ? (completedMode === 'single' ? '–û—Ü–µ–Ω–∫–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞ ‚úì' : '–û—Ü–µ–Ω–∫–∏ —Å–µ–∑–æ–Ω–∞ –ø—Ä–æ—Å—Ç–∞–≤–ª–µ–Ω—ã ‚úì')
-            : (completedMode === 'single' ? '–û—Ü–µ–Ω–∫–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞ ‚úì' : '–°–µ–∑–æ–Ω–Ω–∞—è –æ—Ü–µ–Ω–∫–∞ –∑–∞–≤–µ—Ä—à–µ–Ω–∞ ‚úì'));
-        return;
-      }
-      const entry = seasonQueue[seasonQueueIndex];
-      persistRatingSession();
-      if (evaluatorMode === 'blind' && renderBlindComparison(entry)) return;
-      const existingScore = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
-      const blindMode = evaluatorMode === 'blind';
-      const savedScore = blindMode ? defaultScore() : (existingScore !== null ? clampScore(existingScore) : defaultScore());
-      const savedSongScore = blindMode ? null : songScoreFor(entry, myName);
-      const savedVisualScore = blindMode ? null : visualScoreFor(entry, myName);
-      const savedComment = blindMode ? '' : ratingCommentFor(entry, myName);
-      const optionalPublicParts = !isPersonalScale();
-      const inputMin = ratingMin();
-      const inputMax = ratingMax();
-      const inputStep = scaleStep();
-      const progressText = evaluatorMode === 'blind'
-        ? `–°–ª–µ–ø–∞—è –ø–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞ ¬∑ ${seasonQueueIndex + 1} –∏–∑ ${seasonQueue.length}`
-        : ['entity', 'collection', 'coverage', 'rate-later'].includes(evaluatorMode)
-        ? `${activeEntityQueueLabel} ¬∑ ${seasonQueueIndex + 1} –∏–∑ ${seasonQueue.length}`
-        : evaluatorMode === 'single'
-        ? `–ü–µ—Ä–µ–æ—Ü–µ–Ω–∫–∞ ¬∑ ${entry.year || '–≥–æ–¥ –Ω–µ —É–∫–∞–∑–∞–Ω'}${entry.season ? ' ¬∑ ' + SEASON_LABEL[entry.season] : ''}`
-        : evaluatorMode === 'daily'
-          ? `–ï–∂–µ–¥–Ω–µ–≤–Ω–∞—è –æ—Ü–µ–Ω–∫–∞ ¬∑ ${entry.type === 'ED' ? 'ED ‚Äî —ç–Ω–¥–∏–Ω–≥' : 'OP ‚Äî –æ–ø–µ–Ω–∏–Ω–≥'} ¬∑ ${seasonQueueIndex + 1} –∏–∑ ${seasonQueue.length} –æ—Å—Ç–∞–≤—à–∏—Ö—Å—è`
-          : `${seasonQueueIndex + 1} –∏–∑ ${seasonQueue.length} ¬∑ ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`;
-      evaluatorEl.classList.remove('hidden');
-      evaluatorEl.innerHTML = `<div class="oc-eval-modal" data-entry-id="${escapeHtml(entry.id)}">
-        <div class="oc-eval-top">
-          <div>
-            <div class="oc-eval-progress">${escapeHtml(progressText)}</div>
-            <div class="oc-eval-title">${escapeHtml(entry.title)}</div>
-          </div>
-          <button class="oc-eval-close" data-eval-action="close">–ó–∞–∫—Ä—ã—Ç—å</button>
-        </div>
-        ${renderOpeningVideoBlock(entry)}
-        <div class="oc-eval-grid">
-          <label>–û—Ü–µ–Ω–∫–∞
-            <input id="oc-eval-range" type="range" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
-            <div class="oc-score-word" id="oc-eval-word">${escapeHtml(formatInputScore(savedScore))}</div>
-          </label>
-          <label>${isPersonalScale() ? '–ó–Ω–∞—á–µ–Ω–∏–µ' : '–ò—Ç–æ–≥'}
-            <input id="oc-eval-score" type="number" min="${inputMin}" max="${inputMax}" step="${inputStep}" value="${savedScore}" />
-          </label>
-          ${optionalPublicParts ? `${detailedRatingMarkup(entry, 'oc-eval', savedSongScore, savedVisualScore)}
-          ${ratingCommentEditorMarkup('oc-eval', savedComment)}
-          ${blindMode ? '<div class="oc-blind-comment-hint">–ü—É—Å—Ç–æ–µ –ø–æ–ª–µ —Å–æ—Ö—Ä–∞–Ω–∏—Ç –ø—Ä–µ–∂–Ω–∏–π –∫–æ–º–º–µ–Ω—Ç–∞—Ä–∏–π.</div>' : ''}` : ''}
-        </div>
-        <div class="oc-eval-actions">
-          <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? '–û—Ç–º–µ–Ω–∞' : '–ü—Ä–æ–ø—É—Å—Ç–∏—Ç—å'}</button>
-          ${existingScore !== null && !blindMode ? `<button class="oc-secondary-btn" data-eval-action="delete-current">${isPersonalScale() ? '–£–¥–∞–ª–∏—Ç—å –æ—Ç–º–µ—Ç–∫—É' : '–£–¥–∞–ª–∏—Ç—å –æ—Ü–µ–Ω–∫—É'}</button>` : ''}
-          <button class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" ${blindMode ? 'style="display:none"' : ''} data-eval-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100 ‚úì' : '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100'}</button>
-          <button class="oc-addbtn" data-eval-action="save-next">${blindMode ? '–ü–æ–∫–∞–∑–∞—Ç—å —Å—Ä–∞–≤–Ω–µ–Ω–∏–µ' : evaluatorMode === 'single' ? '–°–æ—Ö—Ä–∞–Ω–∏—Ç—å' : '–°–æ—Ö—Ä–∞–Ω–∏—Ç—å –∏ –¥–∞–ª—å—à–µ'}</button>
-        </div>
-      </div>`;
-      const range = $('#oc-eval-range');
-      const score = $('#oc-eval-score');
-      const word = $('#oc-eval-word');
-      const updateWord = (val) => { if (word) word.textContent = formatInputScore(val); };
-      range.addEventListener('input', () => { score.value = range.value; updateWord(range.value); });
-      score.addEventListener('input', () => {
-        const val = clampScore(score.value);
-        if (val !== null) { range.value = String(val); updateWord(val); }
-      });
-      bindDetailedRatingSuggestion(evaluatorEl, 'oc-eval');
-      bindVideoEmbeds(evaluatorEl);
-    }
-
-    async function saveEvaluatorScore() {
-      const entry = seasonQueue[seasonQueueIndex];
-      if (!entry) return;
-      const score = clampScore($('#oc-eval-score').value);
-      const commentInput = $('#oc-eval-comment');
-      const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
-      const detailed = readDetailedRating(evaluatorEl, entry, 'oc-eval');
-      const { songScore, visualScore, customScores } = detailed;
-      if (score === null) { setStatus(`–í–≤–µ–¥–∏—Ç–µ –æ—Ü–µ–Ω–∫—É –æ—Ç ${formatScore(ratingMin())} –¥–æ ${formatScore(ratingMax())}.`, true); return; }
-      if (detailed.error) { setStatus(detailed.error, true); return; }
-      if (evaluatorMode === 'blind') {
-        blindPendingRating = {
-          entryId: String(entry.id),
-          old: {
-            score: scoreFor(entry, myName),
-            songScore: songScoreFor(entry, myName),
-            visualScore: visualScoreFor(entry, myName),
-            customScores: customScoresFor(entry, myName),
-            comment: ratingCommentFor(entry, myName)
-          },
-          next: { score, songScore, visualScore, customScores, comment }
-        };
-        persistBlindSession();
-        renderEvaluator();
-        return;
-      }
-      try {
-        if (isPersonalScale()) {
-          entry.personalScores = entry.personalScores || {};
-          entry.personalScores[myName] = score;
-          await saveRatingExtras(entry.id, myName, { personalScore: score });
-          await removeRateLaterEntry(entry.id);
-        } else {
-          await persistCompleteRating(entry, { score, songScore, visualScore, customScores, comment });
-        }
-        touchEntryCache(entry);
-        markRatingDataChanged();
-        if (evaluatorMode === 'daily') await markDailyEntryDone(entry.id);
-        setStatus('–û—Ü–µ–Ω–∫–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞ ‚úì');
-        render();
-        renderSeasonViews();
-        seasonQueueIndex += 1;
-        renderEvaluator();
-      } catch (e) {
-        console.error(e);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É.', true);
-      }
-    }
-
-    function renderEditCard(entry) {
-      const seasonOptions = ['', 'winter', 'spring', 'summer', 'fall'].map(s => {
-        const label = s === '' ? '–°–µ–∑–æ–Ω ‚Äî' : SEASON_LABEL[s];
-        const sel = entry.season === s ? 'selected' : '';
-        return `<option value="${s}" ${sel}>${label}</option>`;
-      }).join('');
-
-      return `
-        <div class="oc-editcard" data-id="${entry.id}">
-          <div class="oc-section-label">—Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏–µ —Ç—Ä–µ–∫–∞</div>
-          <div class="oc-editgrid">
-            <input class="oc-e-title" type="text" autocomplete="off" value="${escapeHtml(entry.title)}" placeholder="–ù–∞–∑–≤–∞–Ω–∏–µ" />
-            <select class="oc-e-type">
-              <option value="OP" ${entry.type === 'OP' ? 'selected' : ''}>OP</option>
-              <option value="ED" ${entry.type === 'ED' ? 'selected' : ''}>ED</option>
-            </select>
-            <input class="oc-e-year" type="number" min="1960" max="2100" value="${entry.year || ''}" placeholder="–ì–æ–¥" />
-            <select class="oc-e-season">${seasonOptions}</select>
-          </div>
-          <div class="oc-editgrid2">
-            <input class="oc-e-studio" type="text" list="oc-dl-studios" autocomplete="off" value="${escapeHtml((entry.studios || []).join(', '))}" placeholder="–°—Ç—É–¥–∏–∏ (—á–µ—Ä–µ–∑ –∑–∞–ø—è—Ç—É—é)" />
-            <div class="oc-edit-field-with-status"><input class="oc-e-director" type="text" list="oc-dl-directors" autocomplete="off" value="${escapeHtml((entry.directors || []).join(', '))}" placeholder="–†–µ–∂–∏—Å—Å—ë—Ä—ã –æ–ø–∞ (—á–µ—Ä–µ–∑ –∑–∞–ø—è—Ç—É—é)" /><label class="oc-uncertain-edit-toggle" title="–ù–µ—É–≤–µ—Ä–µ–Ω–Ω—ã–π —Ä–µ–∂–∏—Å—Å—ë—Ä"><input class="oc-e-uncertain-director" type="checkbox" tabindex="-1" ${entry.uncertainDirector ? 'checked' : ''} />‚ùì</label></div>
-            <div class="oc-edit-field-with-status"><input class="oc-e-performer" type="text" list="oc-dl-performers" autocomplete="off" value="${escapeHtml((entry.performers || []).join(', '))}" placeholder="–ò—Å–ø–æ–ª–Ω–∏—Ç–µ–ª–∏ (—á–µ—Ä–µ–∑ –∑–∞–ø—è—Ç—É—é)" /><label class="oc-uncertain-edit-toggle" title="–ù–µ—É–≤–µ—Ä–µ–Ω–Ω—ã–π –∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª—å"><input class="oc-e-uncertain-performer" type="checkbox" tabindex="-1" ${entry.uncertainPerformer ? 'checked' : ''} />‚ùì</label></div>
-            <textarea class="oc-e-franchise" autocomplete="off" placeholder="–§—Ä–∞–Ω—à–∏–∑—ã: –æ–¥–Ω–∞ —Å—Ç—Ä–æ–∫–∞ = –æ–¥–Ω–∞ —Ñ—Ä–∞–Ω—à–∏–∑–∞. –ü—É—Å—Ç–æ–µ –ø–æ–ª–µ —É–¥–∞–ª–∏—Ç —Ñ—Ä–∞–Ω—à–∏–∑—É">${escapeHtml((entry.franchises || []).join('\n'))}</textarea>
-            <input class="oc-e-same-song" type="text" list="oc-dl-same-songs" autocomplete="off" value="${escapeHtml(entry.sameSongTitle || '')}" placeholder="–û–¥–∏–Ω–∞–∫–æ–≤–∞—è –ø–µ—Å–Ω—è ‚Äî –≤–≤–µ–¥–∏ –æ–¥–∏–Ω–∞–∫–æ–≤–æ–µ –æ–±—â–µ–µ –Ω–∞–∑–≤–∞–Ω–∏–µ —É —Å–≤—è–∑–∞–Ω–Ω—ã—Ö OP/ED" />
-          </div>
-          <div class="oc-editgrid3">
-            <div class="oc-edit-field-with-status"><input class="oc-e-image" type="text" value="${escapeHtml(entry.image || '')}" placeholder="–û—Å–Ω–æ–≤–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ / –ø–æ—Å—Ç–µ—Ä (URL)" /><label class="oc-uncertain-edit-toggle" title="–ù–µ—É–≤–µ—Ä–µ–Ω–Ω–æ–µ –æ—Å–Ω–æ–≤–Ω–æ–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ"><input class="oc-e-uncertain-image" type="checkbox" tabindex="-1" ${entry.uncertainImage ? 'checked' : ''} />‚ùì</label></div>
-            <input class="oc-e-fallback-image" type="text" value="${escapeHtml(entry.fallbackImage || '')}" placeholder="–ó–∞–ø–∞—Å–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ (URL –∏–ª–∏ images/—Ñ–∞–π–ª.webp)" />
-            <input class="oc-e-link" type="text" value="${escapeHtml(entry.link || '')}" placeholder="–°—Å—ã–ª–∫–∞ (anisongdb.com –∏ —Ç.–ø.)" />
-            <input class="oc-e-notes" type="text" value="${escapeHtml(entry.notes || '')}" placeholder="–ó–∞–º–µ—Ç–∫–∞ (–Ω–µ–æ–±—è–∑–∞—Ç–µ–ª—å–Ω–æ)" />
-          </div>
-          <div class="oc-editgrid3">
-            <textarea class="oc-e-alt-titles" placeholder="–ê–ª—å—Ç–µ—Ä–Ω–∞—Ç–∏–≤–Ω—ã–µ –Ω–∞–∑–≤–∞–Ω–∏—è ‚Äî –∫–∞–∂–¥–æ–µ —Å –Ω–æ–≤–æ–π —Å—Ç—Ä–æ–∫–∏ –∏–ª–∏ —á–µ—Ä–µ–∑ ;. –ú–æ–∂–Ω–æ –æ—Å—Ç–∞–≤–∏—Ç—å –ø—É—Å—Ç—ã–º">${escapeHtml((entry.alternativeTitles || []).join('\n'))}</textarea>
-          </div>
-          <div class="oc-edit-flags">
-            <label class="oc-flag-check"><input class="oc-e-chinese" type="checkbox" ${entryIsChinese(entry) ? 'checked' : ''} /> –ö–∏—Ç–∞–π—Å–∫–∏–π OP/ED</label>
-            <label class="oc-flag-check"><input class="oc-e-movie" type="checkbox" ${entryIsMovie(entry) ? 'checked' : ''} /> OP/ED —Ñ–∏–ª—å–º–∞</label>
-            <label class="oc-flag-check"><input class="oc-e-shortened" type="checkbox" ${entryIsShortened(entry) ? 'checked' : ''} /> –£–∫–æ—Ä–æ—á–µ–Ω–Ω—ã–π OP/ED</label>
-          </div>
-          <div class="oc-edit-actions">
-            <button class="oc-cancel-btn" data-action="cancel-edit" data-id="${entry.id}">–û—Ç–º–µ–Ω–∞</button>
-            <button class="oc-save-btn" data-action="save-edit" data-id="${entry.id}">–°–æ—Ö—Ä–∞–Ω–∏—Ç—å</button>
-          </div>
-        </div>`;
-    }
-
-    async function saveExternalTrackEditor(id, card) {
-      if (!ensureCatalogAdmin()) return false;
-      const entry = entriesById.get(String(id || ''));
-      if (!entry || !(card instanceof Element)) throw new Error('–†–µ–¥–∞–∫—Ç–æ—Ä —Ç—Ä–µ–∫–∞ –Ω–µ –Ω–∞–π–¥–µ–Ω.');
-      const value = selector => String(card.querySelector(selector)?.value || '').trim();
-      const title = value('.oc-e-title');
-      const type = value('.oc-e-type') === 'ED' ? 'ED' : 'OP';
-      if (!title) throw new Error('–ù–∞–∑–≤–∞–Ω–∏–µ –Ω–µ –º–æ–∂–µ—Ç –±—ã—Ç—å –ø—É—Å—Ç—ã–º.');
-      if (isDuplicateTitle(title, type, id)) throw new Error(`–¢–∞–∫–æ–π ${type} —É–∂–µ –µ—Å—Ç—å.`);
-      const updatedEntry = {
-        ...entry,
-        title,
-        type,
-        year: value('.oc-e-year') ? Number(value('.oc-e-year')) : null,
-        season: value('.oc-e-season'),
-        studios: parseList(value('.oc-e-studio')),
-        directors: parseList(value('.oc-e-director')),
-        performers: parseList(value('.oc-e-performer')),
-        franchises: uniqueFranchiseList(cleanFranchiseList(value('.oc-e-franchise'))),
-        ...sameSongFields(value('.oc-e-same-song')),
-        image: value('.oc-e-image'),
-        fallbackImage: value('.oc-e-fallback-image'),
-        link: value('.oc-e-link'),
-        notes: value('.oc-e-notes'),
-        alternativeTitles: alternativeTitlesForSave(title, value('.oc-e-alt-titles')),
-        isChinese: Boolean(card.querySelector('.oc-e-chinese')?.checked),
-        isMovie: Boolean(card.querySelector('.oc-e-movie')?.checked),
-        isShortened: Boolean(card.querySelector('.oc-e-shortened')?.checked),
-        uncertainPerformer: Boolean(card.querySelector('.oc-e-uncertain-performer')?.checked),
-        uncertainDirector: Boolean(card.querySelector('.oc-e-uncertain-director')?.checked),
-        uncertainImage: Boolean(card.querySelector('.oc-e-uncertain-image')?.checked)
-      };
-      await window.OPED_DB.updateOpening(id, updatedEntry);
-      await saveOpeningExtras(id, {
-        franchises: updatedEntry.franchises,
-        alternativeTitles: updatedEntry.alternativeTitles,
-        isChinese: updatedEntry.isChinese,
-        isMovie: updatedEntry.isMovie,
-        isShortened: updatedEntry.isShortened,
-        sameSongGroupId: updatedEntry.sameSongGroupId,
-        sameSongTitle: updatedEntry.sameSongTitle,
-        uncertainPerformer: updatedEntry.uncertainPerformer,
-        uncertainDirector: updatedEntry.uncertainDirector,
-        uncertainImage: updatedEntry.uncertainImage
-      });
-      Object.assign(entry, updatedEntry);
-      touchEntryCache(entry);
-      populateFilterOptions();
-      render();
-      publishAppData('catalog-inline-edit-saved');
-      setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì');
-      return true;
-    }
-
-    // ---------- manual (user-curated) top-100 ----------
-    function sanitizeTopPins(values) {
-      const byRank = new Map();
-      (Array.isArray(values) ? values : []).forEach(value => {
-        const id = String(value?.id || '').trim();
-        const rank = Math.round(Number(value?.rank) || 0);
-        if (id && rank >= 1 && rank <= 100) byRank.set(rank, { id, rank });
-      });
-      return [...byRank.values()].sort((a, b) => a.rank - b.rank);
-    }
-
-    function applyTopPins(values, pins) {
-      const cleanPins = sanitizeTopPins(pins);
-      const pinnedIds = new Set(cleanPins.map(pin => pin.id));
-      const remaining = Array.from(new Set((values || []).map(String).filter(id => id && !pinnedIds.has(id))));
-      const result = Array(100).fill(null);
-      cleanPins.forEach(pin => { result[pin.rank - 1] = pin.id; });
-      let cursor = 0;
-      for (let index = 0; index < result.length && cursor < remaining.length; index += 1) {
-        if (!result[index]) result[index] = remaining[cursor++];
-      }
-      return result.filter(Boolean).slice(0, 100);
-    }
-
-    function manualUserSafeKey(user) {
-      const raw = String(user || '').trim();
-      if (!raw) return '';
-      if (window.OPED_DB && typeof window.OPED_DB.normalizeNickname === 'function') return window.OPED_DB.normalizeNickname(raw);
-      return safeDocPart(raw);
-    }
-
-    function manualCandidateKeys(user) {
-      const raw = String(user || '').trim();
-      if (!raw) return [];
-      const safe = manualUserSafeKey(raw);
-      const lower = raw.toLowerCase();
-      const keys = [raw, safe, lower].filter(Boolean);
-      Object.keys(manualRanks || {}).forEach(k => {
-        const kk = String(k || '').trim();
-        if (!kk) return;
-        const row = manualRanks[kk] || {};
-        const rowNick = String(row.nickname || row.displayName || row.name || '').trim();
-        const rowSafe = String(row.nicknameKey || '').trim();
-        if (kk.toLowerCase() === lower || manualUserSafeKey(kk) === safe || rowNick.toLowerCase() === lower || rowSafe === safe) {
-          keys.push(kk, rowNick, rowSafe);
-        }
-      });
-      return Array.from(new Set(keys.filter(Boolean)));
-    }
-
-    function manualSameUser(a, b) {
-      const aa = String(a || '').trim();
-      const bb = String(b || '').trim();
-      if (!aa || !bb) return false;
-      const aKeys = manualCandidateKeys(aa).map(x => String(x).trim()).filter(Boolean);
-      const bKeys = manualCandidateKeys(bb).map(x => String(x).trim()).filter(Boolean);
-      const bLower = new Set(bKeys.map(x => x.toLowerCase()));
-      const bSafe = new Set(bKeys.map(x => manualUserSafeKey(x)).filter(Boolean));
-      return aKeys.some(x => bLower.has(x.toLowerCase()) || bSafe.has(manualUserSafeKey(x)));
-    }
-
-    function valueForUserMap(map, user) {
-      if (!map || !user) return undefined;
-      const raw = String(user).trim();
-      if (Object.prototype.hasOwnProperty.call(map, raw)) return map[raw];
-      const keys = manualCandidateKeys(raw);
-      for (const key of keys) {
-        if (Object.prototype.hasOwnProperty.call(map, key)) return map[key];
-      }
-      const safe = manualUserSafeKey(raw);
-      const lower = raw.toLowerCase();
-      for (const key of Object.keys(map)) {
-        const k = String(key || '').trim();
-        if (!k) continue;
-        if (k.toLowerCase() === lower || manualUserSafeKey(k) === safe) return map[key];
-      }
-      return undefined;
-    }
-
-    function appendManualOrderIfMissing(user, type, id) {
-      const raw = String(user || '').trim();
-      const openingId = String(id || '').trim();
-      if (!raw || !openingId) return false;
-      const current = getManualRanksForUser(raw) || {};
-      const order = Array.isArray(current[type]) ? current[type].map(String) : savedManualOrderFor(raw, type);
-      if (order.includes(openingId)) return false;
-      order.push(openingId);
-      rememberManualRanksForUser(raw, { ...current, [type]: order });
-      markManualDirty();
-      return true;
-    }
-
-    function manualRankRowHasTop(row, type) {
-      return !!(row && Array.isArray(row[type]) && row[type].length);
-    }
-
-    function getManualRanksForUser(user) {
-      const keys = manualCandidateKeys(user);
-      const merged = {};
-      let found = false;
-      keys.forEach(key => {
-        const row = manualRanks && manualRanks[key];
-        if (!row) return;
-        found = true;
-        const op = Array.isArray(row.OP) ? row.OP.map(String)
-          : (Array.isArray(row.manualOP) ? row.manualOP.map(String)
-          : (Array.isArray(row.op) ? row.op.map(String) : null));
-        const ed = Array.isArray(row.ED) ? row.ED.map(String)
-          : (Array.isArray(row.manualED) ? row.manualED.map(String)
-          : (Array.isArray(row.ed) ? row.ed.map(String) : null));
-        const excludedOP = Array.isArray(row.excludedOP) ? row.excludedOP.map(String) : null;
-        const excludedED = Array.isArray(row.excludedED) ? row.excludedED.map(String) : null;
-        Object.keys(row).forEach(k => {
-          if (['OP','ED','op','ed','manualOP','manualED','excludedOP','excludedED'].includes(k)) return;
-          if (row[k] !== undefined && row[k] !== null && row[k] !== '') merged[k] = row[k];
-        });
-        if (op && (op.length || !Array.isArray(merged.OP))) merged.OP = op;
-        if (ed && (ed.length || !Array.isArray(merged.ED))) merged.ED = ed;
-        if (excludedOP && (excludedOP.length || !Array.isArray(merged.excludedOP))) merged.excludedOP = Array.from(new Set([...(merged.excludedOP || []), ...excludedOP]));
-        if (excludedED && (excludedED.length || !Array.isArray(merged.excludedED))) merged.excludedED = Array.from(new Set([...(merged.excludedED || []), ...excludedED]));
-      });
-      return found ? merged : {};
-    }
-
-    function rememberManualRanksForUser(user, ranks) {
-      const raw = String(user || '').trim();
-      if (!raw || !ranks) return;
-      const safe = manualUserSafeKey(raw);
-      const profileRow = {
-        ...(manualRanks[raw] || {}),
-        ...ranks,
-        nickname: ranks.nickname || raw,
-        nicknameKey: ranks.nicknameKey || safe
-      };
-      manualRanks[raw] = profileRow;
-      if (safe && safe !== raw) manualRanks[safe] = profileRow;
-    }
-
-    function manualExcludedField(type) {
-      return String(type || '').toUpperCase() === 'ED' ? 'excludedED' : 'excludedOP';
-    }
-
-    function manualExcludedSet(user, type) {
-      const row = getManualRanksForUser(user) || {};
-      const field = manualExcludedField(type);
-      return new Set((Array.isArray(row[field]) ? row[field] : []).map(String));
-    }
-
-    function setManualExcluded(user, type, ids) {
-      const row = getManualRanksForUser(user) || {};
-      const field = manualExcludedField(type);
-      const clean = Array.from(new Set((ids || []).map(String).filter(Boolean)));
-      rememberManualRanksForUser(user, { ...row, [field]: clean });
-    }
-
-    function removeManualExcluded(user, type, id) {
-      const excluded = manualExcludedSet(user, type);
-      const before = excluded.size;
-      excluded.delete(String(id));
-      if (excluded.size !== before) setManualExcluded(user, type, Array.from(excluded));
-    }
-
-    function manualHiddenKey(user, type) {
-      return `${manualUserSafeKey(user)}|${String(type || '').toUpperCase()}`;
-    }
-
-    function manualHiddenSet(user, type) {
-      const key = manualHiddenKey(user, type);
-      if (!manualHiddenForEdit[key]) manualHiddenForEdit[key] = [];
-      return new Set(manualHiddenForEdit[key].map(String));
-    }
-
-    function isManualHidden(user, type, id) {
-      return manualHiddenSet(user, type).has(String(id));
-    }
-
-    function hideManualCandidate(user, type, id) {
-      const key = manualHiddenKey(user, type);
-      const set = manualHiddenSet(user, type);
-      set.add(String(id));
-      manualHiddenForEdit[key] = Array.from(set);
-    }
-
-    function unhideManualCandidate(user, type, id) {
-      const key = manualHiddenKey(user, type);
-      const set = manualHiddenSet(user, type);
-      set.delete(String(id));
-      manualHiddenForEdit[key] = Array.from(set);
-    }
-
-    function manualHiddenCount(user) {
-      return ['OP','ED'].reduce((sum, type) => sum + manualHiddenSet(user, type).size, 0);
-    }
-
-    function ratedIdsForManual(user, type) {
-      return entries
-        .filter(e => e.type === type && scoreFor(e, user) !== null)
-        .sort((a, b) => {
-          const scoreDiff = (scoreFor(b, user) || 0) - (scoreFor(a, user) || 0);
-          if (scoreDiff !== 0) return scoreDiff;
-          return compareNatural(a.title, b.title);
-        })
-        .map(e => e.id);
-    }
-
-    function savedManualOrderFor(user, type) {
-      if (!user) return [];
-      const row = getManualRanksForUser(user);
-      const saved = row && Array.isArray(row[type]) ? row[type].map(String) : [];
-      const valid = new Set(entries.filter(e => e.type === type).map(e => String(e.id)));
-      const seen = new Set();
-      return saved.filter(id => valid.has(String(id)) && !seen.has(String(id)) && (seen.add(String(id)) || true));
-    }
-
-    function ensureManualOrderForEditing(user, type) {
-      if (!user) return [];
-      const current = getManualRanksForUser(user);
-      rememberManualRanksForUser(user, current);
-      const saved = savedManualOrderFor(user, type);
-      const seen = new Set(saved.map(String));
-      const excluded = manualExcludedSet(user, type);
-      const missing = ratedIdsForManual(user, type).filter(id => !seen.has(String(id)) && !excluded.has(String(id)));
-      const order = saved.concat(missing);
-      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-      return order;
-    }
-
-    function manualOrderFor(user, type, includeMissing = false) {
-      return includeMissing ? ensureManualOrderForEditing(user, type) : savedManualOrderFor(user, type);
-    }
-
-    function manualPositionFor(user, type, id, includeMissing = false) {
-      const order = manualOrderFor(user, type, includeMissing);
-      const idx = order.indexOf(id);
-      return idx === -1 ? null : idx + 1;
-    }
-
-    function markManualDirty() {
-      manualDirty = true;
-      const saveBtn = $('#oc-manual-save-btn');
-      if (saveBtn) saveBtn.classList.add('active');
-    }
-
-    function swapManualRank(user, type, idA, idB) {
-      const order = ensureManualOrderForEditing(user, type);
-      const ia = order.indexOf(idA);
-      const ib = order.indexOf(idB);
-      if (ia === -1 || ib === -1) return false;
-      const tmp = order[ia];
-      order[ia] = order[ib];
-      order[ib] = tmp;
-      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-      markManualDirty();
-      return true;
-    }
-
-    function moveManualRankByOffset(user, type, id, offset) {
-      const order = ensureManualOrderForEditing(user, type).slice();
-      const from = order.indexOf(id);
-      const to = from + offset;
-      if (from === -1 || to < 0 || to >= order.length) return false;
-      const [moved] = order.splice(from, 1);
-      order.splice(to, 0, moved);
-      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-      markManualDirty();
-      return true;
-    }
-
-    function moveManualRankTo(user, type, id, place) {
-      const order = ensureManualOrderForEditing(user, type).slice();
-      const from = order.indexOf(id);
-      const targetNum = Number(place);
-      if (from === -1 || !Number.isFinite(targetNum)) return false;
-      const to = Math.max(0, Math.min(order.length - 1, Math.round(targetNum) - 1));
-      if (from === to) return false;
-      const [moved] = order.splice(from, 1);
-      order.splice(to, 0, moved);
-      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-      markManualDirty();
-      return true;
-    }
-
-    function promptManualRank(user, type, id) {
-      const order = ensureManualOrderForEditing(user, type);
-      const current = order.indexOf(id) + 1;
-      if (!current) return false;
-      const raw = window.prompt(
-        `–í–≤–µ–¥–∏—Ç–µ –º–µ—Å—Ç–æ –≤ —Ä—É—á–Ω–æ–º —Ç–æ–ø–µ ${type} –æ—Ç 1 –¥–æ ${order.length}.\n1‚Äì100 –ø–æ–ø–∞–¥–∞–µ—Ç –≤ –¢–æ–ø-100, 101+ —É–π–¥—ë—Ç –Ω–∏–∂–µ —Ç–æ–ø–∞.`,
-        String(current)
-      );
-      if (raw === null) return false;
-      const place = Number(raw.replace(',', '.'));
-      if (!Number.isFinite(place)) {
-        setStatus('–ù—É–∂–Ω–æ –≤–≤–µ—Å—Ç–∏ —á–∏—Å–ª–æ –º–µ—Å—Ç–∞.', true);
-        return false;
-      }
-      return moveManualRankTo(user, type, id, place);
-    }
-
-    function moveManualRankToTop100(user, type, id) {
-      const cleanId = String(id || '').trim();
-      if (!cleanId) return false;
-      removeManualExcluded(user, type, cleanId);
-      let order = ensureManualOrderForEditing(user, type).slice();
-      let from = order.indexOf(cleanId);
-      if (from === -1) {
-        order.push(cleanId);
-        from = order.length - 1;
-      }
-      const to = Math.min(99, Math.max(0, order.length - 1));
-      if (from === to) {
-        rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-        markManualDirty();
-        return true;
-      }
-      const [moved] = order.splice(from, 1);
-      order.splice(to, 0, moved);
-      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-      markManualDirty();
-      return true;
-    }
-
-    function removeManualRankFromTop100(user, type, id) {
-      const cleanId = String(id || '').trim();
-      if (!cleanId) return false;
-      const order = ensureManualOrderForEditing(user, type).slice().filter(x => String(x) !== cleanId);
-      const excluded = manualExcludedSet(user, type);
-      excluded.add(cleanId);
-      rememberManualRanksForUser(user, {
-        ...getManualRanksForUser(user),
-        [type]: order,
-        [manualExcludedField(type)]: Array.from(excluded)
-      });
-      markManualDirty();
-      return true;
-    }
-
-    function ratedListFor(user, list) {
-      return list
-        .map(e => ({ entry: e, score: scoreFor(e, user) }))
-        .filter(r => r.score !== null);
-    }
-
-    function computeProfileStats(user, list) {
-      const rated = ratedListFor(user, list);
-      const opRated = rated.filter(r => r.entry.type === 'OP');
-      const edRated = rated.filter(r => r.entry.type === 'ED');
-      const meanOf = (arr) => arr.length ? arr.reduce((a, b) => a + b.score, 0) / arr.length : null;
-      const songRated = list.map(e => ({ entry: e, score: songScoreFor(e, user) })).filter(r => r.score !== null);
-      const visualRated = list.map(e => ({ entry: e, score: visualScoreFor(e, user) })).filter(r => r.score !== null);
-
-      function groupRows(getKeys, sourceList) {
-        const groups = {};
-        sourceList.forEach(r => {
-          getKeys(r.entry).forEach(key => {
-            if (!key) return;
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(r.score);
-          });
-        });
-        const rows = Object.entries(groups)
-          .map(([key, scores]) => ({ key, mean: scores.reduce((a, b) => a + b, 0) / scores.length, count: scores.length }))
-          .filter(row => row.count >= MIN_PUBLIC_VOTES);
-        rows.sort((a, b) => b.mean - a.mean || b.count - a.count || compareNatural(a.key, b.key));
-        const worstRows = rows.slice().sort((a, b) => a.mean - b.mean || b.count - a.count || compareNatural(a.key, b.key));
-        return { top: rows.slice(0, 5), worst: worstRows[0] ? [worstRows[0]] : [] };
-      }
-
-      return {
-        avgOp: meanOf(opRated), avgEd: meanOf(edRated), avgAll: meanOf(rated),
-        countOp: opRated.length, countEd: edRated.length, countAll: rated.length,
-        avgSong: meanOf(songRated), countSong: songRated.length,
-        avgVisual: meanOf(visualRated), countVisual: visualRated.length,
-        opStudios: groupRows(e => e.studios || [], opRated),
-        edStudios: groupRows(e => e.studios || [], edRated),
-        topDirectors: groupRows(e => e.directors || [], rated),
-        topPerformers: groupRows(e => e.performers || [], rated),
-        opFranchises: groupRows(e => e.franchises || [], opRated),
-        edFranchises: groupRows(e => e.franchises || [], edRated),
-        topSongPerformers: groupRows(e => e.performers || [], songRated),
-        topSeasonYears: groupRows(e => (e.year && e.season) ? [`${SEASON_LABEL[e.season]} ${e.year}`] : [], rated),
-        topEdSeasonYears: groupRows(e => (e.year && e.season) ? [`${SEASON_LABEL[e.season]} ${e.year}`] : [], edRated)
-      };
-    }
-
-    function statCard(label, value, sub, accent) {
-      return `<div class="oc-stat-card"><div class="oc-stat-label">${label}</div><div class="oc-stat-value${accent ? ' accent' : ''}">${value}</div>${sub ? `<div class="oc-stat-sub">${sub}</div>` : ''}</div>`;
-    }
-
-    function statListCard(label, rows, emptyText, worstRows) {
-      const body = rows && rows.length
-        ? `<div class="oc-small-list">${rows.map((row, idx) => `<div class="oc-small-list-row"><span>${idx + 1}. ${escapeHtml(row.key)}</span><span>${formatScore(row.mean)} ¬∑ ${row.count}</span></div>`).join('')}${worstRows && worstRows.length ? `<div class="oc-small-list-row"><span>—Ö—É–¥—à–∏–π: ${escapeHtml(worstRows[0].key)}</span><span>${formatScore(worstRows[0].mean)} ¬∑ ${worstRows[0].count}</span></div>` : ''}</div>`
-        : `<div class="oc-stat-sub">${emptyText || '–Ω–µ—Ç –¥–∞–Ω–Ω—ã—Ö'}${worstRows && worstRows.length ? ` ¬∑ —Ö—É–¥—à–∏–π: ${escapeHtml(worstRows[0].key)} (${formatScore(worstRows[0].mean)})` : ''}</div>`;
-      return `<div class="oc-stat-card"><div class="oc-stat-label">${label}</div>${body}</div>`;
-    }
-
-    function renderProfileStats(stats) {
-      const el = $('#oc-profile-stats');
-      if (!el) return;
-      if (!stats.countAll) {
-        el.innerHTML = statCard('—Å—Ç–∞—Ç–∏—Å—Ç–∏–∫–∞', '‚Äî', '–Ω–µ—Ç –æ—Ü–µ–Ω–æ–∫ –ø–æ —Ç–µ–∫—É—â–∏–º —Ñ–∏–ª—å—Ç—Ä–∞–º');
-        return;
-      }
-      const parts = [];
-      parts.push(statCard('–°—Ä–µ–¥–Ω—è—è ¬∑ OP', formatScore(stats.avgOp), stats.countOp + ' –æ—Ü–µ–Ω–µ–Ω–æ', true));
-      parts.push(statCard('–°—Ä–µ–¥–Ω—è—è ¬∑ ED', formatScore(stats.avgEd), stats.countEd + ' –æ—Ü–µ–Ω–µ–Ω–æ', true));
-      parts.push(statCard('–°—Ä–µ–¥–Ω—è—è ¬∑ –≤—Å–µ–≥–æ', formatScore(stats.avgAll), stats.countAll + ' –æ—Ü–µ–Ω–µ–Ω–æ'));
-      if (stats.countSong) parts.push(statCard('–°—Ä–µ–¥–Ω—è—è ¬∑ –ø–µ—Å–Ω—è', formatScore(stats.avgSong), stats.countSong + ' –æ—Ü–µ–Ω–µ–Ω–æ –æ—Ç–¥–µ–ª—å–Ω–æ', true));
-      if (stats.countVisual) parts.push(statCard('–°—Ä–µ–¥–Ω—è—è ¬∑ –≤–∏–∑—É–∞–ª', formatScore(stats.avgVisual), stats.countVisual + ' –æ—Ü–µ–Ω–µ–Ω–æ –æ—Ç–¥–µ–ª—å–Ω–æ', true));
-      parts.push(statCard('–û—Ü–µ–Ω–µ–Ω–æ OP', stats.countOp, ''));
-      parts.push(statCard('–û—Ü–µ–Ω–µ–Ω–æ ED', stats.countEd, ''));
-      parts.push(statListCard('–¢–æ–ø-5 —Å—Ç—É–¥–∏–π ¬∑ OP', stats.opStudios.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 OP –æ–¥–Ω–æ–π —Å—Ç—É–¥–∏–∏', stats.opStudios.worst));
-      parts.push(statListCard('–¢–æ–ø-5 —Å—Ç—É–¥–∏–π ¬∑ ED', stats.edStudios.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 ED –æ–¥–Ω–æ–π —Å—Ç—É–¥–∏–∏', stats.edStudios.worst));
-      parts.push(statListCard('–¢–æ–ø-5 –∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª–µ–π', stats.topPerformers.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 —Ç—Ä–µ–∫–∞ –∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª—è', stats.topPerformers.worst));
-      if (stats.topSongPerformers && stats.topSongPerformers.top.length) parts.push(statListCard('–¢–æ–ø-5 –∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª–µ–π ¬∑ –ø–µ—Å–Ω—è', stats.topSongPerformers.top, '–Ω–µ—Ç –æ—Ç–¥–µ–ª—å–Ω—ã—Ö –æ—Ü–µ–Ω–æ–∫ –ø–µ—Å–Ω–∏', stats.topSongPerformers.worst));
-      parts.push(statListCard('–¢–æ–ø-5 —Ä–µ–∂–∏—Å—Å—ë—Ä–æ–≤', stats.topDirectors.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 —Ç—Ä–µ–∫–∞ —Ä–µ–∂–∏—Å—Å—ë—Ä–∞', stats.topDirectors.worst));
-      parts.push(statListCard('–¢–æ–ø-5 —Ñ—Ä–∞–Ω—à–∏–∑ ¬∑ OP', stats.opFranchises.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 OP –æ–¥–Ω–æ–π —Ñ—Ä–∞–Ω—à–∏–∑—ã', stats.opFranchises.worst));
-      parts.push(statListCard('–¢–æ–ø-5 —Ñ—Ä–∞–Ω—à–∏–∑ ¬∑ ED', stats.edFranchises.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 ED –æ–¥–Ω–æ–π —Ñ—Ä–∞–Ω—à–∏–∑—ã', stats.edFranchises.worst));
-      parts.push(statListCard('–¢–æ–ø-5 —Å–µ–∑–æ–Ω–æ–≤', stats.topSeasonYears.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 —Ç—Ä–µ–∫–∞ —Å–µ–∑–æ–Ω–∞', stats.topSeasonYears.worst));
-      parts.push(statListCard('–¢–æ–ø-5 —Å–µ–∑–æ–Ω–æ–≤ ¬∑ ED', stats.topEdSeasonYears.top, '–Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 ED –≤ —Å–µ–∑–æ–Ω–µ', stats.topEdSeasonYears.worst));
-      el.innerHTML = parts.join('');
-    }
-
-    function populateArScoreOptions(user, list) {
-      const sel = $('#oc-ar-score');
-      if (!sel) return;
-      const rated = ratedListForMetric(user, list, arScoreMetric);
-      const values = Array.from(new Set(rated.map(r => r.score))).sort((a, b) => a - b);
-      const prev = sel.value;
-      sel.innerHTML = `<option value="">–õ—é–±–∞—è ${metricLabel(arScoreMetric)}</option>` + values.map(v => `<option value="${v}">${formatScore(v)}</option>`).join('');
-      sel.value = values.map(String).includes(prev) ? prev : '';
-      arScoreFilter = sel.value;
-    }
-
-    function ratingTimestampFor(entry, user) {
-      const values = entry?.ratingUpdatedAt || {};
-      const direct = values[user];
-      if (direct) return entryTimestamp({ createdAt: direct });
-      const normalizedUser = normalizedAccountName(user);
-      const matchedKey = Object.keys(values).find(key => normalizedAccountName(key) === normalizedUser);
-      return matchedKey ? entryTimestamp({ createdAt: values[matchedKey] }) : 0;
-    }
-
-    function formatRatingDate(timestamp) {
-      if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
-      return new Intl.DateTimeFormat('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-      }).format(new Date(timestamp));
-    }
-
-    function updateAllRatingsSortLabel() {
-      const button = $('#oc-ar-sort');
-      if (!button) return;
-      const descending = arSortDir === 'desc';
-      const labels = {
-        score: descending ? '–°–Ω–∞—á–∞–ª–∞ –≤—ã—Å–æ–∫–∏–µ ‚Üì' : '–°–Ω–∞—á–∞–ª–∞ –Ω–∏–∑–∫–∏–µ ‚Üë',
-        recent: descending ? '–°–Ω–∞—á–∞–ª–∞ –Ω–æ–≤—ã–µ ‚Üì' : '–°–Ω–∞—á–∞–ª–∞ —Å—Ç–∞—Ä—ã–µ ‚Üë',
-        title: descending ? '–û—Ç –Ø –¥–æ –ê ‚Üì' : '–û—Ç –ê –¥–æ –Ø ‚Üë',
-        release: descending ? '–°–Ω–∞—á–∞–ª–∞ –Ω–æ–≤—ã–µ ‚Üì' : '–°–Ω–∞—á–∞–ª–∞ —Å—Ç–∞—Ä—ã–µ ‚Üë'
-      };
-      button.textContent = labels[arSortMode] || labels.score;
-    }
-
-    function renderAllRatings(user, list) {
-      const opContainer = $('#oc-allratings-op') || $('#oc-allratings-list');
-      const edContainer = $('#oc-allratings-ed');
-      const opCol = $('#oc-allratings-col-op');
-      const edCol = $('#oc-allratings-col-ed');
-      if (!opContainer) return;
-      if (!user) {
-        opContainer.innerHTML = '<div class="oc-empty">–í—ã–±–µ—Ä–∏—Ç–µ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è</div>';
-        if (edContainer) edContainer.innerHTML = '<div class="oc-empty">–í—ã–±–µ—Ä–∏—Ç–µ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è</div>';
-        return;
-      }
-
-      function renderColumn(type, container) {
-        if (!container) return;
-        let rated = ratedListForMetric(user, list, arScoreMetric).filter(r => r.entry.type === type);
-        if (arScoreFilter !== '') rated = rated.filter(r => String(r.score) === String(arScoreFilter));
-        rated.sort((a, b) => {
-          const direction = arSortDir === 'asc' ? 1 : -1;
-          if (arSortMode === 'recent') {
-            const timeDiff = ratingTimestampFor(a.entry, user) - ratingTimestampFor(b.entry, user);
-            if (timeDiff !== 0) return timeDiff * direction;
-          } else if (arSortMode === 'title') {
-            const titleDiff = compareNatural(a.entry.title, b.entry.title);
-            if (titleDiff !== 0) return titleDiff * direction;
-          } else if (arSortMode === 'release') {
-            const yearDiff = (Number(a.entry.year) || 0) - (Number(b.entry.year) || 0);
-            if (yearDiff !== 0) return yearDiff * direction;
-            const seasonDiff = SEASON_ORDER.indexOf(a.entry.season) - SEASON_ORDER.indexOf(b.entry.season);
-            if (seasonDiff !== 0) return seasonDiff * direction;
-          } else {
-            const scoreDiff = a.score - b.score;
-            if (scoreDiff !== 0) return scoreDiff * direction;
-          }
-          return compareNatural(a.entry.title, b.entry.title);
-        });
-
-        if (!rated.length) {
-          container.innerHTML = `<div class="oc-empty">–ù–µ—Ç –æ—Ü–µ–Ω—ë–Ω–Ω—ã—Ö ${type} –¥–ª—è –≤—ã–±—Ä–∞–Ω–Ω–æ–π –æ—Ü–µ–Ω–∫–∏: ${metricLabel(arScoreMetric)}</div>`;
-          return;
-        }
-
-        const editableManual = topMode === 'manual' && manualEditMode && !!myName && manualSameUser(user, myName);
-        if (editableManual) {
-          ensureManualOrderForEditing(user, type);
-          if (!manualShowHidden) rated = rated.filter(r => !isManualHidden(user, type, r.entry.id));
-        }
-
-        allRatingsPage[type] = clampPage(allRatingsPage[type] || 1, rated.length);
-        const page = pageSlice(rated, allRatingsPage[type]);
-        const rowsHtml = page.items.map((r, idx) => {
-          const e = r.entry;
-          const pos = manualPositionFor(user, e.type, e.id, editableManual);
-          const canDeleteRating = !!myName && manualSameUser(user, myName);
-          const hiddenInEditor = editableManual && isManualHidden(user, e.type, e.id);
-          const manualControls = editableManual ? `
-              ${hiddenInEditor ? `<button type="button" class="oc-ar-top-btn" data-action="all-unhide-manual" data-type="${e.type}" data-id="${e.id}" title="–í–µ—Ä–Ω—É—Ç—å –≤ —Å–ø–∏—Å–æ–∫ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏—è">–í–µ—Ä–Ω—É—Ç—å</button>` : `
-                <button type="button" class="oc-ar-rank-btn" data-action="all-set-rank" data-type="${e.type}" data-id="${e.id}" title="–í–≤–µ—Å—Ç–∏ —Ç–æ—á–Ω–æ–µ –º–µ—Å—Ç–æ –≤ —Ä—É—á–Ω–æ–º —Ç–æ–ø–µ">‚Ññ ${pos || '‚Äî'}</button>
-                ${(!pos || pos > 100) ? `<button type="button" class="oc-ar-top-btn" data-action="all-to-top100" data-type="${e.type}" data-id="${e.id}" title="–ü–æ—Å—Ç–∞–≤–∏—Ç—å –Ω–∞ 100-–µ –º–µ—Å—Ç–æ –∏ –≤—ã—Ç–æ–ª–∫–Ω—É—Ç—å —Ç–µ–∫—É—â–∏–π 100-–π –Ω–∏–∂–µ">–í —Ç–æ–ø-100</button>` : ''}
-                <button type="button" class="oc-ar-top-btn" data-action="all-hide-manual" data-type="${e.type}" data-id="${e.id}" title="–°–∫—Ä—ã—Ç—å —Ç–æ–ª—å–∫–æ –∏–∑ —Å–ø–∏—Å–∫–∞ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏—è">–°–∫—Ä—ã—Ç—å</button>
-              `}` : '';
-          const deleteControl = canDeleteRating ? `<button type="button" class="oc-ar-top-btn" data-action="all-delete-rating" data-id="${e.id}" title="–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ—Ü–µ–Ω–∫—É">–£–¥–∞–ª–∏—Ç—å –æ—Ü–µ–Ω–∫—É</button>` : '';
-          const controls = manualControls + deleteControl;
-          const detailBits = [];
-          const totalVal = scoreFor(e, user);
-          const songVal = songScoreFor(e, user);
-          const visualVal = visualScoreFor(e, user);
-          if (arScoreMetric !== 'total' && totalVal !== null) detailBits.push('–æ–±—â–∞—è: ' + formatScore(totalVal));
-          if (arScoreMetric !== 'song' && songVal !== null) detailBits.push('–ø–µ—Å–Ω—è: ' + formatScore(songVal));
-          if (arScoreMetric !== 'visual' && visualVal !== null) detailBits.push('–≤–∏–∑—É–∞–ª: ' + formatScore(visualVal));
-          if (arSortMode === 'recent') {
-            const ratedAt = formatRatingDate(ratingTimestampFor(e, user));
-            if (ratedAt) detailBits.push('–æ—Ü–µ–Ω–µ–Ω–æ: ' + ratedAt);
-          }
-          const comment = ratingCommentFor(e, user);
-          const extraHtml = (detailBits.length ? `<div class="oc-profile-meta">${escapeHtml(detailBits.join(' ¬∑ '))}</div>` : '') +
-            (comment ? `<div class="oc-profile-rating-comment">üí¨ ${escapeHtml(comment)}</div>` : '');
-          return renderUnifiedEntryCard(e, {
-            rankLabel: page.start + idx + 1,
-            scoreText: formatScore(r.score),
-            scoreSub: metricLabel(arScoreMetric),
-            fields: ['performers'],
-            extraHtml,
-            controlsHtml: controls,
-            className: `compact allratings-card${editableManual ? ' editable' : ''}${controls ? ' has-controls' : ''}`
-          });
-        }).join('');
-
-        const scope = 'allratings-' + type.toLowerCase();
-        const pager = paginationHtml(scope, allRatingsPage[type], rated.length);
-        container.innerHTML = pager + rowsHtml + pager;
-        bindPagination(container, scope, () => allRatingsPage[type] || 1, v => { allRatingsPage[type] = clampPage(v, rated.length); }, () => renderAllRatings(user, list));
-      }
-
-      if (opCol) opCol.style.display = (!arTypeFilter || arTypeFilter === 'OP') ? '' : 'none';
-      if (edCol) edCol.style.display = (!arTypeFilter || arTypeFilter === 'ED') ? '' : 'none';
-      renderColumn('OP', opContainer);
-      if (edContainer) renderColumn('ED', edContainer);
-
-      const root = $('#oc-allratings-columns') || opContainer;
-      root.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
-
-      const editableManual = topMode === 'manual' && manualEditMode && !!myName && manualSameUser(user, myName);
-      if (editableManual) {
-        root.querySelectorAll('[data-action="all-set-rank"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            const type = btn.getAttribute('data-type');
-            if (promptManualRank(user, type, id)) {
-              renderProfile();
-              setStatus('–ú–µ—Å—Ç–æ –≤ —Ä—É—á–Ω–æ–º —Ç–æ–ø–µ –æ–±–Ω–æ–≤–ª–µ–Ω–æ. –ù–∞–∂–º–∏ ¬´–°–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ç–æ–ø-100¬ª, —á—Ç–æ–±—ã –æ—Ç–ø—Ä–∞–≤–∏—Ç—å –≤—Å–µ–º.');
-            }
-          });
-        });
-        root.querySelectorAll('[data-action="all-to-top100"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            const type = btn.getAttribute('data-type');
-            if (moveManualRankToTop100(user, type, id)) {
-              renderProfile();
-              setStatus('–¢—Ä–µ–∫ –¥–æ–±–∞–≤–ª–µ–Ω –≤ –¢–æ–ø-100 –ª–æ–∫–∞–ª—å–Ω–æ. –ù–∞–∂–º–∏ ¬´–°–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ç–æ–ø-100¬ª.');
-            }
-          });
-        });
-        root.querySelectorAll('[data-action="all-hide-manual"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            hideManualCandidate(user, btn.getAttribute('data-type'), btn.getAttribute('data-id'));
-            renderProfile();
-            setStatus('–°–∫—Ä—ã—Ç–æ –∏–∑ —Å–ø–∏—Å–∫–∞ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏—è. –≠—Ç–æ –Ω–µ —É–¥–∞–ª—è–µ—Ç –æ—Ü–µ–Ω–∫—É –∏ –Ω–µ –≤–ª–∏—è–µ—Ç –Ω–∞ —Å–æ—Ö—Ä–∞–Ω—ë–Ω–Ω—ã–π —Ç–æ–ø.');
-          });
-        });
-        root.querySelectorAll('[data-action="all-unhide-manual"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            unhideManualCandidate(user, btn.getAttribute('data-type'), btn.getAttribute('data-id'));
-            renderProfile();
-            setStatus('–í–µ—Ä–Ω—É–ª –≤ —Å–ø–∏—Å–æ–∫ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏—è.');
-          });
-        });
-      }
-      root.querySelectorAll('[data-action="all-delete-rating"]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.getAttribute('data-id');
-          if (!window.confirm('–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ—Ü–µ–Ω–∫—É?')) return;
-          await deleteCurrentRating(id, myName, 'public');
-        });
-      });
-    }
-
-    function renderProfileList(containerId, list, user, opts) {
-      opts = opts || {};
-      const container = $(containerId);
-      if (!container) return;
-      if (!user) {
-        container.innerHTML = '<div class="oc-empty">–í—ã–±–µ—Ä–∏—Ç–µ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è</div>';
-        return;
-      }
-      if (!list.length) {
-        const manualEmpty = opts && opts.manual;
-        container.innerHTML = `<div class="oc-empty">${manualEmpty ? '–ù–µ—Ç —Å–æ—Ö—Ä–∞–Ω—ë–Ω–Ω–æ–≥–æ —Ä—É—á–Ω–æ–≥–æ —Ç–æ–ø–∞ –¥–ª—è —ç—Ç–æ–≥–æ —Ç–∏–ø–∞' : '–ù–µ—Ç —Ç—Ä–µ–∫–æ–≤'}</div>`;
-        return;
-      }
-      const editable = !!opts.editable;
-      const type = opts.type || 'OP';
-      const fullOrder = editable ? manualOrderFor(user, type, true) : [];
-      const visibleList = list.slice(0, 100);
-      const html = visibleList.map((item, idx) => {
-        const absoluteIdx = idx;
-        const rankClass = absoluteIdx === 0 ? 'gold' : absoluteIdx === 1 ? 'silver' : absoluteIdx === 2 ? 'bronze' : '';
-        const e = item.entry;
-        const absolutePos = editable ? manualPositionFor(user, type, e.id, true) : (absoluteIdx + 1);
-        const rankLabel = editable ? absolutePos : (absoluteIdx < 3 ? ['‚ë†','‚ë°','‚ë¢'][absoluteIdx] : (absoluteIdx + 1));
-        const yearBit = e.year ? `${e.year}${e.season ? ' ¬∑ ' + SEASON_LABEL[e.season] : ''}` : '';
-        const scoreClass = item.score === null ? 'none' : '';
-        const orderIdx = editable ? fullOrder.indexOf(e.id) : -1;
-        const moveButtons = editable ? `
-            <div class="oc-move-btns">
-              <button class="oc-move-btn" data-action="move-up" data-type="${type}" data-id="${e.id}" ${orderIdx <= 0 ? 'disabled' : ''} title="–í—ã—à–µ">‚ñ≤</button>
-              <button class="oc-move-btn" data-action="move-down" data-type="${type}" data-id="${e.id}" ${(orderIdx === -1 || orderIdx >= fullOrder.length - 1) ? 'disabled' : ''} title="–ù–∏–∂–µ">‚ñº</button>
-            </div>` : '';
-        const rowActions = editable ? `
-            <div class="oc-manual-row-actions">
-              <button type="button" class="oc-ar-top-btn" data-action="remove-from-top" data-type="${type}" data-id="${e.id}" title="–£–±—Ä–∞—Ç—å –∏–∑ —Ç–µ–∫—É—â–µ–≥–æ —Ç–æ–ø-100, –æ—Ü–µ–Ω–∫–∏ –ø—Ä–∏ —ç—Ç–æ–º –æ—Å—Ç–∞–Ω—É—Ç—Å—è">–£–¥–∞–ª–∏—Ç—å –∏–∑ —Ç–æ–ø–∞</button>
-            </div>` : '';
-        const rankHtml = editable
-          ? `<button type="button" class="oc-rank-jump-btn" data-action="set-rank" data-type="${type}" data-id="${e.id}" title="–ö–ª–∏–∫–Ω–∏—Ç–µ, —á—Ç–æ–±—ã –≤–≤–µ—Å—Ç–∏ –º–µ—Å—Ç–æ –≤—Ä—É—á–Ω—É—é">${rankLabel}</button>`
-          : `<div class="oc-profile-rank ${rankClass}">${rankLabel}</div>`;
-        return `
-          <div class="oc-profile-item${editable ? ' manual' : ''}">
-            ${rankHtml}
-            ${imgHtml(e, 'oc-profile-thumb')}
-            <div>
-              <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span></div>
-              ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
-              ${ratingCommentFor(e, user) ? `<div class="oc-profile-rating-comment">üí¨ ${escapeHtml(ratingCommentFor(e, user))}</div>` : ''}
-            </div>
-            <div class="oc-profile-score ${scoreClass}">${formatScore(item.score)}</div>
-            ${moveButtons}
-            ${rowActions}
-          </div>
-        `;
-      }).join('');
-      container.innerHTML = html;
-      container.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
-
-      if (editable) {
-        container.querySelectorAll('[data-action="set-rank"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            const type = btn.getAttribute('data-type');
-            if (promptManualRank(user, type, id)) {
-              renderProfile();
-              setStatus('–ú–µ—Å—Ç–æ –≤ —Ä—É—á–Ω–æ–º —Ç–æ–ø–µ –æ–±–Ω–æ–≤–ª–µ–Ω–æ. –ù–∞–∂–º–∏ ¬´–°–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ç–æ–ø-100¬ª, —á—Ç–æ–±—ã –æ—Ç–ø—Ä–∞–≤–∏—Ç—å –≤—Å–µ–º.');
-            }
-          });
-        });
-        container.querySelectorAll('[data-action="move-up"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            const type = btn.getAttribute('data-type');
-            if (moveManualRankByOffset(user, type, id, -1)) {
-              renderProfile();
-            }
-          });
-        });
-        container.querySelectorAll('[data-action="move-down"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            const type = btn.getAttribute('data-type');
-            if (moveManualRankByOffset(user, type, id, 1)) {
-              renderProfile();
-            }
-          });
-        });
-        container.querySelectorAll('[data-action="remove-from-top"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.getAttribute('data-id');
-            const type = btn.getAttribute('data-type');
-            if (!window.confirm('–£–±—Ä–∞—Ç—å –∏–∑ —Ç–µ–∫—É—â–µ–≥–æ —Ç–æ–ø-100? –û—Ü–µ–Ω–∫–∞ –æ—Å—Ç–∞–Ω–µ—Ç—Å—è, —Ç—Ä–µ–∫ –º–æ–∂–Ω–æ –±—É–¥–µ—Ç –≤–µ—Ä–Ω—É—Ç—å –∫–Ω–æ–ø–∫–æ–π ¬´–í —Ç–æ–ø-100¬ª.')) return;
-            if (removeManualRankFromTop100(user, type, id)) {
-              renderProfile();
-              setStatus('–£–¥–∞–ª–µ–Ω–æ –∏–∑ —Ç–æ–ø-100 –ª–æ–∫–∞–ª—å–Ω–æ. –ù–∞–∂–º–∏ ¬´–°–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ç–æ–ø-100¬ª.');
-            }
-          });
-        });
-      }
-    }
-
-    function renderProfile() {
-      populateProfileUsers();
-      profileUser = profileUserSelect.value;
-
-      const filtered = applyFilters(entries);
-      const topFiltered = applyFiltersIgnoringType(entries);
-      const allRatingsFiltered = applyFiltersIgnoringType(entries);
-      if (profilePanel) {
-        profilePanel.dataset.profileRatingsReady = String(
-          firebaseRatingsScope === 'all' && remoteDataState.ratings.ready
-        );
-        profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
-      }
-
-      renderProfileStats(computeProfileStats(profileUser, filtered));
-
-      function topForScore(type) {
-        const manualOrder = manualOrderFor(profileUser, type);
-        const manualIndex = new Map(manualOrder.map((id, idx) => [id, idx]));
-        const list = topFiltered
-          .filter(e => e.type === type && e.scores && profileUser && e.scores[profileUser] !== undefined)
-          .map(e => ({ entry: e, score: e.scores[profileUser] }));
-        list.sort((a, b) => {
-          const scoreDiff = b.score - a.score;
-          if (scoreDiff !== 0) return scoreDiff;
-          const ai = manualIndex.has(a.entry.id) ? manualIndex.get(a.entry.id) : Number.POSITIVE_INFINITY;
-          const bi = manualIndex.has(b.entry.id) ? manualIndex.get(b.entry.id) : Number.POSITIVE_INFINITY;
-          if (ai !== bi) return ai - bi;
-          return compareNatural(a.entry.title, b.entry.title);
-        });
-        return list.slice(0, 100);
-      }
-
-      function topForManual(type) {
-        const ownProfile = !!myName && manualSameUser(profileUser, myName);
-        const order = manualOrderFor(profileUser, type, manualEditMode && ownProfile);
-        return order
-          .map(id => {
-            const e = topFiltered.find(x => x.id === id && x.type === type);
-            return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
-          })
-          .filter(Boolean)
-          .slice(0, 100);
-      }
-
-      const isOwnProfile = !!myName && manualSameUser(profileUser, myName);
-      const canEdit = topMode === 'manual' && manualEditMode && isOwnProfile;
-      const opList = topMode === 'manual' ? topForManual('OP') : topForScore('OP');
-      const edList = topMode === 'manual' ? topForManual('ED') : topForScore('ED');
-
-      renderProfileList('#oc-profile-op', opList, profileUser, { editable: canEdit, type: 'OP', manual: topMode === 'manual' });
-      renderProfileList('#oc-profile-ed', edList, profileUser, { editable: canEdit, type: 'ED', manual: topMode === 'manual' });
-
-      const labelText = '(–≤—Ä—É—á–Ω—É—é)';
-      $('#oc-topmode-label-op').textContent = labelText;
-      $('#oc-topmode-label-ed').textContent = labelText;
-      const hintEl = $('#oc-topmode-hint');
-      if (topMode === 'manual') {
-        hintEl.style.display = 'block';
-        hintEl.textContent = canEdit
-          ? '–†–µ–∂–∏–º —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏—è: –º–µ–Ω—è–π –º–µ—Å—Ç–∞, –∑–∞—Ç–µ–º –Ω–∞–∂–º–∏ ¬´–°–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ç–æ–ø-100¬ª, —á—Ç–æ–±—ã –ø–æ—Ä—è–¥–æ–∫ —Å—Ç–∞–ª –≤–∏–¥–µ–Ω –≤—Å–µ–º.'
-          : `–ü–æ–∫–∞–∑–∞–Ω —Å–æ—Ö—Ä–∞–Ω—ë–Ω–Ω—ã–π —Ä—É—á–Ω–æ–π —Ç–æ–ø –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—è ‚Äî –ø–æ—Ä—è–¥–æ–∫ —Å—Ç–∞—Ç–∏—á–Ω—ã–π, –Ω–µ –ø–µ—Ä–µ—Å—á–∏—Ç—ã–≤–∞–µ—Ç—Å—è —Å–∞–º –ø–æ –æ—Ü–µ–Ω–∫–µ.`;
-      } else {
-        hintEl.style.display = 'none';
-        hintEl.textContent = '';
-      }
-
-      const manualEditBtn = $('#oc-manual-edit-btn');
-      const manualSaveBtn = $('#oc-manual-save-btn');
-      const isOwnManual = !!myName && manualSameUser(profileUser, myName) && topMode === 'manual';
-      if (manualEditBtn) {
-        manualEditBtn.disabled = !isOwnManual;
-        manualEditBtn.classList.toggle('active', canEdit);
-        manualEditBtn.textContent = canEdit ? '–ó–∞–≤–µ—Ä—à–∏—Ç—å —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞–Ω–∏–µ' : '–†–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å —Ç–æ–ø-100';
-      }
-      if (manualSaveBtn) {
-        manualSaveBtn.disabled = !isOwnManual;
-        manualSaveBtn.classList.toggle('active', manualDirty);
-      }
-      if (manualHiddenToggleBtn) {
-        const hiddenCount = manualHiddenCount(profileUser);
-        manualHiddenToggleBtn.disabled = !canEdit || hiddenCount === 0;
-        manualHiddenToggleBtn.style.display = canEdit ? '' : 'none';
-        manualHiddenToggleBtn.classList.toggle('active', manualShowHidden);
-        manualHiddenToggleBtn.textContent = manualShowHidden ? `–°–∫—Ä—ã—Ç—å —Å–∫—Ä—ã—Ç—ã–µ (${hiddenCount})` : `–ü–æ–∫–∞–∑–∞—Ç—å —Å–∫—Ä—ã—Ç—ã–µ (${hiddenCount})`;
-      }
-      if (profileDeleteBtn) {
-        profileDeleteBtn.disabled = !isAdmin() || !profileUser;
-        profileDeleteBtn.style.display = isAdmin() ? '' : 'none';
-      }
-
-      populateArScoreOptions(profileUser, allRatingsFiltered);
-      renderAllRatings(profileUser, allRatingsFiltered);
-      renderDailyProfilePanel();
-      if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
-        registerNameInput.value = myName || '';
-      }
-    }
-
-    function setTopMode(mode) {
-      topMode = mode;
-      manualEditMode = false;
-      profileTopPage = { OP: 1, ED: 1 };
-      allRatingsPage = { OP: 1, ED: 1 };
-      $('#oc-topmode-score').classList.toggle('active', mode === 'score');
-      $('#oc-topmode-manual').classList.toggle('active', mode === 'manual');
-      renderProfile();
-    }
-
-
-    function usersWithManualTop(type, scope = 'all') {
-      const users = [];
-      const seenKeys = new Set();
-      Object.keys(manualRanks || {}).forEach(key => {
-        const row = manualRanks[key] || {};
-        const display = String(row.nickname || row.displayName || row.name || key || '').trim();
-        if (!display) return;
-        const belongsToAdmin = isAdminNickname(display);
-        if (scope === 'admins' && !belongsToAdmin) return;
-        const safe = String(row.nicknameKey || manualUserSafeKey(display)).trim() || display.toLowerCase();
-        if (seenKeys.has(safe)) return;
-        const arr = manualOrderFor(display, type);
-        if (!Array.isArray(arr) || !arr.length) return;
-        seenKeys.add(safe);
-        users.push(display);
-      });
-      return users.sort(compareNatural);
-    }
-
-    function computeGlobalManualTop(type, scope = 'all') {
-      const users = usersWithManualTop(type, scope);
-      const rows = new Map();
-      users.forEach(user => {
-        const seen = new Set();
-        manualOrderFor(user, type).slice(0, 100).forEach((id, idx) => {
-          if (seen.has(id)) return;
-          const entry = entriesById.get(String(id));
-          if (!entry || entry.type !== type) return;
-          seen.add(id);
-          if (!rows.has(id)) rows.set(id, { entry, sumPlace: 0, count: 0, bestPlace: Number.POSITIVE_INFINITY, users: [] });
-          const row = rows.get(id);
-          const place = idx + 1;
-          row.sumPlace += place;
-          row.count += 1;
-          row.bestPlace = Math.min(row.bestPlace, place);
-          row.users.push(user);
-        });
-      });
-      return Array.from(rows.values()).map(row => {
-        const avgPlace = row.sumPlace / row.count;
-        const coverage = users.length ? row.count / users.length : 0;
-        return { ...row, avgPlace, coverage, totalUsers: users.length, mode: 'manual' };
-      }).sort((a, b) =>
-        b.count - a.count ||
-        a.avgPlace - b.avgPlace ||
-        a.bestPlace - b.bestPlace ||
-        compareNatural(a.entry.title, b.entry.title)
-      ).slice(0, 100);
-    }
-
-    function computeGlobalScoreTop(type, scope = 'all') {
-      const minVotes = scope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
-      const rows = entries
-        .filter(e => e.type === type)
-        .map(e => ({
-          entry: e,
-          avgScore: scope === 'admins' ? adminAvg(e.scores, minVotes) : avg(e.scores, minVotes),
-          count: scope === 'admins' ? adminRatingCount(e.scores) : ratingCount(e.scores),
-          mode: 'score'
-        }))
-        .filter(r => r.avgScore !== null)
-        .sort((a, b) => b.avgScore - a.avgScore || b.count - a.count || compareNatural(a.entry.title, b.entry.title));
-      if (rows.length <= 100) return rows;
-      const cutoff = rows[99].avgScore;
-      return rows.filter((row, idx) => idx < 100 || Math.abs(row.avgScore - cutoff) < 0.0001);
-    }
-
-    function cachedGlobalTop(mode, type, scope) {
-      const key = `${mode}|${type}|${scope}|${dataVersion}|${manualRanksVersion}`;
-      if (globalTopCache.has(key)) return globalTopCache.get(key);
-      const rows = mode === 'score' ? computeGlobalScoreTop(type, scope) : computeGlobalManualTop(type, scope);
-      globalTopCache.set(key, rows);
-      return rows;
-    }
-
-    function renderGlobalTop100() {
-      const listEl = $('#oc-globaltop-list');
-      const summaryEl = $('#oc-globaltop-summary');
-      if (!listEl) return;
-      if (!isAdmin()) globalTopScope = 'all';
-      document.querySelectorAll('[data-globaltop-type]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopType === globalTopType));
-      document.querySelectorAll('[data-globaltop-mode]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopMode === globalTopMode));
-      document.querySelectorAll('[data-globaltop-scope]').forEach(btn => btn.classList.toggle('active', btn.dataset.globaltopScope === globalTopScope));
-      const rows = cachedGlobalTop(globalTopMode, globalTopType, globalTopScope);
-      const users = usersWithManualTop(globalTopType, globalTopScope);
-      const scopeLabel = globalTopScope === 'admins' ? '–¢–æ–ª—å–∫–æ –∞–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä—ã.' : '–í—Å–µ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª–∏, –≤–∫–ª—é—á–∞—è –∞–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä–æ–≤.';
-      const minVotes = globalTopScope === 'admins' ? 1 : MIN_PUBLIC_VOTES;
-      if (summaryEl) summaryEl.textContent = globalTopMode === 'score'
-        ? `${scopeLabel} –¢–∏–ø: ${globalTopType}. –†–µ–∂–∏–º: —Å—Ä–µ–¥–Ω–∏–π –±–∞–ª–ª. –ú–∏–Ω–∏–º—É–º ${minVotes} –æ—Ü–µ–Ω–∫–∏. –ü–æ–∫–∞–∑–∞–Ω–æ: ${rows.length}.`
-        : `${scopeLabel} –¢–∏–ø: ${globalTopType}. –†–µ–∂–∏–º: —Ä—É—á–Ω—ã–µ —Ç–æ–ø-100. –°–Ω–∞—á–∞–ª–∞ —É—á–∏—Ç—ã–≤–∞–µ—Ç—Å—è –∫–æ–ª–∏—á–µ—Å—Ç–≤–æ –ø–æ–ø–∞–¥–∞–Ω–∏–π –≤ —Ç–æ–ø, –ø–æ—Ç–æ–º —Å—Ä–µ–¥–Ω–µ–µ –º–µ—Å—Ç–æ. –ü–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª–µ–π —Å —Ä—É—á–Ω—ã–º —Ç–æ–ø–æ–º: ${users.length}. –ü–æ–∫–∞–∑–∞–Ω–æ: ${rows.length}.`;
-      if (globalTopMode === 'manual' && !users.length) {
-        listEl.innerHTML = '<div class="oc-empty">–ü–æ–∫–∞ –Ω–µ—Ç —Å–æ—Ö—Ä–∞–Ω—ë–Ω–Ω—ã—Ö —Ä—É—á–Ω—ã—Ö —Ç–æ–ø-100 –¥–ª—è —ç—Ç–æ–≥–æ —Ç–∏–ø–∞.</div>';
-        return;
-      }
-      if (!rows.length) {
-        listEl.innerHTML = globalTopMode === 'score'
-          ? `<div class="oc-empty">${globalTopScope === 'admins' ? '–ü–æ–∫–∞ –Ω–µ—Ç —Ç—Ä–µ–∫–æ–≤ —Å –æ—Ü–µ–Ω–∫–∞–º–∏ –∞–¥–º–∏–Ω–∏—Å—Ç—Ä–∞—Ç–æ—Ä–æ–≤.' : '–ü–æ–∫–∞ –Ω–µ—Ç —Ç—Ä–µ–∫–æ–≤ —Å –º–∏–Ω–∏–º—É–º 3 –ø—É–±–ª–∏—á–Ω—ã–º–∏ –æ—Ü–µ–Ω–∫–∞–º–∏.'}</div>`
-          : '<div class="oc-empty">–í —Ä—É—á–Ω—ã—Ö —Ç–æ–ø–∞—Ö –ø–æ–∫–∞ –Ω–µ—Ç –∞–∫—Ç—É–∞–ª—å–Ω—ã—Ö —Ç—Ä–µ–∫–æ–≤.</div>';
-        return;
-      }
-      const visibleRows = rows.slice(0, globalTopRenderLimit);
-      listEl.innerHTML = `<div class="oc-globaltop-list">${visibleRows.map((row, idx) => {
-        const e = row.entry;
-        const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
-        const yearBit = e.year ? `${e.year}${e.season ? ' ¬∑ ' + SEASON_LABEL[e.season] : ''}` : '';
-        const metric = globalTopMode === 'score'
-          ? `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">—Å—Ä. ${formatScore(row.avgScore)}</span></div><div class="oc-globaltop-metric">–æ—Ü–µ–Ω–æ–∫ ${row.count}</div><div class="oc-globaltop-metric">–º–∏–Ω. ${minVotes}</div>`
-          : `<div class="oc-globaltop-metric"><span class="oc-globaltop-score">–≤ —Ç–æ–ø–µ ${row.count}/${row.totalUsers}</span></div><div class="oc-globaltop-metric">—Å—Ä. –º–µ—Å—Ç–æ ${formatScore(row.avgPlace)}</div><div class="oc-globaltop-metric">–ª—É—á—à–µ–µ –º–µ—Å—Ç–æ ${row.bestPlace}</div>`;
-        return `<div class="oc-globaltop-item">
-          <div class="oc-profile-rank ${rankClass}">${idx < 3 ? ['‚ë†','‚ë°','‚ë¢'][idx] : idx + 1}</div>
-          ${imgHtml(e, 'oc-profile-thumb')}
-          <div>
-            <div class="oc-profile-name"><span class="oc-clickable-title" data-action="open-card" data-id="${e.id}">${escapeHtml(e.title)}</span> <span class="oc-type-tag ${e.type}">${e.type}</span></div>
-            ${yearBit ? `<div class="oc-profile-meta">${escapeHtml(yearBit)}</div>` : ''}
-          </div>
-          ${metric}
-        </div>`;
-      }).join('')}${progressiveMoreMarkup('global-top', visibleRows.length, rows.length)}</div>`;
-      listEl.querySelectorAll('[data-action="open-card"]').forEach(el => el.addEventListener('click', () => openCardModal(el.getAttribute('data-id'))));
-      installProgressiveAutoload(listEl, 'global-top', () => {
-        globalTopRenderLimit += 30;
-        renderGlobalTop100();
-      });
-    }
-
-    function ratingStepsDesc() {
-      const steps = [];
-      for (let v = 10; v >= 1; v--) steps.push(v);
-      return steps;
-    }
-
-    function tierStepsDesc() {
-      if (isPersonalScale()) return [5, 4, 3, 2, 1];
-      return ratingStepsDesc();
-    }
-
-    function tierScoreForEntry(entry, user) {
-      return isPersonalScale() ? personalScoreFor(entry, user) : scoreFor(entry, user);
-    }
-
-    function baseTierRowForScore(score) {
-      if (isPersonalScale()) {
-        const num = normalizeOptionalNumber(score);
-        if (num === null) return null;
-        return Math.max(1, Math.min(5, Math.round(num)));
-      }
-      const num = normalizePublicScore(score);
-      if (num === null) return null;
-      return Math.max(1, Math.min(10, Math.floor(num)));
-    }
-
-    function allowedTierRowsForScore(score) {
-      if (isPersonalScale()) {
-        const row = baseTierRowForScore(score);
-        return row === null ? [] : [row];
-      }
-      const num = normalizePublicScore(score);
-      if (num === null) return [];
-      if (Math.abs(num - Math.round(num)) < 0.0001) return [Math.max(1, Math.min(10, Math.round(num)))];
-      const low = Math.max(1, Math.min(10, Math.floor(num)));
-      const high = Math.max(1, Math.min(10, Math.ceil(num)));
-      return Array.from(new Set([low, high]));
-    }
-
-    function tierRowForEntry(user, type, year, season, entry) {
-      const score = tierScoreForEntry(entry, user);
-      const allowed = allowedTierRowsForScore(score);
-      if (!allowed.length) return null;
-      const placements = tierPlacementsForContext(user, type, year, season);
-      const custom = placements && placements[entry.id] !== undefined ? Number(placements[entry.id]) : null;
-      return custom !== null && allowed.includes(custom) ? custom : allowed[0];
-    }
-
-    function normalizedTierScoreRatio(score) {
-      const n = Number(score);
-      if (!Number.isFinite(n)) return 0;
-      if (isPersonalScale()) return Math.max(0, Math.min(1, (n - 1) / 4));
-      return normalizedPublicScoreRatio(n);
-    }
-
-    function tierRowStyle(score) {
-      const ratio = normalizedTierScoreRatio(score);
-      const hue = Math.round(ratio * 120); // low = red, high = green
-      return `--tier-label-bg: hsla(${hue}, 55%, 22%, 0.72); --tier-zone-bg: hsla(${hue}, 55%, 30%, 0.09); --tier-border: hsla(${hue}, 70%, 55%, 0.42); --tier-text: hsl(${hue}, 80%, 72%);`;
-    }
-
-    function tierOrderForContext(user, type, year, season, score) {
-      const keys = manualCandidateKeys(user);
-      for (const candidate of keys) {
-        const val = tierOrders[tierOrderKey(candidate, type, year, season, score)];
-        if (Array.isArray(val)) return val;
-      }
-      return tierOrders[tierOrderKey(user, type, year, season, score)] || [];
-    }
-
-    function tierPlacementsForContext(user, type, year, season) {
-      const keys = manualCandidateKeys(user);
-      for (const candidate of keys) {
-        const val = tierPlacements[tierContextKey(candidate, type, year, season)];
-        if (val && typeof val === 'object') return val;
-      }
-      return tierPlacements[tierContextKey(user, type, year, season)] || {};
-    }
-
-    function orderedTierItems(user, type, year, season, score) {
-      const items = entries.filter(e =>
-        e.type === type &&
-        Number(e.year) === Number(year) &&
-        e.season === season &&
-        tierScoreForEntry(e, user) !== null &&
-        tierRowForEntry(user, type, year, season, e) === Number(score)
-      );
-      const saved = tierOrderForContext(user, type, year, season, score);
-      const byId = new Map(items.map(e => [e.id, e]));
-      const ordered = saved.filter(id => byId.has(id)).map(id => byId.get(id));
-      const used = new Set(ordered.map(e => e.id));
-      const rest = items.filter(e => !used.has(e.id)).sort((a, b) => compareNatural(a.title, b.title));
-      return ordered.concat(rest);
-    }
-
-    function renderTierList() {
-      const container = $('#oc-tier-list');
-      if (!container) return;
-      const typeSel = $('#oc-tier-type');
-      const yearSel = $('#oc-tier-year');
-      const seasonSel = $('#oc-tier-season');
-      if (typeSel) typeSel.value = tierSelection.type;
-      if (yearSel) yearSel.value = String(tierSelection.year);
-      if (seasonSel) seasonSel.value = tierSelection.season;
-      if (!myName) {
-        container.innerHTML = '<div class="oc-empty">–í–≤–µ–¥–∏—Ç–µ –Ω–∏–∫–Ω–µ–π–º, —á—Ç–æ–±—ã —Å—Ç—Ä–æ–∏—Ç—å –ª–∏—á–Ω—ã–π —Ç–∏—Ä-–ª–∏—Å—Ç.</div>';
-        return;
-      }
-      const seasonItems = entries.filter(e => e.type === tierSelection.type && Number(e.year) === Number(tierSelection.year) && e.season === tierSelection.season);
-      const ratedCount = seasonItems.filter(e => tierScoreForEntry(e, myName) !== null).length;
-      if (!seasonItems.length) {
-        container.innerHTML = '<div class="oc-empty">–í —ç—Ç–æ–º —Å–µ–∑–æ–Ω–µ –Ω–µ—Ç —Ç—Ä–µ–∫–æ–≤ –≤—ã–±—Ä–∞–Ω–Ω–æ–≥–æ —Ç–∏–ø–∞.</div>';
-        return;
-      }
-      if (!ratedCount) {
-        container.innerHTML = isPersonalScale()
-          ? '<div class="oc-empty">–£ —Ç–µ–±—è –ø–æ–∫–∞ –Ω–µ—Ç –æ—Ç–º–µ—Ç–æ–∫ 1‚Äì5 –≤ —ç—Ç–æ–º —Å–µ–∑–æ–Ω–µ. –û—Ü–µ–Ω–∏ —Å–µ–∑–æ–Ω –ø–æ –ø—è—Ç–∏–±–∞–ª–ª—å–Ω–æ–º—É —á–µ–∫–ª–∏—Å—Ç—É ‚Äî –∏ –∫–∞—Ä—Ç–æ—á–∫–∏ —Å–∞–º–∏ –ø–æ—è–≤—è—Ç—Å—è –≤ –Ω—É–∂–Ω—ã—Ö —Ä—è–¥–∞—Ö.</div>'
-          : '<div class="oc-empty">–£ —Ç–µ–±—è –ø–æ–∫–∞ –Ω–µ—Ç –æ—Ü–µ–Ω–æ–∫ –≤ —ç—Ç–æ–º —Å–µ–∑–æ–Ω–µ. –û—Ü–µ–Ω–∏ —Å–µ–∑–æ–Ω ‚Äî –∏ –∫–∞—Ä—Ç–æ—á–∫–∏ —Å–∞–º–∏ –ø–æ—è–≤—è—Ç—Å—è –≤ –Ω—É–∂–Ω—ã—Ö —Ä—è–¥–∞—Ö.</div>';
-        return;
-      }
-      const rows = tierStepsDesc().map(score => {
-        const items = orderedTierItems(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
-        const cards = items.map(e => {
-          const title = escapeHtml(e.title);
-          const bg = e.image ? `<img class="oc-track-image" src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" crossorigin="anonymous" referrerpolicy="no-referrer" data-remove-on-error="1">` : `<span>${escapeHtml(e.type)}</span>`;
-          return `<div class="oc-tier-card" draggable="true" data-tier-card="1" data-id="${e.id}" data-score="${score}" title="${title}">
-            ${bg}<div class="oc-tier-card-controls"><button type="button" class="oc-tier-shift-btn" data-tier-shift="-1" data-id="${e.id}" data-score="${score}" title="–õ–µ–≤–µ–µ">‚Üê</button><button type="button" class="oc-tier-shift-btn" data-tier-shift="1" data-id="${e.id}" data-score="${score}" title="–ü—Ä–∞–≤–µ–µ">‚Üí</button></div><div class="oc-tier-card-title">${title}</div>
-          </div>`;
-        }).join('');
-        const label = tierLabelFor(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
-        const labelIsCustom = label !== tierDefaultLabel(score);
-        return `<div class="oc-tier-row" data-tier-score="${score}" style="${tierRowStyle(score)}">
-          <div class="oc-tier-label" data-tier-label="1" data-score="${score}" title="–ö–ª–∏–∫ ‚Äî –ø–µ—Ä–µ–∏–º–µ–Ω–æ–≤–∞—Ç—å —Ç–∏—Ä. –ü—É—Å—Ç–æ–µ –Ω–∞–∑–≤–∞–Ω–∏–µ —Å–±—Ä–æ—Å–∏—Ç –µ–≥–æ –æ–±—Ä–∞—Ç–Ω–æ.">
-            <span class="${labelIsCustom ? 'oc-tier-label-custom' : ''}">${escapeHtml(label)}</span>
-            <span class="oc-tier-label-edit">‚úé</span>
-          </div>
-          <div class="oc-tier-dropzone" data-tier-drop="1" data-score="${score}">${cards}</div>
-        </div>`;
-      }).join('');
-      container.innerHTML = `<div class="oc-tier-board">${rows}</div>`;
-      bindTierDnD();
-      bindTierLabels();
-    }
-
-    function canDropTierCardToScore(entryId, targetScore) {
-      const entry = entriesById.get(String(entryId));
-      if (!entry) return false;
-      return allowedTierRowsForScore(tierScoreForEntry(entry, myName)).includes(Number(targetScore));
-    }
-
-    async function saveTierPlacement(user, type, year, season, entryId, targetScore) {
-      const entry = entriesById.get(String(entryId));
-      if (!entry) return;
-      const allowed = allowedTierRowsForScore(tierScoreForEntry(entry, user));
-      const target = Number(targetScore);
-      if (!allowed.includes(target)) return;
-      const ctx = tierContextKey(user, type, year, season);
-      tierPlacements[ctx] = tierPlacements[ctx] || {};
-      if (target === allowed[0]) delete tierPlacements[ctx][entryId];
-      else tierPlacements[ctx][entryId] = target;
-      if (!Object.keys(tierPlacements[ctx]).length) delete tierPlacements[ctx];
-      await saveTierPlacements(user, type, year, season);
-    }
-
-    async function saveVisibleTierOrders(container, scores) {
-      for (const score of Array.from(new Set(scores.map(Number)))) {
-        const zone = container.querySelector(`[data-tier-drop][data-score="${score}"]`);
-        if (!zone) continue;
-        const order = Array.from(zone.querySelectorAll('[data-tier-card]')).map(el => el.getAttribute('data-id'));
-        await saveTierOrder(myName, tierSelection.type, tierSelection.year, tierSelection.season, Number(score), order);
-      }
-    }
-
-    function bindTierLabels() {
-      const container = $('#oc-tier-list');
-      if (!container) return;
-      container.querySelectorAll('[data-tier-label]').forEach(label => {
-        label.addEventListener('click', async () => {
-          const score = Number(label.getAttribute('data-score'));
-          const current = tierLabelFor(myName, tierSelection.type, tierSelection.year, tierSelection.season, score);
-          const fallback = tierDefaultLabel(score);
-          const raw = window.prompt(`–ù–∞–∑–≤–∞–Ω–∏–µ —Ç–∏—Ä–∞ ${fallback}.\n–û—Å—Ç–∞–≤—å –ø—É—Å—Ç—ã–º, —á—Ç–æ–±—ã –≤–µ—Ä–Ω—É—Ç—å —Å—Ç–∞–Ω–¥–∞—Ä—Ç–Ω–æ–µ –Ω–∞–∑–≤–∞–Ω–∏–µ.`, current === fallback ? '' : current);
-          if (raw === null) return;
-          await saveTierLabel(myName, tierSelection.type, tierSelection.year, tierSelection.season, score, raw);
-          renderTierList();
-          setStatus(raw.trim() ? '–ù–∞–∑–≤–∞–Ω–∏–µ —Ç–∏—Ä–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–æ ‚úì' : '–ù–∞–∑–≤–∞–Ω–∏–µ —Ç–∏—Ä–∞ —Å–±—Ä–æ—à–µ–Ω–æ ‚úì');
-        });
-      });
-    }
-
-    function bindTierDnD() {
-      const container = $('#oc-tier-list');
-      if (!container) return;
-      let dragId = null;
-      let dragScore = null;
-      let dragChanged = false;
-
-      container.querySelectorAll('[data-tier-shift]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const id = btn.getAttribute('data-id');
-          const score = Number(btn.getAttribute('data-score'));
-          const delta = Number(btn.getAttribute('data-tier-shift'));
-          const zone = container.querySelector(`[data-tier-drop][data-score="${score}"]`);
-          if (!zone || !id || !Number.isFinite(delta)) return;
-          const order = Array.from(zone.querySelectorAll('[data-tier-card]')).map(el => el.getAttribute('data-id'));
-          const from = order.indexOf(id);
-          const to = Math.max(0, Math.min(order.length - 1, from + delta));
-          if (from === -1 || from === to) return;
-          const [moved] = order.splice(from, 1);
-          order.splice(to, 0, moved);
-          try {
-            await saveTierOrder(myName, tierSelection.type, tierSelection.year, tierSelection.season, score, order);
-            renderTierList();
-            setStatus('–ü–æ—Ä—è–¥–æ–∫ –≤ —Ç–∏—Ä–µ —Å–æ—Ö—Ä–∞–Ω—ë–Ω ‚úì');
-          } catch (err) {
-            console.error(err);
-            setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –ø–æ—Ä—è–¥–æ–∫ —Ç–∏—Ä-–ª–∏—Å—Ç–∞.', true);
-          }
-        });
-      });
-
-      container.querySelectorAll('[data-tier-card]').forEach(card => {
-        card.addEventListener('dragstart', (e) => {
-          if (e.target && e.target.closest && e.target.closest('[data-tier-shift]')) { e.preventDefault(); return; }
-          dragId = card.getAttribute('data-id');
-          dragScore = card.getAttribute('data-score');
-          dragChanged = false;
-          card.classList.add('dragging');
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', dragId);
-        });
-        card.addEventListener('dragend', async () => {
-          const currentId = dragId;
-          const originalScore = dragScore;
-          const currentScore = card.getAttribute('data-score') || originalScore;
-          card.classList.remove('dragging');
-          dragId = null;
-          dragScore = null;
-          if (!currentId || !dragChanged) return;
-          try {
-            await saveVisibleTierOrders(container, [Number(originalScore), Number(currentScore)]);
-            setStatus(Number(originalScore) === Number(currentScore) ? '–ü–æ—Ä—è–¥–æ–∫ –≤ —Ç–∏—Ä–µ —Å–æ—Ö—Ä–∞–Ω—ë–Ω ‚úì' : '–ö–∞—Ä—Ç–æ—á–∫–∞ –ø–µ—Ä–µ–Ω–µ—Å–µ–Ω–∞ –≤ –¥–æ–ø—É—Å—Ç–∏–º—ã–π —Ç–∏—Ä ‚úì');
-          } catch (err) {
-            console.error(err);
-            setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –ø–æ—Ä—è–¥–æ–∫ —Ç–∏—Ä-–ª–∏—Å—Ç–∞.', true);
-          }
-        });
-      });
-      container.querySelectorAll('[data-tier-drop]').forEach(zone => {
-        zone.addEventListener('dragover', (e) => {
-          const targetScore = Number(zone.getAttribute('data-score'));
-          if (!dragId || !canDropTierCardToScore(dragId, targetScore)) return;
-          e.preventDefault();
-          zone.classList.add('drag-over');
-          const after = getDragAfterElement(zone, e.clientX, e.clientY);
-          const dragged = Array.from(container.querySelectorAll('[data-tier-card]')).find(el => el.getAttribute('data-id') === dragId);
-          if (!dragged) return;
-          const beforeParent = dragged.parentElement;
-          const beforeNext = dragged.nextElementSibling;
-          if (after == null) zone.appendChild(dragged);
-          else zone.insertBefore(dragged, after);
-          if (beforeParent !== dragged.parentElement || beforeNext !== dragged.nextElementSibling) dragChanged = true;
-        });
-        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-        zone.addEventListener('drop', async (e) => {
-          const dropScore = Number(zone.getAttribute('data-score'));
-          if (!dragId || !canDropTierCardToScore(dragId, dropScore)) return;
-          e.preventDefault();
-          zone.classList.remove('drag-over');
-          const droppedId = dragId;
-          const oldScore = Number(dragScore);
-          try {
-            await saveTierPlacement(myName, tierSelection.type, tierSelection.year, tierSelection.season, droppedId, dropScore);
-            const moved = Array.from(container.querySelectorAll('[data-tier-card]')).find(el => el.getAttribute('data-id') === droppedId);
-            if (moved) moved.setAttribute('data-score', String(dropScore));
-            await saveVisibleTierOrders(container, [oldScore, dropScore]);
-            dragChanged = false;
-            setStatus(oldScore === dropScore ? '–ü–æ—Ä—è–¥–æ–∫ –≤ —Ç–∏—Ä–µ —Å–æ—Ö—Ä–∞–Ω—ë–Ω ‚úì' : '–ö–∞—Ä—Ç–æ—á–∫–∞ –ø–µ—Ä–µ–Ω–µ—Å–µ–Ω–∞ –≤ –¥–æ–ø—É—Å—Ç–∏–º—ã–π —Ç–∏—Ä ‚úì');
-          } catch (err) {
-            console.error(err);
-            setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –ø–æ—Ä—è–¥–æ–∫ —Ç–∏—Ä-–ª–∏—Å—Ç–∞.', true);
-          }
-        });
-      });
-    }
-
-    function getDragAfterElement(container, x, y) {
-      const elements = [...container.querySelectorAll('[data-tier-card]:not(.dragging)')];
-      for (const child of elements) {
-        const box = child.getBoundingClientRect();
-        const midY = box.top + box.height / 2;
-        const midX = box.left + box.width / 2;
-        if (y < midY && x < box.right) return child;
-        if (y < box.bottom && x < midX) return child;
-      }
-      return null;
-    }
-
-    function publicEntryAvg(entry) {
-      return avg(entry.scores, MIN_PUBLIC_VOTES);
-    }
-
-    function songStatsGroupRows(list, getKeys) {
-      const groups = {};
-      list.forEach(e => {
-        const score = avgAny(e.songScores || {});
-        if (score === null) return;
-        getKeys(e).forEach(key => {
-          if (!key) return;
-          if (!groups[key]) groups[key] = [];
-          groups[key].push(score);
-        });
-      });
-      return Object.entries(groups)
-        .map(([key, vals]) => ({ key, count: vals.length, mean: vals.reduce((a, b) => a + b, 0) / vals.length }))
-        .filter(row => row.count >= MIN_PUBLIC_VOTES)
-        .sort((a, b) => b.mean - a.mean || b.count - a.count || compareNatural(a.key, b.key))
-        .slice(0, 50);
-    }
-
-    function statsGroupRows(list, getKeys) {
-      const groups = {};
-      list.forEach(e => {
-        const score = publicEntryAvg(e);
-        if (score === null) return;
-        getKeys(e).forEach(key => {
-          if (!key) return;
-          if (!groups[key]) groups[key] = [];
-          groups[key].push(score);
-        });
-      });
-      return Object.entries(groups)
-        .map(([key, vals]) => ({ key, count: vals.length, mean: vals.reduce((a, b) => a + b, 0) / vals.length }))
-        .filter(row => row.count >= MIN_PUBLIC_VOTES)
-        .sort((a, b) => b.mean - a.mean || b.count - a.count || compareNatural(a.key, b.key))
-        .slice(0, 50);
-    }
-
-    function renderStatsTable(selector, rows) {
-      const el = $(selector);
-      if (!el) return;
-      if (!rows.length) {
-        el.innerHTML = '<div class="oc-empty">–ü–æ–∫–∞ –Ω–µ—Ç –¥–∞–Ω–Ω—ã—Ö: –Ω—É–∂–Ω–æ –º–∏–Ω–∏–º—É–º 3 —Ç—Ä–µ–∫–∞ —Å –ø—É–±–ª–∏—á–Ω–æ–π —Å—Ä–µ–¥–Ω–µ–π –æ—Ü–µ–Ω–∫–æ–π.</div>';
-        return;
-      }
-      el.innerHTML = rows.map((row, idx) => `<div class="oc-stats-row">
-        <div class="oc-stats-rank">${idx + 1}</div>
-        <div class="oc-stats-name" title="${escapeHtml(row.key)}">${escapeHtml(row.key)}</div>
-        <div class="oc-stats-score">${formatScore(row.mean)}</div>
-        <div class="oc-stats-count">${row.count} —Ç—Ä–µ–∫.</div>
-      </div>`).join('');
-    }
-
-    function renderStatsPage() {
-      const base = entries.filter(e => !statsTypeFilter || e.type === statsTypeFilter);
-      renderStatsTable('#oc-stats-performers', statsGroupRows(base, e => e.performers || []));
-      renderStatsTable('#oc-stats-song-performers', songStatsGroupRows(base, e => e.performers || []));
-      renderStatsTable('#oc-stats-studios', statsGroupRows(base, e => e.studios || []));
-      renderStatsTable('#oc-stats-directors', statsGroupRows(base, e => e.directors || []));
-      renderStatsTable('#oc-stats-seasons', statsGroupRows(base, e => (e.year && e.season) ? [`${SEASON_LABEL[e.season]} ${e.year}`] : []));
-      renderStatsTable('#oc-stats-franchises', statsGroupRows(base, e => e.franchises || []));
-    }
-
-    function openingModalInputBounds() {
-      return {
-        min: ratingScale === 'half' ? 0.5 : 1,
-        max: 10,
-        step: ratingScale === 'half' ? 0.5 : 1
-      };
-    }
-
-    function clampOpeningModalScore(value) {
-      const raw = String(value ?? '').trim();
-      if (!raw) return null;
-      const num = Number(raw);
-      if (!Number.isFinite(num)) return null;
-      const bounds = openingModalInputBounds();
-      return Math.max(bounds.min, Math.min(bounds.max, Number(num.toFixed(1))));
-    }
-
-    function openCardModal(id) {
-      if (!requireAccount('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –æ—Ç–∫—Ä—ã—Ç—å –∫–∞—Ä—Ç–æ—á–∫—É –∏ –≤—ã—Å—Ç–∞–≤–ª—è—Ç—å –æ—Ü–µ–Ω–∫–∏.')) return;
-      const entry = entriesById.get(String(id));
-      if (!entry || !openingModal) return;
-      const score = avg(entry.scores);
-      const adminScore = adminAvg(entry.scores);
-      const adminCount = adminRatingCount(entry.scores);
-      const avgSong = avgAny(entry.songScores || {});
-      const avgVisual = avgAny(entry.visualScores || {});
-      const detailSettings = detailedRatingSettings(myName, entry.type);
-      const votes = Object.entries(entry.scores || {}).sort((a,b)=> Number(b[1]) - Number(a[1]));
-      const arrayValue = (arr, kind) => (arr || []).filter(Boolean).length ? entityFilterValuesMarkup(kind, arr) : '‚Äî';
-      const scoreRows = [
-        `<div class="oc-detail-box"><div class="oc-detail-label">–æ–±—â–∞—è —Å—Ä–µ–¥–Ω—è—è</div><div class="oc-detail-value">${formatScore(score)} ¬∑ ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ –æ—Ü–µ–Ω–æ–∫</div></div>`,
-        isAdmin() ? `<div class="oc-detail-box"><div class="oc-detail-label">—Å—Ä–µ–¥–Ω—è—è –∞–¥–º–∏–Ω–æ–≤</div><div class="oc-detail-value">${formatScore(adminScore)} ¬∑ ${adminCount} –æ—Ü–µ–Ω–æ–∫</div></div>` : '',
-        detailSettings.enabled && avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailSettings.songLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgSong)} ¬∑ ${ratingCount(entry.songScores)}</div></div>` : '',
-        detailSettings.enabled && avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailSettings.visualLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgVisual)} ¬∑ ${ratingCount(entry.visualScores)}</div></div>` : ''
-      ].filter(Boolean).join('');
-      const detailRows = `
-        <div class="oc-detail-box"><div class="oc-detail-label">—Ç–∏–ø</div><div class="oc-detail-value">${escapeHtml(entry.type || '‚Äî')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">–≥–æ–¥</div><div class="oc-detail-value">${escapeHtml(entry.year || '‚Äî')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">—Å–µ–∑–æ–Ω</div><div class="oc-detail-value">${entry.season ? escapeHtml(SEASON_LABEL[entry.season]) : '‚Äî'}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">—Å—Ç—É–¥–∏–∏</div><div class="oc-detail-value">${arrayValue(entry.studios, 'studios')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">—Ä–µ–∂–∏—Å—Å—ë—Ä—ã</div><div class="oc-detail-value">${arrayValue(entry.directors, 'directors')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">–∏—Å–ø–æ–ª–Ω–∏—Ç–µ–ª–∏</div><div class="oc-detail-value">${arrayValue(entry.performers, 'performers')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">—Ñ—Ä–∞–Ω—à–∏–∑—ã</div><div class="oc-detail-value">${arrayValue(entry.franchises, 'franchises')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">–∞–ª—å—Ç. –Ω–∞–∑–≤–∞–Ω–∏—è</div><div class="oc-detail-value">${escapeHtml((entry.alternativeTitles || []).filter(Boolean).join(', ') || '‚Äî')}</div></div>
-        <div class="oc-detail-box"><div class="oc-detail-label">–æ—Ü–µ–Ω–æ–∫</div><div class="oc-detail-value">${ratingCount(entry.scores)} –æ–±—â–∏—Ö${ratingCount(entry.songScores) ? ' ¬∑ ' + ratingCount(entry.songScores) + ' –ø–µ—Å–Ω—è' : ''}${ratingCount(entry.visualScores) ? ' ¬∑ ' + ratingCount(entry.visualScores) + ' –≤–∏–∑—É–∞–ª' : ''}</div></div>
-      `;
-      const imageHtml = renderOpeningVideoBlock(entry);
-      const progressText = `–∫–∞—Ä—Ç–æ—á–∫–∞ ¬∑ ${entry.type || 'OP'}${entry.year ? ' ¬∑ ' + entry.year : ''}${entry.season ? ' ¬∑ ' + SEASON_LABEL[entry.season] : ''}`;
-      const bounds = openingModalInputBounds();
-      const myPublicScore = scoreFor(entry, myName);
-      const mySongScore = songScoreFor(entry, myName);
-      const myVisualScore = visualScoreFor(entry, myName);
-      const myComment = ratingCommentFor(entry, myName);
-      const savedScore = myPublicScore !== null ? clampOpeningModalScore(myPublicScore) : 5;
-      const hasAnyMyRating = myPublicScore !== null || mySongScore !== null || myVisualScore !== null;
-      openingModal.classList.remove('hidden');
-      openingModal.innerHTML = `<div class="oc-eval-modal oc-opening-detail-modal" data-entry-id="${escapeHtml(entry.id)}">
-        <div class="oc-eval-top">
-          <div class="oc-opening-title-block">
-            <div class="oc-eval-progress">${escapeHtml(progressText)}</div>
-            <div class="oc-opening-title-row">
-              <div class="oc-eval-title">${escapeHtml(entry.title)} ${!entry.link ? '<span class="oc-missing-link" title="–°—Å—ã–ª–∫–∞ –Ω–µ –¥–æ–±–∞–≤–ª–µ–Ω–∞">üò°</span>' : ''}</div>
-              <button type="button" class="oc-opening-info-toggle" data-opening-info-toggle="1" aria-expanded="false" title="–ü–æ–∫–∞–∑–∞—Ç—å –æ–ø–∏—Å–∞–Ω–∏–µ">‚åÑ</button>
-            </div>
-          </div>
-          <button type="button" class="oc-eval-close" data-modal-close="1">–ó–∞–∫—Ä—ã—Ç—å</button>
-        </div>
-        <div class="oc-opening-info-panel hidden" data-opening-info-panel="1">
-          <div class="oc-section-label">–æ–ø–∏—Å–∞–Ω–∏–µ</div>
-          <div class="oc-detail-grid">${detailRows}</div>
-          ${entry.notes ? `<div class="oc-notes" style="margin-top:12px;">${escapeHtml(entry.notes)}</div>` : ''}
-        </div>
-        ${imageHtml}
-        <div class="oc-opening-rate-panel">
-          <div class="oc-section-label">—Ç–≤–æ—è –æ—Ü–µ–Ω–∫–∞</div>
-          <div class="oc-eval-grid">
-            <label>–û–±—â–∞—è –æ—Ü–µ–Ω–∫–∞
-              <input id="oc-card-range" type="range" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${savedScore}" />
-              <div class="oc-score-word" id="oc-card-word">${escapeHtml(formatScore(savedScore))}</div>
-            </label>
-            <label>–ò—Ç–æ–≥
-              <input id="oc-card-score" type="number" min="${bounds.min}" max="${bounds.max}" step="${bounds.step}" value="${savedScore}" />
-            </label>
-            ${detailedRatingMarkup(entry, 'oc-card', mySongScore, myVisualScore)}
-            ${ratingCommentEditorMarkup('oc-card', myComment)}
-          </div>
-          <div class="oc-opening-rate-actions">
-            ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">–£–¥–∞–ª–∏—Ç—å –æ—Ü–µ–Ω–∫—É</button>` : ''}
-            <button type="button" class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" data-card-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100 ‚úì' : '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100'}</button>
-            <button type="button" class="oc-addbtn" data-card-action="save-rating">–°–æ—Ö—Ä–∞–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É</button>
-          </div>
-        </div>
-        <div class="oc-opening-score-strip">
-          <div class="oc-detail-grid">${scoreRows || '<div class="oc-detail-box"><div class="oc-detail-label">—Å—Ä–µ–¥–Ω—è—è</div><div class="oc-detail-value">‚Äî</div></div>'}</div>
-        </div>
-        <div class="oc-opening-user-votes">
-          <div class="oc-section-label" style="margin-bottom:8px;">–æ—Ü–µ–Ω–∫–∏ –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª–µ–π</div>
-          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${detailSettings.enabled && songScoreFor(entry, voter) !== null ? ' ¬∑ ' + escapeHtml(detailSettings.songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${detailSettings.enabled && visualScoreFor(entry, voter) !== null ? ' ¬∑ ' + escapeHtml(detailSettings.visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">–æ—Ü–µ–Ω–æ–∫ –ø–æ–∫–∞ –Ω–µ—Ç</span>'}</div>
-        </div>
-      </div>`;
-
-      bindOpeningVideoEmbed();
-      bindDetailedRatingSuggestion(openingModal, 'oc-card');
-      const range = $('#oc-card-range');
-      const scoreInput = $('#oc-card-score');
-      const word = $('#oc-card-word');
-      const updateWord = (val) => { if (word) word.textContent = formatScore(val); };
-      if (range && scoreInput) {
-        range.addEventListener('input', () => { scoreInput.value = range.value; updateWord(range.value); });
-        scoreInput.addEventListener('input', () => {
-          const val = clampOpeningModalScore(scoreInput.value);
-          if (val !== null) { range.value = String(val); updateWord(val); }
-        });
-      }
-      const saveBtn = openingModal.querySelector('[data-card-action="save-rating"]');
-      if (saveBtn) saveBtn.addEventListener('click', () => saveCardModalRating(entry.id));
-      const candidateBtn = openingModal.querySelector('[data-card-action="toggle-candidate"]');
-      if (candidateBtn) candidateBtn.addEventListener('click', async () => {
-        candidateBtn.disabled = true;
-        try {
-          const active = await window.OC_APP_BRIDGE?.toggleTopCandidate?.(entry.id, entry.type);
-          candidateBtn.classList.toggle('active', Boolean(active));
-          candidateBtn.textContent = active ? '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100 ‚úì' : '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100';
-        } catch (error) {
-          setStatus(error?.message || '–ù–µ —É–¥–∞–ª–æ—Å—å –∏–∑–º–µ–Ω–∏—Ç—å –∫–∞–Ω–¥–∏–¥–∞—Ç–∞.', true);
-        } finally {
-          candidateBtn.disabled = false;
-        }
-      });
-      const deleteBtn = openingModal.querySelector('[data-card-action="delete-rating"]');
-      if (deleteBtn) deleteBtn.addEventListener('click', async () => {
-        if (!ensureNickname()) return;
-        if (!window.confirm('–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ–±—â—É—é –æ—Ü–µ–Ω–∫—É, –ø–µ—Å–Ω—é –∏ –≤–∏–∑—É–∞–ª?')) return;
-        await deleteCurrentRating(entry.id, myName, 'public');
-        openCardModal(entry.id);
-      });
-    }
-
-    async function saveCardModalRating(id) {
-      const entry = entriesById.get(String(id));
-      if (!entry || !openingModal) return;
-      if (!ensureNickname()) return;
-      const scoreInput = $('#oc-card-score');
-      const commentInput = $('#oc-card-comment');
-      const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
-      const score = clampOpeningModalScore(scoreInput ? scoreInput.value : '');
-      const detailed = readDetailedRating(openingModal, entry, 'oc-card');
-      const { songScore, visualScore, customScores } = detailed;
-      const bounds = openingModalInputBounds();
-      if (score === null) { setStatus(`–í–≤–µ–¥–∏—Ç–µ –æ–±—â—É—é –æ—Ü–µ–Ω–∫—É –æ—Ç ${formatScore(bounds.min)} –¥–æ ${formatScore(bounds.max)}.`, true); return; }
-      if (detailed.error) { setStatus(detailed.error, true); return; }
-      try {
-        await persistCompleteRating(entry, { score, songScore, visualScore, customScores, comment });
-        render();
-        renderSeasonViews();
-        if (activeTab === 'profile') renderProfile();
-        if (activeTab === 'tier') renderTierList();
-        if (activeTab === 'stats') renderStatsPage();
-        if (activeTab === 'top100') renderGlobalTop100();
-        closeCardModal();
-        setStatus('–û—Ü–µ–Ω–∫–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞ ‚úì');
-      } catch (err) {
-        console.error(err);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É.', true);
-      }
-    }
-
-    function closeCardModal() {
-      if (!openingModal) return;
-      openingModal.classList.add('hidden');
-      openingModal.innerHTML = '';
-    }
-
-    function render() {
-      populateProfileUsers();
-      const filtered = applyFilters(entries);
-      const sorted = applySort(filtered);
-      chartPage = clampPage(chartPage, sorted.length);
-      const page = pageSlice(sorted, chartPage);
-      resultCountEl.textContent = sorted.length
-        ? `–ü–æ–∫–∞–∑–∞–Ω–æ: ${page.start + 1}‚Äì${Math.min(sorted.length, page.start + PAGE_SIZE)} –∏–∑ ${sorted.length} / –≤—Å–µ–≥–æ ${entries.length}`
-        : `–ü–æ–∫–∞–∑–∞–Ω–æ: 0 –∏–∑ ${entries.length}`;
-      renderFilterStat(filtered);
-      updateAccountDashboard();
-
-      if (!entries.length) {
-        listContainer.innerHTML = '<div class="oc-inline-loader" role="status" aria-label="–ó–∞–≥—Ä—É–∑–∫–∞ –¥–∞–Ω–Ω—ã—Ö"><img src="https://www.image2url.com/r2/default/gifs/1785398081496-70cb3d2d-c6f9-49e7-9840-d635f8c2157e.gif" alt="–ó–∞–≥—Ä—É–∑–∫–∞ –¥–∞–Ω–Ω—ã—Ö" referrerpolicy="no-referrer" /></div>';
-        return;
-      }
-      if (!sorted.length) {
-        listContainer.innerHTML = '<div class="oc-empty">–ù–∏—á–µ–≥–æ –Ω–µ –Ω–∞–π–¥–µ–Ω–æ –ø–æ —ç—Ç–∏–º —Ñ–∏–ª—å—Ç—Ä–∞–º.</div>';
-        return;
-      }
-
-      const html = page.items.map((entry, idx) => {
-        const absoluteIdx = page.start + idx;
-        if (entry.id === editingId) return renderEditCard(entry);
-        const score = avg(entry.scores);
-        const scoreText = visibleAverageMarkup(entry, score);
-        const showRank = sortMode === 'score';
-        const rankClass = showRank && absoluteIdx === 0 ? 'gold' : showRank && absoluteIdx === 1 ? 'silver' : showRank && absoluteIdx === 2 ? 'bronze' : '';
-        const rankLabel = showRank ? (absoluteIdx < 3 ? ['‚ë†','‚ë°','‚ë¢'][absoluteIdx] : (absoluteIdx + 1)) : (absoluteIdx + 1);
-        const chips = Object.entries(entry.scores || {}).map(([voter, val]) => {
-          const mine = voter === myName ? ' mine' : '';
-          return `<span class="oc-chip${mine}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}</span>`;
-        }).join('');
-        const myPublicScore = scoreFor(entry, myName);
-        const myPersonalScore = personalScoreFor(entry, myName);
-        const myVal = isPersonalScale() ? (myPersonalScore || defaultScore()) : (myPublicScore || defaultScore());
-        const extraBits = [];
-        if (ratingCount(entry.scores) > 0 && ratingCount(entry.scores) < MIN_PUBLIC_VOTES) extraBits.push(`<div class="oc-song-small">—Å—Ä–µ–¥–Ω—è—è –ø–æ—è–≤–∏—Ç—Å—è –ø–æ—Å–ª–µ ${MIN_PUBLIC_VOTES} –æ—Ü–µ–Ω–æ–∫ ¬∑ —Å–µ–π—á–∞—Å ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}</div>`);
-        if (myPersonalScore !== null) extraBits.push(`<div class="oc-song-small">—Ç–≤–æ—è –æ—Ü–µ–Ω–∫–∞: ${escapeHtml(formatFiveScore(myPersonalScore))}</div>`);
-        const hasSavedScore = isPersonalScale() ? myPersonalScore !== null : myPublicScore !== null;
-        const controlsHtml = `
-          <div class="oc-rate-control ${hasSavedScore ? 'is-saved' : 'is-empty'}" data-saved="${hasSavedScore ? escapeHtml(String(myVal)) : ''}">
-          <div class="oc-rate-row">
-            <input type="range" min="${ratingMin()}" max="${ratingMax()}" step="${scaleStep()}" value="${myVal}" class="oc-slider" data-id="${entry.id}" />
-            <span class="oc-rate-val">${escapeHtml(formatInputScore(myVal))}</span>
-          </div>
-          </div>
-          <button type="button" class="oc-rate-btn" data-action="rate" data-id="${entry.id}">${hasSavedScore ? '–ò–∑–º–µ–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É' : '–û—Ü–µ–Ω–∏—Ç—å'}</button>
-          <button type="button" class="oc-open-btn" data-action="open-card" data-id="${entry.id}">–ö–∞—Ä—Ç–æ—á–∫–∞</button>
-          <button type="button" class="oc-secondary-btn${hasSavedScore ? '' : ' hidden'}" data-action="delete-rating" data-id="${entry.id}">${isPersonalScale() ? '—É–¥–∞–ª–∏—Ç—å –æ—Ç–º–µ—Ç–∫—É' : '—É–¥–∞–ª–∏—Ç—å –æ—Ü–µ–Ω–∫—É'}</button>
-          ${isCatalogAdmin() ? `<button type="button" class="oc-edit-btn" data-action="edit" data-id="${entry.id}">‚úé —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å</button>
-          <button type="button" class="oc-del" data-action="delete" data-id="${entry.id}">—É–¥–∞–ª–∏—Ç—å —Ç—Ä–µ–∫</button>` : ''}`;
-        return renderUnifiedEntryCard(entry, {
-          rankLabel,
-          rankClass,
-          scoreText,
-          scoreSub: '—Å—Ä–µ–¥–Ω—è—è',
-          fields: ['studios', 'directors', 'performers', 'franchises'],
-          notes: true,
-          extraHtml: extraBits.join(''),
-          votesHtml: `<div class="oc-votes">${chips}</div>`,
-          controlsHtml,
-          className: `main-card ${(myPublicScore !== null || myPersonalScore !== null) ? 'oc-card-rated' : ''}`
-        });
-      }).join('');
-
-      const pager = paginationHtml('chart', chartPage, sorted.length);
-      listContainer.innerHTML = `${pager}<div class="oc-list ${catalogView === 'compact' ? 'oc-list-compact' : ''}">${html}</div>${pager}`;
-      bindPagination(listContainer, 'chart', () => chartPage, v => { chartPage = clampPage(v, sorted.length); }, render);
-
-      listContainer.querySelectorAll('.oc-slider').forEach(slider => {
-        slider.addEventListener('input', (e) => {
-          const val = parseFloat(e.target.value);
-          const control = e.target.closest('.oc-rate-control');
-          control?.classList.add('is-dirty');
-          e.target.parentElement.querySelector('.oc-rate-val').textContent = formatInputScore(val);
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="rate"]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.preventDefault();
-          if (!ensureNickname()) return;
-          const id = btn.getAttribute('data-id');
-          const slider = listContainer.querySelector(`.oc-slider[data-id="${id}"]`);
-          const val = clampScore(slider.value);
-          const entry = entriesById.get(String(id));
-          if (!entry || val === null) return;
-          try {
-            suppressChartRatingRefreshUntil = Date.now() + 3000;
-            if (isPersonalScale()) {
-              entry.personalScores = entry.personalScores || {};
-              entry.personalScores[myName] = val;
-              await saveRatingExtras(entry.id, myName, { personalScore: val });
-            } else {
-              entry.scores = entry.scores || {};
-              entry.scores[myName] = val;
-              await window.OPED_DB.saveRating(entry.id, myName, val);
-              await saveRatingExtras(entry.id, myName, { score: val });
-              appendManualOrderIfMissing(myName, entry.type, entry.id);
-            }
-            touchEntryCache(entry);
-            markRatingDataChanged();
-            const card = btn.closest('.oc-unified-card');
-            const control = btn.closest('.oc-card-actions')?.querySelector('.oc-rate-control');
-            if (control) {
-              control.classList.remove('is-empty', 'is-dirty');
-              control.classList.add('is-saved');
-              control.dataset.saved = String(val);
-            }
-            if (card) {
-              card.classList.add('oc-card-rated');
-              const scoreNode = card.querySelector('.oc-season-score');
-              if (scoreNode) scoreNode.innerHTML = `${visibleAverageMarkup(entry, avg(entry.scores))}<span class="oc-season-score-sub">—Å—Ä–µ–¥–Ω—è—è</span>`;
-              const votesNode = card.querySelector('.oc-votes');
-              if (votesNode) {
-                votesNode.innerHTML = Object.entries(entry.scores || {}).map(([voter, score]) => {
-                  const mine = voter === myName ? ' mine' : '';
-                  return `<span class="oc-chip${mine}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(score)}</span>`;
-                }).join('');
-              }
-            }
-            btn.textContent = '–ò–∑–º–µ–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É';
-            btn.closest('.oc-card-actions')?.querySelector('[data-action="delete-rating"]')?.classList.remove('hidden');
-            updateAccountDashboard();
-            setStatus('–û—Ü–µ–Ω–∫–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞ ‚úì');
-          } catch (err) {
-            console.error(err);
-            setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –æ—Ü–µ–Ω–∫—É.', true);
-          }
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="delete-rating"]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          if (!ensureNickname()) return;
-          const id = e.target.getAttribute('data-id');
-          if (!window.confirm(isPersonalScale() ? '–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ—Ç–º–µ—Ç–∫—É 1‚Äì5?' : '–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ—Ü–µ–Ω–∫—É?')) return;
-          await deleteCurrentRating(id, myName, isPersonalScale() ? 'personal' : 'public');
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="open-card"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openCardModal(btn.getAttribute('data-id'));
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="edit"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          if (!ensureCatalogAdmin()) return;
-          editingId = e.target.getAttribute('data-id');
-          render();
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="cancel-edit"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          editingId = null;
-          render();
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="save-edit"]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          if (!ensureCatalogAdmin()) return;
-          const id = e.target.getAttribute('data-id');
-          const card = listContainer.querySelector(`.oc-editcard[data-id="${id}"]`);
-          const entry = entriesById.get(String(id));
-          if (!card || !entry) return;
-          const title = card.querySelector('.oc-e-title').value.trim();
-          if (!title) { setStatus('–ù–∞–∑–≤–∞–Ω–∏–µ –Ω–µ –º–æ–∂–µ—Ç –±—ã—Ç—å –ø—É—Å—Ç—ã–º.', true); return; }
-          const newType = card.querySelector('.oc-e-type').value;
-          if (isDuplicateTitle(title, newType, id)) { setStatus(`–¢–∞–∫–æ–π ${newType} —É–∂–µ –µ—Å—Ç—å. –û–¥–∏–Ω–∞–∫–æ–≤—ã–µ –Ω–∞–∑–≤–∞–Ω–∏—è –∑–∞–ø—Ä–µ—â–µ–Ω—ã –æ—Ç–¥–µ–ª—å–Ω–æ –≤–Ω—É—Ç—Ä–∏ OP –∏ ED.`, true); return; }
-          const previousImage = String(entry.image || '').trim();
-          const previousFallbackImage = String(entry.fallbackImage || '').trim();
-          const nextImage = card.querySelector('.oc-e-image').value.trim();
-          const imageChanged = nextImage !== previousImage;
-
-          const updatedEntry = {
-            ...entry,
-            title,
-            type: newType,
-            year: (() => {
-              const yearRaw = card.querySelector('.oc-e-year').value.trim();
-              return yearRaw ? parseInt(yearRaw, 10) : null;
-            })(),
-            season: card.querySelector('.oc-e-season').value,
-            studios: parseList(card.querySelector('.oc-e-studio').value),
-            directors: parseList(card.querySelector('.oc-e-director').value),
-            performers: parseList(card.querySelector('.oc-e-performer').value),
-            franchises: uniqueFranchiseList(cleanFranchiseList(card.querySelector('.oc-e-franchise').value)),
-            ...sameSongFields(card.querySelector('.oc-e-same-song')?.value),
-            image: nextImage,
-            fallbackImage: card.querySelector('.oc-e-fallback-image').value.trim(),
-            link: card.querySelector('.oc-e-link').value.trim(),
-            notes: card.querySelector('.oc-e-notes').value.trim(),
-            alternativeTitles: alternativeTitlesForSave(title, card.querySelector('.oc-e-alt-titles') ? card.querySelector('.oc-e-alt-titles').value : ''),
-            isChinese: Boolean(card.querySelector('.oc-e-chinese') && card.querySelector('.oc-e-chinese').checked),
-            isMovie: Boolean(card.querySelector('.oc-e-movie') && card.querySelector('.oc-e-movie').checked),
-            isShortened: Boolean(card.querySelector('.oc-e-shortened') && card.querySelector('.oc-e-shortened').checked),
-            uncertainPerformer: Boolean(card.querySelector('.oc-e-uncertain-performer')?.checked),
-            uncertainDirector: Boolean(card.querySelector('.oc-e-uncertain-director')?.checked),
-            uncertainImage: Boolean(card.querySelector('.oc-e-uncertain-image')?.checked)
-          };
-
-          if (imageChanged) {
-            updatedEntry.fallbackImage = nextImage ? previousFallbackImage : '';
-          }
-
-          try {
-            await window.OPED_DB.updateOpening(id, updatedEntry);
-            await saveOpeningExtras(id, { franchises: updatedEntry.franchises, alternativeTitles: updatedEntry.alternativeTitles, isChinese: updatedEntry.isChinese, isMovie: updatedEntry.isMovie, isShortened: updatedEntry.isShortened, sameSongGroupId: updatedEntry.sameSongGroupId, sameSongTitle: updatedEntry.sameSongTitle, uncertainPerformer: updatedEntry.uncertainPerformer, uncertainDirector: updatedEntry.uncertainDirector, uncertainImage: updatedEntry.uncertainImage });
-
-            Object.assign(entry, updatedEntry);
-            touchEntryCache(entry);
-            editingId = null;
-            populateFilterOptions();
-            render();
-
-            if (!imageChanged) {
-              setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì');
-              return;
-            }
-
-            if (!nextImage) {
-              setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì');
-              if (previousFallbackImage) void (async () => {
-                try {
-                  await deleteFallbackImageCopy(previousFallbackImage);
-                } catch (deleteError) {
-                  console.error('Old fallback image deletion failed', deleteError);
-                  setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã, –Ω–æ —Å—Ç–∞—Ä—É—é —Ä–µ–∑–µ—Ä–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É —É–¥–∞–ª–∏—Ç—å –Ω–µ —É–¥–∞–ª–æ—Å—å: ' + (deleteError.message || deleteError), true);
-                }
-              })();
-              return;
-            }
-
-            setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì –ù–æ–≤–∞—è —Ä–µ–∑–µ—Ä–≤–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ —Å–æ–∑–¥–∞—ë—Ç—Å—è –≤ —Ñ–æ–Ω–µ‚Ä¶');
-            void (async () => {
-              try {
-                const createdFallbackImage = await createFallbackImageCopy(nextImage, title, newType);
-                await window.OPED_DB.updateOpeningFallbackImage(id, createdFallbackImage);
-                entry.fallbackImage = createdFallbackImage;
-                touchEntryCache(entry);
-
-                if (previousFallbackImage && previousFallbackImage !== createdFallbackImage) {
-                  try {
-                    await deleteFallbackImageCopy(previousFallbackImage);
-                  } catch (deleteError) {
-                    console.error('Old fallback image deletion failed', deleteError);
-                    setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã, –Ω–æ —Å—Ç–∞—Ä—É—é —Ä–µ–∑–µ—Ä–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É —É–¥–∞–ª–∏—Ç—å –Ω–µ —É–¥–∞–ª–æ—Å—å: ' + (deleteError.message || deleteError), true);
-                    return;
-                  }
-                }
-                setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è –∏ –Ω–æ–≤–∞—è —Ä–µ–∑–µ—Ä–≤–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì');
-              } catch (backupError) {
-                console.warn('Edited track fallback image upload failed', backupError);
-                setStatus('–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω–µ–Ω—ã ‚úì –ù–æ –Ω–æ–≤—É—é —Ä–µ–∑–µ—Ä–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É —Å–æ–∑–¥–∞—Ç—å –Ω–µ —É–¥–∞–ª–æ—Å—å: ' + (backupError.message || backupError), true);
-              }
-            })();
-          } catch (err) {
-            console.error(err);
-            setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –∏–∑–º–µ–Ω–µ–Ω–∏—è: ' + (err.message || err), true);
-          }
-        });
-      });
-
-      listContainer.querySelectorAll('[data-action="delete"]').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          if (!ensureCatalogAdmin()) return;
-          const target = e.target;
-          const id = target.getAttribute('data-id');
-          if (target.getAttribute('data-confirm') !== '1') {
-            target.setAttribute('data-confirm', '1');
-            target.textContent = '—Ç–æ—á–Ω–æ —É–¥–∞–ª–∏—Ç—å?';
-            target.style.color = '#FF2E63';
-            if (target._resetTimer) clearTimeout(target._resetTimer);
-            target._resetTimer = setTimeout(() => {
-              target.setAttribute('data-confirm', '0');
-              target.textContent = '—É–¥–∞–ª–∏—Ç—å —Ç—Ä–µ–∫';
-              target.style.color = '';
-            }, 3000);
-            return;
-          }
-          const entryToDelete = entriesById.get(String(id));
-          const fallbackToDelete = String(entryToDelete && entryToDelete.fallbackImage || '').trim();
-          try {
-            await window.OPED_DB.deleteOpening(id);
-            entries = entries.filter(x => x.id !== id);
-            populateFilterOptions();
-            render();
-
-            if (fallbackToDelete) {
-              try {
-                const removed = await deleteFallbackImageCopy(fallbackToDelete);
-                setStatus(removed
-                  ? '–¢—Ä–µ–∫ –∏ —Ä–µ–∑–µ—Ä–≤–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ —É–¥–∞–ª–µ–Ω—ã ‚úì'
-                  : '–¢—Ä–µ–∫ —É–¥–∞–ª—ë–Ω. –†–µ–∑–µ—Ä–≤–Ω–∞—è —Å—Å—ã–ª–∫–∞ –±—ã–ª–∞ –≤–Ω–µ—à–Ω–µ–π, —Ñ–∞–π–ª –Ω–µ —É–¥–∞–ª—è–ª—Å—è.');
-              } catch (deleteError) {
-                console.error('Deleted track fallback cleanup failed', deleteError);
-                setStatus('–¢—Ä–µ–∫ —É–¥–∞–ª—ë–Ω, –Ω–æ —Ä–µ–∑–µ—Ä–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É —É–¥–∞–ª–∏—Ç—å –Ω–µ —É–¥–∞–ª–æ—Å—å: ' + (deleteError.message || deleteError), true);
-              }
-            } else {
-              setStatus('–£–¥–∞–ª–µ–Ω–æ ‚úì');
-            }
-          } catch (err) {
-            console.error(err);
-            setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å.', true);
-          }
-        });
-      });
-      renderSeasonViews();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'tier') renderTierList();
-      if (activeTab === 'stats') renderStatsPage();
-      if (activeTab === 'top100') renderGlobalTop100();
-    }
-
-
-    document.querySelectorAll('.oc-tab-btn').forEach(btn => {
-      btn.addEventListener('click', event => {
-        const tab = btn.dataset.tab;
-        if ((!tab || tab !== 'chart') && !accessLevel) {
-          event.preventDefault();
-          showAuthModal('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –æ—Ç–∫—Ä—ã—Ç—å —ç—Ç–æ—Ç —Ä–∞–∑–¥–µ–ª.');
-          return;
-        }
-        if (tab) {
-          switchTab(tab);
-        }
-      });
-    });
-
-    document.querySelectorAll('[data-entity-home]').forEach(card => {
-      card.addEventListener('click', () => {
-        if (!requireAccount('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –æ—Ç–∫—Ä—ã—Ç—å –∫–æ–ª–ª–µ–∫—Ü–∏–∏.')) return;
-        switchTab('entity-' + card.getAttribute('data-entity-home'));
-      });
-    });
-
-    if (entityCreateForm) entityCreateForm.addEventListener('submit', saveEntityAlbum);
-    if (entityFiltersToggle) entityFiltersToggle.addEventListener('click', () => {
-      entityFiltersExpanded = !entityFiltersExpanded;
-      renderEntityAlbums();
-    });
-    entityAlbumSearchInput?.addEventListener('input', () => {
-      entityCardRenderLimit = 40;
-      renderEntityAlbums();
-    });
-    entityAlbumSortSelect?.addEventListener('change', () => {
-      entityCardRenderLimit = 40;
-      renderEntityAlbums();
-    });
-    if (entityBackBtn) entityBackBtn.addEventListener('click', () => {
-      if (activeEntityCardId) {
-        activeEntityCardId = '';
-        resetEntityAlbumFilters();
-        renderEntityAlbums();
-      } else {
-        switchTab('chart');
-      }
-    });
-    [entitySearchInput, entityTrackTypeSelect, entityTrackSortSelect, entityFromYearSelect, entityFromSeasonSelect, entityToYearSelect, entityToSeasonSelect, entityProgressSelect].forEach(el => {
-      if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => {
-        entityTrackRenderLimit = 30;
-        renderEntityAlbums();
-      });
-    });
-    if (entityRateAllBtn) entityRateAllBtn.addEventListener('click', startEntityRating);
-    if (entityPanel) entityPanel.addEventListener('click', async event => {
-      const open = event.target.closest('[data-entity-open]');
-      if (open && !event.target.closest('[data-entity-delete]')) {
-        activeEntityCardId = open.getAttribute('data-entity-open');
-        entityFiltersExpanded = false;
-        entityTrackRenderLimit = 30;
-        renderEntityAlbums();
-        return;
-      }
-      const rate = event.target.closest('[data-entity-rate]');
-      if (rate) { startOpeningRating(rate.getAttribute('data-entity-rate')); return; }
-      const remove = event.target.closest('[data-entity-delete]');
-      if (remove && isCatalogAdmin() && confirm('–£–¥–∞–ª–∏—Ç—å —ç—Ç–æ—Ç –∞–ª—å–±–æ–º?')) {
-        try { await window.OPED_DB.deleteEntityCard(remove.getAttribute('data-entity-delete')); setStatus('–ê–ª—å–±–æ–º —É–¥–∞–ª—ë–Ω.'); }
-        catch (error) { console.error(error); setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —É–¥–∞–ª–∏—Ç—å –∞–ª—å–±–æ–º.', true); }
-      }
-    });
-
-    seasonYearsEl.addEventListener('click', (e) => {
-      const rateBtn = e.target.closest('[data-season-rate]');
-      if (rateBtn && !rateBtn.disabled) {
-        selectedSeason = {
-          year: Number(rateBtn.getAttribute('data-year')),
-          season: rateBtn.getAttribute('data-season')
-        };
-        expandedYear = selectedSeason.year;
-        renderSeasonViews();
-        startSeasonRating();
-        return;
-      }
-
-      const yearBtn = e.target.closest('[data-season-year]');
-      if (yearBtn) {
-        const year = Number(yearBtn.getAttribute('data-season-year'));
-        expandedYear = expandedYear === year ? null : year;
-        renderSeasonViews();
-        return;
-      }
-
-      const seasonBtn = e.target.closest('[data-season-select]');
-      if (seasonBtn && !seasonBtn.disabled) {
-        selectedSeason = {
-          year: Number(seasonBtn.getAttribute('data-year')),
-          season: seasonBtn.getAttribute('data-season')
-        };
-        expandedYear = selectedSeason.year;
-        renderSeasonViews();
-      }
-    });
-
-    seasonRateBtn.addEventListener('click', () => startSeasonRating(false));
-    if (seasonRateAllBtn) seasonRateAllBtn.addEventListener('click', () => startSeasonRating(true));
-    if (seasonPrevBtn) seasonPrevBtn.addEventListener('click', goToPreviousSeason);
-
-    document.querySelectorAll('[data-season-type]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        seasonType = btn.dataset.seasonType === 'ED' ? 'ED' : 'OP';
-        renderSeasonViews();
-      });
-    });
-
-    if (seasonTierBtn) {
-      seasonTierBtn.addEventListener('click', () => {
-        if (!selectedSeason) return;
-        tierSelection = { type: seasonType, year: selectedSeason.year, season: selectedSeason.season };
-        switchTab('tier');
-      });
-    }
-
-    seasonListEl.addEventListener('click', (e) => {
-      const open = e.target.closest('[data-action="open-card"]');
-      if (open) { openCardModal(open.getAttribute('data-id')); return; }
-      const basketBtn = e.target.closest('[data-basket-add]');
-      if (basketBtn) {
-        const entry = entriesById.get(String(basketBtn.getAttribute('data-basket-add')));
-        toggleEntryInEventBasket(entry);
-        return;
-      }
-      const btn = e.target.closest('[data-op-rate]');
-      if (!btn) return;
-      startOpeningRating(btn.getAttribute('data-op-rate'));
-    });
-
-    evaluatorEl.addEventListener('click', async (e) => {
-      const action = e.target.getAttribute('data-eval-action');
-      if (!action) return;
-      if (action === 'close') closeEvaluator();
-      if (action === 'blind-start') startBlindRerating();
-      if (action === 'blind-resume') resumeBlindRerating();
-      if (action === 'blind-replace') await resolveBlindRating('replace');
-      if (action === 'blind-keep') await resolveBlindRating('keep');
-      if (action === 'blind-skip') await resolveBlindRating('skip');
-      if (action === 'skip') {
-        if (evaluatorMode === 'single') closeEvaluator();
-        else {
-          if (evaluatorMode === 'blind' && blindSessionStats) blindSessionStats.skipped += 1;
-          seasonQueueIndex += 1;
-          if (evaluatorMode === 'blind') persistBlindSession();
-          renderEvaluator();
-        }
-      }
-      if (action === 'delete-current') {
-        const entry = seasonQueue[seasonQueueIndex];
-        if (entry && window.confirm(isPersonalScale() ? '–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ—Ç–º–µ—Ç–∫—É 1‚Äì5?' : '–£–¥–∞–ª–∏—Ç—å —Ç–≤–æ—é –æ—Ü–µ–Ω–∫—É?')) {
-          await deleteCurrentRating(entry.id, myName, isPersonalScale() ? 'personal' : 'public');
-          if (evaluatorMode === 'single') closeEvaluator();
-          else { seasonQueueIndex += 1; renderEvaluator(); }
-        }
-      }
-      if (action === 'toggle-candidate') {
-        const entry = seasonQueue[seasonQueueIndex];
-        const button = e.target.closest('[data-eval-action="toggle-candidate"]');
-        if (!entry || !button) return;
-        button.disabled = true;
-        try {
-          const active = await window.OC_APP_BRIDGE?.toggleTopCandidate?.(entry.id, entry.type);
-          button.classList.toggle('active', Boolean(active));
-          button.textContent = active ? '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100 ‚úì' : '–ö–∞–Ω–¥–∏–¥–∞—Ç –≤ —Ç–æ–ø‚Äë100';
-        } catch (error) {
-          setStatus(error?.message || '–ù–µ —É–¥–∞–ª–æ—Å—å –∏–∑–º–µ–Ω–∏—Ç—å –∫–∞–Ω–¥–∏–¥–∞—Ç–∞.', true);
-        } finally {
-          button.disabled = false;
-        }
-      }
-      if (action === 'save-next') await saveEvaluatorScore();
-    });
-
-    nameInput.addEventListener('focus', () => { if (!requireAccount('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –≤—ã–±—Ä–∞—Ç—å –Ω–∏–∫.')) { nameInput.blur(); return; } nameInput.dataset.accountBeforeEdit = myName || ''; });
-    nameInput.addEventListener('change', (e) => {
-      const val = e.target.value.trim();
-      if (!val || normalizedAccountName(val) === normalizedAccountName(myName)) {
-        nameInput.value = myName || '';
-        return;
-      }
-      showNameModal('–î–ª—è –ø–µ—Ä–µ–∫–ª—é—á–µ–Ω–∏—è –∞–∫–∫–∞—É–Ω—Ç–∞ –ø–æ–¥—Ç–≤–µ—Ä–¥–∏ –≤—Ö–æ–¥.', val);
-    });
-
-    modalNameSave.addEventListener('click', () => commitNickname(modalNameInput.value));
-    if (modalNameClose) modalNameClose.addEventListener('click', hideNameModal);
-    modalNameInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commitNickname(modalNameInput.value);
-      }
-    });
-    if (modalAccountPass) modalAccountPass.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commitNickname(modalNameInput.value);
-      }
-    });
-    if (forgotPasswordBtn) forgotPasswordBtn.addEventListener('click', async () => {
-      if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
-        modalNameError.textContent = PERSONAL_ACCOUNT_DISABLED_MESSAGE;
-        return;
-      }
-      const email = String(modalAccountEmail?.value || '').trim();
-      if (!email) { modalNameError.textContent = '–°–Ω–∞—á–∞–ª–∞ –≤–≤–µ–¥–∏ email –∞–∫–∫–∞—É–Ω—Ç–∞.'; return; }
-      try {
-        await window.OPED_DB.resetAccountPassword(email);
-        modalNameError.textContent = '–ü–∏—Å—å–º–æ –¥–ª—è –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∏—è –æ—Ç–ø—Ä–∞–≤–ª–µ–Ω–æ ‚úì';
-      } catch (error) {
-        modalNameError.textContent = '–ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–ø—Ä–∞–≤–∏—Ç—å –ø–∏—Å—å–º–æ: ' + (error?.message || error);
-      }
-    });
-
-    avatarPicker.innerHTML = AVATAR_OPTIONS.map(em => `<button type="button" data-emoji="${em}">${em}</button>`).join('')
-      + `<div class="oc-avatar-custom">
-          <input type="text" id="oc-avatar-custom-input" placeholder="—Å–≤–æ–π —ç–º–æ–¥–∑–∏ (üì± –∫–ª–∞–≤–∏–∞—Ç—É—Ä–∞ —ç–º–æ–¥–∑–∏)" maxlength="8" />
-          <button type="button" id="oc-avatar-custom-btn">OK</button>
-        </div>`;
-
-    avatarBtn.addEventListener('click', (e) => { e.stopPropagation(); if (!requireAccount('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –∏–∑–º–µ–Ω–∏—Ç—å –∞–≤–∞—Ç–∞—Ä.')) return; avatarPicker.classList.toggle('hidden'); });
-    if (dailyBell) dailyBell.addEventListener('click', () => {
-      if (!requireAccount('–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç, —á—Ç–æ–±—ã –æ—Ç–∫—Ä—ã—Ç—å –µ–∂–µ–¥–Ω–µ–≤–Ω—É—é –æ—Ü–µ–Ω–∫—É.')) return;
-      const state = dailyCurrentState(myName);
-      if (state.settings.enabled && state.available && !state.done) startDailyRating().catch(error => { console.error(error); setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–∫—Ä—ã—Ç—å –¥–µ–π–ª–∏–∫.', true); });
-      else { switchTab('profile'); renderDailyProfilePanel(); }
-    });
-
-    avatarPicker.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button[data-emoji]');
-      if (!btn) return;
-      avatarPicker.classList.add('hidden');
-      if (await saveAvatar(btn.getAttribute('data-emoji'))) setStatus('–ê–≤–∞—Ç–∞—Ä —Å–æ—Ö—Ä–∞–Ω—ë–Ω –≤ –∞–∫–∫–∞—É–Ω—Ç–µ ‚úì');
-    });
-
-    async function applyCustomAvatar() {
-      const input = $('#oc-avatar-custom-input');
-      const val = input.value.trim();
-      if (!val) return;
-      avatarPicker.classList.add('hidden');
-      input.value = '';
-      if (await saveAvatar(val)) setStatus('–ê–≤–∞—Ç–∞—Ä —Å–æ—Ö—Ä–∞–Ω—ë–Ω –≤ –∞–∫–∫–∞—É–Ω—Ç–µ ‚úì');
-    }
-
-    avatarPicker.addEventListener('click', (e) => { if (e.target.id === 'oc-avatar-custom-btn') applyCustomAvatar(); });
-    avatarPicker.addEventListener('keydown', (e) => {
-      if (e.target.id === 'oc-avatar-custom-input' && e.key === 'Enter') {
-        e.preventDefault();
-        applyCustomAvatar();
-      }
-    });
-    avatarPicker.addEventListener('click', (e) => { if (e.target.id === 'oc-avatar-custom-input') e.stopPropagation(); });
-    document.addEventListener('click', (e) => {
-      if (!avatarPicker.contains(e.target) && e.target !== avatarBtn) avatarPicker.classList.add('hidden');
-    });
-
-
-    try { localStorage.removeItem('op-ed-anisong-import-tabs-v1'); } catch (_) {}
-
-
-
-    if (franchiseRepairBtn) franchiseRepairBtn.addEventListener('click', repairBrokenFranchises);
-    if (franchiseRepairModal) {
-      franchiseRepairModal.addEventListener('click', (e) => {
-        if (e.target === franchiseRepairModal || e.target.closest('[data-franchise-repair-close]')) {
-          closeFranchiseRepairModal();
-          return;
-        }
-        const selectAll = e.target.closest('[data-franchise-repair-select-all]');
-        if (selectAll) {
-          franchiseRepairModal.querySelectorAll('.oc-franchise-repair-check').forEach(box => { box.checked = selectAll.checked; });
-          return;
-        }
-        if (e.target.closest('[data-franchise-repair-apply]')) applyFranchiseRepairsFromModal();
-      });
-    }
-
-
-    function getImageUploadSecret() {
-      let secret = '';
-      try {
-        localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY);
-        secret = sessionStorage.getItem(IMAGE_UPLOAD_SECRET_KEY) || '';
-      } catch (_) {}
-      if (!secret) {
-        secret = String(window.prompt('–í–≤–µ–¥–∏—Ç–µ UPLOAD_SECRET –∏–∑ Cloudflare. –û–Ω —Å–æ—Ö—Ä–∞–Ω–∏—Ç—Å—è —Ç–æ–ª—å–∫–æ –¥–æ –∑–∞–∫—Ä—ã—Ç–∏—è –≤–∫–ª–∞–¥–∫–∏.') || '').trim();
-        if (secret) {
-          try { sessionStorage.setItem(IMAGE_UPLOAD_SECRET_KEY, secret); } catch (_) {}
-        }
-      }
-      return secret;
-    }
-
-    function forgetImageUploadSecret() {
-      try { localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
-      try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
-      imageMigrationStatus('–°–æ—Ö—Ä–∞–Ω—ë–Ω–Ω—ã–π –ø–∞—Ä–æ–ª—å —É–¥–∞–ª—ë–Ω —Å —ç—Ç–æ–≥–æ —É—Å—Ç—Ä–æ–π—Å—Ç–≤–∞.');
-    }
-
-    function compactImageFileName(title, type, source) {
-      const base = String(title || '').toLowerCase().normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '').slice(0, 64) || 'track';
-      let hash = 2166136261;
-      const value = [title, type, source].join('|');
-      for (let i = 0; i < value.length; i++) {
-        hash ^= value.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-      }
-      return 'images/' + base + '-' + type.toLowerCase() + '-' + (hash >>> 0).toString(36) + '.webp';
-    }
-
-    async function workerImageRequest(path, secret, body, responseType) {
-      const controller = new AbortController();
-      const timeoutMs = path === '/proxy-image' ? 20000 : 30000;
-      const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await fetch(IMAGE_UPLOAD_WORKER + path, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Upload-Secret': secret },
-          body: JSON.stringify(body),
-          signal: controller.signal
-        });
-        if (!response.ok) {
-          let message = 'HTTP ' + response.status;
-          try { const data = await response.json(); message = data.error || message; } catch (_) {}
-          if (response.status === 401) {
-            try { localStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
-            try { sessionStorage.removeItem(IMAGE_UPLOAD_SECRET_KEY); } catch (_) {}
-          }
-          throw new Error(message);
-        }
-        return responseType === 'blob' ? await response.blob() : await response.json();
-      } catch (error) {
-        if (error && error.name === 'AbortError') {
-          throw new Error(path === '/proxy-image'
-            ? '–ò—Å—Ç–æ—á–Ω–∏–∫ –∫–∞—Ä—Ç–∏–Ω–∫–∏ –Ω–µ –æ—Ç–≤–µ—Ç–∏–ª –∑–∞ 20 —Å–µ–∫—É–Ω–¥'
-            : '–ó–∞–≥—Ä—É–∑–∫–∞ —Ä–µ–∑–µ—Ä–≤–Ω–æ–π –∫–∞—Ä—Ç–∏–Ω–∫–∏ –Ω–µ –∑–∞–≤–µ—Ä—à–∏–ª–∞—Å—å –∑–∞ 30 —Å–µ–∫—É–Ω–¥');
-        }
-        throw error;
-      } finally {
-        window.clearTimeout(timeout);
-      }
-    }
-
-    function canvasToWebp(canvas, quality) {
-      return new Promise((resolve, reject) => {
-        canvas.toBlob(blob => {
-          if (!blob || blob.type !== 'image/webp') reject(new Error('–ë—Ä–∞—É–∑–µ—Ä –Ω–µ —Å–º–æ–≥ —Å–∂–∞—Ç—å –∫–∞—Ä—Ç–∏–Ω–∫—É –≤ WebP'));
-          else resolve(blob);
-        }, 'image/webp', quality);
-      });
-    }
-
-    function blobToBase64(blob) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
-        reader.onerror = () => reject(new Error('–ù–µ —É–¥–∞–ª–æ—Å—å –ø—Ä–æ—á–∏—Ç–∞—Ç—å —Å–∂–∞—Ç—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É'));
-        reader.readAsDataURL(blob);
-      });
-    }
-
-    async function directImageRequest(imageUrl) {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 12000);
-      try {
-        const response = await fetch(imageUrl, {
-          method: 'GET',
-          mode: 'cors',
-          credentials: 'omit',
-          cache: 'no-store',
-          referrerPolicy: 'no-referrer',
-          headers: { 'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8' },
-          signal: controller.signal
-        });
-        if (!response.ok) throw new Error('–∏—Å—Ç–æ—á–Ω–∏–∫ –≤–µ—Ä–Ω—É–ª HTTP ' + response.status);
-        const type = String(response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
-        if (!type.startsWith('image/') || type === 'image/svg+xml') {
-          throw new Error('—Å—Å—ã–ª–∫–∞ –Ω–µ –≤–µ–¥—ë—Ç –Ω–∞ —Ä–∞—Å—Ç—Ä–æ–≤–æ–µ –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ');
-        }
-        const announced = Number(response.headers.get('Content-Length') || 0);
-        if (announced > 12 * 1024 * 1024) throw new Error('–∏—Å—Ö–æ–¥–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ –±–æ–ª—å—à–µ 12 –ú–ë');
-        const blob = await response.blob();
-        if (blob.size > 12 * 1024 * 1024) throw new Error('–∏—Å—Ö–æ–¥–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ –±–æ–ª—å—à–µ 12 –ú–ë');
-        return blob;
-      } catch (error) {
-        if (error && error.name === 'AbortError') throw new Error('–∏—Å—Ç–æ—á–Ω–∏–∫ –Ω–µ –æ—Ç–≤–µ—Ç–∏–ª –∑–∞ 12 —Å–µ–∫—É–Ω–¥');
-        throw error;
-      } finally {
-        window.clearTimeout(timeout);
-      }
-    }
-
-    async function downloadFallbackSource(imageUrl, secret) {
-      let directError = null;
-      try {
-        return { blob: await directImageRequest(imageUrl), route: '–Ω–∞–ø—Ä—è–º—É—é —á–µ—Ä–µ–∑ –±—Ä–∞—É–∑–µ—Ä' };
-      } catch (error) {
-        directError = error;
-      }
-      try {
-        return {
-          blob: await workerImageRequest('/proxy-image', secret, { url: imageUrl }, 'blob'),
-          route: '—á–µ—Ä–µ–∑ Cloudflare Worker'
-        };
-      } catch (workerError) {
-        const directMessage = directError && directError.message ? directError.message : '–Ω–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –æ—à–∏–±–∫–∞';
-        const workerMessage = workerError && workerError.message ? workerError.message : '–Ω–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –æ—à–∏–±–∫–∞';
-        throw new Error('–Ω–∞–ø—Ä—è–º—É—é: ' + directMessage + '; —á–µ—Ä–µ–∑ Worker: ' + workerMessage);
-      }
-    }
-
-    async function createFallbackImageCopy(imageUrl, title, type, onProgress) {
-      let stage = '–ø—Ä–æ–≤–µ—Ä–∫–∞ –ø–∞—Ä–æ–ª—è –∑–∞–≥—Ä—É–∑—á–∏–∫–∞';
-      let stageStartedAt = Date.now();
-      let bitmap = null;
-      const report = (state, details) => {
-        if (typeof onProgress !== 'function') return;
-        onProgress({
-          state,
-          stage,
-          details: details || '',
-          elapsedMs: Math.max(0, Date.now() - stageStartedAt)
-        });
-      };
-      const beginStage = nextStage => {
-        stage = nextStage;
-        stageStartedAt = Date.now();
-        report('start');
-      };
-      const finishStage = details => report('done', details);
-      try {
-        beginStage('–ø—Ä–æ–≤–µ—Ä–∫–∞ –ø–∞—Ä–æ–ª—è –∑–∞–≥—Ä—É–∑—á–∏–∫–∞');
-        const secret = getImageUploadSecret();
-        if (!secret) throw new Error('–Ω–µ –≤–≤–µ–¥—ë–Ω UPLOAD_SECRET');
-        finishStage();
-
-        beginStage('—Å–∫–∞—á–∏–≤–∞–Ω–∏–µ –æ—Å–Ω–æ–≤–Ω–æ–π –∫–∞—Ä—Ç–∏–Ω–∫–∏');
-        setStatus('–°–∫–∞—á–∏–≤–∞—é –æ—Å–Ω–æ–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É –¥–ª—è —Ä–µ–∑–µ—Ä–≤–Ω–æ–π –∫–æ–ø–∏–∏‚Ä¶');
-        const source = await downloadFallbackSource(imageUrl, secret);
-        const sourceBlob = source.blob;
-        finishStage(Math.max(1, Math.round(sourceBlob.size / 1024)) + ' –ö–ë ¬∑ ' + source.route);
-
-        beginStage('–¥–µ–∫–æ–¥–∏—Ä–æ–≤–∞–Ω–∏–µ –∫–∞—Ä—Ç–∏–Ω–∫–∏');
-        setStatus('–ü—Ä–æ–≤–µ—Ä—è—é –∏ –¥–µ–∫–æ–¥–∏—Ä—É—é –æ—Å–Ω–æ–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É‚Ä¶');
-        bitmap = await createImageBitmap(sourceBlob);
-        if (!bitmap.width || !bitmap.height || bitmap.width * bitmap.height > 50000000) {
-          throw new Error('—Å–ª–∏—à–∫–æ–º –±–æ–ª—å—à–æ–µ —Ä–∞–∑—Ä–µ—à–µ–Ω–∏–µ –∏—Å—Ö–æ–¥–Ω–æ–π –∫–∞—Ä—Ç–∏–Ω–∫–∏');
-        }
-        finishStage(bitmap.width + '√ó' + bitmap.height);
-
-        beginStage('—É–º–µ–Ω—å—à–µ–Ω–∏–µ –∫–∞—Ä—Ç–∏–Ω–∫–∏');
-        const maxSide = 1400;
-        const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-        const width = Math.max(1, Math.round(bitmap.width * scale));
-        const height = Math.max(1, Math.round(bitmap.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const context = canvas.getContext('2d', { alpha: false });
-        if (!context) throw new Error('–±—Ä–∞—É–∑–µ—Ä –Ω–µ —Å–º–æ–≥ —Å–æ–∑–¥–∞—Ç—å Canvas');
-        context.fillStyle = '#111';
-        context.fillRect(0, 0, width, height);
-        context.drawImage(bitmap, 0, 0, width, height);
-        bitmap.close();
-        bitmap = null;
-        finishStage(width + '√ó' + height);
-
-        beginStage('—Å–∂–∞—Ç–∏–µ –∫–∞—Ä—Ç–∏–Ω–∫–∏ –≤ WebP');
-        setStatus('–°–∂–∏–º–∞—é –∫–∞—Ä—Ç–∏–Ω–∫—É –≤ WebP‚Ä¶');
-        const webp = await canvasToWebp(canvas, 0.78);
-        finishStage(Math.max(1, Math.round(webp.size / 1024)) + ' –ö–ë');
-
-        beginStage('–ø–æ–¥–≥–æ—Ç–æ–≤–∫–∞ –∫–∞—Ä—Ç–∏–Ω–∫–∏ –∫ –∑–∞–≥—Ä—É–∑–∫–µ');
-        setStatus('–ü–æ–¥–≥–æ—Ç–∞–≤–ª–∏–≤–∞—é —Ä–µ–∑–µ—Ä–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É –∫ –∑–∞–≥—Ä—É–∑–∫–µ‚Ä¶');
-        const contentBase64 = await blobToBase64(webp);
-        const path = compactImageFileName(title, type, imageUrl);
-        finishStage(path);
-
-        beginStage('–∑–∞–≥—Ä—É–∑–∫–∞ —Ä–µ–∑–µ—Ä–≤–Ω–æ–π –∫–∞—Ä—Ç–∏–Ω–∫–∏ –≤ GitHub');
-        setStatus('–ó–∞–≥—Ä—É–∂–∞—é —Ä–µ–∑–µ—Ä–≤–Ω—É—é –∫–∞—Ä—Ç–∏–Ω–∫—É –≤ images/‚Ä¶');
-        await workerImageRequest('/upload', secret, { path, contentBase64 }, 'json');
-        finishStage(path);
-        return path;
-      } catch (error) {
-        if (bitmap) bitmap.close();
-        const message = error && error.message ? error.message : String(error || '–Ω–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –æ—à–∏–±–∫–∞');
-        report('error', message);
-        throw new Error('–ü—Ä–æ–±–ª–µ–º–∞ –Ω–∞ —ç—Ç–∞–ø–µ ¬´' + stage + '¬ª: ' + message);
-      }
-    }
-
-
-    function managedFallbackImagePath(value) {
-      const path = String(value || '').trim().replace(/^\.\//, '');
-      return /^images\/[a-z0-9][a-z0-9-]{0,99}\.webp$/i.test(path) ? path : '';
-    }
-
-    async function removeFallbackImageFromBrowserCache(path) {
-      if (!('caches' in window)) return;
-      const url = new URL(path, document.baseURI).href;
-      const names = await caches.keys();
-      await Promise.all(names
-        .filter(name => name.startsWith('op-ed-images-'))
-        .map(async name => {
-          const cache = await caches.open(name);
-          await cache.delete(url);
-        }));
-    }
-
-    async function deleteFallbackImageCopy(value) {
-      const path = managedFallbackImagePath(value);
-      if (!path) return false;
-      const secret = getImageUploadSecret();
-      if (!secret) throw new Error('–ù–µ –≤–≤–µ–¥—ë–Ω UPLOAD_SECRET');
-      await workerImageRequest('/delete', secret, { path }, 'json');
-      await removeFallbackImageFromBrowserCache(path);
-      return true;
-    }
-
-
-    function existingImageMigrationCandidates() {
-      return entries.filter(entry =>
-        entry && entry.id && String(entry.image || '').trim() && !String(entry.fallbackImage || '').trim()
-      );
-    }
-
-    function imageMigrationStatus(message, error) {
-      const el = $('#oc-image-migration-status');
-      if (el) {
-        el.textContent = message || '';
-        el.style.color = error ? 'var(--pink)' : '';
-      }
-    }
-
-    function appendImageMigrationLog(message, error) {
-      const el = $('#oc-image-migration-log');
-      if (!el) return;
-      const row = document.createElement('div');
-      row.textContent = message;
-      row.style.color = error ? 'var(--pink)' : 'var(--muted)';
-      el.appendChild(row);
-      el.scrollTop = el.scrollHeight;
-    }
-
-    function openImageMigrationModal() {
-      if (!ensureCatalogAdmin()) return;
-      const remaining = existingImageMigrationCandidates().length;
-      imageMigrationStatus('–û—Å—Ç–∞–ª–æ—Å—å –±–µ–∑ —Ä–µ–∑–µ—Ä–≤–Ω–æ–π –∫–æ–ø–∏–∏: ' + remaining);
-      imageMigrationModal.classList.remove('hidden');
-    }
-
-    function closeImageMigrationModal() {
-      if (imageMigrationRunning) {
-        imageMigrationStopRequested = true;
-        imageMigrationStatus('–û—Å—Ç–∞–Ω–∞–≤–ª–∏–≤–∞—é –ø–æ—Å–ª–µ —Ç–µ–∫—É—â–µ–π –∫–∞—Ä—Ç–∏–Ω–∫–∏‚Ä¶');
-        return;
-      }
-      imageMigrationModal.classList.add('hidden');
-    }
-
-    async function runExistingImageMigrationBatch() {
-      if (imageMigrationRunning || !ensureCatalogAdmin()) return;
-      const candidates = existingImageMigrationCandidates().slice(0, 50);
-      if (!candidates.length) {
-        imageMigrationStatus('–í—Å–µ —Å—É—â–µ—Å—Ç–≤—É—é—â–∏–µ –∫–∞—Ä—Ç–∏–Ω–∫–∏ —É–∂–µ –æ–±—Ä–∞–±–æ—Ç–∞–Ω—ã ‚úì');
-        return;
-      }
-      if (!getImageUploadSecret()) {
-        imageMigrationStatus('–ù–µ –≤–≤–µ–¥—ë–Ω UPLOAD_SECRET.', true);
-        return;
-      }
-
-      imageMigrationRunning = true;
-      imageMigrationStopRequested = false;
-      $('#oc-image-migration-start').disabled = true;
-      $('#oc-image-migration-stop').disabled = false;
-      $('#oc-image-migration-log').innerHTML = '';
-      let success = 0;
-      let failed = 0;
-
-      for (let index = 0; index < candidates.length; index++) {
-        if (imageMigrationStopRequested) break;
-        const entry = candidates[index];
-        imageMigrationStatus('–û–±—Ä–∞–±–∞—Ç—ã–≤–∞—é ' + (index + 1) + ' –∏–∑ ' + candidates.length + ': ' + entry.title);
-        appendImageMigrationLog('‚ñ∂ ' + (index + 1) + '/' + candidates.length + ' ¬∑ ' + entry.title);
-        try {
-          const fallbackImage = await createFallbackImageCopy(entry.image, entry.title, entry.type, progress => {
-            const seconds = (progress.elapsedMs / 1000).toFixed(1) + ' —Å';
-            if (progress.state === 'start') {
-              appendImageMigrationLog('  ‚Ä¶ ' + progress.stage);
-            } else if (progress.state === 'done') {
-              appendImageMigrationLog('  ‚úì ' + progress.stage + ' ¬∑ ' + seconds + (progress.details ? ' ¬∑ ' + progress.details : ''));
-            } else {
-              appendImageMigrationLog('  ‚úï ' + progress.stage + ' ¬∑ ' + seconds + ' ¬∑ ' + progress.details, true);
-            }
-          });
-          appendImageMigrationLog('  ‚Ä¶ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∏–µ —Å—Å—ã–ª–∫–∏ fallbackImage –≤ Firebase');
-          const firebaseStartedAt = Date.now();
-          if (typeof window.OPED_DB.updateOpeningFallbackImage === 'function') {
-            await window.OPED_DB.updateOpeningFallbackImage(entry.id, fallbackImage);
-          } else {
-            await window.OPED_DB.updateOpening(entry.id, { ...entry, fallbackImage });
-          }
-          appendImageMigrationLog('  ‚úì —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∏–µ —Å—Å—ã–ª–∫–∏ fallbackImage –≤ Firebase ¬∑ ' + ((Date.now() - firebaseStartedAt) / 1000).toFixed(1) + ' —Å');
-          entry.fallbackImage = fallbackImage;
-          success++;
-          appendImageMigrationLog('‚úì –ì–æ—Ç–æ–≤–æ: ' + entry.title + ' ‚Üí ' + fallbackImage);
-        } catch (error) {
-          failed++;
-          const message = error && error.message ? error.message : '–Ω–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –æ—à–∏–±–∫–∞';
-          appendImageMigrationLog('‚úï ' + entry.title + ': ' + message, true);
-          if (/–Ω–µ–≤–µ—Ä–Ω—ã–π –ø–∞—Ä–æ–ª—å|unauthorized|401/i.test(message)) {
-            imageMigrationStopRequested = true;
-            appendImageMigrationLog('–ü–∞–∫–µ—Ç –æ—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω: –ø—Ä–æ–≤–µ—Ä—å—Ç–µ UPLOAD_SECRET.', true);
-          }
-        }
-      }
-
-      imageMigrationRunning = false;
-      $('#oc-image-migration-start').disabled = false;
-      $('#oc-image-migration-stop').disabled = true;
-      const remaining = existingImageMigrationCandidates().length;
-      imageMigrationStatus(
-        (imageMigrationStopRequested ? '–û—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–æ. ' : '–ü–∞—á–∫–∞ –∑–∞–≤–µ—Ä—à–µ–Ω–∞. ') +
-        '–£—Å–ø–µ—à–Ω–æ: ' + success + ', –æ—à–∏–±–æ–∫: ' + failed + ', –æ—Å—Ç–∞–ª–æ—Å—å: ' + remaining,
-        failed > 0
-      );
-    }
-
-    if (imageMigrationBtn) imageMigrationBtn.addEventListener('click', openImageMigrationModal);
-    if (imageMigrationInlineBtn) imageMigrationInlineBtn.addEventListener('click', openImageMigrationModal);
-    if ($('#oc-image-migration-start')) $('#oc-image-migration-start').addEventListener('click', runExistingImageMigrationBatch);
-    if ($('#oc-image-migration-stop')) $('#oc-image-migration-stop').addEventListener('click', () => {
-      imageMigrationStopRequested = true;
-      imageMigrationStatus('–û—Å—Ç–∞–Ω–∞–≤–ª–∏–≤–∞—é –ø–æ—Å–ª–µ —Ç–µ–∫—É—â–µ–π –∫–∞—Ä—Ç–∏–Ω–∫–∏‚Ä¶');
-    });
-    if ($('#oc-image-migration-forget-secret')) $('#oc-image-migration-forget-secret').addEventListener('click', forgetImageUploadSecret);
-    if (imageMigrationModal) imageMigrationModal.addEventListener('click', event => {
-      if (event.target === imageMigrationModal || event.target.closest('[data-image-migration-close]')) closeImageMigrationModal();
-    });
-
-    $('#oc-add-btn').addEventListener('click', async () => {
-      if (!ensureCatalogAdmin()) return;
-      if (!ensureNickname()) return;
-
-      const title = $('#oc-add-title').value.trim();
-      const type = $('#oc-add-type').value;
-      const yearRaw = $('#oc-add-year').value.trim();
-      const year = yearRaw ? parseInt(yearRaw, 10) : null;
-      const season = $('#oc-add-season').value;
-      const studios = parseList($('#oc-add-studio').value);
-      const directors = parseList($('#oc-add-director').value);
-      const performers = parseList($('#oc-add-performer').value);
-      const sameSong = sameSongFields($('#oc-add-same-song')?.value);
-      const franchises = franchisesForSave($('#oc-add-franchise').value);
-      const alternativeTitles = alternativeTitlesForSave(title, $('#oc-add-alt-titles') ? $('#oc-add-alt-titles').value : '');
-      const image = $('#oc-add-image').value.trim();
-      let fallbackImage = $('#oc-add-fallback-image').value.trim();
-      const makeImageBackup = Boolean($('#oc-add-backup-image') && $('#oc-add-backup-image').checked);
-      const link = $('#oc-add-link').value.trim();
-      const isChinese = Boolean($('#oc-add-chinese') && $('#oc-add-chinese').checked);
-      const isMovie = Boolean($('#oc-add-movie') && $('#oc-add-movie').checked);
-      const isShortened = Boolean($('#oc-add-shortened') && $('#oc-add-shortened').checked);
-      const uncertainPerformer = Boolean($('#oc-add-uncertain-performer')?.checked);
-      const uncertainDirector = Boolean($('#oc-add-uncertain-director')?.checked);
-      const uncertainImage = Boolean($('#oc-add-uncertain-image')?.checked);
-
-      const addEntry = { title, type, year, season, studios, directors, performers, franchises, image, link };
-      const missingFields = missingAddFormFields(addEntry);
-      if (missingFields.length) {
-        showMissingFieldsModal(missingFields);
-        return;
-      }
-      if (isDuplicateTitle(title, type, null)) { setStatus(`–¢–∞–∫–æ–π ${type} —É–∂–µ –µ—Å—Ç—å. OP –∏ ED –ø—Ä–æ–≤–µ—Ä—è—é—Ç—Å—è –æ—Ç–¥–µ–ª—å–Ω–æ.`, true); return; }
-      if (!(await confirmSimilarTitleIfNeeded(title, type, null))) {
-        setStatus('–î–æ–±–∞–≤–ª–µ–Ω–∏–µ –æ—Ç–º–µ–Ω–µ–Ω–æ: –ø–æ—Ö–æ–∂–µ –Ω–∞ –¥—É–±–ª—å.');
-        return;
-      }
-
-      try {
-        const createdRef = await window.OPED_DB.addOpening({
-          title,
-          type,
-          year,
-          season,
-          studios,
-          directors,
-          performers,
-          ...sameSong,
-          franchises,
-          alternativeTitles,
-          image,
-          fallbackImage,
-          link,
-          isChinese,
-          isMovie,
-          isShortened,
-          uncertainPerformer,
-          uncertainDirector,
-          uncertainImage,
-          notes: '',
-          createdBy: myName
-        });
-        if (createdRef && createdRef.id) await saveOpeningExtras(createdRef.id, { franchises, alternativeTitles, isChinese, isMovie, isShortened, uncertainPerformer, uncertainDirector, uncertainImage, ...sameSong });
-        try { localStorage.setItem('op-ed-last-added-title-v1', title); } catch (_) {}
-        window.OC_ADD_FIELD_HISTORY?.capture?.();
-
-        const resetAddControl = (id, value, checked) => {
-          if (window.OC_ADD_FIELD_PINS?.isPinned?.(id)) return;
-          const control = $('#' + id);
-          if (!control) return;
-          if (control.type === 'checkbox') control.checked = Boolean(checked);
-          else {
-            control.value = value;
-            control.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-        };
-        resetAddControl('oc-add-title', '');
-        resetAddControl('oc-add-type', 'OP');
-        resetAddControl('oc-add-year', '');
-        resetAddControl('oc-add-season', '');
-        resetAddControl('oc-add-studio', '');
-        resetAddControl('oc-add-director', '');
-        resetAddControl('oc-add-performer', '');
-        resetAddControl('oc-add-same-song', '');
-        resetAddControl('oc-add-franchise', '');
-        resetAddControl('oc-add-alt-titles', '');
-        resetAddControl('oc-add-image', '');
-        resetAddControl('oc-add-fallback-image', '');
-        resetAddControl('oc-add-link', '');
-        resetAddControl('oc-add-chinese', '', false);
-        resetAddControl('oc-add-movie', '', false);
-        resetAddControl('oc-add-shortened', '', false);
-        ['oc-add-uncertain-performer', 'oc-add-uncertain-director', 'oc-add-uncertain-image'].forEach(id => {
-          const control = $('#' + id);
-          if (control) {
-            control.checked = false;
-            control.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        });
-        resetAddControl('oc-add-backup-image', '', true);
-
-        const shouldCreateBackup = Boolean(image && makeImageBackup && !fallbackImage && createdRef && createdRef.id);
-        if (!shouldCreateBackup) {
-          setStatus('–¢—Ä–µ–∫ –¥–æ–±–∞–≤–ª–µ–Ω ‚úì');
-          return;
-        }
-
-        setStatus('–¢—Ä–µ–∫ –¥–æ–±–∞–≤–ª–µ–Ω ‚úì –†–µ–∑–µ—Ä–≤–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ —Å–æ–∑–¥–∞—ë—Ç—Å—è –≤ —Ñ–æ–Ω–µ‚Ä¶');
-        void (async () => {
-          try {
-            const createdFallbackImage = await createFallbackImageCopy(image, title, type);
-            await window.OPED_DB.updateOpeningFallbackImage(createdRef.id, createdFallbackImage);
-            setStatus('–¢—Ä–µ–∫ –∏ —Ä–µ–∑–µ—Ä–≤–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ –¥–æ–±–∞–≤–ª–µ–Ω—ã ‚úì');
-          } catch (backupError) {
-            console.warn('Fallback image upload failed', backupError);
-            const message = backupError && backupError.message ? backupError.message : '–Ω–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –æ—à–∏–±–∫–∞';
-            setStatus('–¢—Ä–µ–∫ –¥–æ–±–∞–≤–ª–µ–Ω ‚úì –ù–æ –∑–∞–ø–∞—Å–Ω–∞—è –∫–∞—Ä—Ç–∏–Ω–∫–∞ –Ω–µ —Å–æ–∑–¥–∞–Ω–∞: ' + message, true);
-          }
-        })();
-      } catch (err) {
-        console.error(err);
-        const message = err && err.message ? err.message : '–Ω–µ–∏–∑–≤–µ—Å—Ç–Ω–∞—è –æ—à–∏–±–∫–∞';
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å –¥–æ–±–∞–≤–∏—Ç—å —Ç—Ä–µ–∫: ' + message, true);
-      }
-    });
-
-    function normalizeMainFilterRange() {
-      if (!filters.fromYear || !filters.toYear) return;
-      const start = Number(filters.fromYear) * 4 + SEASON_ORDER.indexOf(filters.fromSeason);
-      const end = Number(filters.toYear) * 4 + SEASON_ORDER.indexOf(filters.toSeason);
-      if (start <= end) return;
-      [filters.fromYear, filters.toYear] = [filters.toYear, filters.fromYear];
-      [filters.fromSeason, filters.toSeason] = [filters.toSeason, filters.fromSeason];
-    }
-
-    function applyFilterChange() {
-      normalizeMainFilterRange();
-      persistFilterStates();
-      chartPage = 1;
-      profileTopPage = { OP: 1, ED: 1 };
-      allRatingsPage = { OP: 1, ED: 1 };
-      syncFilterControls();
-      render();
-      if (activeTab === 'profile') renderProfile();
-    }
-
-    const debouncedFilterChange = makeDebounced(applyFilterChange, 250);
-
-    function bindSimpleFilter(selector, key, targetFilters, eventName = 'change') {
-      const el = $(selector);
-      if (!el) return;
-      el.addEventListener(eventName, (e) => {
-        targetFilters[key] = e.target.value;
-        filters = activeTab === 'profile' ? profileFilters : catalogFilters;
-        if (eventName === 'input') debouncedFilterChange();
-        else applyFilterChange();
-      });
-    }
-
-    bindSimpleFilter('#oc-f-search', 'search', catalogFilters, 'input');
-    bindSimpleFilter('#oc-p-search', 'search', profileFilters, 'input');
-    bindSimpleFilter('#oc-f-type', 'type', catalogFilters);
-    bindSimpleFilter('#oc-p-type', 'type', profileFilters);
-    bindSimpleFilter('#oc-f-from-year', 'fromYear', catalogFilters);
-    bindSimpleFilter('#oc-p-from-year', 'fromYear', profileFilters);
-    bindSimpleFilter('#oc-f-from-season', 'fromSeason', catalogFilters);
-    bindSimpleFilter('#oc-p-from-season', 'fromSeason', profileFilters);
-    bindSimpleFilter('#oc-f-to-year', 'toYear', catalogFilters);
-    bindSimpleFilter('#oc-p-to-year', 'toYear', profileFilters);
-    bindSimpleFilter('#oc-f-to-season', 'toSeason', catalogFilters);
-    bindSimpleFilter('#oc-p-to-season', 'toSeason', profileFilters);
-    bindSimpleFilter('#oc-f-score-cmp', 'scoreCmp', catalogFilters);
-    bindSimpleFilter('#oc-p-score-cmp', 'scoreCmp', profileFilters);
-    bindSimpleFilter('#oc-f-score-value', 'scoreValue', catalogFilters, 'input');
-    bindSimpleFilter('#oc-p-score-value', 'scoreValue', profileFilters, 'input');
-    [['#oc-f-missing', catalogFilters], ['#oc-p-missing', profileFilters]].forEach(([selector, targetFilters]) => {
-      const el = $(selector);
-      if (!el) return;
-      el.addEventListener('change', () => {
-        targetFilters.missingOnly = Boolean(el.checked);
-        filters = activeTab === 'profile' ? profileFilters : catalogFilters;
-        applyFilterChange();
-      });
-    });
-    if (contentFilterSelect) {
-      contentFilterSelect.addEventListener('change', (e) => setContentFilterMode(e.target.value));
-    }
-    $('#oc-sort').addEventListener('change', (e) => { sortMode = e.target.value; chartPage = 1; render(); });
-
-    function bindMultiFilter(selector, filterKey, targetFilters) {
-      const el = $(selector);
-      if (!el) return;
-      const apply = () => {
-        targetFilters[filterKey] = Array.from(el.selectedOptions).map(o => o.value);
-        filters = activeTab === 'profile' ? profileFilters : catalogFilters;
-        applyFilterChange();
-      };
-      el.addEventListener('mousedown', (e) => {
-        const option = e.target && e.target.closest ? e.target.closest('option') : null;
-        if (!option || !el.contains(option)) return;
-        e.preventDefault();
-        option.selected = !option.selected;
-        apply();
-        el.focus();
-      });
-      el.addEventListener('change', apply);
-    }
-    bindMultiFilter('#oc-f-studio', 'studios', catalogFilters);
-    bindMultiFilter('#oc-f-director', 'directors', catalogFilters);
-    bindMultiFilter('#oc-f-performer', 'performers', catalogFilters);
-    bindMultiFilter('#oc-f-franchise', 'franchises', catalogFilters);
-    bindMultiFilter('#oc-p-studio', 'studios', profileFilters);
-    bindMultiFilter('#oc-p-director', 'directors', profileFilters);
-    bindMultiFilter('#oc-p-performer', 'performers', profileFilters);
-    bindMultiFilter('#oc-p-franchise', 'franchises', profileFilters);
-
-    document.querySelectorAll('[data-filter-suggest]').forEach(input => {
-      input.addEventListener('change', () => addFilterValueFromInput(input));
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addFilterValueFromInput(input); } });
-    });
-
-    document.addEventListener('input', (e) => {
-      const input = e.target && e.target.closest ? e.target.closest('input[list]') : null;
-      if (input) refreshDynamicDatalist(input);
-    });
-    document.addEventListener('focusin', (e) => {
-      const input = e.target && e.target.closest ? e.target.closest('input[list]') : null;
-      if (input) refreshDynamicDatalist(input);
-    });
-
-    function resetAllFilters() {
-      filters.search = ''; filters.type = ''; filters.fromYear = ''; filters.fromSeason = 'winter'; filters.toYear = ''; filters.toSeason = 'fall'; filters.scoreCmp = ''; filters.scoreValue = ''; filters.missingOnly = false;
-      // –†–µ–∂–∏–º –ø–æ–∫–∞–∑–∞ –∫–∏—Ç–∞–π—Å–∫–∏—Ö / —Ñ–∏–ª—å–º–æ–≤ / —É–∫–æ—Ä–æ—á–µ–Ω–Ω—ã—Ö –Ω–µ —Å—á–∏—Ç–∞–µ–º –æ–±—ã—á–Ω—ã–º —Ñ–∏–ª—å—Ç—Ä–æ–º.
-      // –û–Ω —Å–æ—Ö—Ä–∞–Ω—è–µ—Ç—Å—è –æ—Ç–¥–µ–ª—å–Ω–æ –∏ –Ω–µ –¥–æ–ª–∂–µ–Ω —Å–±—Ä–∞—Å—ã–≤–∞—Ç—å—Å—è –∫–Ω–æ–ø–∫–æ–π ¬´–°–±—Ä–æ—Å–∏—Ç—å —Ñ–∏–ª—å—Ç—Ä—ã¬ª.
-      filters.studios = []; filters.directors = []; filters.performers = []; filters.franchises = [];
-      sortMode = 'added_desc';
-      chartPage = 1; profileTopPage = { OP: 1, ED: 1 }; allRatingsPage = { OP: 1, ED: 1 }; arScoreFilter = '';
-      const sort = $('#oc-sort');
-      if (sort) sort.value = 'added_desc';
-      persistFilterStates();
-      populateFilterOptions();
-      syncContentFilterSelect();
-      render();
-      if (activeTab === 'profile') renderProfile();
-    }
-
-    $('#oc-reset-filters').addEventListener('click', resetAllFilters);
-    $('#oc-p-reset-filters').addEventListener('click', resetAllFilters);
-    $('#oc-p-copy-catalog-filters')?.addEventListener('click', () => {
-      Object.assign(profileFilters, cloneFilterState(catalogFilters));
-      filters = profileFilters;
-      persistFilterStates();
-      syncFilterControls();
-      applyFilterChange();
-      setStatus('–§–∏–ª—å—Ç—Ä—ã –∫–∞—Ç–∞–ª–æ–≥–∞ –ø–µ—Ä–µ–Ω–µ—Å–µ–Ω—ã –≤ –ø—Ä–æ—Ñ–∏–ª—å ‚úì');
-    });
-
-    scaleSelect.addEventListener('change', async (e) => {
-      await saveScale(e.target.value);
-      render();
-      if (activeTab === 'profile') renderProfile();
-      if (activeTab === 'tier') renderTierList();
-      if (activeTab === 'stats') renderStatsPage();
-      if (activeTab === 'top100') renderGlobalTop100();
-      setStatus('–®–∫–∞–ª–∞ –æ—Ü–µ–Ω–∫–∏ –æ–±–Ω–æ–≤–ª–µ–Ω–∞ ‚úì');
-    });
-
-    $('#oc-topmode-score').addEventListener('click', () => setTopMode('score'));
-    $('#oc-topmode-manual').addEventListener('click', () => setTopMode('manual'));
-    const manualEditBtn = $('#oc-manual-edit-btn');
-    const manualSaveBtn = $('#oc-manual-save-btn');
-    const blindRerateBtn = $('#oc-blind-rerate-btn');
-    if (blindRerateBtn) blindRerateBtn.addEventListener('click', openBlindReratingSetup);
-    if (manualEditBtn) manualEditBtn.addEventListener('click', () => {
-      if (!myName || !manualSameUser(profileUser, myName)) return;
-      manualEditMode = !manualEditMode;
-      manualShowHidden = false;
-      if (manualEditMode) { ensureManualOrderForEditing(myName, 'OP'); ensureManualOrderForEditing(myName, 'ED'); }
-      renderProfile();
-    });
-    if (manualSaveBtn) manualSaveBtn.addEventListener('click', async () => {
-      if (!myName || !manualSameUser(profileUser, myName)) return;
-      try {
-        ensureManualOrderForEditing(myName, 'OP');
-        ensureManualOrderForEditing(myName, 'ED');
-        await saveManualRanks();
-        manualDirty = false;
-        manualSaveBtn.classList.remove('active');
-        renderProfile();
-        setStatus('–¢–≤–æ–π —Ç–æ–ø-100 —Å–æ—Ö—Ä–∞–Ω—ë–Ω –∏ –±—É–¥–µ—Ç –≤–∏–¥–µ–Ω –≤—Å–µ–º ‚úì');
-      } catch (e) {
-        console.error(e);
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å —Ä—É—á–Ω–æ–π —Ç–æ–ø-100.', true);
-      }
-    });
-    if (manualHiddenToggleBtn) manualHiddenToggleBtn.addEventListener('click', () => {
-      manualShowHidden = !manualShowHidden;
-      allRatingsPage = { OP: 1, ED: 1 };
-      renderProfile();
-    });
-    if (profileDeleteBtn) profileDeleteBtn.addEventListener('click', () => deleteProfileFully(profileUser));
-    profileUserSelect.addEventListener('change', () => { manualEditMode = false; manualShowHidden = false; profileTopExpanded = { OP: false, ED: false }; allRatingsPage = { OP: 1, ED: 1 }; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
-
-    const tierTypeEl = $('#oc-tier-type');
-    const tierYearEl = $('#oc-tier-year');
-    const tierSeasonEl = $('#oc-tier-season');
-    if (tierTypeEl) tierTypeEl.addEventListener('change', (e) => { tierSelection.type = e.target.value; renderTierList(); });
-    if (tierYearEl) tierYearEl.addEventListener('change', (e) => { tierSelection.year = Number(e.target.value); renderTierList(); });
-    if (tierSeasonEl) tierSeasonEl.addEventListener('change', (e) => { tierSelection.season = e.target.value; renderTierList(); });
-
-    const statsTypeEl = $('#oc-stats-type');
-    if (statsTypeEl) statsTypeEl.addEventListener('change', (e) => { statsTypeFilter = e.target.value; renderStatsPage(); });
-
-    $('#oc-ar-type').addEventListener('change', (e) => {
-      arTypeFilter = e.target.value;
-      allRatingsPage = { OP: 1, ED: 1 };
-      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
-    });
-    const arMetricEl = $('#oc-ar-metric');
-    if (arMetricEl) arMetricEl.addEventListener('change', (e) => {
-      arScoreMetric = e.target.value || 'total';
-      arScoreFilter = '';
-      allRatingsPage = { OP: 1, ED: 1 };
-      populateArScoreOptions(profileUser, applyFiltersIgnoringType(entries));
-      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
-    });
-    $('#oc-ar-score').addEventListener('change', (e) => {
-      arScoreFilter = e.target.value;
-      allRatingsPage = { OP: 1, ED: 1 };
-      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
-    });
-    if (openingModal) {
-      openingModal.addEventListener('click', (e) => {
-        const toggle = e.target.closest('[data-opening-info-toggle]');
-        if (toggle) {
-          const panel = openingModal.querySelector('[data-opening-info-panel]');
-          const willOpen = panel && panel.classList.contains('hidden');
-          if (panel) panel.classList.toggle('hidden', !willOpen);
-          toggle.classList.toggle('open', Boolean(willOpen));
-          toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-          toggle.title = willOpen ? '–°–∫—Ä—ã—Ç—å –æ–ø–∏—Å–∞–Ω–∏–µ' : '–ü–æ–∫–∞–∑–∞—Ç—å –æ–ø–∏—Å–∞–Ω–∏–µ';
-          return;
-        }
-        if (e.target === openingModal || e.target.closest('[data-modal-close]')) closeCardModal();
-      });
-    }
-
-    document.querySelectorAll('[data-globaltop-type]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        globalTopType = btn.dataset.globaltopType === 'ED' ? 'ED' : 'OP';
-        globalTopRenderLimit = 30;
-        renderGlobalTop100();
-      });
-    });
-    document.querySelectorAll('[data-globaltop-mode]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        globalTopMode = btn.dataset.globaltopMode === 'score' ? 'score' : 'manual';
-        globalTopRenderLimit = 30;
-        renderGlobalTop100();
-      });
-    });
-    document.querySelectorAll('[data-globaltop-scope]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (!isAdmin()) return;
-        globalTopScope = btn.dataset.globaltopScope === 'admins' ? 'admins' : 'all';
-        globalTopRenderLimit = 30;
-        renderGlobalTop100();
-      });
-    });
-
-    authRegisterOpenBtn?.addEventListener('click', showRegistrationModal);
-    document.addEventListener('click', event => {
-      const target = event.target.closest('[data-entity-filter-kind][data-entity-filter-value]');
-      if (!target) return;
-      event.preventDefault();
-      event.stopPropagation();
-      applyEntityCardFilter(target.dataset.entityFilterKind, target.dataset.entityFilterValue);
-    });
-    window.addEventListener('oped-catalog-view-change', event => {
-      catalogView = event.detail === 'compact' ? 'compact' : 'detailed';
-    });
-    registerCloseBtn?.addEventListener('click', () => { hideRegistrationModal(); showAuthModal('–í–æ–π–¥–∏ –∏–ª–∏ —Å–æ–∑–¥–∞–π –∞–∫–∫–∞—É–Ω—Ç.'); });
-    accessBadge?.addEventListener('click', () => showAuthModal(accessLevel ? '–í–æ–π–¥–∏ –∑–∞–Ω–æ–≤–æ –∏–ª–∏ —Å–º–µ–Ω–∏ –∞–∫–∫–∞—É–Ω—Ç.' : '–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç.'));
-    accessBadge?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        showAuthModal(accessLevel ? '–í–æ–π–¥–∏ –∑–∞–Ω–æ–≤–æ –∏–ª–∏ —Å–º–µ–Ω–∏ –∞–∫–∫–∞—É–Ω—Ç.' : '–í–æ–π–¥–∏ –≤ –∞–∫–∫–∞—É–Ω—Ç.');
-      }
-    });
-    if (authSaveBtn) authSaveBtn.addEventListener('click', commitPersonalLogin);
-    if (authCloseBtn) authCloseBtn.addEventListener('click', hideAuthModal);
-    if (authIdentifierInput) authIdentifierInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); authPassInput?.focus(); } });
-    if (authPassInput) authPassInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitPersonalLogin(); } });
-    if (authForgotBtn) authForgotBtn.addEventListener('click', async () => {
-      const identifier = String(authIdentifierInput?.value || '').trim();
-      const email = identifier.includes('@') ? identifier : '';
-      if (!email) { showAuthModal('–î–ª—è –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∏—è –≤–≤–µ–¥–∏ email –∞–∫–∫–∞—É–Ω—Ç–∞.'); return; }
-      try {
-        const db = await waitForFirebaseDb();
-        await db.resetAccountPassword(email);
-        showAuthModal('–ü–∏—Å—å–º–æ –¥–ª—è –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∏—è –æ—Ç–ø—Ä–∞–≤–ª–µ–Ω–æ ‚úì');
-      } catch (error) { showAuthModal('–ù–µ —É–¥–∞–ª–æ—Å—å –æ—Ç–ø—Ä–∞–≤–∏—Ç—å –ø–∏—Å—å–º–æ: ' + (error?.message || error)); }
-    });
-    authLogoutBtn?.addEventListener('click', async () => {
-      try {
-        await window.OPED_DB?.logoutAccount?.();
-        authenticatedUid = '';
-        accessLevel = '';
-        myName = '';
-        sessionStorage.removeItem(ACCESS_KEY);
-        localStorage.removeItem(PRIMARY_NAME_KEY);
-        localStorage.removeItem(NAME_KEY);
-        nameInput.value = '';
-        hideAuthModal();
-        updateAccessUi();
-        render();
-        setStatus('–í—ã –≤—ã—à–ª–∏ –∏–∑ –∞–∫–∫–∞—É–Ω—Ç–∞.');
-      } catch (error) {
-        showAuthModal('–ù–µ —É–¥–∞–ª–æ—Å—å –≤—ã–π—Ç–∏: ' + (error?.message || error));
-      }
-    });
-
-    if (registerSaveBtn) registerSaveBtn.addEventListener('click', async () => {
-      const nickname = String(registerNameInput?.value || myName || '').trim();
-      const email = String(registerEmailInput?.value || '').trim();
-      const password = String(registerPassInput?.value || '');
-      const confirmation = String(registerPassConfirmInput?.value || '');
-      if (registerError) registerError.textContent = '';
-      if (!nickname) { if (registerError) registerError.textContent = '–í–≤–µ–¥–∏—Ç–µ –Ω–∏–∫–Ω–µ–π–º.'; return; }
-      if (!/^\S+@\S+\.\S+$/.test(email)) { if (registerError) registerError.textContent = '–í–≤–µ–¥–∏—Ç–µ –∫–æ—Ä—Ä–µ–∫—Ç–Ω—ã–π email.'; return; }
-      if (password.length < 6) { if (registerError) registerError.textContent = '–ü–∞—Ä–æ–ª—å –¥–æ–ª–∂–µ–Ω —Å–æ–¥–µ—Ä–∂–∞—Ç—å –º–∏–Ω–∏–º—É–º 6 —Å–∏–º–≤–æ–ª–æ–≤.'; return; }
-      if (password !== confirmation) { if (registerError) registerError.textContent = '–ü–∞—Ä–æ–ª–∏ –Ω–µ —Å–æ–≤–ø–∞–¥–∞—é—Ç.'; return; }
-      if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
-        if (registerError) { registerError.textContent = PERSONAL_ACCOUNT_DISABLED_MESSAGE; registerError.style.color = '#FFC857'; }
-        return;
-      }
-      const existing = accountProfile(nickname);
-      if (existing?.authUid) { if (registerError) registerError.textContent = '–î–ª—è —ç—Ç–æ–≥–æ –Ω–∏–∫–∞ –ª–∏—á–Ω—ã–π –ø–∞—Ä–æ–ª—å —É–∂–µ —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω.'; return; }
-      const registerButtonText = registerSaveBtn?.textContent || '–ó–∞—Ä–µ–≥–∏—Å—Ç—Ä–∏—Ä–æ–≤–∞—Ç—å –∞–∫–∫–∞—É–Ω—Ç';
-      if (registerSaveBtn) { registerSaveBtn.disabled = true; registerSaveBtn.textContent = '–°–æ–∑–¥–∞—ë–º –∞–∫–∫–∞—É–Ω—Ç‚Ä¶'; }
-      if (registerError) { registerError.textContent = '–°–æ–∑–¥–∞—ë–º –∞–∫–∫–∞—É–Ω—Ç‚Ä¶'; registerError.style.color = '#FFC857'; }
-      try {
-        if (!window.OPED_DB || typeof window.OPED_DB.registerAccount !== 'function') throw new Error('–°–µ—Ä–≤–∏—Å –µ—â—ë –∑–∞–≥—Ä—É–∂–∞–µ—Ç—Å—è. –ü–æ–ø—Ä–æ–±—É–π —á–µ—Ä–µ–∑ –ø–∞—Ä—É —Å–µ–∫—É–Ω–¥.');
-        const result = await window.OPED_DB.registerAccount(nickname, email, password, Boolean(registerRememberInput?.checked));
-        const patch = { authUid: result?.user?.uid, authProvider: 'password', passwordEnabled: true };
-        const row = accountProfile(nickname);
-        if (row) Object.assign(row, patch);
-        else firebaseUserProfiles.push({ id: normalizedAccountName(nickname), nickname, nicknameKey: normalizedAccountName(nickname), ...patch });
-        registerNameInput.value = '';
-        registerEmailInput.value = '';
-        registerPassInput.value = '';
-        registerPassConfirmInput.value = '';
-        if (registerSaveBtn) { registerSaveBtn.disabled = false; registerSaveBtn.textContent = registerButtonText; }
-        hideRegistrationModal();
-        await applyPersonalAccountSession(result, Boolean(registerRememberInput?.checked));
-        setStatus(`–ê–∫–∫–∞—É–Ω—Ç ¬´${nickname}¬ª —Å–æ–∑–¥–∞–Ω, –≤—Ö–æ–¥ –≤—ã–ø–æ–ª–Ω–µ–Ω ‚úì`);
-      } catch (error) {
-        console.error('Account registration failed', error);
-        const code = String(error?.code || '');
-        const message = code === 'auth/operation-not-allowed'
-          ? '–†–µ–≥–∏—Å—Ç—Ä–∞—Ü–∏—è —Å–µ–π—á–∞—Å –Ω–µ–¥–æ—Å—Ç—É–ø–Ω–∞.'
-          : code === 'auth/invalid-credential' || code === 'auth/wrong-password'
-            ? '–≠—Ç–æ—Ç email —É–∂–µ —Å—É—â–µ—Å—Ç–≤—É–µ—Ç, –Ω–æ –≤–≤–µ–¥—ë–Ω –Ω–µ–≤–µ—Ä–Ω—ã–π –ø–∞—Ä–æ–ª—å. –í–≤–µ–¥–∏ –ø–∞—Ä–æ–ª—å –æ—Ç —ç—Ç–æ–≥–æ email –∏–ª–∏ –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–∏ –µ–≥–æ.'
-            : code === 'auth/email-linked-to-another-nickname'
-              ? (error?.message || '–≠—Ç–æ—Ç email —É–∂–µ —Å–≤—è–∑–∞–Ω —Å –¥—Ä—É–≥–∏–º –Ω–∏–∫–æ–º.')
-              : code === 'permission-denied' || code === 'firestore/permission-denied'
-                ? '–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ—Ö—Ä–∞–Ω–∏—Ç—å –∞–∫–∫–∞—É–Ω—Ç.'
-                : (error?.message || '–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞—Ä–µ–≥–∏—Å—Ç—Ä–∏—Ä–æ–≤–∞—Ç—å –∞–∫–∫–∞—É–Ω—Ç.');
-        if (registerSaveBtn) { registerSaveBtn.disabled = false; registerSaveBtn.textContent = registerButtonText; }
-        if (registerError) { registerError.textContent = message; registerError.style.color = '#FF2E63'; }
-      }
-    });
-
-    const tierDownloadBtn = $('#oc-tier-download-btn');
-    if (tierDownloadBtn) tierDownloadBtn.addEventListener('click', downloadCurrentTierList);
-
-    const arSortModeEl = $('#oc-ar-sort-mode');
-    if (arSortModeEl) arSortModeEl.addEventListener('change', (event) => {
-      arSortMode = event.target.value || 'score';
-      arSortDir = 'desc';
-      allRatingsPage = { OP: 1, ED: 1 };
-      updateAllRatingsSortLabel();
-      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
-    });
-
-    $('#oc-ar-sort').addEventListener('click', () => {
-      arSortDir = arSortDir === 'desc' ? 'asc' : 'desc';
-      allRatingsPage = { OP: 1, ED: 1 };
-      updateAllRatingsSortLabel();
-      renderAllRatings(profileUser, applyFiltersIgnoringType(entries));
-    });
-
-    function loadHtml2Canvas() {
-      if (window.html2canvas) return Promise.resolve(window.html2canvas);
-      if (window._opedHtml2CanvasPromise) return window._opedHtml2CanvasPromise;
-      window._opedHtml2CanvasPromise = new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'html2canvas.min.js?v=1.4.1';
-        script.async = true;
-        script.onload = () => window.html2canvas ? resolve(window.html2canvas) : reject(new Error('html2canvas –Ω–µ –∑–∞–≥—Ä—É–∑–∏–ª—Å—è'));
-        script.onerror = () => {
-          window._opedHtml2CanvasPromise = null;
-          reject(new Error('–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–≥—Ä—É–∑–∏—Ç—å html2canvas'));
-        };
-        document.head.appendChild(script);
-      });
-      return window._opedHtml2CanvasPromise;
-    }
-
-    function waitForImages(root) {
-      const imgs = Array.from(root.querySelectorAll('img'));
-      if (!imgs.length) return Promise.resolve();
-      return Promise.all(imgs.map(img => new Promise(resolve => {
-        if (img.complete) { resolve(); return; }
-        const done = () => resolve();
-        img.addEventListener('load', done, { once: true });
-        img.addEventListener('error', done, { once: true });
-        setTimeout(done, 2500);
-      })));
-    }
-
-    async function downloadCurrentTierList() {
-      if (!myName) { setStatus('–í–≤–µ–¥–∏—Ç–µ –Ω–∏–∫–Ω–µ–π–º –¥–ª—è —Å–∫–∞—á–∏–≤–∞–Ω–∏—è —Ç–∏—Ä-–ª–∏—Å—Ç–∞.', true); return; }
-      const board = $('#oc-tier-list .oc-tier-board');
-      if (!board || !board.querySelector('[data-tier-card]')) {
-        setStatus('–í —ç—Ç–æ–º —Ç–∏—Ä-–ª–∏—Å—Ç–µ –ø–æ–∫–∞ –Ω–µ—Ç –∫–∞—Ä—Ç–æ—á–µ–∫ –¥–ª—è —Å–∫–∞—á–∏–≤–∞–Ω–∏—è.', true);
-        return;
-      }
-
-      const type = tierSelection.type;
-      const year = tierSelection.year;
-      const season = tierSelection.season;
-      const exportWrap = document.createElement('div');
-      exportWrap.className = 'oc-tier-export-wrap';
-      exportWrap.style.position = 'fixed';
-      exportWrap.style.left = '-20000px';
-      exportWrap.style.top = '0';
-      exportWrap.style.zIndex = '-1';
-      exportWrap.style.setProperty('--bg', '#0B0A10');
-      exportWrap.style.setProperty('--card', '#16121F');
-      exportWrap.style.setProperty('--card-hover', '#1D1829');
-      exportWrap.style.setProperty('--border', '#2A2435');
-      exportWrap.style.setProperty('--pink', '#FF2E63');
-      exportWrap.style.setProperty('--cyan', '#08D9D6');
-      exportWrap.style.setProperty('--text', '#F5F3FA');
-      exportWrap.style.setProperty('--muted', '#8B8698');
-      exportWrap.style.setProperty('--gold', '#FFC857');
-      exportWrap.style.setProperty('--green', '#4ADE80');
-      exportWrap.innerHTML = `<div class="oc-tier-export-title">–ê–ë–û–ë–ê ¬∑ —Ç–∏—Ä-–ª–∏—Å—Ç ${escapeHtml(type)} ¬∑ ${escapeHtml(SEASON_LABEL[season])} ${escapeHtml(year)} ¬∑ ${escapeHtml(myName)}</div>`;
-      const clonedBoard = board.cloneNode(true);
-      clonedBoard.querySelectorAll('[draggable]').forEach(el => el.removeAttribute('draggable'));
-      clonedBoard.querySelectorAll('img').forEach(img => {
-        img.setAttribute('crossorigin', 'anonymous');
-        img.setAttribute('referrerpolicy', 'no-referrer');
-      });
-      exportWrap.appendChild(clonedBoard);
-      document.body.appendChild(exportWrap);
-
-      try {
-        const html2canvas = await loadHtml2Canvas();
-        await waitForImages(exportWrap);
-        const canvas = await html2canvas(exportWrap, {
-          backgroundColor: '#0B0A10',
-          useCORS: true,
-          allowTaint: false,
-          logging: false,
-          imageTimeout: 5000,
-          scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
-          windowWidth: Math.max(document.documentElement.scrollWidth, exportWrap.scrollWidth + 80),
-          windowHeight: Math.max(document.documentElement.scrollHeight, exportWrap.scrollHeight + 80)
-        });
-        canvas.toBlob(blob => {
-          exportWrap.remove();
-          if (!blob) { setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å PNG.', true); return; }
-          const pngUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = pngUrl;
-          a.download = `aboba-tier-${type}-${year}-${season}.png`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(pngUrl), 30000);
-          setStatus('–¢–∏—Ä-–ª–∏—Å—Ç —Å–∫–∞—á–∞–Ω –∫–∞–∫ PNG-—Å–∫—Ä–∏–Ω—à–æ—Ç ‚úì');
-        }, 'image/png');
-      } catch (err) {
-        console.error(err);
-        exportWrap.remove();
-        setStatus('–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å –∏–∑–æ–±—Ä–∞–∂–µ–Ω–∏–µ.', true);
-      }
-    }
-
-
-    let personalSessionRestorePromise = null;
-
-    async function restorePersonalSession(clearWhenMissing = false) {
-      if (personalSessionRestorePromise) return personalSessionRestorePromise;
-      personalSessionRestorePromise = (async () => {
-        try {
-          const db = await waitForFirebaseDb();
-          const resumed = await db.resumePersonalAccount();
-          if (resumed) {
-            await applyPersonalAccountSession(resumed, true);
-            return true;
-          }
-          if (clearWhenMissing) {
-            authenticatedUid = '';
-            accessLevel = '';
-            sessionStorage.removeItem(ACCESS_KEY);
-            updateAccessUi();
-          }
-          return false;
-        } catch (error) {
-          console.warn('Saved personal session restore failed', error);
-          return false;
-        } finally {
-          personalSessionRestorePromise = null;
-        }
-      })();
-      return personalSessionRestorePromise;
-    }
-
-    window.addEventListener('oped-account-restored', event => {
-      if (event?.detail?.authenticated && !authenticatedUid) void restorePersonalSession(false);
-    });
-
-    (async function init() {
-      updateAccessUi();
-      await restorePersonalSession(true);
-      await loadName();
-      await loadAvatar();
-      await loadScale();
-      await loadContentFilterMode();
-      await loadAvatarsMap();
-      await loadManualRanks();
-      if (myName && !avatarsMap[myName]) avatarsMap[myName] = myAvatar;
-      await loadTierOrders();
-      await loadEntries();
-      refreshDailyUi();
-      if (accessLevel && !myName) showNameModal('–í–≤–µ–¥–∏—Ç–µ –Ω–∏–∫–Ω–µ–π–º, —á—Ç–æ–±—ã –ø—Ä–æ–¥–æ–ª–∂–∏—Ç—å.');
-    })();
-  })();
+Y™Áäx-ÆÈ‹j◊ù¢Îi∫⁄+äßj[hëÈ‹¢ÈÌ◊éx˜‘Ëµ©h∫⁄n∂XßzÕH[\‹ù»YZ[ïZY»Húõ€H	ÀãŸö\ôXò\ŸKX€€ôöYÀöú…Œ¬Çà
+ù[ò›[€ä
+H¬àYà
+]⁄[ô›Àú›‹òYŸJH¬à⁄[ô›Àú›‹òYŸHH¬à\ﬁ[ò»Ÿ]
+Ÿ^K⁄\ôY
+H¬à€€ú›ò[YHHÿÿ[›‹òYŸKôŸ]][JŸ^JN¬àô]\õàò[YHOOHù[»ù[à»ò[YHN¬àKà\ﬁ[ò»Ÿ]
+Ÿ^Kò[YK⁄\ôY
+H¬àÿÿ[›‹òYŸKúŸ]][JŸ^Kò[YJN¬àô]\õàùYN¬àBàN¬àBÇà€€ú›—VHH	€‹YYY[ùöY\…Œ¬à€€ú›êSQW“—VHH	€^KY\‹^K[ò[YIŒ¬à€€ú›UêUTó“—VHH	€^KX]ò]\âŒ¬à€€ú›UêUTî◊”PT“—VHH	ÿ]ò]\úÀ[X\	Œ¬à€€ú›SS◊“—VHH	€‹YYY[[À[ÿYY	Œ¬à€€ú›PSïPS‘êSí‘◊“—VHH	€X[ùX[\ò[ö‹…Œ¬à€€ú›––SW“—VHH	‹ò][ôÀ\ÿÿ[IŒ¬à€€ú›””ïSï—íSTó“—VHH	ÿ€€ù[ùYö[\ã[[ŸIŒ¬à€€ú›QTó”‘ëTî◊“—VHH	›Y\ã[‹ô\ú…Œ¬à€€ú›QTó”PëS◊“—VHH	›Y\ã[Xô[…Œ¬à€€ú›QTó‘P—SQSï◊“—VHH	›Y\ã\XŸ[Y[ù…Œ¬à€€ú›P–—T‘◊“—VHH	€‹YYXXÿŸ\‹À[]ô[	Œ¬à€€ú›íSPTñW”êSQW“—VHH	€‹YY\ö[X\ûKXXÿ€›[ù[ò[YIŒ¬à€€ú›Tî””êS–P–”’Sï–UU—SêPìQHùYN¬à€€ú›Tî””êS–P–”’Sï—T–PìQ”QT‘–Q—HH	Ù(4-t,Ù.4`t`¥`4,4a¥.4c»4`t-t.taÙ,4`H4/t-t-4/¥`t`¥`Ù/Ù/t,à4'Ù/¥/Ù`4/¥,t`Ù.t`¥-H4/Ù/¥-Ù-¥-KâŒ¬à€€ú›QRSó”íP“”êSQT»Hô]»Ÿ]
+…Ù/Ù-t`WÙ.¥/¥b4,4aÙ.4.IÀ	Ù/Ùdt`WÙ.¥/¥b4,4aÙ.4.IÀ	›ﬁ^^	À	ŸY€‹ù‹…À	Ù.¥/¥a4,	◊JN¬à€€ú›QRSó’RQ»Hô]»Ÿ]
+YZ[ïZY N¬à€€ú›””ëíTìQQ”Q–P÷W”PSïPS’‘“—VT»Hô]»Ÿ]
+…Ù/Ùdt`WÙ.¥/¥b4,4aÙ.4.IÀ	Ù/Ù-t`WÙ.¥/¥b4,4aÙ.4.IÀ	ŸY€‹ù‹…À	Ù.¥/¥a4,	À	⁄€\…◊JN¬à€€ú›UëSï–êT“—U“—VHH	ÿXõÿòKY]ô[ùÀXò\⁄Ÿ]]åIŒ¬à€€ú›SPQ—W’T–Q’”‘í—TàH	⁄ŒãÀ€‹YZ[XYŸK]\ÿYöŸY\\öŸY\\ååÀLYKù€‹öŸ\úÀô]âŒ¬à€€ú›SPQ—W’T–Q‘—P‘ëU“—VHH	€‹YYZ[XYŸK]\ÿY\ŸX‹ô]	Œ¬à€€ú›RSW—T”RT‘—Q“—VHH	€‹YYYZ[KY\€Z\‹ŸY]åIŒ¬à€€ú›–US—◊’íQU◊“—VHH	€‹YYXÿ][ŸÀ]öY]À]åIŒ¬à€€ú›—S””QW–P“◊“—VHH	€‹YY]Ÿ[€€YKXX⁄À]åIŒ¬à€€ú›–US—◊–QRSó’”‘í‘‘P—HH⁄[ô›Àì–◊––US—◊–QRSó’”‘í‘‘P—HOOHùYN¬à€€ú›RSW”T“◊”—ëî—U“’Tî»HŒ¬à€€ú›RSW‘ëSPT—W“’TàHN¬à€€ú›êUTêS–””U‘àHô]»[ùê€€]‹ä…‹ùIÀ	Ÿ[â◊K»ù[Y\öXŒàùYKŸ[ú⁄]]ö]Nà	ÿò\ŸI»JN¬à€€ú›€€\\ôSò]\ò[H
+YùöY⁄
+HOàêUTêS–””U‘ãò€€\\ôJ›ö[ô Yùœ»	… K›ö[ô öY⁄œ»	… JN¬Çà€€ú›UëSï–êT“—U–S’—QHô]»Ÿ]
+…Ù/Ù-t`t.¥/¥b4,4aÙ.4.IÀ	ŸY€‹ù‹…◊JN¬à€€ú›RSó‘PìP◊’ì’T»HŒ¬à€€ú›íUëW‘–”‘ëW”PëS»H»Nà	Ù-Ù,4.Ù`Ù/Ù,	Àéà	Ù/t-H4/¥aÙ-t/tc	ÀŒà	ÕLÕL	Àà	Ù/t/¥`4/	ÀNà	Ù-Ù,4-t,t.4`tc	»N¬à€€ú›UêUTó”‘S”î»H…¸'Ê`âÀ	¸'Ê#âÀ	¸'È¢âÀ	¸'‰,IÀ	¸'‰)…À	¸'‰"IÀ	¸'‰nIÀ	¸'„.	À	¸'„©…À	¸'„©	À	¸'„≠IÀ	¸'Â)IÀ	¸'‰Ø…À	¸'‰Ô	À	¸'„&IÀ	¯´d	À	¸'‰ÓâÀ	¸'„´	À	¸'„iIÀ	¯¶•;Ó#…À	¸'‰oâÀ	¸'È°	À	¸'‰.âÀ	¸'„g	◊N¬à][ùöY\»H◊N¬à]^Sò[YHH	…Œ¬à]^P]ò]\àH	¸'Ê`âŒ¬à]]][ùXÿ]YZYH	…Œ¬à]]ò]\ú”X\HﬂN¬à]ò][ô‘ÿÿ[HH	⁄[ù	Œ»À»	⁄[ù	À	⁄[â»‹à\ú€€ò[	Ÿö]ôI¬à]XÿŸ\‹”]ô[HŸ\‹⁄[€î›‹òYŸKôŸ]][JP–—T‘◊“—VJH	…Œ¬à]ÿ][Ÿ’öY]»Hÿÿ[›‹òYŸKôŸ]][J–US—◊’íQU◊“—VJHOOH	ÿ€€\X›	»»	ÿ€€\X›	»à	Ÿ]Z[Y	Œ¬à€€ú›íSTó—QêUS»H»ŸX\ò⁄à	…À\Nà	…Àúõ€VYX\éà	…Àúõ€TŸX\€€éà	›⁄[ù\âÀ÷YX\éà	…À‘ŸX\€€éà	Ÿò[	Àÿ€‹ôP€\à	…Àÿ€‹ôUò[YNà	…ÀZ\‹⁄[ô”€õNàò[ŸKYP⁄[ô\ŸNàùYKYS[›öYNàùYKYT⁄‹ù[ôYàùYK›Y[‹Œà◊K\ôX›‹úŒà◊K\ôõ‹õY\úŒà◊Kúò[ò⁄\Ÿ\Œà◊HN¬à€€ú›€€ôQö[\î›]HH€›\òŸHOà
+»ããú€›\òŸK›Y[‹ŒàÀããä€›\òŸKú›Y[‹»◊JWK\ôX›‹úŒàÀããä€›\òŸKô\ôX›‹ú»◊JWK\ôõ‹õY\úŒàÀããä€›\òŸKú\ôõ‹õY\ú»◊JWKúò[ò⁄\Ÿ\ŒàÀããä€›\òŸKôúò[ò⁄\Ÿ\»◊JWHJN¬àù[ò›[€àÿYö[\î›]JŸ^JH¬àûH¬à€€ú›ÿ]ôYHî””ãú\úŸJÿÿ[›‹òYŸKôŸ]][JŸ^JH	€ù[	 N¬àô]\õà€€ôQö[\î›]Jÿ]ôY	âà\[Ÿàÿ]ôYOOH	€ÿöôX›	»»»ããëíSTó—QêUSÀããúÿ]ôYHàíSTó—QêUS N¬àHÿ]⁄
+ H¬àô]\õà€€ôQö[\î›]JíSTó—QêUS N¬àBàBà€€ú›ÿ][Ÿ—ö[\ú»HÿYö[\î›]J	€‹YYXÿ][ŸÀYö[\úÀ]åI N¬à€€ú›õŸö[Qö[\ú»HÿYö[\î›]J	€‹YY\õŸö[KYö[\úÀ]åI N¬àù[ò›[€à\ú⁄\›ö[\î›]\ 
+H¬àûH¬àÿÿ[›‹òYŸKúŸ]][J	€‹YYXÿ][ŸÀYö[\úÀ]åIÀî””ãú›ö[ô⁄YûJÿ][Ÿ—ö[\ú JN¬àÿÿ[›‹òYŸKúŸ]][J	€‹YY\õŸö[KYö[\úÀ]åIÀî””ãú›ö[ô⁄YûJõŸö[Qö[\ú JN¬àHÿ]⁄
+ HﬂBàBà]ö[\ú»Hÿ][Ÿ—ö[\úŒ¬à]€‹ù[ŸHH	ÿYYŸ\ÿ…Œ¬à]Y][ô“YHù[¬à]X[ùX[ò[ö‹»HﬂN¬à]‹[ŸHH	€X[ùX[	Œ»À»X[ùX[‹\»HXZ[àõŸö[H[ŸBà]\ï\Qö[\àH	…Œ¬à]\îÿ€‹ôQö[\àH	…Œ¬à]\îÿ€‹ôSY]öX»H	››[	Œ¬à]\î€‹ù[ŸHH	‹ÿ€‹ôIŒ¬à]\î€‹ù\àH	Ÿ\ÿ…Œ¬à]õŸö[U\Ÿ\àH	…Œ¬à]€ÿò[‹\HH	”‘	Œ¬à]€ÿò[‹[ŸHH	€X[ùX[	Œ¬à]€ÿò[‹ÿ€‹HH	ÿ[	Œ¬à]€ÿò[‹ô[ô\ì[Z]HÃ¬à€€ú›Q—W‘“VëHHL¬à]⁄\ùYŸHHN¬à]õŸö[U‹YŸHH»‘àKQàHN¬à][ò][ô‹‘YŸHH»‘àKQàHN¬à]õŸö[U‹^[ôYH»‘àò[ŸKQàò[ŸHN¬à]X[ùX[Y][ŸHHò[ŸN¬à]X[ùX[\ùHHò[ŸN¬à]X[ùX[⁄›“Y[àHò[ŸN¬à]X[ùX[Y[ëõ‹ëY]HﬂN¬Çà€€ú›—PT””ó”PëSH»⁄[ù\éà	Ù%Ù.4/4,	À‹ö[ôŒà	Ù$¥-t`t/t,	À›[[Y\éà	Ù&Ù-t`¥/âÀò[à	Ù'¥`t-t/tc	»N¬à€€ú›	H
+Ÿ[
+HOàÿ›[Y[ùú]Y\ûTŸ[X›‹äŸ[
+N¬Çàù[ò›[€àö]\‹^YYòX⁄“[XYŸJ[XYŸJH¬àYà
+J[XYŸH[ú›[òŸ[ŸàS[XYŸQ[[Y[ù
+JHô]\õé¬à€€ú›\Qö]H
+
+HOàô\]Y\›[ö[X][€ëúò[YJ
+
+HOà¬à€€ú›õﬁH[XYŸKú\ô[ù[[Y[ùÀôŸ]õ›[ô[ô–€Y[ùôX›
+
+N¬àYà
+Z[XYŸKõò]\ò[⁄YZ[XYŸKõò]\ò[ZY⁄XõﬁÀù⁄YXõﬁÀöZY⁄
+Hô]\õé¬à€€ú›€›\òŸTò][»H[XYŸKõò]\ò[⁄Y»[XYŸKõò]\ò[ZY⁄¬à€€ú›\ôŸ]ò][»Hõﬁù⁄Y»õﬁöZY⁄¬à€€ú›\’€”ò\úõ›»H€›\òŸTò][»\ôŸ]ò][Œ¬à€€ú›\’€’⁄YP[ôõ]H€›\òŸTò][»à\ôŸ]ò][»
+àKåMN¬à[XYŸKò€\‹”\›ùŸŸ€J	€ÿÀ]òX⁄ÀZ[XYŸKX‹õ‹	À\’€”ò\úõ›»\’€’⁄YP[ôõ]
+N¬àJN¬àYà
+[XYŸKò€€\]JH\Qö]
+
+N¬à[ŸH[XYŸKòY]ô[ù\›[ô\ä	€ÿY	À\Qö]»€òŸNàùYHJN¬àBÇàÿ›[Y[ùòY]ô[ù\›[ô\ä	€ÿY	À]ô[ùOà¬àYà
+]ô[ùù\ôŸ]ÀõX]⁄\œÀä	⁄[YÀõÿÀ]òX⁄ÀZ[XYŸI JHö]\‹^YYòX⁄“[XYŸJ]ô[ùù\ôŸ]
+N¬àKùYJN¬àô]»]]][€ìÿúŸ\ùô\äôX€‹ô»OàôX€‹ôÀôõ‹ëXX⁄
+ôX€‹ôOàôX€‹ôòYYõŸ\Àôõ‹ëXX⁄
+õŸHOà¬àYà
+JõŸH[ú›[òŸ[Ÿà[[Y[ù
+JHô]\õé¬àYà
+õŸKõX]⁄\ 	⁄[YÀõÿÀ]òX⁄ÀZ[XYŸI JHö]\‹^YYòX⁄“[XYŸJõŸJN¬àõŸKú]Y\ûTŸ[X›‹ê[Àä	⁄[YÀõÿÀ]òX⁄ÀZ[XYŸI Kôõ‹ëXX⁄
+ö]\‹^YYòX⁄“[XYŸJN¬àJJJKõÿúŸ\ùôJÿ›[Y[ùôÿ›[Y[ù[[Y[ù»⁄[\›àùYK›XùôYNàùYHJN¬Çà€€ú›\›€€ùZ[ô\àH	
+	»€ÿÀ[\›X€€ùZ[ô\â N¬à€€ú››]\—[H	
+	»€ÿÀ\›]\… N¬à€€ú›ô\›[€›[ù[H	
+	»€ÿÀ\ô\›[€›[ù	 N¬à€€ú›ò[YR[ú]H	
+	»€ÿÀ[^[ò[YI N¬à€€ú›]ò]\êùàH	
+	»€ÿÀX]ò]\ãXùâ N¬à€€ú›]ò]\îX⁄Ÿ\àH	
+	»€ÿÀX]ò]\ã\X⁄Ÿ\â N¬à€€ú›Z[Pô[H	
+	»€ÿÀYZ[KXô[	 N¬à€€ú›Z[Pô[›H	
+	»€ÿÀYZ[KXô[Y›	 N¬à€€ú›Xÿ€›[ùŸ[€€YHH	
+	»€ÿÀXXÿ€›[ù]Ÿ[€€YI N¬à€€ú›Ÿ[€€YPX⁄»H	
+	»€ÿÀ]Ÿ[€€YKXX⁄… N¬à€€ú›ÿ][Ÿ‘õŸ‹ô\‹»H	
+	»€ÿÀXÿ][ŸÀ\õŸ‹ô\‹… N¬à€€ú›]Z[YöY]–ùàH	
+	»€ÿÀ]öY]ÀY]Z[Y	 N¬à€€ú›€€\X›öY]–ùàH	
+	»€ÿÀ]öY]ÀX€€\X›	 N¬à€€ú›Z[T[ô[H	
+	»€ÿÀYZ[K\[ô[	 N¬à€€ú›Z[Uÿ\›H	
+	»€ÿÀYZ[K]ÿ\›	 N¬à€€ú›ÿÿ[TŸ[X›H	
+	»€ÿÀ\ÿÿ[K\Ÿ[X›	 N¬à€€ú›€€ù[ùö[\îŸ[X›H	
+	»€ÿÀX€€ù[ùYö[\ã\Ÿ[X›	 N¬à€€ú›ö[\î›][H	
+	»€ÿÀYö[\ú›]	 N¬à€€ú›XZ[î[ô[H	
+	»€ÿÀ[XZ[ã\[ô[	 N¬à€€ú›õŸö[T[ô[H	
+	»€ÿÀ\õŸö[K\[ô[	 N¬à€€ú›ô\ò][ô‘[ô[H	
+	»€ÿÀ\ô\ò][ôÀ\[ô[	 N¬à€€ú›\ÿ€›ô\ûT[ô[H	
+	»€ÿÀY\ÿ€›ô\ûK\[ô[	 N¬à€€ú›‹L[ô[H	
+	»€ÿÀ]‹L\[ô[	 N¬à€€ú›ŸX\€€î[ô[H	
+	»€ÿÀ\ŸX\€€ã\[ô[	 N¬à€€ú››\õò[Y[ù‘[ô[H	
+	»€ÿÀ]›\õò[Y[ùÀ\[ô[	 N¬à€€ú›Y\î[ô[H	
+	»€ÿÀ]Y\ã\[ô[	 N¬à€€ú››]‘[ô[H	
+	»€ÿÀ\›]À\[ô[	 N¬à€€ú›[ù]T[ô[H	
+	»€ÿÀY[ù]K\[ô[	 N¬à€€ú›[ù]U]Q[H	
+	»€ÿÀY[ù]K]]I N¬à€€ú›[ù]T›Xù]Q[H	
+	»€ÿÀY[ù]K\›Xù]I N¬à€€ú›[ù]PòX⁄–ùàH	
+	»€ÿÀY[ù]KXòX⁄… N¬à€€ú›[ù]P‹ôX]Qõ‹õHH	
+	»€ÿÀY[ù]KX‹ôX]I N¬à€€ú›[ù]Uò[YTŸ[X›H	
+	»€ÿÀY[ù]K]ò[YI N¬à€€ú›[ù]R[XYŸR[ú]H	
+	»€ÿÀY[ù]KZ[XYŸI N¬à€€ú›[ù]Qö[\ú—[H	
+	»€ÿÀY[ù]KYö[\ú… N¬à€€ú›[ù]Qö[\ú’ŸŸ€HH	
+	»€ÿÀY[ù]KYö[\úÀ]ŸŸ€I N¬à€€ú›[ù]P[ù[U€€»H	
+	»€ÿÀY[ù]KX[ù[K]€€… N¬à€€ú›[ù]P[ù[TŸX\ò⁄[ú]H	
+	»€ÿÀY[ù]KX[ù[K\ŸX\ò⁄	 N¬à€€ú›[ù]P[ù[T€‹ùŸ[X›H	
+	»€ÿÀY[ù]KX[ù[K\€‹ù	 N¬à€€ú›[ù]UòX⁄‘€‹ùŸ[X›H	
+	»€ÿÀY[ù]K]òX⁄À\€‹ù	 N¬à€€ú›[ù]TŸX\ò⁄[ú]H	
+	»€ÿÀY[ù]K\ŸX\ò⁄	 N¬à€€ú›[ù]UòX⁄’\TŸ[X›H	
+	»€ÿÀY[ù]K]òX⁄À]\I N¬à€€ú›[ù]Qúõ€VYX\îŸ[X›H	
+	»€ÿÀY[ù]KYúõ€K^YX\â N¬à€€ú›[ù]Qúõ€TŸX\€€îŸ[X›H	
+	»€ÿÀY[ù]KYúõ€K\ŸX\€€â N¬à€€ú›[ù]U÷YX\îŸ[X›H	
+	»€ÿÀY[ù]K]À^YX\â N¬à€€ú›[ù]U‘ŸX\€€îŸ[X›H	
+	»€ÿÀY[ù]K]À\ŸX\€€â N¬à€€ú›[ù]TõŸ‹ô\‹‘Ÿ[X›H	
+	»€ÿÀY[ù]K\õŸ‹ô\‹… N¬à€€ú›[ù]Tò]P[ùàH	
+	»€ÿÀY[ù]K\ò]KX[	 N¬à€€ú›[ù]Q‹öY[H	
+	»€ÿÀY[ù]KY‹öY	 N¬à€€ú›[ù]UòX⁄‹—[H	
+	»€ÿÀY[ù]K]òX⁄‹… N¬à€€ú›‹[ö[ô”[Ÿ[H	
+	»€ÿÀ[‹[ö[ôÀ[[Ÿ[	 N¬à€€ú›€€ôö\õS[Ÿ[H	
+	»€ÿÀX€€ôö\õK[[Ÿ[	 N¬à€€ú›úò[ò⁄\ŸTô\Z\ì[Ÿ[H	
+	»€ÿÀYúò[ò⁄\ŸK\ô\Z\ã[[Ÿ[	 N¬à€€ú›[XYŸSZY‹ò][€êùàH	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ãXùâ N¬à€€ú›[XYŸSZY‹ò][€í[õ[ôPùàH	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ãZ[õ[ôKXùâ N¬à€€ú›[XYŸSZY‹ò][€ì[Ÿ[H	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã[[Ÿ[	 N¬à][XYŸSZY‹ò][€îù[õö[ô»Hò[ŸN¬à][XYŸSZY‹ò][€î›‹ô\]Y\›YHò[ŸN¬ÇÇà€€ú›]][Ÿ[H	
+	»€ÿÀX]][[Ÿ[	 N¬à€€ú›]]Y[ùYöY\í[ú]H	
+	»€ÿÀX]]ZY[ùYöY\â N¬à€€ú›]]\‹“[ú]H	
+	»€ÿÀX]]\\‹… N¬à€€ú›]]ô[Y[Xô\í[ú]H	
+	»€ÿÀX]]\ô[Y[Xô\â N¬à€€ú›]]ÿ]ôPùàH	
+	»€ÿÀX]]\ÿ]ôI N¬à€€ú›]]õ‹ô€›ùàH	
+	»€ÿÀX]]Yõ‹ô€›	 N¬à€€ú›]]Ÿ€›]ùàH	
+	»€ÿÀX]][Ÿ€›]	 N¬à€€ú›]]ôY⁄\›\ì‹[êùàH	
+	»€ÿÀX]]\ôY⁄\›\ã[‹[â N¬à€€ú›ôY⁄\›\ì[Ÿ[H	
+	»€ÿÀ\ôY⁄\›\ã[[Ÿ[	 N¬à€€ú›ôY⁄\›\ê€‹ŸPùàH	
+	»€ÿÀ\ôY⁄\›\ãX€‹ŸI N¬à€€ú›]]\úõ‹àH	
+	»€ÿÀX]]Y\úõ‹â N¬à€€ú›]]€‹ŸPùàH	
+	»€ÿÀX]]X€‹ŸI N¬à€€ú›XÿŸ\‹–òYŸHH	
+	»€ÿÀXXÿŸ\‹ÀXòYŸI N¬à€€ú›úò[ò⁄\ŸTô\Z\êùàH	
+	»€ÿÀYúò[ò⁄\ŸK\ô\Z\ãXùâ N¬à€€ú›õŸö[U\Ÿ\îŸ[X›H	
+	»€ÿÀ\õŸö[K]\Ÿ\â N¬à€€ú›X[ùX[Y[ïŸŸ€PùàH	
+	»€ÿÀ[X[ùX[ZY[ã]ŸŸ€KXùâ N¬à€€ú›õŸö[Q[]PùàH	
+	»€ÿÀ\õŸö[KY[]KXùâ N¬à€€ú›ŸX\€€ñYX\ú—[H	
+	»€ÿÀ\ŸX\€€ã^YX\ú… N¬à€€ú›ŸX\€€ï]Q[H	
+	»€ÿÀ\ŸX\€€ã]]I N¬à€€ú›ŸX\€€î›Xù]Q[H	
+	»€ÿÀ\ŸX\€€ã\›Xù]I N¬à€€ú›ŸX\€€ì\›[H	
+	»€ÿÀ\ŸX\€€ã[\›	 N¬à€€ú›ŸX\€€îò]PùàH	
+	»€ÿÀ\ŸX\€€ã\ò]KXùâ N¬à€€ú›ŸX\€€îò]P[ùàH	
+	»€ÿÀ\ŸX\€€ã\ò]KX[Xùâ N¬à€€ú›ŸX\€€îô]êùàH	
+	»€ÿÀ\ŸX\€€ã\ô]ãXùâ N¬à€€ú›ŸX\€€ïY\êùàH	
+	»€ÿÀ\ŸX\€€ã]Y\ãXùâ N¬à€€ú›]ò[X]‹ë[H	
+	»€ÿÀ\ŸX\€€ãY]ò[X]‹â N¬à€€ú›ò[YS[Ÿ[H	
+	»€ÿÀ[ò[YK[[Ÿ[	 N¬à€€ú›[Ÿ[ò[YR[ú]H	
+	»€ÿÀ[[Ÿ[[ò[YI N¬à€€ú›[Ÿ[ò[YTÿ]ôHH	
+	»€ÿÀ[[Ÿ[[ò[YK\ÿ]ôI N¬à€€ú›[Ÿ[ò[YP€‹ŸHH	
+	»€ÿÀ[[Ÿ[[ò[YKX€‹ŸI N¬à€€ú›[Ÿ[Xÿ€›[ù[XZ[H	
+	»€ÿÀ[[Ÿ[XXÿ€›[ùY[XZ[	 N¬à€€ú›[Ÿ[Xÿ€›[ù\‹»H	
+	»€ÿÀ[[Ÿ[XXÿ€›[ù\\‹… N¬à€€ú›õ‹ô€›\‹›€‹ôùàH	
+	»€ÿÀYõ‹ô€›\\‹›€‹ô	 N¬à€€ú›ô[Y[Xô\êXÿ€›[ù[ú]H	
+	»€ÿÀ\ô[Y[Xô\ãXXÿ€›[ù	 N¬à€€ú›[Ÿ[ò[YQ\úõ‹àH	
+	»€ÿÀ[[Ÿ[[ò[YKY\úõ‹â N¬à€€ú›ôY⁄\›\ìò[YR[ú]H	
+	»€ÿÀ\ôY⁄\›\ã[ò[YI N¬à€€ú›ôY⁄\›\ë[XZ[[ú]H	
+	»€ÿÀ\ôY⁄\›\ãY[XZ[	 N¬à€€ú›ôY⁄\›\î\‹“[ú]H	
+	»€ÿÀ\ôY⁄\›\ã\\‹… N¬à€€ú›ôY⁄\›\î\‹–€€ôö\õR[ú]H	
+	»€ÿÀ\ôY⁄\›\ã\\‹ÀX€€ôö\õI N¬à€€ú›ôY⁄\›\îô[Y[Xô\í[ú]H	
+	»€ÿÀ\ôY⁄\›\ã\ô[Y[Xô\â N¬à€€ú›ôY⁄\›\îÿ]ôPùàH	
+	»€ÿÀ\ôY⁄\›\ã\ÿ]ôI N¬à€€ú›ôY⁄\›\ë\úõ‹àH	
+	»€ÿÀ\ôY⁄\›\ãY\úõ‹â N¬Çà€€ú›—PT””ó”‘ëTàH…›⁄[ù\âÀ	‹‹ö[ô…À	‹›[[Y\âÀ	Ÿò[	◊N¬à€€ú›—PT””ó‘’Tï”S”ïH»⁄[ù\éà‹ö[ôŒàÀ›[[Y\éàãò[àHN¬à]X›]ôUXàH	ÿ⁄\ù	Œ¬à]^[ôYYX\àHô]»]J
+KôŸ]ù[YX\ä
+N¬à]Ÿ[X›YŸX\€€àHù[¬à]ŸX\€€ï\HH	”‘	Œ¬à]ŸX\€€íYP⁄[ô\ŸHHùYN¬à]ŸX\€€íYS[›öYHHùYN¬à]ŸX\€€íYT⁄‹ù[ôYHùYN¬à]ŸX\€€î]Y]YHH◊N¬à]ŸX\€€î]Y]YR[ô^H¬à]]ò[X]‹ì[ŸHH	‹ŸX\€€âŒ¬à]õ[ô[ô[ô‘ò][ô»Hù[¬à]õ[ôŸ\‹⁄[€î›]»Hù[¬à]Z[PX›]ôRŸ^HH	…Œ¬à]Z[Pÿ[[ô\ì[€ùHù[¬à]Z[TôYúô\⁄[Y\àHù[¬à]ö\ôXò\ŸS‹[ö[ô‹»H◊N¬à]ö\ôXò\ŸTò][ô‹»H◊N¬à]ö\ôXò\ŸTò][ô‹‘ÿ€‹HH	€õ€ôIŒ¬à]ö\ôXò\ŸSX[ùX[ò[ö‹»H◊N¬à]ö\ôXò\ŸU\Ÿ\îõŸö[\»H◊N¬à]ö\ôXò\ŸQ[ù]Pÿ\ô»H◊N¬à]ö\ôXò\ŸU[ú›Xë[ù]Pÿ\ô»Hù[¬à]X›]ôQ[ù]U\HH	‹›Y[‹…Œ¬à]X›]ôQ[ù]Pÿ\ôYH	…Œ¬à][ù]Qö[\ú—^[ôYHò[ŸN¬à]X›]ôQ[ù]T]Y]YSXô[H	…Œ¬à]X›]ôTò][ô‘]Y]YP€€ù^HﬂN¬à]X›]ôQ[ù]Qö[\ôY[ùöY\»H◊N¬à][ù]Pÿ\ôô[ô\ì[Z]H¬à][ù]UòX⁄‘ô[ô\ì[Z]HÃ¬à]ö\ôXò\ŸU[ú›Xì‹[ö[ô‹»Hù[¬à]ö\ôXò\ŸU[ú›Xîò][ô‹»Hù[¬à]ö\ôXò\ŸU[ú›XìX[ùX[ò[ö‹»Hù[¬à]ö\ôXò\ŸU[ú›Xï\Ÿ\îõŸö[\»Hù[¬à]ö\ôXò\ŸU[ú›XïY\ì‹ô\ú»Hù[¬à]ö\ôXò\ŸU[ú›Xë]ô[ùò\⁄Ÿ]Hù[¬à]ö\ôXò\ŸQ]ô[ùò\⁄Ÿ]HﬂN¬à]ö\ôXò\ŸQ]ô[ùò\⁄Ÿ]ÿYYHò[ŸN¬à]ö\ôXò\ŸQí[ú›[òŸHHù[¬à€€ú›ô[[›Q]T›]HH¬à‹[ö[ô‹Œà»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[Kàò][ô‹Œà»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[KàX[ùX[ò[ö‹Œà»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[Kà\Ÿ\îõŸö[\Œà»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[Kà[ù]Pÿ\ôŒà»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[KàY\éà»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[Kà]ô[ùò\⁄Ÿ]à»›\ùYàò[ŸKôXYNàò[ŸKõ€Z\ŸNàù[ô\€€ôNàù[BàN¬à]õ›]Q]Tﬁ[ò“YH¬à]Y\ì‹ô\ú»HﬂN¬à]Y\ìXô[»HﬂN¬à]Y\îXŸ[Y[ù»HﬂN¬à]›]’\Qö[\àH	…Œ¬à]Y\îŸ[X›[€àH»\Nà	”‘	ÀYX\éàô]»]J
+KôŸ]ù[YX\ä
+KŸX\€€éà	›⁄[ù\â»N¬à]^[ôYêÿX⁄HHù[¬ÇàÀ»KKKKKKKKKH\ôõ‹õX[òŸH^Y\àõ‹à\ôŸHÿ][Ÿ‹»KKKKKKKKKBàÀ»RH⁄›‹»€õHY⁄[ò]Yÿ\ôÀù]⁄]›\ÿ[ô»ŸàòX⁄‹»H^[ú⁄]ôH\ù\¬àÀ»ô\X]Yö[\ö[ôÀ‹›]\›X‹»›ô\àH⁄€H[ã[Y[[‹ûHÿ][ŸÀà\ŸH€›[ù\ú»[ôàÀ»ÿX⁄\»ŸY\ô\X]Yô[ô\ú»⁄X\[ô€ÿ[\ÿŸHŸ]ô\ò[ö\ô\›‹ôH€ò\⁄›»[ù»€ôHRHôYúô\⁄Çà]]Uô\ú⁄[€àH¬à]ÿ][Ÿ’ô\ú⁄[€àH¬à]X[ùX[ò[ö‹’ô\ú⁄[€àH¬à]]ò]\ú’ô\ú⁄[€àH¬à][ùöY\–ûRYHô]»X\
+
+N¬à]ö[\ì‹[€ú’ô\ú⁄[€àHLN¬à]ÿ]Y€‹ûPÿX⁄Uô\ú⁄[€àHLN¬à]ÿ]Y€‹ûPÿX⁄HH»›Y[‹Œà◊K\ôX›‹úŒà◊K\ôõ‹õY\úŒà◊Kúò[ò⁄\Ÿ\Œà◊KYX\úŒà◊HN¬à]õŸö[U\Ÿ\ú–ÿX⁄HH»Ÿ^Nà	…Àò[Y\Œà◊HN¬à]ö[\ôYÿX⁄HH»Ÿ^Nà	…Àò[YNàù[N¬à]€‹ùYÿX⁄HH»Ÿ^Nà	…À[ú]àù[ò[YNàù[N¬à]€ÿò[‹ÿX⁄HHô]»X\
+
+N¬à]ZTôYúô\⁄[Y\àHù[¬à]ZTôYúô\⁄ôYY—ö[\ì‹[€ú»Hò[ŸN¬à]›\ô\‹–⁄\ùò][ô‘ôYúô\⁄[ù[H¬à]\›‹[ö[ô‹‘€ò\⁄›Ÿ^HH	…Œ¬Çàù[ò›[€à\‹]⁄\]ô[ù
+ò[YK]Z[HﬂJH¬à€€ú›^[ÿYH»X›]ôUXãããô]Z[N¬à⁄[ô›Àô\‹]⁄]ô[ù
+ô]»›\›€Q]ô[ù
+ò[YK»]Z[à^[ÿYJJN¬àÿ›[Y[ùô\‹]⁄]ô[ù
+ô]»›\›€Q]ô[ù
+ò[YK»]Z[à^[ÿYJJN¬àBÇàù[ò›[€à\]T€ò\⁄›
+
+H¬àô]\õà¬à[ùöY\Ààò][ô‹Œàö\ôXò\ŸTò][ô‹ÀàX[ùX[ò[ö‹Àà\Ÿ\îõŸö[\Œàö\ôXò\ŸU\Ÿ\îõŸö[\Àà›\úô[ù\Ÿ\éà¬àöX⁄€ò[YNà^Sò[YKàZYà›\úô[ù\ú€€ò[ZY
+
+Kà]ò]\éà^P]ò]\ãàXÿŸ\‹”]ô[à]][ùXÿ]Yàõ€€X[äXÿŸ\‹”]ô[	âà›\úô[ù\ú€€ò[ZY
+
+H	âà^Sò[YJBàKàX›]ôUXÇàN¬àBÇàù[ò›[€àXõ\⁄\]JôX\€€àH	›\]I H¬à€€ú›€ò\⁄›H\]T€ò\⁄›
+
+N¬à⁄[ô›Àì–◊–T—UHH⁄[ô›Àì–◊–T—UHﬂN¬àÿöôX›ò\‹⁄Y€ä⁄[ô›Àì–◊–T—UK€ò\⁄›
+N¬à\‹]⁄\]ô[ù
+	€‹Yò\Y]K]\]Y	À»ôX\€€ã€ò\⁄›JN¬àô]\õà€ò\⁄›¬àBÇà⁄[ô›Àì–◊–T–îíQ—HH¬à€ò\⁄›à\]T€ò\⁄›à‹[ïòX⁄ŒàYOà‹[êÿ\ô[Ÿ[
+›ö[ô Y	… JKàò]UòX⁄ŒàYOà›\ù‹[ö[ô‘ò][ô ›ö[ô Y	… JKà‹LY]J\JH¬à€€ú›€X[ï\HH\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€€ú›õ›»HŸ]X[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YJHﬂN¬àô]\õà¬àÿ[ôY]\Œà\úò^Kôúõ€Jô]»Ÿ]
+
+õ›÷ÿÿ[ôY]\…ÿ€X[ï\_XH◊JKõX\
+›ö[ô Kôö[\äõ€€X[äJJKà[úŒàÿ[ö]^ôU‹[ú õ›÷ÿ[ú…ÿ€X[ï\_XJBàN¬àKà\’‹ÿ[ôY]JY\JH¬à€€ú›€X[ï\HH\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€€ú›õ›»HŸ]X[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YJHﬂN¬àô]\õà
+õ›÷ÿÿ[ôY]\…ÿ€X[ï\_XH◊JKõX\
+›ö[ô Kö[ò€Y\ ›ö[ô Y
+JN¬àKà\ﬁ[ò»ŸŸ€U‹ÿ[ôY]JY\JH¬àYà
+[^Sò[YHX›\úô[ù\ú€€ò[ZY
+
+JHõ›»ô]»\úõ‹ä	Ù%4.Ùc»4.¥,4/t-4.4-4,4`¥/¥,à4,¥/¥.t-4.4,à4.Ù.4aÙ/tbÙ.H4,4.¥.¥,4`Ù/t`ãâ N¬à€€ú›€X[ï\HH\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€€ú›‹[ö[ô“YH›ö[ô Y	… N¬à€€ú››\úô[ùHŸ]X[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YJHﬂN¬à€€ú›öY[Hÿ[ôY]\…ÿ€X[ï\_X¬à€€ú›ÿ[ôY]\»Hô]»Ÿ]
+
+›\úô[ùŸöY[H◊JKõX\
+›ö[ô JN¬àYà
+ÿ[ôY]\Àö\ ‹[ö[ô“Y
+JHÿ[ôY]\Àô[]J‹[ö[ô“Y
+N¬à[ŸHÿ[ôY]\ÀòY
+‹[ö[ô“Y
+N¬à€€ú›ô^H»ããò›\úô[ùŸöY[NàÀããòÿ[ôY]\◊HN¬àô[Y[Xô\ìX[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YKô^
+N¬à]ÿZ]ÿ]ôSX[ùX[ò[ö‹ 
+N¬àXõ\⁄\]J	›‹LXÿ[ôY]\À\ÿ]ôY	 N¬àô]\õàÿ[ôY]\Àö\ ‹[ö[ô“Y
+N¬àKà\ﬁ[ò»Y‹ÿ[ôY]\ \JH¬àYà
+[^Sò[YHX›\úô[ù\ú€€ò[ZY
+
+JHõ›»ô]»\úõ‹ä	Ù%4.Ùc»4.4-Ù/4-t/t-t/t.4c»4`¥/¥/Ù,4,¥/¥.t-4.4,à4.Ù.4aÙ/tbÙ.H4,4.¥.¥,4`Ù/t`ãâ N¬à€€ú›€X[ï\HH\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€€ú››\úô[ùHŸ]X[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YJHﬂN¬à€€ú›ÿ[ôY]\»H
+›\úô[ùÿÿ[ôY]\…ÿ€X[ï\_XH◊JKõX\
+›ö[ô N¬à€€ú›‹ô\àH\U‹[ú à\úò^Kôúõ€Jô]»Ÿ]
+Àããòÿ[ôY]\Àããä›\úô[ùÿ€X[ï\WH◊JKõX\
+›ö[ô WJJKà›\úô[ùÿ[ú…ÿ€X[ï\_XBà
+N¬à€€ú›ô^H»ããò›\úô[ùÿ€X[ï\WNà‹ô\àN¬àô[Y[Xô\ìX[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YKô^
+N¬à]ÿZ]ÿ]ôSX[ùX[ò[ö‹ 
+N¬àXõ\⁄\]J	›‹LXÿ[ôY]\ÀXYY	 N¬àô]\õàô^¬àKà\ﬁ[ò»ÿ]ôU‹[ú \K[ú H¬àYà
+[^Sò[YHX›\úô[ù\ú€€ò[ZY
+
+JHõ›»ô]»\úõ‹ä	Ù%4.Ùc»4-Ù,4.¥`4-t/Ù.Ù-t/t.4c»4,¥/¥.t-4.4,à4.Ù.4aÙ/tbÙ.H4,4.¥.¥,4`Ù/t`ãâ N¬à€€ú›€X[ï\HH\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€€ú››\úô[ùHŸ]X[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YJHﬂN¬à€€ú›€X[î[ú»Hÿ[ö]^ôU‹[ú [ú N¬à€€ú›ô^H¬àããò›\úô[ùàÿ€X[ï\WNà\U‹[ú ›\úô[ùÿ€X[ï\WH◊K€X[î[ú Kàÿ[ú…ÿ€X[ï\_XNà€X[î[ú¬àN¬àô[Y[Xô\ìX[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YKô^
+N¬à]ÿZ]ÿ]ôSX[ùX[ò[ö‹ 
+N¬àXõ\⁄\]J	›‹L\[úÀ\ÿ]ôY	 N¬àô]\õàô^¬àKà\ﬁ[ò»ÿ]ôQY[ò[ö‹ \K‹ô\äH¬àYà
+[^Sò[YHX›\úô[ù\ú€€ò[ZY
+
+JHõ›»ô]»\úõ‹ä	Ù%4.Ùc»4`t/¥at`4,4/t-t/t.4c»4,¥/¥.t-4.4,à4.Ù.4aÙ/tbÙ.H4,4.¥.¥,4`Ù/t`ãâ N¬à€€ú›€X[ï\HH\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€€ú››\úô[ùHŸ]X[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YJHﬂN¬à€€ú›ô^H¬àããò›\úô[ùàÿ€X[ï\WNà\úò^Kôúõ€Jô]»Ÿ]
+
+‹ô\à◊JKõX\
+›ö[ô Kôö[\äõ€€X[äJJKú€XŸJL
+BàN¬àô[Y[Xô\ìX[ùX[ò[ö‹—õ‹ï\Ÿ\ä^Sò[YKô^
+N¬à]ÿZ]ÿ]ôSX[ùX[ò[ö‹ 
+N¬àX[ùX[\ùHHò[ŸN¬àXõ\⁄\]J	€X[ùX[\ò[ö‹À\ÿ]ôY	 N¬àô]\õàô^¬àKà\ﬁ[ò»ÿ]ôP€€X›[€ú €€X›[€ú H¬àYà
+]⁄[ô›Àì‘Q—èÀúÿ]ôU\Ÿ\ê€€X›[€ú Hõ›»ô]»\úõ‹ä	Ù)t`4,4/t.4.Ù.4bt-H4/Ù/¥-4,t/¥`4/¥.à4-tbtdH4/t-H4/Ù/¥-4.¥.Ùc¥aÙ-t/t/ãâ N¬à€€ú›õ›‹»H]ÿZ]⁄[ô›Àì‘Q—ãúÿ]ôU\Ÿ\ê€€X›[€ú ^Sò[YK€€X›[€ú N¬à€€ú›õŸö[R[ô^Hö\ôXò\ŸU\Ÿ\îõŸö[\Àôö[ô[ô^
+õ›»Oàõ‹õX[^ôYXÿ€›[ùò[YJõ›ÀõöX⁄€ò[YRŸ^Hõ›ÀõöX⁄€ò[YHõ›ÀöY
+HOOHõ‹õX[^ôYXÿ€›[ùò[YJ^Sò[YJJN¬àYà
+õŸö[R[ô^èH
+Hö\ôXò\ŸU\Ÿ\îõŸö[\÷‹õŸö[R[ô^HH»ããôö\ôXò\ŸU\Ÿ\îõŸö[\÷‹õŸö[R[ô^K€€X›[€úŒàõ›‹»N¬àXõ\⁄\]J	ÿ€€X›[€úÀ\ÿ]ôY	 N¬àô]\õàõ›‹Œ¬àKàõŸö[Q]Jò[YHH^Sò[YJH¬àô]\õàZ[TõŸö[Qõ‹äò[YJHù[¬àKà\Ÿ\îÿ€‹ôJYò[YHH^Sò[YJH¬à€€ú›[ùûHH[ùöY\–ûRYôŸ]
+›ö[ô Y	… JN¬àYà
+Y[ùûJHô]\õàù[¬à€€ú›XõX‘ÿ€‹ôHHÿ€‹ôQõ‹ä[ùûKò[YJN¬àô]\õàXõX‘ÿ€‹ôHOOHù[»XõX‘ÿ€‹ôHà\ú€€ò[ÿ€‹ôQõ‹ä[ùûKò[YJN¬àKà\‘ò]S]\äY
+H¬àô]\õàò]S]\íY—õ‹ä^Sò[YJKö[ò€Y\ ›ö[ô Y	… JN¬àKà\ﬁ[ò»ŸŸ€Tò]S]\äY
+H¬àô]\õàŸŸ€Tò]S]\ë[ùûJ›ö[ô Y	… JN¬àKà\ﬁ[ò»ÿ]ôTõŸö[T]⁄
+]⁄
+H¬àYà
+[^Sò[YHX›\úô[ù\ú€€ò[ZY
+
+JHõ›»ô]»\úõ‹ä	Ù%4.Ùc»4`t/¥at`4,4/t-t/t.4c»4,¥/¥.t-4.4,à4.Ù.4aÙ/tbÙ.H4,4.¥.¥,4`Ù/t`ãâ N¬à]ÿZ]ÿ]ôQZ[TõŸö[T]⁄
+]⁄	âà\[Ÿà]⁄OOH	€ÿöôX›	»»]⁄àﬂJN¬àXõ\⁄\]J	‹õŸö[K\Ÿ][ô‹À\ÿ]ôY	 N¬àô]\õàZ[TõŸö[Qõ‹ä^Sò[YJN¬àKà›\ùò][ô‘]Y]YJYÀ‹[€ú»HﬂJH¬àYà
+Y[ú›\ôSöX⁄€ò[YJ
+JHô]\õàò[ŸN¬à€€ú›[ŸHH›ö[ô ‹[€úÀõ[ŸH	ÿ€€X›[€â N¬à€€ú›Xô[H›ö[ô ‹[€úÀõXô[	Ù'¥aÙ-t`4-t-4c4/¥a¥-t/t.¥.	 N¬à€€ú›€€ù^H‹[€úÀò€€ù^	âà\[Ÿà‹[€úÀò€€ù^OOH	€ÿöôX›	»»‹[€úÀò€€ù^àﬂN¬à€€ú›õ›‹»H\úò^Kôúõ€Jô]»Ÿ]
+
+Y»◊JKõX\
+›ö[ô JJKõX\
+YOà[ùöY\–ûRYôŸ]
+Y
+JKôö[\äõ€€X[äN¬àYà
+\õ›‹Àõ[ô›
+H¬àŸ]›]\ 	Ù$à4ct`¥/¥.H4/¥aÙ-t`4-t-4.4/t-H4/¥`t`¥,4.Ù/¥`tc4/t-t/¥a¥-t/tdt/t/tbÙaH4`¥`4-t.¥/¥,ãâÀùYJN¬àô]\õàò[ŸN¬àBà›\ù\ú⁄\›[ùò][ô‘]Y]YJõ›‹À[ŸKXô[€€ù^
+N¬àô]\õàùYN¬àKàô[ô\êÿ][Ÿ—Y]‹äY
+H¬àYà
+Z\–ÿ][Ÿ–YZ[ä
+JHô]\õà	…Œ¬à€€ú›[ùûHH[ùöY\–ûRYôŸ]
+›ö[ô Y	… JN¬àô]\õà[ùûH»ô[ô\ëY]ÿ\ô
+[ùûJHà	…Œ¬àKà\ﬁ[ò»ÿ]ôPÿ][Ÿ—Y]‹äYÿ\ô
+H¬àô]\õàÿ]ôQ^\õò[òX⁄—Y]‹ä›ö[ô Y	… Kÿ\ô
+N¬àKàÿ]⁄õ›\õò[
+ÿ[òX⁄ H¬àYà
+]⁄[ô›Àì‘Q—èÀùÿ]⁄ÿ][Ÿ“õ›\õò[
+H¬àÿ[òX⁄ ◊JN¬àô]\õàù[¬àBàô]\õà⁄[ô›Àì‘Q—ãùÿ]⁄ÿ][Ÿ“õ›\õò[
+ÿ[òX⁄ N¬àBàN¬Çàù[ò›[€àX\ö‘ô[[›Q]TôXYJò[YK]Z[HﬂJH¬à€€ú››]HHô[[›Q]T›]V€ò[YWN¬àYà
+\›]JHô]\õé¬à€€ú›ö\ú›ôXYHH\›]KúôXYN¬à›]KúôXYHHùYN¬àYà
+›]Kúô\€€ôJH¬à›]Kúô\€€ôJ
+N¬à›]Kúô\€€ôHHù[¬àBà\‹]⁄\]ô[ù
+	€‹Yô]K\ôXYIÀ»€›\òŸNàò[YKö\ú›ôXYKããô]Z[JN¬àYà
+ò[YHOOH	€‹[ö[ô‹… H\‹]⁄\]ô[ù
+	€‹Yòÿ][ŸÀ\ôXYIÀ»ö\ú›ôXYKããô]Z[JN¬àBÇàù[ò›[€à‹ôX]Tô[[›Q]Tõ€Z\ŸJò[YJH¬à€€ú››]HHô[[›Q]T›]V€ò[YWN¬àYà
+\›]JHô]\õàõ€Z\ŸKúô\€€ôJ
+N¬àYà
+›]KúôXYJHô]\õàõ€Z\ŸKúô\€€ôJ
+N¬àYà
+\›]Kúõ€Z\ŸJH¬à›]Kúõ€Z\ŸHHô]»õ€Z\ŸJô\€€ôHOà¬à›]Kúô\€€ôHHô\€€ôN¬àJN¬àBàô]\õà›]Kúõ€Z\ŸN¬àBÇàù[ò›[€àô\Ÿ]ô[[›Q]T›Xúÿ‹ö\[€äò[YJH¬à€€ú››]HHô[[›Q]T›]V€ò[YWN¬àYà
+\›]JHô]\õé¬à›]Kú›\ùYHò[ŸN¬à›]Kúõ€Z\ŸHHù[¬à›]Kúô\€€ôHHù[¬àBÇàù[ò›[€àù[ï⁄[êúõ›‹Ÿ\í\“YJÿ[òX⁄À[Y[›]HLå
+H¬àYà
+\[Ÿà⁄[ô›Àúô\]Y\›YPÿ[òX⁄»OOH	Ÿù[ò›[€â H¬à⁄[ô›Àúô\]Y\›YPÿ[òX⁄ 
+
+HOàÿ[òX⁄ 
+K»[Y[›]JN¬àô]\õé¬àBà⁄[ô›ÀúŸ][Y[›]
+ÿ[òX⁄ÀX]õZ[ä[Y[›]çL
+JN¬àBÇàù[ò›[€àõŸ‹ô\‹⁄]ôS[‹ôSX\ö›\
+ÿ€‹K⁄›€ã›[
+H¬àYà
+⁄›€àèH›[
+Hô]\õà	…Œ¬àô]\õàù]€à\OHòù]€àà€\‹œHõÿÀ\õŸ‹ô\‹⁄]ôK[[‹ôHà]K\õŸ‹ô\‹⁄]ôK[[‹ôOHâ‹ÿ€‹_Hè¥'Ù/¥.¥,4-Ù,4/t/à	‹⁄›€üH4.4-»	››[H0≠»4-Ù,4,Ù`4`Ù-Ù.4`¥c4-tbtdOÿù]€èò¬àBÇàù[ò›[€à[ú›[õŸ‹ô\‹⁄]ôP]]€ÿY
+€€ùZ[ô\ãÿ€‹Kÿ[òX⁄ H¬à€€ú›ù]€àH€€ùZ[ô\èÀú]Y\ûTŸ[X›‹èÀäŸ]K\õŸ‹ô\‹⁄]ôK[[‹ôOHâ‹ÿ€‹_HóX
+N¬àYà
+Xù]€äHô]\õé¬àù]€ãòY]ô[ù\›[ô\ä	ÿ€X⁄…Àÿ[òX⁄À»€òŸNàùYHJN¬àYà
+J	“[ù\úŸX›[€ìÿúŸ\ùô\â»[à⁄[ô› JHô]\õé¬à€€ú›ÿúŸ\ùô\àHô]»[ù\úŸX›[€ìÿúŸ\ùô\ä[ùöY\»Oà¬àYà
+Y[ùöY\Àú€€YJ[ùûHOà[ùûKö\“[ù\úŸX›[ô JHô]\õé¬àÿúŸ\ùô\ãô\ÿ€€õôX›
+
+N¬àù]€ãò€X⁄ 
+N¬àK»õ€›X\ô⁄[éà	ÕL	»JN¬àÿúŸ\ùô\ãõÿúŸ\ùôJù]€äN¬àBÇàù[ò›[€àÿZ]õ‹ëö\ôXò\ŸQä
+H¬àYà
+⁄[ô›Àì‘Q—äHô]\õàõ€Z\ŸKúô\€€ôJ⁄[ô›Àì‘Q—äN¬Çàô]\õàô]»õ€Z\ŸJ
+ô\€€ôKôZôX›
+HOà¬à€€ú›[Y\àHŸ][Y[›]
+
+
+HOà¬àôZôX›
+ô]»\úõ‹ä	Ù't-H4`Ù-4,4.Ù/¥`tc4/Ù/¥-4.¥.Ùc¥aÙ.4`¥c4`tcÀà4'Ù`4/¥,¥-t`4c4`¥-H4.4/t`¥-t`4/t-t`à4.4/Ù/¥/Ù`4/¥,t`Ù.t`¥-H4-tbtdH4`4,4-Àâ JN¬àKL
+N¬Çà⁄[ô›ÀòY]ô[ù\›[ô\ä	€‹YYã\ôXYIÀ
+
+HOà¬à€X\ï[Y[›]
+[Y\äN¬àô\€€ôJ⁄[ô›Àì‘Q—äN¬àK»€òŸNàùYHJN¬àJN¬àBÇà\ﬁ[ò»ù[ò›[€àŸ]^[ôYä
+H¬àYà
+^[ôYêÿX⁄JHô]\õà^[ôYêÿX⁄N¬à€€ú›\[ŸH]ÿZ][\‹ù
+	⁄ŒãÀ›››Àô‹›]XÀò€€KŸö\ôXò\ŸZúÀÃLãåMKåŸö\ôXò\ŸKX\öú… N¬à€€ú›ú”[ŸH]ÿZ][\‹ù
+	⁄ŒãÀ›››Àô‹›]XÀò€€KŸö\ôXò\ŸZúÀÃLãåMKåŸö\ôXò\ŸKYö\ô\›‹ôKöú… N¬à€€ú›]][ŸH]ÿZ][\‹ù
+	⁄ŒãÀ›››Àô‹›]XÀò€€KŸö\ôXò\ŸZúÀÃLãåMKåŸö\ôXò\ŸKX]]öú… N¬à€€ú›ö\ôXò\ŸP€€ôöY»H¬à\RŸ^NàêR^òTﬁPã]⁄úŸ^öSSŸïöUöñ\ú[‘“[‹õUVHãà]]€XZ[éàõ‹YY[‹ô[ãYYYôö\ôXò\ŸX\ò€€Hãàõ⁄ôX›Yàõ‹YY[‹ô[ãYYYãà›‹òYŸPùX⁄Ÿ]àõ‹YY[‹ô[ãYYYôö\ôXò\Ÿ\›‹òYŸKò\ãàY\‹ÿY⁄[ô‘Ÿ[ô\íYàéåLLçåãà\YàåNéåLLçåùŸXéòòXåMÃYåçYMXŒŸLôôHÇàN¬à€€ú›\H\[ŸôŸ]\ 
+Kõ[ô›»\[ŸôŸ]\
+
+Hà\[Ÿö[ö]X[^ôP\
+ö\ôXò\ŸP€€ôöY N¬àûH¬à€€ú›]]H]][ŸôŸ]]]
+\
+N¬àYà
+\[Ÿà]]ò]]›]TôXYHOOH	Ÿù[ò›[€â H]ÿZ]]]ò]]›]TôXYJ
+N¬àYà
+X]]ò›\úô[ù\Ÿ\äH]ÿZ]]][Ÿú⁄Y€í[ê[õ€û[[›\€J]]
+N¬àHÿ]⁄
+JH¬à€€ú€€Kùÿ\õä	ÿ[õ€û[[›\»]]õ‹à]ô[ùò\⁄Ÿ]òZ[Y	ÀJN¬àBà^[ôYêÿX⁄HH»éàú”[ŸôŸ]ö\ô\›‹ôJ\
+Kããôú”[ŸN¬àô]\õà^[ôYêÿX⁄N¬àBÇÇàù[ò›[€àXZŸQXõ›[òŸY
+õã[^HHçL
+H¬à][Y\àHù[¬àô]\õàù[ò›[€àXõ›[òŸY
+ããò\ô‹ H¬à€X\ï[Y[›]
+[Y\äN¬à[Y\àHŸ][Y[›]
+
+
+HOàõãò\J\À\ô‹ K[^JN¬àN¬àBÇàù[ò›[€à€X\ë\ö]ôYÿX⁄\ 
+H¬àö[\ôYÿX⁄HH»Ÿ^Nà	…Àò[YNàù[N¬à€‹ùYÿX⁄HH»Ÿ^Nà	…À[ú]àù[ò[YNàù[N¬à€ÿò[‹ÿX⁄Kò€X\ä
+N¬àBÇàù[ò›[€à›X⁄[ùûPÿX⁄J[ùûJH¬àYà
+Y[ùûJHô]\õà[ùûN¬à…‹ÿ€‹ô\…À	‹€€ô‘ÿ€‹ô\…À	›ö\›X[ÿ€‹ô\…À	ÿ›\›€Tÿ€‹ô\…À	‹\ú€€ò[ÿ€‹ô\…À	ÿ€€[Y[ù…◊Kôõ‹ëXX⁄
+Ÿ^HOà¬àYà
+[ùûV⁄Ÿ^WH	âà\[Ÿà[ùûV⁄Ÿ^WHOOH	€ÿöôX›	 H¬àûH»[]H[ùûV⁄Ÿ^WKó◊€ÿ◊‹›]Œ»Hÿ]⁄
+JHﬂBàBàJN¬à[]H[ùûKó◊€ÿ‘ŸX\ò⁄^¬àô]\õà[ùûN¬àBÇàù[ò›[€àôXùZ[ò\›[ô^\ »ÿ][Ÿ–⁄[ôŸYHùYHHHﬂJH¬à[ùöY\–ûRYHô]»X\
+[ùöY\ÀõX\
+HOà‘›ö[ô KöY
+KWJJN¬à]Uô\ú⁄[€à
+œHN¬àYà
+ÿ][Ÿ–⁄[ôŸY
+H¬àÿ][Ÿ’ô\ú⁄[€à
+œHN¬àö[\ì‹[€ú’ô\ú⁄[€àHLN¬àÿ]Y€‹ûPÿX⁄Uô\ú⁄[€àHLN¬àBàõŸö[U\Ÿ\ú–ÿX⁄KöŸ^HH	…Œ¬à€X\ë\ö]ôYÿX⁄\ 
+N¬àBÇàù[ò›[€àX\ö‘ò][ô—]P⁄[ôŸY
+
+H¬à]Uô\ú⁄[€à
+œHN¬àõŸö[U\Ÿ\ú–ÿX⁄KöŸ^HH	…Œ¬à€X\ë\ö]ôYÿX⁄\ 
+N¬àBÇàù[ò›[€àX\ö”X[ùX[ò[ö‹–⁄[ôŸY
+
+H¬àX[ùX[ò[ö‹’ô\ú⁄[€à
+œHN¬àõŸö[U\Ÿ\ú–ÿX⁄KöŸ^HH	…Œ¬à€ÿò[‹ÿX⁄Kò€X\ä
+N¬à€X\ë\ö]ôYÿX⁄\ 
+N¬àBÇàù[ò›[€àX\ö–]ò]\ú–⁄[ôŸY
+
+H¬à]ò]\ú’ô\ú⁄[€à
+œHN¬àõŸö[U\Ÿ\ú–ÿX⁄KöŸ^HH	…Œ¬àBÇàù[ò›[€àôYúô\⁄ö\⁄XõT[ô[ »õ‹òŸQö[\ú»Hò[ŸHHHﬂJH¬àYà
+õ‹òŸQö[\ú H‹[]Qö[\ì‹[€ú ùYJN¬à[ŸHﬁ[ò—ö[\ê€€ùõ€ 
+N¬à‹[]TõŸö[U\Ÿ\ú 
+N¬àYà
+X›]ôUXàOOH	ÿ⁄\ù	 Hô[ô\ä
+N¬à[ŸHYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬à[ŸHYà
+X›]ôUXàOOH	›‹L	 Hô[ô\ë€ÿò[‹L
+
+N¬à[ŸHYà
+X›]ôUXàOOH	‹ŸX\€€â Hô[ô\îŸX\€€ïöY]‹ 
+N¬à[ŸHYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬à[ŸHYà
+X›]ôUXàOOH	‹›]… Hô[ô\î›]‘YŸJ
+N¬à[ŸHYà
+X›]ôUXàOOH	Ÿ\ÿ€›ô\ûI HXõ\⁄\]J	›ö\⁄XõK\ôYúô\⁄	 N¬àBÇàù[ò›[€àÿ⁄Y[Uö\⁄XõTôYúô\⁄
+‹[€ú»HﬂJH¬àZTôYúô\⁄ôYY—ö[\ì‹[€ú»HZTôYúô\⁄ôYY—ö[\ì‹[€ú»õ€€X[ä‹[€úÀôõ‹òŸQö[\ú N¬à€X\ï[Y[›]
+ZTôYúô\⁄[Y\äN¬àZTôYúô\⁄[Y\àHŸ][Y[›]
+
+
+HOà¬àZTôYúô\⁄[Y\àHù[¬à€€ú›õ‹òŸQö[\ú»HZTôYúô\⁄ôYY—ö[\ì‹[€úŒ¬àZTôYúô\⁄ôYY—ö[\ì‹[€ú»Hò[ŸN¬àôYúô\⁄ö\⁄XõT[ô[ »õ‹òŸQö[\ú»JN¬àKL
+N¬àBÇÇàù[ò›[€àö\ô\›‹ôU[YRŸ^Jò[YJH¬àYà
+]ò[YJHô]\õà	…Œ¬àYà
+\[Ÿàò[YKù”Z[\»OOH	Ÿù[ò›[€â Hô]\õà›ö[ô ò[YKù”Z[\ 
+JN¬àYà
+\[Ÿàò[YKúŸX€€ô»OOH	€ù[Xô\â Hô]\õà	›ò[YKúŸX€€ôﬂNâ›ò[YKõò[õ‹ŸX€€ô»X¬àYà
+ò[YH[ú›[òŸ[Ÿà]JHô]\õà›ö[ô ò[YKôŸ][YJ
+JN¬àô]\õà›ö[ô ò[YJN¬àBÇàù[ò›[€à›\úô[ù\ú€€ò[ZY
+
+H¬àô]\õà›ö[ô ⁄[ô›Àì‘Q—èÀò›\úô[ù\Ÿ\ïZYÀä
+H]][ùXÿ]YZY	… N¬àBÇàù[ò›[€àô\]Z\ôT\ú€€ò[ZY
+
+H¬à€€ú›ZYH›\úô[ù\ú€€ò[ZY
+
+N¬àYà
+]ZY
+Hõ›»ô]»\úõ‹ä	Ù%4.Ùc»4`t/¥at`4,4/t-t/t.4c»4/t`Ù-¥-t/H4.Ù.4aÙ/tbÙ.H4,4.¥.¥,4`Ù/t`ãâ N¬àô]\õàZY¬àBÇàù[ò›[€à‹[ö[ô‹‘€ò\⁄›Ÿ^Jõ›‹ H¬àô]\õà
+õ›‹»◊JKõX\
+õ›»Oà	‹õ›ÀöY	…ﬂNâŸö\ô\›‹ôU[YRŸ^Jõ›Àù\]Y]õ›Àò‹ôX]Y]	… _X
+Köõ⁄[ä	ﬂ	 N¬àBÇà\ﬁ[ò»ù[ò›[€àÿ]ôS‹[ö[ô—^ò\ ‹[ö[ô“Y^ò\ H¬àYà
+[‹[ö[ô“YY^ò\ Hô]\õé¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬à€€ú›^[ÿYH»\]Y]à^úŸ\ùô\ï[Y\›[\
+
+HN¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	Ÿúò[ò⁄\Ÿ\… JH^[ÿYôúò[ò⁄\Ÿ\»H€X[ëúò[ò⁄\ŸS\›
+^ò\Àôúò[ò⁄\Ÿ\ N¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	ÿ[\õò]]ôU]\… JH^[ÿYò[\õò]]ôU]\»H€X[ê[X\”\›
+^ò\Àò[\õò]]ôU]\ N¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	⁄\–⁄[ô\ŸI JH^[ÿYö\–⁄[ô\ŸHHõ€€X[ä^ò\Àö\–⁄[ô\ŸJN¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	⁄\”[›öYI JH^[ÿYö\”[›öYHHõ€€X[ä^ò\Àö\”[›öYJN¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	⁄\‘⁄‹ù[ôY	 JH^[ÿYö\‘⁄‹ù[ôYHõ€€X[ä^ò\Àö\‘⁄‹ù[ôY
+N¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	‹ÿ[YT€€ô—‹õ›\Y	 JH^[ÿYúÿ[YT€€ô—‹õ›\YH›ö[ô ^ò\Àúÿ[YT€€ô—‹õ›\Y	… Kùö[J
+N¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	‹ÿ[YT€€ô’]I JH^[ÿYúÿ[YT€€ô’]HH›ö[ô ^ò\Àúÿ[YT€€ô’]H	… Kùö[J
+N¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	›[òŸ\ùZ[î\ôõ‹õY\â JH^[ÿYù[òŸ\ùZ[î\ôõ‹õY\àHõ€€X[ä^ò\Àù[òŸ\ùZ[î\ôõ‹õY\äN¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	›[òŸ\ùZ[ë\ôX›‹â JH^[ÿYù[òŸ\ùZ[ë\ôX›‹àHõ€€X[ä^ò\Àù[òŸ\ùZ[ë\ôX›‹äN¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	›[òŸ\ùZ[í[XYŸI JH^[ÿYù[òŸ\ùZ[í[XYŸHHõ€€X[ä^ò\Àù[òŸ\ùZ[í[XYŸJN¬à]ÿZ]^úŸ]ÿ ^ôÿ ^ôã	€‹[ö[ô‹…À›ö[ô ‹[ö[ô“Y
+JK^[ÿY»Y\ôŸNàùYHJN¬àBÇà\ﬁ[ò»ù[ò›[€àÿ]ôTò][ô—^ò\ ‹[ö[ô“YöX⁄€ò[YK^ò\ H¬àYà
+]⁄[ô›Àì‘Q—à\[Ÿà⁄[ô›Àì‘Q—ãõõ‹õX[^ôSöX⁄€ò[YHOOH	Ÿù[ò›[€â Hô]\õé¬à€€ú›ÿYôSò[YHH⁄[ô›Àì‘Q—ãõõ‹õX[^ôSöX⁄€ò[YJöX⁄€ò[YJN¬à€€ú›ÿYôS‹[ö[ô“YH›ö[ô ‹[ö[ô“Y	… Kùö[J
+N¬àYà
+\ÿYôSò[YH\ÿYôS‹[ö[ô“YY^ò\ Hô]\õé¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬à€€ú›^[ÿYH¬à‹[ö[ô“YàÿYôS‹[ö[ô“YàöX⁄€ò[YNà›ö[ô öX⁄€ò[YH	… Kùö[J
+KàöX⁄€ò[YRŸ^NàÿYôSò[YKà›€ô\ïZYàô\]Z\ôT\ú€€ò[ZY
+
+Kà]ò]\éà^P]ò]\ãà\]Y]à^úŸ\ùô\ï[Y\›[\
+
+BàN¬à…‹ÿ€‹ôIÀ	‹€€ô‘ÿ€‹ôIÀ	›ö\›X[ÿ€‹ôIÀ	‹\ú€€ò[ÿ€‹ôI◊Kôõ‹ëXX⁄
+Ÿ^HOà¬àYà
+SÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\ÀŸ^JJHô]\õé¬à€€ú›ò[H^ò\÷⁄Ÿ^WN¬à^[ÿY⁄Ÿ^WHH
+ò[OOHù[ò[OOH[ôYö[ôYò[OOH	… H»^ô[]QöY[
+
+Hàù[Xô\äò[
+N¬àJN¬àYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	ÿ€€[Y[ù	 JH¬à€€ú›€€[Y[ùH›ö[ô ^ò\Àò€€[Y[ù	… Kùö[J
+Kú€XŸJL
+N¬à^[ÿYò€€[Y[ùH€€[Y[ù»€€[Y[ùà^ô[]QöY[
+
+N¬àBàYà
+ÿöôX›úõ››\Kö\”›€îõ‹\ùKòÿ[
+^ò\À	ÿ›\›€Tÿ€‹ô\… JH¬à€€ú››\›€Tÿ€‹ô\»Hõ‹õX[^ôP›\›€Tò][ô‘ÿ€‹ô\ ^ò\Àò›\›€Tÿ€‹ô\ N¬à^[ÿYò›\›€Tÿ€‹ô\»HÿöôX›öŸ^\ ›\›€Tÿ€‹ô\ Kõ[ô›»›\›€Tÿ€‹ô\»à^ô[]QöY[
+
+N¬àBà]ÿZ]^úŸ]ÿ ^ôÿ ^ôã	‹ò][ô‹…À	‹ÿYôSò[Y_W◊…‹ÿYôS‹[ö[ô“YX
+K^[ÿY»Y\ôŸNàùYHJN¬àBÇà\ﬁ[ò»ù[ò›[€à\ú⁄\›€€\]Tò][ô [ùûKò[Y\ H¬àYà
+Y[ùûH[^Sò[YJHõ›»ô]»\úõ‹ä	Ù't-H4/t,4.t-4-t/H4/Ù/¥.Ùc4-Ù/¥,¥,4`¥-t.Ùc4.4.Ù.4`¥`4-t.ãâ N¬à€€ú›ÿ€‹ôHHù[Xô\äò[Y\Àúÿ€‹ôJN¬àYà
+Sù[Xô\ãö\—ö[ö]Jÿ€‹ôJJHõ›»ô]»\úõ‹ä	Ù't-t.¥/¥`4`4-t.¥`¥/t,4c»4/¥a¥-t/t.¥,â N¬à€€ú›€€ô‘ÿ€‹ôHHò[Y\Àú€€ô‘ÿ€‹ôHOOHù[ò[Y\Àú€€ô‘ÿ€‹ôHOOH[ôYö[ôY»ù[àù[Xô\äò[Y\Àú€€ô‘ÿ€‹ôJN¬à€€ú›ö\›X[ÿ€‹ôHHò[Y\Àùö\›X[ÿ€‹ôHOOHù[ò[Y\Àùö\›X[ÿ€‹ôHOOH[ôYö[ôY»ù[àù[Xô\äò[Y\Àùö\›X[ÿ€‹ôJN¬à€€ú››\›€Tÿ€‹ô\»Hõ‹õX[^ôP›\›€Tò][ô‘ÿ€‹ô\ ò[Y\Àò›\›€Tÿ€‹ô\ N¬à€€ú›€€[Y[ùH›ö[ô ò[Y\Àò€€[Y[ù	… Kùö[J
+Kú€XŸJL
+N¬à[ùûKúÿ€‹ô\»H[ùûKúÿ€‹ô\»ﬂN¬à[ùûKú€€ô‘ÿ€‹ô\»H[ùûKú€€ô‘ÿ€‹ô\»ﬂN¬à[ùûKùö\›X[ÿ€‹ô\»H[ùûKùö\›X[ÿ€‹ô\»ﬂN¬à[ùûKò›\›€Tÿ€‹ô\»H[ùûKò›\›€Tÿ€‹ô\»ﬂN¬à[ùûKò€€[Y[ù»H[ùûKò€€[Y[ù»ﬂN¬à[ùûKúò][ô’\]Y]H[ùûKúò][ô’\]Y]ﬂN¬à[ùûKúÿ€‹ô\÷€^Sò[YWHHÿ€‹ôN¬à[ùûKúò][ô’\]Y]€^Sò[YWHHô]»]J
+N¬àYà
+€€ô‘ÿ€‹ôHOOHù[Sù[Xô\ãö\—ö[ö]J€€ô‘ÿ€‹ôJJH[]H[ùûKú€€ô‘ÿ€‹ô\÷€^Sò[YWN»[ŸH[ùûKú€€ô‘ÿ€‹ô\÷€^Sò[YWHH€€ô‘ÿ€‹ôN¬àYà
+ö\›X[ÿ€‹ôHOOHù[Sù[Xô\ãö\—ö[ö]Jö\›X[ÿ€‹ôJJH[]H[ùûKùö\›X[ÿ€‹ô\÷€^Sò[YWN»[ŸH[ùûKùö\›X[ÿ€‹ô\÷€^Sò[YWHHö\›X[ÿ€‹ôN¬àYà
+ÿöôX›öŸ^\ ›\›€Tÿ€‹ô\ Kõ[ô›
+H[ùûKò›\›€Tÿ€‹ô\÷€^Sò[YWHH›\›€Tÿ€‹ô\Œ»[ŸH[]H[ùûKò›\›€Tÿ€‹ô\÷€^Sò[YWN¬àYà
+€€[Y[ù
+H[ùûKò€€[Y[ù÷€^Sò[YWHH€€[Y[ù»[ŸH[]H[ùûKò€€[Y[ù÷€^Sò[YWN¬à]ÿZ]⁄[ô›Àì‘Q—ãúÿ]ôTò][ô [ùûKöY^Sò[YKÿ€‹ôJN¬à]ÿZ]ÿ]ôTò][ô—^ò\ [ùûKöY^Sò[YK»€€ô‘ÿ€‹ôKö\›X[ÿ€‹ôK›\›€Tÿ€‹ô\À€€[Y[ùJN¬à]ÿZ]ô[[›ôTò]S]\ë[ùûJ[ùûKöY
+N¬à\[ôX[ùX[‹ô\íYìZ\‹⁄[ô ^Sò[YK[ùûKù\K[ùûKöY
+N¬à›X⁄[ùûPÿX⁄J[ùûJN¬àX\ö‘ò][ô—]P⁄[ôŸY
+
+N¬àô]\õà»ÿ€‹ôK€€ô‘ÿ€‹ôKö\›X[ÿ€‹ôK›\›€Tÿ€‹ô\À€€[Y[ùN¬àBÇà\ﬁ[ò»ù[ò›[€à[]P›\úô[ùò][ô ‹[ö[ô“YöX⁄€ò[YKõ‹òŸS[ŸJH¬à€€ú›[ùûHH[ùöY\–ûRYôŸ]
+›ö[ô ‹[ö[ô“Y
+JN¬à€€ú›ò[YHH›ö[ô öX⁄€ò[YH	… Kùö[J
+N¬àYà
+Y[ùûH[ò[YJHô]\õé¬à€€ú›[ŸHHõ‹òŸS[ŸH
+\‘\ú€€ò[ÿÿ[J
+H»	‹\ú€€ò[	»à	‹XõX… N¬àûH¬àYà
+[ŸHOOH	‹\ú€€ò[	 H¬àYà
+[ùûKú\ú€€ò[ÿ€‹ô\ H[]H[ùûKú\ú€€ò[ÿ€‹ô\÷€ò[YWN¬à]ÿZ]ÿ]ôTò][ô—^ò\ [ùûKöYò[YK»\ú€€ò[ÿ€‹ôNàù[JN¬àH[ŸH¬àYà
+[ùûKúÿ€‹ô\ H[]H[ùûKúÿ€‹ô\÷€ò[YWN¬àYà
+[ùûKú€€ô‘ÿ€‹ô\ H[]H[ùûKú€€ô‘ÿ€‹ô\÷€ò[YWN¬àYà
+[ùûKùö\›X[ÿ€‹ô\ H[]H[ùûKùö\›X[ÿ€‹ô\÷€ò[YWN¬àYà
+[ùûKò€€[Y[ù H[]H[ùûKò€€[Y[ù÷€ò[YWN¬àYà
+[ùûKúò][ô’\]Y]
+H[]H[ùûKúò][ô’\]Y]€ò[YWN¬àYà
+⁄[ô›Àì‘Q—à	âà\[Ÿà⁄[ô›Àì‘Q—ãô[]Tò][ô»OOH	Ÿù[ò›[€â H¬à]ÿZ]⁄[ô›Àì‘Q—ãô[]Tò][ô [ùûKöYò[YK…‹ÿ€‹ôIÀ	‹€€ô‘ÿ€‹ôIÀ	›ö\›X[ÿ€‹ôIÀ	ÿ€€[Y[ù	◊JN¬àH[ŸH¬à]ÿZ]ÿ]ôTò][ô—^ò\ [ùûKöYò[YK»ÿ€‹ôNàù[€€ô‘ÿ€‹ôNàù[ö\›X[ÿ€‹ôNàù[€€[Y[ùàù[JN¬àBàBà›X⁄[ùûPÿX⁄J[ùûJN¬àX\ö‘ò][ô—]P⁄[ôŸY
+
+N¬àô[ô\ä
+N¬àô[ô\îŸX\€€ïöY]‹ 
+N¬àYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àYà
+X›]ôUXàOOH	‹›]… Hô[ô\î›]‘YŸJ
+N¬àYà
+X›]ôUXàOOH	›‹L	 Hô[ô\ë€ÿò[‹L
+
+N¬àYà
+X›]ôUXãú›\ù’⁄]
+	Ÿ[ù]KI JHô[ô\ë[ù]P[ù[\ 
+N¬àŸ]›]\ [ŸHOOH	‹\ú€€ò[	»»	Ù'¥`¥/4-t`¥.¥,4`Ù-4,4.Ù-t/t,8ß$…»à	Ù'¥a¥-t/t.¥,4`Ù-4,4.Ù-t/t,8ß$… N¬àHÿ]⁄
+\úäH¬à€€ú€€Kô\úõ‹ä\úäN¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`Ù-4,4.Ù.4`¥c4/¥a¥-t/t.¥`ÀâÀùYJN¬àBàBÇàù[ò›[€àõŸö[Sò[YSX]⁄\’\ôŸ]
+ò[YK\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ H¬à€€ú›ò]»H›ö[ô ò[YH	… Kùö[J
+N¬àYà
+\ò] Hô]\õàò[ŸN¬à€€ú››Ÿ\àHò]Àù”›Ÿ\êÿ\ŸJ
+N¬àYà
+\ôŸ]Ÿ^\»	âà
+\ôŸ]Ÿ^\Àö\ ò] H\ôŸ]Ÿ^\Àö\ ›Ÿ\äJJHô]\õàùYN¬àYà
+›Ÿ\àOOH›ö[ô \ôŸ]	… Kùö[J
+Kù”›Ÿ\êÿ\ŸJ
+JHô]\õàùYN¬àô]\õàX[ùX[\Ÿ\îÿYôRŸ^Jò] HOOH\ôŸ]ÿYôN¬àBÇàù[ò›[€à[]SX]⁄[ô“Ÿ^\—úõ€SX\
+X\\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ H¬àYà
+[X\
+Hô]\õé¬àÿöôX›öŸ^\ X\
+Kôõ‹ëXX⁄
+Ÿ^HOà¬àYà
+õŸö[Sò[YSX]⁄\’\ôŸ]
+Ÿ^K\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ JH[]HX\⁄Ÿ^WN¬àJN¬àBÇà\ﬁ[ò»ù[ò›[€à[]TõŸö[Qù[J\ôŸ]\Ÿ\äH¬àYà
+Y[ú›\ôPYZ[ä
+JHô]\õé¬à€€ú›\ôŸ]H›ö[ô \ôŸ]\Ÿ\à	… Kùö[J
+N¬àYà
+]\ôŸ]
+H»Ÿ]›]\ 	Ù$¥bÙ,t-t`4.4/Ù`4/¥a4.4.Ùc4-4.Ùc»4`Ù-4,4.Ù-t/t.4cÀâÀùYJN»ô]\õé»BàYà
+]⁄[ô›Àò€€ôö\õJ4(Ù-4,4.Ù.4`¥c4/Ù`4/¥a4.4.Ùc0™…›\ôŸ]pÆ»4/Ù/¥.Ù/t/¥`t`¥c4cè»4(Ù-4,4.ÙcÙ`¥`tc»4/¥a¥-t/t.¥.4`4`ÙaÙ/t/¥.H4`¥/¥/ÀLL4`¥.4`t.Ù.4`t`¥b»4.4,4,¥,4`¥,4`à4+t`¥/à4-4-t.t`t`¥,¥.4-H4/t-t.Ùc4-Ùc»4/¥`¥/4-t/t.4`¥cò
+JHô]\õé¬à€€ú›\ôŸ]ÿYôHHX[ùX[\Ÿ\îÿYôRŸ^J\ôŸ]
+N¬à€€ú›\ôŸ]Ÿ^\»Hô]»Ÿ]
+X[ùX[ÿ[ôY]RŸ^\ \ôŸ]
+Kôõ]X\
+àOà‘›ö[ô äK›ö[ô äKù”›Ÿ\êÿ\ŸJ
+WJJN¬à\ôŸ]Ÿ^\ÀòY
+\ôŸ]
+N¬à\ôŸ]Ÿ^\ÀòY
+\ôŸ]ù”›Ÿ\êÿ\ŸJ
+JN¬à\ôŸ]Ÿ^\ÀòY
+\ôŸ]ÿYôJN¬Çà[ùöY\Àôõ‹ëXX⁄
+[ùûHOà¬à[]SX]⁄[ô“Ÿ^\—úõ€SX\
+[ùûKúÿ€‹ô\À\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ N¬à[]SX]⁄[ô“Ÿ^\—úõ€SX\
+[ùûKú€€ô‘ÿ€‹ô\À\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ N¬à[]SX]⁄[ô“Ÿ^\—úõ€SX\
+[ùûKùö\›X[ÿ€‹ô\À\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ N¬à[]SX]⁄[ô“Ÿ^\—úõ€SX\
+[ùûKú\ú€€ò[ÿ€‹ô\À\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ N¬à›X⁄[ùûPÿX⁄J[ùûJN¬àJN¬à[]SX]⁄[ô“Ÿ^\—úõ€SX\
+]ò]\ú”X\\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ N¬àÿöôX›öŸ^\ X[ùX[ò[ö‹»ﬂJKôõ‹ëXX⁄
+Ÿ^HOà¬à€€ú›õ›»HX[ùX[ò[ö‹÷⁄Ÿ^WHﬂN¬àYà
+õŸö[Sò[YSX]⁄\’\ôŸ]
+Ÿ^K\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ HàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›ÀõöX⁄€ò[YK\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ HàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›ÀõöX⁄€ò[YRŸ^K\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ JH¬à[]HX[ùX[ò[ö‹÷⁄Ÿ^WN¬àBàJN¬à›Y\ì‹ô\úÀY\ìXô[ÀY\îXŸ[Y[ù◊Kôõ‹ëXX⁄
+X\Oà¬àÿöôX›öŸ^\ X\ﬂJKôõ‹ëXX⁄
+Ÿ^HOà¬à€€ú››€ô\àH›ö[ô Ÿ^JKú‹]
+	ﬂ	 VÃH	…Œ¬àYà
+õŸö[Sò[YSX]⁄\’\ôŸ]
+›€ô\ã\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ JH[]HX\⁄Ÿ^WN¬àJN¬àJN¬Çà\ú⁄\›X[ùX[ò[ö‹–ÿX⁄J
+N¬àûH»⁄[ô›Àú›‹òYŸH	âà⁄[ô›Àú›‹òYŸKúŸ]
+UêUTî◊”PT“—VKî””ãú›ö[ô⁄YûJ]ò]\ú”X\
+KùYJN»Hÿ]⁄
+JHﬂBàX\ö‘ò][ô—]P⁄[ôŸY
+
+N¬àX\ö”X[ùX[ò[ö‹–⁄[ôŸY
+
+N¬àX\ö–]ò]\ú–⁄[ôŸY
+
+N¬àõŸö[U\Ÿ\ú–ÿX⁄HH»Ÿ^Nà	…Àò[Y\Œà◊HN¬Çà€€ú›\úõ‹ú»H◊N¬àûH¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬à€€ú›€€X›[€ú’‘ÿÿ[àH…‹ò][ô‹…À	€X[ùX[ò[ö‹…À	›\Ÿ\îõŸö[\…À	›Y\ì‹ô\ú…À	›Y\ìXô[…À	›Y\îXŸ[Y[ù…◊N¬à€€ú›[]\»H◊N¬àõ‹à
+€€ú›€€X›[€ìò[YHŸà€€X›[€ú’‘ÿÿ[äH¬à€€ú›€ò\⁄›H]ÿZ]^ôŸ]ÿ‹ ^ò€€X›[€ä^ôã€€X›[€ìò[YJJN¬à€ò\⁄›ôÿ‹Àôõ‹ëXX⁄
+Oà¬à€€ú›õ›»H»YàöYããôô]J
+HN¬à€€ú›⁄›[[]HBàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›ÀõöX⁄€ò[YK\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ HàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›Àô\‹^Sò[YK\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ HàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›Àõò[YK\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ HàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›ÀõöX⁄€ò[YRŸ^K\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ HàõŸö[Sò[YSX]⁄\’\ôŸ]
+õ›ÀöY\ôŸ]\ôŸ]ÿYôK\ôŸ]Ÿ^\ Hà›ö[ô õ›ÀöY	… Kú›\ù’⁄]
+	›\ôŸ]ÿYô_W◊ÿ
+N¬àYà
+⁄›[[]JH[]\Àú\⁄
+^ô[]Qÿ ^ôÿ ^ôã€€X›[€ìò[YKöY
+JJN¬àJN¬àBà]ÿZ]õ€Z\ŸKò[Ÿ]Y
+[]\ Kù[äô\›[»Oà¬àô\›[Àôö[\äàOàãú›]\»OOH	‹ôZôX›Y	 Kôõ‹ëXX⁄
+àOà»€€ú€€Kô\úõ‹ä	‘õŸö[H[]HòZ[Y	ÀãúôX\€€äN»\úõ‹úÀú\⁄
+ãúôX\€€äN»JN¬àJN¬àHÿ]⁄
+JH¬à€€ú€€Kô\úõ‹ä	–€›[õ›[]HõŸö[Húõ€Hö\ôXò\ŸIÀJN¬à\úõ‹úÀú\⁄
+JN¬àBÇà‹[]TõŸö[U\Ÿ\ú ùYJN¬àYà
+õŸö[U\Ÿ\îŸ[X›	âàõŸö[U\Ÿ\îŸ[X›ùò[YHOOH\ôŸ]
+HõŸö[U\Ÿ\îŸ[X›ùò[YHH	…Œ¬àô[ô\ä
+N¬àô[ô\îŸX\€€ïöY]‹ 
+N¬àô[ô\îõŸö[J
+N¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àYà
+X›]ôUXàOOH	›‹L	 Hô[ô\ë€ÿò[‹L
+
+N¬àYà
+\úõ‹úÀõ[ô›
+HŸ]›]\ 	Ù't-H4,¥`t-H4-4,4/t/tbÙ-H4/Ù`4/¥a4.4.Ùc»4`Ù-4,4.Ù/¥`tc4`Ù-4,4.Ù.4`¥câÀùYJN¬à[ŸHŸ]›]\ 4'Ù`4/¥a4.4.Ùc0™…›\ôŸ]pÆ»4`Ù-4,4.Ùdt/H4/Ù/¥.Ù/t/¥`t`¥c4cà8ß$ÿ
+N¬àBÇàù[ò›[€àÿYôQÿ‘\ù
+ò[YJH¬àô]\õà›ö[ô ò[YH	… Kùö[J
+Kù”›Ÿ\êÿ\ŸJ
+Kúô\XŸJ÷◊òK^¥,tcÙdLNWÀWJÀŸ⁄K	◊… Kú€XŸJ
+N¬àBÇàù[ò›[€àY\ì[ŸRŸ^J
+H¬àô]\õà\‘\ú€€ò[ÿÿ[J
+H»	Ÿö]ôI»à	‹XõX…Œ¬àBÇàù[ò›[€àY\ì[ŸUò[YJ[ŸJH¬àô]\õà[ŸHY\ì[ŸRŸ^J
+N¬àBÇàù[ò›[€àY\ì‹ô\ëÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJH¬à€€ú›ÿ€‹ôRŸ^HH›ö[ô ÿ€‹ôJKúô\XŸJ	ÀâÀ	◊… N¬àô]\õà	›Y\ê€€ù^ÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ã[ŸJ_W◊…‹ÿ€‹ôRŸ^_X¬àBÇàù[ò›[€àY\ê€€ù^ÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ã[ŸJH¬à€€ú›ÿYôSò[YHH⁄[ô›Àì‘Q—à	âà\[Ÿà⁄[ô›Àì‘Q—ãõõ‹õX[^ôSöX⁄€ò[YHOOH	Ÿù[ò›[€â¬à»⁄[ô›Àì‘Q—ãõõ‹õX[^ôSöX⁄€ò[YJ\Ÿ\äBààÿYôQÿ‘\ù
+\Ÿ\äN¬àô]\õà	‹ÿYôSò[Y_W◊…›Y\ì[ŸUò[YJ[ŸJ_W◊…›\_W◊…ﬁYX\üW◊…‹ŸX\€€üX¬àBÇàù[ò›[€àY\ìXô[ÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJH¬à€€ú›ÿ€‹ôRŸ^HH›ö[ô ÿ€‹ôJKúô\XŸJ	ÀâÀ	◊… N¬àô]\õà	›Y\ê€€ù^ÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ã[ŸJ_W◊…‹ÿ€‹ôRŸ^_X¬àBÇàù[ò›[€àY\ì‹ô\íŸ^J\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJH¬àô]\õà	›\Ÿ\à	…ﬂ_	›Y\ì[ŸUò[YJ[ŸJ__	›\__	ﬁYX\ü_	‹ŸX\€€ü_	‹ÿ€‹ô_X¬àBÇà\ﬁ[ò»ù[ò›[€à›\ùY\ì‹ô\ïÿ]⁄\ä
+H¬à€€ú››]HHô[[›Q]T›]KùY\é¬àYà
+›]Kú›\ùY
+Hô]\õà‹ôX]Tô[[›Q]Tõ€Z\ŸJ	›Y\â N¬à›]Kú›\ùYHùYN¬à€€ú›ôXYTõ€Z\ŸHH‹ôX]Tô[[›Q]Tõ€Z\ŸJ	›Y\â N¬àûH¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬àYà
+ö\ôXò\ŸU[ú›XïY\ì‹ô\ú Hö\ôXò\ŸU[ú›XïY\ì‹ô\ú 
+N¬à€€ú›[ú›Xú»H◊N¬à€€ú›ôXYT\ù»Hô]»Ÿ]
+
+N¬à€€ú›X\ö‘\ùôXYHHò[YHOà¬àôXYT\ùÀòY
+ò[YJN¬àYà
+ôXYT\ùÀú⁄^ôHOOH HX\ö‘ô[[›Q]TôXYJ	›Y\â N¬àN¬Çà[ú›XúÀú\⁄
+^õ€î€ò\⁄›
+^ò€€X›[€ä^ôã	›Y\ì‹ô\ú… K€ò\⁄›Oà¬à€€ú›ô^HﬂN¬à€ò\⁄›ôÿ‹Àôõ‹ëXX⁄
+Oà¬à€€ú›õ›»H»YàöYããôô]J
+HN¬àô^›Y\ì‹ô\íŸ^Jõ›ÀõöX⁄€ò[YKõ›Àù\Kõ›ÀûYX\ãõ›ÀúŸX\€€ãõ›Àúÿ€‹ôKõ›Àõ[ŸH	‹XõX… WHH\úò^Kö\–\úò^Jõ›Àõ‹ô\äH»õ›Àõ‹ô\ãõX\
+›ö[ô Hà◊N¬àJN¬àY\ì‹ô\ú»Hô^¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àX\ö‘\ùôXYJ	€‹ô\ú… N¬àK\úàOà¬à€€ú€€Kô\úõ‹ä	›Y\ì‹ô\ú»ÿ]⁄\úõ‹âÀ\úäN¬àX\ö‘\ùôXYJ	€‹ô\ú… N¬àJJN¬Çà[ú›XúÀú\⁄
+^õ€î€ò\⁄›
+^ò€€X›[€ä^ôã	›Y\ìXô[… K€ò\⁄›Oà¬à€€ú›ô^HﬂN¬à€ò\⁄›ôÿ‹Àôõ‹ëXX⁄
+Oà¬à€€ú›õ›»H»YàöYããôô]J
+HN¬à€€ú›ò[H›ö[ô õ›ÀõXô[	… Kùö[J
+N¬àYà
+]ò[
+Hô]\õé¬àô^›Y\ìXô[Ÿ^Jõ›ÀõöX⁄€ò[YKõ›Àù\Kõ›ÀûYX\ãõ›ÀúŸX\€€ãõ›Àúÿ€‹ôKõ›Àõ[ŸH	‹XõX… WHHò[¬àJN¬àY\ìXô[»Hô^¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àX\ö‘\ùôXYJ	€Xô[… N¬àK\úàOà¬à€€ú€€Kô\úõ‹ä	›Y\ìXô[»ÿ]⁄\úõ‹âÀ\úäN¬àX\ö‘\ùôXYJ	€Xô[… N¬àJJN¬Çà[ú›XúÀú\⁄
+^õ€î€ò\⁄›
+^ò€€X›[€ä^ôã	›Y\îXŸ[Y[ù… K€ò\⁄›Oà¬à€€ú›ô^HﬂN¬à€ò\⁄›ôÿ‹Àôõ‹ëXX⁄
+Oà¬à€€ú›õ›»H»YàöYããôô]J
+HN¬à€€ú›XŸ[Y[ù»Hõ›ÀúXŸ[Y[ù»	âà\[Ÿàõ›ÀúXŸ[Y[ù»OOH	€ÿöôX›	»»õ›ÀúXŸ[Y[ù»àﬂN¬àô^›Y\ê€€ù^Ÿ^Jõ›ÀõöX⁄€ò[YKõ›Àù\Kõ›ÀûYX\ãõ›ÀúŸX\€€ãõ›Àõ[ŸH	‹XõX… WHHXŸ[Y[ùŒ¬àJN¬àY\îXŸ[Y[ù»Hô^¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àX\ö‘\ùôXYJ	‹XŸ[Y[ù… N¬àK\úàOà¬à€€ú€€Kô\úõ‹ä	›Y\îXŸ[Y[ù»ÿ]⁄\úõ‹âÀ\úäN¬àX\ö‘\ùôXYJ	‹XŸ[Y[ù… N¬àJJN¬Çàö\ôXò\ŸU[ú›XïY\ì‹ô\ú»H
+
+HOà[ú›XúÀôõ‹ëXX⁄
+[ú›XàOà»Yà
+\[Ÿà[ú›XàOOH	Ÿù[ò›[€â H[ú›Xä
+N»JN¬àHÿ]⁄
+JH¬à€€ú€€Kô\úõ‹ä	–€›[õ›ÿ]⁄Y\à]IÀJN¬àX\ö‘ô[[›Q]TôXYJ	›Y\âÀ»\úõ‹éàùYHJN¬àBàô]\õàôXYTõ€Z\ŸN¬àBÇàù[ò›[€à›‹Y\ì‹ô\ïÿ]⁄\ä
+H¬àYà
+ö\ôXò\ŸU[ú›XïY\ì‹ô\ú Hö\ôXò\ŸU[ú›XïY\ì‹ô\ú 
+N¬àö\ôXò\ŸU[ú›XïY\ì‹ô\ú»Hù[¬àô\Ÿ]ô[[›Q]T›Xúÿ‹ö\[€ä	›Y\â N¬àBÇà\ﬁ[ò»ù[ò›[€àÿ]ôUY\ì‹ô\ä\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK‹ô\äH¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬à€€ú›[ŸHHY\ì[ŸRŸ^J
+N¬à€€ú›YHY\ì‹ô\ëÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJN¬àY\ì‹ô\ú÷›Y\ì‹ô\íŸ^J\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJWHH‹ô\ãú€XŸJ
+KõX\
+›ö[ô N¬à]ÿZ]^úŸ]ÿ ^ôÿ ^ôã	›Y\ì‹ô\ú…ÀY
+K¬àöX⁄€ò[YNà\Ÿ\ãàöX⁄€ò[YRŸ^NàX[ùX[\Ÿ\îÿYôRŸ^J\Ÿ\äKà›€ô\ïZYàô\]Z\ôT\ú€€ò[ZY
+
+Kà\KàYX\éàù[Xô\äYX\äKàŸX\€€ãàÿ€‹ôNàù[Xô\äÿ€‹ôJKà[ŸKà‹ô\éà‹ô\ãõX\
+›ö[ô Kà\]Y]à^úŸ\ùô\ï[Y\›[\
+
+BàK»Y\ôŸNàùYHJN¬àBÇà\ﬁ[ò»ù[ò›[€àÿYY\ì‹ô\ú 
+H¬àÀ»4(¥.4`t.Ù.4`t`à4-Ù,4,Ù`4`Ù-¥,4-t`¥`tc»4aÙ-t`4-t-»ö\ô\›‹ôHÿ]⁄\à4,à›\ùY\ì‹ô\ïÿ]⁄\ä
+KÇàBÇÇàù[ò›[€àY\ê€€ù^Ÿ^J\Ÿ\ã\KYX\ãŸX\€€ã[ŸJH¬àô]\õà	›\Ÿ\à	…ﬂ_	›Y\ì[ŸUò[YJ[ŸJ__	›\__	ﬁYX\ü_	‹ŸX\€€üX¬àBÇàù[ò›[€àY\ìXô[Ÿ^J\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJH¬àô]\õà	›Y\ê€€ù^Ÿ^J\Ÿ\ã\KYX\ãŸX\€€ã[ŸJ__	‹ÿ€‹ô_X¬àBÇà\ﬁ[ò»ù[ò›[€àÿYY\ìXô[ 
+H¬àÀ»4't,4-Ù,¥,4/t.4c»4`¥.4`4/¥,à4-Ù,4,Ù`4`Ù-¥,4c¥`¥`tc»4aÙ-t`4-t-»ö\ô\›‹ôHÿ]⁄\à4,à›\ùY\ì‹ô\ïÿ]⁄\ä
+KÇàBÇà\ﬁ[ò»ù[ò›[€àÿ]ôUY\ìXô[
+\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôKXô[
+H¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬à€€ú›[ŸHHY\ì[ŸRŸ^J
+N¬à€€ú›Ÿ^HHY\ìXô[Ÿ^J\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJN¬à€€ú›ò[H›ö[ô Xô[	… Kùö[J
+N¬àYà
+ò[
+HY\ìXô[÷⁄Ÿ^WHHò[¬à[ŸH[]HY\ìXô[÷⁄Ÿ^WN¬à€€ú›YHY\ìXô[ÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôK[ŸJN¬à€€ú›^[ÿYH¬àöX⁄€ò[YNà\Ÿ\ãàöX⁄€ò[YRŸ^NàX[ùX[\Ÿ\îÿYôRŸ^J\Ÿ\äKà›€ô\ïZYàô\]Z\ôT\ú€€ò[ZY
+
+Kà\KàYX\éàù[Xô\äYX\äKàŸX\€€ãàÿ€‹ôNàù[Xô\äÿ€‹ôJKà[ŸKà\]Y]à^úŸ\ùô\ï[Y\›[\
+
+BàN¬àYà
+ò[
+H^[ÿYõXô[Hò[¬à[ŸH^[ÿYõXô[H^ô[]QöY[
+
+N¬à]ÿZ]^úŸ]ÿ ^ôÿ ^ôã	›Y\ìXô[…ÀY
+K^[ÿY»Y\ôŸNàùYHJN¬àBÇàù[ò›[€àY\ëYò][Xô[
+ÿ€‹ôJH¬àô]\õà\‘\ú€€ò[ÿÿ[J
+H»õ‹õX]ö]ôTÿ€‹ôJÿ€‹ôJHàõ‹õX]ÿ€‹ôJÿ€‹ôJN¬àBÇàù[ò›[€àY\ìXô[õ‹ä\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôJH¬à€€ú›Ÿ^\»HX[ùX[ÿ[ôY]RŸ^\ \Ÿ\äN¬àõ‹à
+€€ú›ÿ[ôY]HŸàŸ^\ H¬à€€ú›ò[HY\ìXô[÷›Y\ìXô[Ÿ^Jÿ[ôY]K\KYX\ãŸX\€€ãÿ€‹ôJWN¬àYà
+ò[
+Hô]\õàò[¬àBàô]\õàY\ìXô[÷›Y\ìXô[Ÿ^J\Ÿ\ã\KYX\ãŸX\€€ãÿ€‹ôJWHY\ëYò][Xô[
+ÿ€‹ôJN¬àBÇà\ﬁ[ò»ù[ò›[€àÿYY\îXŸ[Y[ù 
+H¬àÀ»4'Ù-t`4-t/t/¥`tb»4/4-t-¥-4`»4-4/¥/Ù`Ù`t`¥.4/4bÙ/4.4`¥.4`4,4/4.4-Ù,4,Ù`4`Ù-¥,4c¥`¥`tc»4aÙ-t`4-t-»ö\ô\›‹ôHÿ]⁄\à4,à›\ùY\ì‹ô\ïÿ]⁄\ä
+KÇàBÇà\ﬁ[ò»ù[ò›[€àÿ]ôUY\îXŸ[Y[ù \Ÿ\ã\KYX\ãŸX\€€äH¬àûH¬à€€ú›^H]ÿZ]Ÿ]^[ôYä
+N¬à€€ú›[ŸHHY\ì[ŸRŸ^J
+N¬à€€ú››HY\ê€€ù^Ÿ^J\Ÿ\ã\KYX\ãŸX\€€ã[ŸJN¬à€€ú›XŸ[Y[ù»HY\îXŸ[Y[ù÷ÿ›HﬂN¬à]ÿZ]^úŸ]ÿ ^ôÿ ^ôã	›Y\îXŸ[Y[ù…ÀY\ê€€ù^ÿ“Y
+\Ÿ\ã\KYX\ãŸX\€€ã[ŸJJK¬àöX⁄€ò[YNà\Ÿ\ãàöX⁄€ò[YRŸ^NàX[ùX[\Ÿ\îÿYôRŸ^J\Ÿ\äKà›€ô\ïZYàô\]Z\ôT\ú€€ò[ZY
+
+Kà\KàYX\éàù[Xô\äYX\äKàŸX\€€ãà[ŸKàXŸ[Y[ùÀà\]Y]à^úŸ\ùô\ï[Y\›[\
+
+BàK»Y\ôŸNàùYHJN¬àHÿ]⁄
+JH¬à€€ú€€Kô\úõ‹ä	–€›[õ›ÿ]ôHY\àXŸ[Y[ù»»ö\ôXò\ŸIÀJN¬àõ›»N¬àBàBÇàù[ò›[€àYŸ‹ôYÿ]Tÿ€‹ôSX\
+õ›ÀôYö^H	… H¬à€€ú›ÿ€‹ô\»HﬂN¬à€€ú›ÿ\][^ôYHôYö^»ôYö^ÃKù’\\êÿ\ŸJ
+H
+»ôYö^ú€XŸJJHà	…Œ¬à€€ú›€›[ùŸ^HHôYö^»	‹ôYö^Tò][ô–€›[ùà	‹ò][ô–€›[ù	Œ¬à€€ú››[RŸ^HHôYö^»	‹ôYö^Tò][ô‘›[Xà	‹ò][ô‘›[IŒ¬à€€ú›]ô\òYŸRŸ^HHôYö^»	‹ôYö^Tò][ô–]ô\òYŸXà	‹ò][ô–]ô\òYŸIŒ¬à€€ú›€›[ùHù[Xô\äõ›œÀñÿ€›[ùŸ^WJN¬à€€ú›]ô\òYŸHHù[Xô\äõ›œÀñÿ]ô\òYŸRŸ^WJN¬à€€ú›ò]‘›[HHù[Xô\äõ›œÀñ‹›[RŸ^WJN¬à€€ú››[HHù[Xô\ãö\—ö[ö]Jò]‘›[JH»ò]‘›[Hà
+ù[Xô\ãö\—ö[ö]J€›[ù
+H	âàù[Xô\ãö\—ö[ö]J]ô\òYŸJH»€›[ù
+à]ô\òYŸHà
+N¬à€€ú›YŸ‹ôYÿ]TôXYHHù[Xô\äõ›œÀúò][ô–YŸ‹ôYÿ]Uô\ú⁄[€äHèHN¬àYà
+YŸ‹ôYÿ]TôXYH	âàù[Xô\ãö\—ö[ö]J€›[ù
+H	âà€›[ùèH	âàù[Xô\ãö\—ö[ö]J›[JJH¬àÿöôX›ôYö[ôTõ‹\ùJÿ€‹ô\À	◊◊€ÿ◊ÿYŸ‹ôYÿ]W‹›]…À¬àò[YNà»Ÿ^P€›[ùà€›[ù]ô–[ûNà€›[ù»›[H»€›[ùàù[›[KYŸ‹ôYÿ]NàùYKôYö^àÿ\][^ôYKà€€ôöY›\òXõNàùYKà[ù[Y\òXõNàò[ŸBàJN¬àBà€€ú›YZ[ê€›[ùHù[Xô\äõ›œÀñ‹ôYö^»	‹ôYö^PYZ[îò][ô–€›[ùà	ÿYZ[îò][ô–€›[ù	◊JN¬à€€ú›YZ[ê]ô\òYŸHHù[Xô\äõ›œÀñ‹ôYö^»	‹ôYö^PYZ[îò][ô–]ô\òYŸXà	ÿYZ[îò][ô–]ô\òYŸI◊JN¬à€€ú›YZ[îò]‘›[HHù[Xô\äõ›œÀñ‹ôYö^»	‹ôYö^PYZ[îò][ô‘›[Xà	ÿYZ[îò][ô‘›[I◊JN¬à€€ú›YZ[î›[HHù[Xô\ãö\—ö[ö]JYZ[îò]‘›[JBà»YZ[îò]‘›[Bàà
+ù[Xô\ãö\—ö[ö]JYZ[ê€›[ù
+H	âàù[Xô\ãö\—ö[ö]JYZ[ê]ô\òYŸJH»YZ[ê€›[ù
+àYZ[ê]ô\òYŸHà
+N¬àYà
+YŸ‹ôYÿ]TôXYH	âàù[Xô\ãö\—ö[ö]JYZ[ê€›[ù
+H	âàYZ[ê€›[ùèH	âàù[Xô\ãö\—ö[ö]JYZ[î›[JJH¬àÿöôX›ôYö[ôTõ‹\ùJÿ€‹ô\À	◊◊€ÿ◊ÿYZ[óÿYŸ‹ôYÿ]W‹›]…À¬àò[YNà»€›[ùàYZ[ê€›[ù]ô–[ûNàYZ[ê€›[ù»YZ[î›[H»YZ[ê€›[ùàù[›[NàYZ[î›[KYŸ‹ôYÿ]NàùYHKà€€ôöY›\òXõNàùYKà[ù[Y\òXõNàò[ŸBàJN¬àBàYà
+YŸ‹ôYÿ]TôXYH	âàö\ôXò\ŸTò][ô‹‘ÿ€‹HOOH	ÿ[	 H¬àÿöôX›ôYö[ôTõ‹\ùJÿ€‹ô\À	◊◊€ÿ◊‹ôYô\óÿYŸ‹ôYÿ]IÀ»ò[YNàùYK€€ôöY›\òXõNàùYK[ù[Y\òXõNàò[ŸHJN¬àBàô]\õàÿ€‹ô\Œ¬àBÇàù[ò›[€àõ‹õX[^ôQ[ùûQúõ€Qö\ôXò\ŸJõ› H¬àô]\õà¬àYàõ›ÀöYà]Nàõ›Àù]H	…Àà[\õò]]ôU]\Œà€X[ê[X\”\›
+õ›Àò[\õò]]ôU]\»õ›Àò[]\»õ›Àò[X\Ÿ\»õ›Àò[\õò]]ôSò[Y\»õ›Àò[ò[Y\»◊JKà\Nàõ›Àù\HOOH	—Q	»»	—Q	»à	”‘	ÀàYX\éàõ›ÀûYX\àOOHù[õ›ÀûYX\àOOH[ôYö[ôYõ›ÀûYX\àOOH	…»»ù[àù[Xô\äõ›ÀûYX\äKàŸX\€€éàõ›ÀúŸX\€€à	…Àà›Y[‹Œàõ›Àú›Y[‹»
+õ›Àú›Y[»»‹õ›Àú›Y[◊Hà◊JKà\ôX›‹úŒàõ›Àô\ôX›‹ú»◊Kà\ôõ‹õY\úŒàõ›Àú\ôõ‹õY\ú»◊Kàúò[ò⁄\Ÿ\Œà€X[ëúò[ò⁄\ŸS\›
+õ›Àôúò[ò⁄\Ÿ\»õ›Àôúò[ò⁄\ŸH◊JKà[XYŸNàõ›Àö[XYŸH	…Ààò[òX⁄“[XYŸNàõ›Àôò[òX⁄“[XYŸHõ›Àö[XYŸQò[òX⁄»	…Àà[òŸ\ùZ[î\ôõ‹õY\éàõ€€X[äõ›Àù[òŸ\ùZ[î\ôõ‹õY\äKà[òŸ\ùZ[ë\ôX›‹éàõ€€X[äõ›Àù[òŸ\ùZ[ë\ôX›‹äKà[òŸ\ùZ[í[XYŸNàõ€€X[äõ›Àù[òŸ\ùZ[í[XYŸJKàÿ[YT€€ô—‹õ›\Yà›ö[ô õ›Àúÿ[YT€€ô—‹õ›\Yõ›Àú€€ô—‹õ›\Y	… Kùö[J
+Kàÿ[YT€€ô’]Nà›ö[ô õ›Àúÿ[YT€€ô’]Hõ›Àú€€ô—‹õ›\]H	… Kùö[J
+Kà[öŒàõ›Àõ[ö»	…Ààõ›\Œàõ›Àõõ›\»	…Àà\–⁄[ô\ŸNàõ€€X[äõ›Àö\–⁄[ô\ŸHõ›Àò⁄[ô\ŸHõ›Àö\–⁄[òHõ›Àò⁄[ô\ŸS‹[ö[ô Kà\”[›öYNàõ€€X[äõ›Àö\”[›öYHõ›Àõ[›öYHõ›Àö\—ö[Hõ›Àôö[S‹[ö[ô Kà\‘⁄‹ù[ôYàõ€€X[äõ›Àö\‘⁄‹ù[ôYõ›Àú⁄‹ù[ôYõ›Àö\‘⁄‹ùõ›Àú⁄‹ùõ›Àú⁄‹ù‹[ö[ô»õ›Àú⁄‹ù[ôY‹[ö[ô Kà‹ôX]Y]àõ›Àò‹ôX]Y]ù[à\]Y]àõ›Àù\]Y]ù[àò][ô–YŸ‹ôYÿ]Uô\ú⁄[€éàù[Xô\äõ›Àúò][ô–YŸ‹ôYÿ]Uô\ú⁄[€à
+Kàÿ€‹ô\ŒàYŸ‹ôYÿ]Tÿ€‹ôSX\
+õ› Kà€€ô‘ÿ€‹ô\ŒàYŸ‹ôYÿ]Tÿ€‹ôSX\
+õ›À	‹€€ô… Kàö\›X[ÿ€‹ô\ŒàYŸ‹ôYÿ]Tÿ€‹ôSX\
+õ›À	›ö\›X[	 Kà›\›€Tÿ€‹ô\ŒàﬂKà€€[Y[ùŒàﬂKà\ú€€ò[ÿ€‹ô\ŒàﬂKàò][ô’\]Y]àﬂBàN¬àBÇàù[ò›[€àôXùZ[[ùöY\—úõ€Qö\ôXò\ŸJ
+H¬à€€ú›ô^Hö\ôXò\ŸS‹[ö[ô‹ÀõX\
+õ‹õX[^ôQ[ùûQúõ€Qö\ôXò\ŸJN¬à€€ú›ûRYHô]»X\
+ô^õX\
+HOà‘›ö[ô KöY
+KWJJN¬à€€ú›õŸö[P]ò]\ìò[Y\»Hô]»Ÿ]
+à
+ö\ôXò\ŸU\Ÿ\îõŸö[\»◊JBàôö[\äõ›»Oà›ö[ô õ›Àò]ò]\à	… Kùö[J
+JBàôõ]X\
+õ›»Oà¬à›ö[ô õ›ÀõöX⁄€ò[YHõ›Àô\‹^Sò[YHõ›Àõò[YHõ›ÀöY	… Kùö[J
+Kà›ö[ô õ›ÀõöX⁄€ò[YRŸ^H	… Kùö[J
+BàJBàôö[\äõ€€X[äBàõX\
+õ‹õX[^ôYXÿ€›[ùò[YJBà
+N¬à]]ò]\ê⁄[ôŸYHò[ŸN¬Çàö\ôXò\ŸTò][ô‹Àôõ‹ëXX⁄
+àOà¬à€€ú›‹[ö[ô“YH›ö[ô ãõ‹[ö[ô“Y	… N¬à€€ú›[ùûHHûRYôŸ]
+‹[ö[ô“Y
+N¬à€€ú›öX⁄€ò[YHH›ö[ô ãõöX⁄€ò[YH	… Kùö[J
+N¬à€€ú›ÿ€‹ôHHõ‹õX[^ôS‹[€ò[ù[Xô\äãúÿ€‹ôJN¬à€€ú›€€ô‘ÿ€‹ôHHõ‹õX[^ôS‹[€ò[ù[Xô\äãú€€ô‘ÿ€‹ôJN¬à€€ú›ö\›X[ÿ€‹ôHHõ‹õX[^ôS‹[€ò[ù[Xô\äãùö\›X[ÿ€‹ôJN¬à€€ú›\ú€€ò[ÿ€‹ôHHõ‹õX[^ôS‹[€ò[ù[Xô\äãú\ú€€ò[ÿ€‹ôJN¬à€€ú››\›€Tÿ€‹ô\»Hõ‹õX[^ôP›\›€Tò][ô‘ÿ€‹ô\ ãò›\›€Tÿ€‹ô\ N¬à€€ú›€€[Y[ùH›ö[ô ãò€€[Y[ù	… Kùö[J
+N¬ÇàYà
+Y[ùûH[öX⁄€ò[YJHô]\õé¬à[ùûKúò][ô’\]Y]H[ùûKúò][ô’\]Y]ﬂN¬à[ùûKúò][ô’\]Y]€öX⁄€ò[YWHHãù\]Y]ãò‹ôX]Y]ù[¬àYà
+ãò]ò]\äH¬à€€ú›]àH›ö[ô ãò]ò]\äKùö[J
+N¬à€€ú›\–ÿ[õ€öXÿ[]ò]\àHõŸö[P]ò]\ìò[Y\Àö\ õ‹õX[^ôYXÿ€›[ùò[YJöX⁄€ò[YJJN¬àYà
+]à	âàZ\–ÿ[õ€öXÿ[]ò]\à	âàX]ò]\ú”X\€öX⁄€ò[YWJH¬à]ò]\ú”X\€öX⁄€ò[YWHH]é¬à]ò]\ê⁄[ôŸYHùYN¬àBàBàYà
+ù[Xô\ãö\—ö[ö]J\ú€€ò[ÿ€‹ôJJH¬à[ùûKú\ú€€ò[ÿ€‹ô\»H[ùûKú\ú€€ò[ÿ€‹ô\»ﬂN¬à[ùûKú\ú€€ò[ÿ€‹ô\÷€öX⁄€ò[YWHH\ú€€ò[ÿ€‹ôN¬àBàYà
+€€[Y[ù
+H¬à[ùûKò€€[Y[ù»H[ùûKò€€[Y[ù»ﬂN¬à[ùûKò€€[Y[ù÷€öX⁄€ò[YWHH€€[Y[ù¬àBàYà
+ÿöôX›öŸ^\ ›\›€Tÿ€‹ô\ Kõ[ô›
+H¬à[ùûKò›\›€Tÿ€‹ô\»H[ùûKò›\›€Tÿ€‹ô\»ﬂN¬à[ùûKò›\›€Tÿ€‹ô\÷€öX⁄€ò[YWHH›\›€Tÿ€‹ô\Œ¬àBàYà
+ù[Xô\ãö\—ö[ö]Jÿ€‹ôJJH¬à[ùûKúÿ€‹ô\»H[ùûKúÿ€‹ô\»ﬂN¬à[ùûKúÿ€‹ô\÷€öX⁄€ò[YWHHÿ€‹ôN¬àYà
+ù[Xô\ãö\—ö[ö]J€€ô‘ÿ€‹ôJJH¬à[ùûKú€€ô‘ÿ€‹ô\»H[ùûKú€€ô‘ÿ€‹ô\»ﬂN¬à[ùûKú€€ô‘ÿ€‹ô\÷€öX⁄€ò[YWHH€€ô‘ÿ€‹ôN¬àBàYà
+ù[Xô\ãö\—ö[ö]Jö\›X[ÿ€‹ôJJH¬à[ùûKùö\›X[ÿ€‹ô\»H[ùûKùö\›X[ÿ€‹ô\»ﬂN¬à[ùûKùö\›X[ÿ€‹ô\÷€öX⁄€ò[YWHHö\›X[ÿ€‹ôN¬àBàH[ŸH¬àYà
+ù[Xô\ãö\—ö[ö]J€€ô‘ÿ€‹ôJJH¬à[ùûKú€€ô‘ÿ€‹ô\»H[ùûKú€€ô‘ÿ€‹ô\»ﬂN¬à[ùûKú€€ô‘ÿ€‹ô\÷€öX⁄€ò[YWHH€€ô‘ÿ€‹ôN¬àBàYà
+ù[Xô\ãö\—ö[ö]Jö\›X[ÿ€‹ôJJH¬à[ùûKùö\›X[ÿ€‹ô\»H[ùûKùö\›X[ÿ€‹ô\»ﬂN¬à[ùûKùö\›X[ÿ€‹ô\÷€öX⁄€ò[YWHHö\›X[ÿ€‹ôN¬àBàBàJN¬Çà€€ú›€ò\⁄›Ÿ^HH‹[ö[ô‹‘€ò\⁄›Ÿ^Jö\ôXò\ŸS‹[ö[ô‹ N¬à€€ú›ÿ][Ÿ–⁄[ôŸYH€ò\⁄›Ÿ^HOOH\›‹[ö[ô‹‘€ò\⁄›Ÿ^N¬à\›‹[ö[ô‹‘€ò\⁄›Ÿ^HH€ò\⁄›Ÿ^N¬à[ùöY\»Hô^¬àôXùZ[ò\›[ô^\ »ÿ][Ÿ–⁄[ôŸYJN¬àXõ\⁄\]Jÿ][Ÿ–⁄[ôŸY»	ÿÿ][ŸÀ]\]Y	»à	‹ò][ô‹À]\]Y	 N¬àYà
+]ò]\ê⁄[ôŸY
+HX\ö–]ò]\ú–⁄[ôŸY
+
+N¬àYà
+X›]ôUXàOOH	ÿ⁄\ù	»	âàXÿ][Ÿ–⁄[ôŸY	âà]Kõõ› 
+H›\ô\‹–⁄\ùò][ô‘ôYúô\⁄[ù[
+H¬à\]PXÿ€›[ù\⁄õÿ\ô
+
+N¬àH[ŸH¬àÿ⁄Y[Uö\⁄XõTôYúô\⁄
+»õ‹òŸQö[\úŒàÿ][Ÿ–⁄[ôŸYJN¬àBàBÇàù[ò›[€àõ›“\”X[ùX[‹]Jõ› H¬àô]\õàHJõ›»	âà
+à\úò^Kö\–\úò^Jõ›Àì‘
+H\úò^Kö\–\úò^Jõ›ÀëQ
+Hà\úò^Kö\–\úò^Jõ›Àõ‹
+H\úò^Kö\–\úò^Jõ›ÀôY
+Hà\úò^Kö\–\úò^Jõ›ÀõX[ùX[‘
+H\úò^Kö\–\úò^Jõ›ÀõX[ùX[Q
+Hà\úò^Kö\–\úò^Jõ›Àô^€YY‘
+H\úò^Kö\–\úò^Jõ›Àô^€YYQ
+Hà\úò^Kö\–\úò^Jõ›Àòÿ[ôY]\”‘
+H\úò^Kö\–\úò^Jõ›Àòÿ[ôY]\—Q
+Hà\úò^Kö\–\úò^Jõ›Àú[ú”‘
+H\úò^Kö\–\úò^Jõ›Àú[ú—Q
+Bà
+JN¬àBÇàù[ò›[€àX[ùX[ò[ö‘õ›“Y[ù]Jõ› H¬àYà
+\õ› Hô]\õà»\‹^Nà	…ÀÿYôRŸ^Nà	…»N¬à€€ú›öX⁄€ò[YHH›ö[ô õ›ÀõöX⁄€ò[YHõ›Àô\‹^Sò[YHõ›Àõò[YH	… Kùö[J
+N¬à€€ú›ò]“YH›ö[ô õ›ÀöY	… Kùö[J
+N¬à€€ú›öX⁄€ò[YRŸ^Tò]»H›ö[ô õ›ÀõöX⁄€ò[YRŸ^H	… Kùö[J
+N¬à€€ú›\‹^Sò[YHHöX⁄€ò[YH
+ò]“Y	âàò]“Yö[ô^Ÿä	◊◊… HOOHLH»ò]“Yà	… N¬à€€ú›ÿYôRŸ^HHöX⁄€ò[YRŸ^Tò]»
+\‹^Sò[YH»X[ùX[\Ÿ\îÿYôRŸ^J\‹^Sò[YJHàò]“Y
+N¬àô]\õà»\‹^Nà\‹^Sò[YHÿYôRŸ^KÿYôRŸ^HN¬àBÇàù[ò›[€à\–›\úô[ùX[ùX[ò[ö‘õ› õ› H¬àYà
+[^Sò[YH\õ› Hô]\õàò[ŸN¬à€€ú›Y[ù]HHX[ùX[ò[ö‘õ›“Y[ù]Jõ› N¬à€€ú›ò]»H›ö[ô ^Sò[YH	… Kùö[J
+N¬à€€ú›ÿYôHHX[ùX[\Ÿ\îÿYôRŸ^Jò] N¬à€€ú›ÿ[ôY]\»H⁄Y[ù]Kô\‹^KY[ù]KúÿYôRŸ^Kõ›ÀõöX⁄€ò[YKõ›Àô\‹^Sò[YKõ›Àõò[YKõ›ÀöYBàõX\
+àOà›ö[ô à	… Kùö[J
+JBàôö[\äõ€€X[äN¬àô]\õàÿ[ôY]\Àú€€YJàOàãù”›Ÿ\êÿ\ŸJ
+HOOHò]Àù”›Ÿ\êÿ\ŸJ
+HX[ùX[\Ÿ\îÿYôRŸ^JäHOOHÿYôJN¬àBÇàù[ò›[€à⁄›[ŸY\ÿÿ[X[ùX[òYù
+õ› H¬àô]\õàHJX[ùX[\ùH	âàX[ùX[Y][ŸH	âà\–›\úô[ùX[ùX[ò[ö‘õ› õ› JN¬àBÇàù[ò›[€àY\ôŸSX[ùX[ò[ö‘õ›“[ù \ôŸ]õ› H¬àYà
+\õ›»\õ›“\”X[ùX[‹]Jõ› JHô]\õé¬àYà
+⁄›[ŸY\ÿÿ[X[ùX[òYù
+õ› JHô]\õé¬à€€ú›Y[ù]HHX[ùX[ò[ö‘õ›“Y[ù]Jõ› N¬à€€ú›\‹^HHY[ù]Kô\‹^N¬à€€ú›ÿYôRŸ^HHY[ù]KúÿYôRŸ^N¬àYà
+Y\‹^H	âà\ÿYôRŸ^JHô]\õé¬à€€ú›õ›ô[ò[òŸRŸ^HH›ö[ô ÿYôRŸ^HX[ùX[\Ÿ\îÿYôRŸ^J\‹^JJKùö[J
+Kù”›Ÿ\êÿ\ŸJ
+N¬àYà
+õ›ÀõX[ùX[‹ôX]YOOHùYH	âàP””ëíTìQQ”Q–P÷W”PSïPS’‘“—VTÀö\ õ›ô[ò[òŸRŸ^JJHô]\õé¬à€€ú›\”‘H\úò^Kö\–\úò^Jõ›Àì‘
+H\úò^Kö\–\úò^Jõ›ÀõX[ùX[‘
+H\úò^Kö\–\úò^Jõ›Àõ‹
+N¬à€€ú›\—QH\úò^Kö\–\úò^Jõ›ÀëQ
+H\úò^Kö\–\úò^Jõ›ÀõX[ùX[Q
+H\úò^Kö\–\úò^Jõ›ÀôY
+N¬à€€ú›\—^€YY‘H\úò^Kö\–\úò^Jõ›Àô^€YY‘
+N¬à€€ú›\—^€YYQH\úò^Kö\–\úò^Jõ›Àô^€YYQ
+N¬à€€ú›‹H\úò^Kö\–\úò^Jõ›Àì‘
+H»õ›Àì‘õX\
+›ö[ô Hà
+\úò^Kö\–\úò^Jõ›ÀõX[ùX[‘
+H»õ›ÀõX[ùX[‘õX\
+›ö[ô Hà
+\úò^Kö\–\úò^Jõ›Àõ‹
+H»õ›Àõ‹õX\
+›ö[ô Hà◊JJN¬à€€ú›YH\úò^Kö\–\úò^Jõ›ÀëQ
+H»õ›ÀëQõX\
+›ö[ô Hà
+\úò^Kö\–\úò^Jõ›ÀõX[ùX[Q
+H»õ›ÀõX[ùX[QõX\
+›ö[ô Hà
+\úò^Kö\–\úò^Jõ›ÀôY
+H»õ›ÀôYõX\
+›ö[ô Hà◊JJN¬à€€ú›^€YY‘H\—^€YY‘»õ›Àô^€YY‘õX\
+›ö[ô Hà◊N¬à€€ú›^€YYQH\—^€YYQ»õ›Àô^€YYQõX\
+›ö[ô Hà◊N¬à€€ú›ÿ[ôY]\”‘H\úò^Kö\–\úò^Jõ›Àòÿ[ôY]\”‘
+H»õ›Àòÿ[ôY]\”‘õX\
+›ö[ô Hàù[¬à€€ú›ÿ[ôY]\—QH\úò^Kö\–\úò^Jõ›Àòÿ[ôY]\—Q
+H»õ›Àòÿ[ôY]\—QõX\
+›ö[ô Hàù[¬à€€ú›[ú”‘H\úò^Kö\–\úò^Jõ›Àú[ú”‘
+H»ÿ[ö]^ôU‹[ú õ›Àú[ú”‘
+Hàù[¬à€€ú›[ú—QH\úò^Kö\–\úò^Jõ›Àú[ú—Q
+H»ÿ[ö]^ôU‹[ú õ›Àú[ú—Q
+Hàù[¬à€€ú›ô]àH»ããä\ôŸ]Ÿ\‹^WHﬂJKããäÿYôRŸ^H»
+\ôŸ]‹ÿYôRŸ^WHﬂJHàﬂJHN¬à€€ú›õŸö[Tõ›»H¬àããúô]ãàöX⁄€ò[YNà\‹^KàöX⁄€ò[YRŸ^NàÿYôRŸ^HX[ùX[\Ÿ\îÿYôRŸ^J\‹^JBàN¬àYà
+\”‘
+HõŸö[Tõ›Àì‘H‹ú€XŸJL
+N¬à[ŸHYà
+P\úò^Kö\–\úò^JõŸö[Tõ›Àì‘
+JHõŸö[Tõ›Àì‘H◊N¬àYà
+\—Q
+HõŸö[Tõ›ÀëQHYú€XŸJL
+N¬à[ŸHYà
+P\úò^Kö\–\úò^JõŸö[Tõ›ÀëQ
+JHõŸö[Tõ›ÀëQH◊N¬àYà
+\—^€YY‘
+HõŸö[Tõ›Àô^€YY‘H\úò^Kôúõ€Jô]»Ÿ]
+^€YY‘
+JN¬à[ŸHYà
+P\úò^Kö\–\úò^JõŸö[Tõ›Àô^€YY‘
+JHõŸö[Tõ›Àô^€YY‘H◊N¬àYà
+\—^€YYQ
+HõŸö[Tõ›Àô^€YYQH\úò^Kôúõ€Jô]»Ÿ]
+^€YYQ
+JN¬à[ŸHYà
+P\úò^Kö\–\úò^JõŸö[Tõ›Àô^€YYQ
+JHõŸö[Tõ›Àô^€YYQH◊N¬àYà
+ÿ[ôY]\”‘
+HõŸö[Tõ›Àòÿ[ôY]\”‘H\úò^Kôúõ€Jô]»Ÿ]
+ÿ[ôY]\”‘
+JN¬àYà
+ÿ[ôY]\—Q
+HõŸö[Tõ›Àòÿ[ôY]\—QH\úò^Kôúõ€Jô]»Ÿ]
+ÿ[ôY]\—Q
+JN¬àYà
+[ú”‘
+HõŸö[Tõ›Àú[ú”‘H[ú”‘¬àYà
+[ú—Q
+HõŸö[Tõ›Àú[ú—QH[ú—Q¬à\ôŸ]Ÿ\‹^WHHõŸö[Tõ›Œ¬àYà
+õŸö[Tõ›ÀõöX⁄€ò[YRŸ^H	âàõŸö[Tõ›ÀõöX⁄€ò[YRŸ^HOOH\‹^JH\ôŸ]‹õŸö[Tõ›ÀõöX⁄€ò[YRŸ^WHHõŸö[Tõ›Œ¬àBÇàù[ò›[€à\ú⁄\›X[ùX[ò[ö‹–ÿX⁄J
+H¬àûH»⁄[ô›Àú›‹òYŸH	âà⁄[ô›Àú›‹òYŸKúŸ]
+PSïPS‘êSí‘◊“—VKî””ãú›ö[ô⁄YûJX[ùX[ò[ö‹ KùYJN»Hÿ]⁄
+JHﬂBàBÇàù[ò›[€àôYúô\⁄Yù\ìX[ùX[ò[ö–ÿX⁄P⁄[ôŸJ
+H¬àX\ö”X[ùX[ò[ö‹–⁄[ôŸY
+
+N¬àÿ⁄Y[Uö\⁄XõTôYúô\⁄
+
+N¬àBÇàù[ò›[€àôXùZ[X[ùX[ò[ö‹—úõ€Qö\ôXò\ŸJ
+H¬àYà
+P\úò^Kö\–\úò^Jö\ôXò\ŸSX[ùX[ò[ö‹ JHô]\õé¬à€€ú›ô^HﬂN¬àö\ôXò\ŸSX[ùX[ò[ö‹Àôõ‹ëXX⁄
+õ›»OàY\ôŸSX[ùX[ò[ö‘õ›“[ù ô^õ› JN¬àX[ùX[ò[ö‹»Hô^¬à\ú⁄\›X[ùX[ò[ö‹–ÿX⁄J
+N¬àôYúô\⁄Yù\ìX[ùX[ò[ö–ÿX⁄P⁄[ôŸJ
+N¬àXõ\⁄\]J	€X[ùX[\ò[ö‹À]\]Y	 N¬àBÇàù[ò›[€àôXùZ[X[ùX[ò[ö‹—úõ€Tò][ô—ÿ‹ 
+H¬àYà
+P\úò^Kö\–\úò^Jö\ôXò\ŸTò][ô‹ JHô]\õé¬à€€ú›ô^H»ããõX[ùX[ò[ö‹»N¬àö\ôXò\ŸTò][ô‹Àôõ‹ëXX⁄
+õ›»Oà¬à€€ú›‹[ö[ô“YH›ö[ô õ›Àõ‹[ö[ô“Y	… Kùö[J
+N¬àYà
+‹[ö[ô“YOOH	◊◊€X[ùX[ò[ö‹…»õ›“\”X[ùX[‹]Jõ› JH¬àY\ôŸSX[ùX[ò[ö‘õ›“[ù ô^õ› N¬àBàJN¬àX[ùX[ò[ö‹»Hô^¬à\ú⁄\›X[ùX[ò[ö‹–ÿX⁄J
+N¬àôYúô\⁄Yù\ìX[ùX[ò[ö–ÿX⁄P⁄[ôŸJ
+N¬àXõ\⁄\]J	€X[ùX[\ò[ö‹À]\]Y	 N¬àBÇàù[ò›[€àôXùZ[\Ÿ\îõŸö[\—úõ€Qö\ôXò\ŸJ
+H¬à€€ú›ô^H»ããò]ò]\ú”X\N¬à
+ö\ôXò\ŸU\Ÿ\îõŸö[\»◊JKôõ‹ëXX⁄
+õ›»Oà¬à€€ú›öX⁄€ò[YHH›ö[ô õ›ÀõöX⁄€ò[YHõ›Àô\‹^Sò[YHõ›Àõò[YHõ›ÀöY	… Kùö[J
+N¬à€€ú›]ò]\àH›ö[ô õ›Àò]ò]\à	… Kùö[J
+N¬àYà
+öX⁄€ò[YH	âà]ò]\äHô^€öX⁄€ò[YWHH]ò]\é¬àJN¬à]ò]\ú”X\Hô^¬à€€ú››\úô[ùõŸö[HHXÿ€›[ùõŸö[J^Sò[YJN¬à€€ú››\úô[ù]ò]\àH›ö[ô ›\úô[ùõŸö[OÀò]ò]\à	… Kùö[J
+N¬àYà
+›\úô[ù]ò]\à	âà›ö[ô ›\úô[ùõŸö[OÀò]]ZY	… HOOH›ö[ô ]][ùXÿ]YZY	… JH¬à^P]ò]\àH›\úô[ù]ò]\é¬à]ò]\êùãù^€€ù[ùH›\úô[ù]ò]\é¬àûH»⁄[ô›Àú›‹òYŸH	âà⁄[ô›Àú›‹òYŸKúŸ]
+UêUTó“—VK›\úô[ù]ò]\ãò[ŸJN»Bàÿ]⁄
+JH»€€ú€€Kô\úõ‹ä	–€›[õ›ÿX⁄Hÿ]⁄YõŸö[H]ò]\âÀJN»BàBàX\ö–]ò]\ú–⁄[ôŸY
+
+N¬àûH»⁄[ô›Àú›‹òYŸH	âà⁄[ô›Àú›‹òYŸKúŸ]
+UêUTî◊”PT“—VKî””ãú›ö[ô⁄YûJ]ò]\ú”X\
+KùYJN»Hÿ]⁄
+JHﬂBàÿ⁄Y[Uö\⁄XõTôYúô\⁄
+
+N¬àôYúô\⁄Z[UZJ
+N¬àXõ\⁄\]J	›\Ÿ\ã\õŸö[\À]\]Y	 N¬àBÇàù[ò›[€àŸ]›]\ \ŸÀ\—\úõ‹äH¬à›]\—[ù^€€ù[ùH\ŸŒ¬à›]\—[ú›[Kò€€‹àH\—\úõ‹à»	»—ëåëMå…»à	»ŒééN	Œ¬àYà
+\Ÿ HŸ][Y[›]
+
+
+HOà»Yà
+›]\—[ù^€€ù[ùOOH\Ÿ H›]\—[ù^€€ù[ùH	…Œ»KÃ
+N¬àBÇàù[ò›[€àõ‹õX[^ôYXÿ€›[ùò[YJò[YJH¬àô]\õà›ö[ô ò[YH	… Kùö[J
+Kù”›Ÿ\êÿ\ŸJ
+Kúô\XŸJ÷◊òK^¥,tcÙdLNWÀWJÀŸ⁄K	◊… Kú€XŸJå
+N¬àBÇàù[ò›[€à\–YZ[ìöX⁄€ò[YJò[YHH^Sò[YJH¬àô]\õàQRSó”íP“”êSQTÀö\ õ‹õX[^ôYXÿ€›[ùò[YJò[YJJN¬àBÇàù[ò›[€à\–YZ[ïZY
+ZYH]][ùXÿ]YZY
+H¬àô]\õàQRSó’RQÀö\ ›ö[ô ZY	… JN¬àBÇàù[ò›[€à\–YZ[ä
+H¬àô]\õàXÿŸ\‹”]ô[OOH	ÿYZ[â»	âà\–YZ[ïZY
+
+N¬àBÇàù[ò›[€à\–ÿ][Ÿ–YZ[ä
+H¬àô]\õà\–YZ[ä
+H	âà–US—◊–QRSó’”‘í‘‘P—N¬àBÇàù[ò›[€à\]PXÿŸ\‹’ZJ
+H¬àÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	ÀõÿÀXYZ[ã[€õI Kôõ‹ëXX⁄
+[Oà[ò€\‹”\›ùŸŸ€J	€ÿÀ[ÿ⁄ŸY	ÀZ\–YZ[ä
+JJN¬àÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	ÀõÿÀXÿ][ŸÀXYZ[ã[€õI Kôõ‹ëXX⁄
+[Oà[ò€\‹”\›ùŸŸ€J	€ÿÀ[ÿ⁄ŸY	ÀZ\–ÿ][Ÿ–YZ[ä
+JJN¬àYà
+XÿŸ\‹–òYŸJH¬àXÿŸ\‹–òYŸKù^€€ù[ùH\–YZ[ä
+H»	Ù,4-4/4.4/I»à
+XÿŸ\‹”]ô[»	Ù,¥at/¥-	»à	Ù,Ù/¥`t`¥c	 N¬àXÿŸ\‹–òYŸKò€\‹”\›ùŸŸ€J	ÿYZ[âÀ\–YZ[ä
+JN¬àBà\]PXÿ€›[ù\⁄õÿ\ô
+
+N¬àXõ\⁄\]J	ÿXÿ€›[ù]\]Y	 N¬àBÇàù[ò›[€àŸ[€€YT›‹òYŸRŸ^J
+H¬àô]\õà	’—S””QW–P“◊“—V_Nâ€õ‹õX[^ôYXÿ€›[ùò[YJ^Sò[YJ_X¬àBÇàù[ò›[€à\]PXÿ€›[ù\⁄õÿ\ô
+
+H¬à€€ú›⁄Y€ôY[àHõ€€X[äXÿŸ\‹”]ô[	âà]][ùXÿ]YZY	âà^Sò[YJN¬àYà
+Xÿ€›[ùŸ[€€YJH¬à€€ú›X⁄€õ›€YŸYH⁄Y€ôY[à	âà
+ÿÿ[›‹òYŸKôŸ]][JŸ[€€YT›‹òYŸRŸ^J
+JHOOH	ÃI»Xÿ€›[ùõŸö[J^Sò[YJOÀùŸ[€€YPX⁄€õ›€YŸYOOHùYJN¬àXÿ€›[ùŸ[€€YKò€\‹”\›ùŸŸ€J	⁄Y[âÀ\⁄Y€ôY[àX⁄€õ›€YŸY
+N¬àBàYà
+ÿ][Ÿ‘õŸ‹ô\‹ Hÿ][Ÿ‘õŸ‹ô\‹Àò€\‹”\›ùŸŸ€J	⁄Y[âÀ\⁄Y€ôY[äN¬àYà
+\⁄Y€ôY[àY[ùöY\Àõ[ô›
+Hô]\õé¬à€€ú›ö\⁄XõQ[ùöY\»H[ùöY\Àôö[\ä[ùûHOà[ùûT\‹Ÿ\“Y[ëõY‹ [ùûKö[\úÀöYP⁄[ô\ŸKö[\úÀöYS[›öYKö[\úÀöYT⁄‹ù[ôY
+JN¬à€€ú›ò]YHö\⁄XõQ[ùöY\Àôö[\ä[ùûHOàÿ€‹ôQõ‹ä[ùûK^Sò[YJHOOHù[
+N¬à€€ú›ò]Y‹Hò]Yôö[\ä[ùûHOà[ùûKù\HOOH	”‘	 Kõ[ô›¬à€€ú›ò]YYHò]Yôö[\ä[ùûHOà[ùûKù\HOOH	—Q	 Kõ[ô›¬à€€ú›\òŸ[ùHö\⁄XõQ[ùöY\Àõ[ô›»X]úõ›[ô
+ò]Yõ[ô›
+àL»ö\⁄XõQ[ùöY\Àõ[ô›
+Hà¬à	
+	»€ÿÀXÿ][ŸÀ\õŸ‹ô\‹À]]I Kù^€€ù[ùH4'¥a¥-t/t-t/t/à	‹ò]Yõ[ô›H4.4-»	›ö\⁄XõQ[ùöY\Àõ[ô›H0≠»	‹\òŸ[ùIX¬à	
+	»€ÿÀXÿ][ŸÀ\õŸ‹ô\‹ÀY]Z[	 Kù^€€ù[ùH‘	‹ò]Y‹H0≠»Q	‹ò]YYH0≠»4/¥`t`¥,4.Ù/¥`tc	”X]õX^
+ö\⁄XõQ[ùöY\Àõ[ô›Hò]Yõ[ô›
+_X¬à	
+	»€ÿÀXÿ][ŸÀ\õŸ‹ô\‹ÀYö[	 Kú›[Kù⁄YH	‹\òŸ[ùIX¬àBÇàù[ò›[€à⁄›–]][Ÿ[
+Y\‹ÿYŸJH¬àYà
+X]][Ÿ[
+Hô]\õé¬à]]\úõ‹ãù^€€ù[ùHY\‹ÿYŸH	…Œ¬àYà
+]]\‹“[ú]
+H]]\‹“[ú]ô\ÿXõYHò[ŸN¬à]][Ÿ[ò€\‹”\›úô[[›ôJ	⁄Y[â N¬àŸ][Y[›]
+
+
+HOà]]Y[ùYöY\í[ú]	âà]]Y[ùYöY\í[ú]ôõÿ›\ 
+K
+N¬àBÇàù[ò›[€àYP]][Ÿ[
+
+H¬àYà
+]][Ÿ[
+H]][Ÿ[ò€\‹”\›òY
+	⁄Y[â N¬àYà
+]]\úõ‹äH]]\úõ‹ãù^€€ù[ùH	…Œ¬àYà
+]]\‹“[ú]
+H¬à]]\‹“[ú]ùò[YHH	…Œ¬à]]\‹“[ú]ô\ÿXõYHùYN¬àBàBÇàù[ò›[€à⁄›‘ôY⁄\›ò][€ì[Ÿ[
+
+H¬àYP]][Ÿ[
+
+N¬àYà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	…Œ¬àYà
+ôY⁄\›\ìò[YR[ú]	âà\ôY⁄\›\ìò[YR[ú]ùò[YJHôY⁄\›\ìò[YR[ú]ùò[YHH	…Œ¬àYà
+ôY⁄\›\î\‹“[ú]
+HôY⁄\›\î\‹“[ú]ô\ÿXõYHò[ŸN¬àYà
+ôY⁄\›\î\‹–€€ôö\õR[ú]
+HôY⁄\›\î\‹–€€ôö\õR[ú]ô\ÿXõYHò[ŸN¬àôY⁄\›\ì[Ÿ[Àò€\‹”\›úô[[›ôJ	⁄Y[â N¬àŸ][Y[›]
+
+
+HOàôY⁄\›\ìò[YR[ú]Àôõÿ›\ 
+K
+N¬àBÇàù[ò›[€àYTôY⁄\›ò][€ì[Ÿ[
+
+H¬àôY⁄\›\ì[Ÿ[Àò€\‹”\›òY
+	⁄Y[â N¬àYà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	…Œ¬àYà
+ôY⁄\›\î\‹“[ú]
+H¬àôY⁄\›\î\‹“[ú]ùò[YHH	…Œ¬àôY⁄\›\î\‹“[ú]ô\ÿXõYHùYN¬àBàYà
+ôY⁄\›\î\‹–€€ôö\õR[ú]
+H¬àôY⁄\›\î\‹–€€ôö\õR[ú]ùò[YHH	…Œ¬àôY⁄\›\î\‹–€€ôö\õR[ú]ô\ÿXõYHùYN¬àBàBÇàù[ò›[€àô\]Z\ôPXÿ€›[ù
+Y\‹ÿYŸHH	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ã4aÙ`¥/¥,tb»4/¥`¥.¥`4bÙ`¥c4ct`¥/¥`à4`4,4-Ù-4-t.Àâ H¬àYà
+XÿŸ\‹”]ô[
+Hô]\õàùYN¬à⁄›–]][Ÿ[
+Y\‹ÿYŸJN¬àô]\õàò[ŸN¬àBÇà\ﬁ[ò»ù[ò›[€à\T\ú€€ò[Xÿ€›[ùŸ\‹⁄[€äô\›[ô[Y[Xô\àHùYJH¬à€€ú›õŸö[HHô\›[ÀúõŸö[N¬à€€ú›öX⁄€ò[YHH›ö[ô õŸö[OÀõöX⁄€ò[YHõŸö[OÀõöX⁄€ò[YRŸ^HõŸö[OÀöY	… Kùö[J
+N¬àYà
+[öX⁄€ò[YJHõ›»ô]»\úõ‹ä	Ù't-H4`Ù-4,4.Ù/¥`tc4/¥/Ù`4-t-4-t.Ù.4`¥c4,4.¥.¥,4`Ù/t`ãâ N¬à]][ùXÿ]YZYH›ö[ô ô\›[Àù\Ÿ\èÀùZYõŸö[OÀò]]ZY	… N¬à€€ú›[ô^Hö\ôXò\ŸU\Ÿ\îõŸö[\Àôö[ô[ô^
+õ›»Oàõ‹õX[^ôYXÿ€›[ùò[YJõ›ÀõöX⁄€ò[YRŸ^Hõ›ÀõöX⁄€ò[YHõ›ÀöY
+HOOHõ‹õX[^ôYXÿ€›[ùò[YJöX⁄€ò[YJJN¬àYà
+[ô^èH
+Hö\ôXò\ŸU\Ÿ\îõŸö[\÷⁄[ô^HH»ããôö\ôXò\ŸU\Ÿ\îõŸö[\÷⁄[ô^KããúõŸö[HN¬à[ŸHö\ôXò\ŸU\Ÿ\îõŸö[\Àú\⁄
+õŸö[JN¬à€€ú›õŸö[P]ò]\àH›ö[ô õŸö[OÀò]ò]\à	… Kùö[J
+N¬àYà
+õŸö[P]ò]\äH¬à^P]ò]\àHõŸö[P]ò]\é¬à]ò]\êùãù^€€ù[ùHõŸö[P]ò]\é¬àûH»]ÿZ]⁄[ô›Àú›‹òYŸKúŸ]
+UêUTó“—VKõŸö[P]ò]\ãò[ŸJN»Bàÿ]⁄
+JH»€€ú€€Kô\úõ‹ä	–€›[õ›ÿX⁄HõŸö[H]ò]\âÀJN»BàBà]ÿZ]ÿ]ôSò[YJöX⁄€ò[YJN¬àÿÿ[›‹òYŸKúŸ]][JíSPTñW”êSQW“—VKöX⁄€ò[YJN¬àò[YR[ú]ùò[YHHöX⁄€ò[YN¬àXÿŸ\‹”]ô[H\–YZ[ïZY
+
+H»	ÿYZ[â»à	›\Ÿ\âŒ¬àŸ\‹⁄[€î›‹òYŸKúŸ]][JP–—T‘◊“—VKXÿŸ\‹”]ô[
+N¬àYP]][Ÿ[
+
+N¬à\]PXÿŸ\‹’ZJ
+N¬àô[ô\ä
+N¬àYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬àŸ]›]\ 4$¥at/¥-4,¥bÙ/Ù/¥.Ù/t-t/Nà	€öX⁄€ò[Y_H8ß$ÿ
+N¬àô]\õàùYN¬àBÇà\ﬁ[ò»ù[ò›[€à€€[Z]\ú€€ò[Ÿ⁄[ä
+H¬à€€ú›Y[ùYöY\àH›ö[ô ]]Y[ùYöY\í[ú]Àùò[YH	… Kùö[J
+N¬à€€ú›\‹›€‹ôH›ö[ô ]]\‹“[ú]Àùò[YH	… N¬àYà
+ZY[ùYöY\à\\‹›€‹ô
+H»⁄›–]][Ÿ[
+	Ù$¥,¥-t-4.[XZ[4.4.Ù.4aÙ/tbÙ.H4/Ù,4`4/¥.Ùcâ N»ô]\õàò[ŸN»BàYà
+ZY[ùYöY\ãö[ò€Y\ 	–	 JH»⁄›–]][Ÿ[
+	Ù%4.Ùc»4,t-t-Ù/¥/Ù,4`t/t/¥,Ù/à4,¥at/¥-4,4`¥-t/Ù-t`4c4/t`Ù-¥/t/à4`Ù.¥,4-ÙbÙ,¥,4`¥c[XZ[â N»ô]\õàò[ŸN»Bà€€ú›‹öY⁄[ò[^H]]ÿ]ôPùèÀù^€€ù[ù	Ù$¥/¥.t`¥.4,à4,4.¥.¥,4`Ù/t`âŒ¬àYà
+]]ÿ]ôPùäH»]]ÿ]ôPùãô\ÿXõYHùYN»]]ÿ]ôPùãù^€€ù[ùH	Ù$¥at/¥-4.4/8†)âŒ»BàYà
+]]\úõ‹äH]]\úõ‹ãù^€€ù[ùH	Ù'Ù`4/¥,¥-t`4cÙ-t/4-4,4/t/tbÙ-x†)âŒ¬àûH¬à€€ú›àH]ÿZ]ÿZ]õ‹ëö\ôXò\ŸQä
+N¬à€€ú›ô\›[H]ÿZ]ãõŸ⁄[î\ú€€ò[Xÿ€›[ù
+Y[ùYöY\ã\‹›€‹ôõ€€X[ä]]ô[Y[Xô\í[ú]Àò⁄X⁄ŸY
+JN¬àô]\õà]ÿZ]\T\ú€€ò[Xÿ€›[ùŸ\‹⁄[€äô\›[õ€€X[ä]]ô[Y[Xô\í[ú]Àò⁄X⁄ŸY
+JN¬àHÿ]⁄
+\úõ‹äH¬à€€ú€€Kô\úõ‹ä	‘\ú€€ò[Xÿ€›[ùŸ⁄[àòZ[Y	À\úõ‹äN¬à€€ú›€ŸHH›ö[ô \úõ‹èÀò€ŸH	… N¬à€€ú›Y\‹ÿYŸHH€ŸHOOH	ÿ]]⁄[ùò[YX‹ôY[ùX[	»€ŸHOOH	ÿ]]›‹õ€ôÀ\\‹›€‹ô	»»	Ù't-t,¥-t`4/tbÙ.H[XZ[4.4.Ù.4.Ù.4aÙ/tbÙ.H4/Ù,4`4/¥.Ùcâ»à
+\úõ‹èÀõY\‹ÿYŸH	Ù't-H4`Ù-4,4.Ù/¥`tc4,¥/¥.t`¥.â N¬à⁄›–]][Ÿ[
+Y\‹ÿYŸJN¬àô]\õàò[ŸN¬àHö[ò[H¬àYà
+]]ÿ]ôPùäH»]]ÿ]ôPùãô\ÿXõYHò[ŸN»]]ÿ]ôPùãù^€€ù[ùH‹öY⁄[ò[^»BàBàBÇàù[ò›[€à[ú›\ôPYZ[ä
+H¬àYà
+\–YZ[ä
+JHô]\õàùYN¬àŸ]›]\ 	Ù't`Ù-¥-t/H4,4-4/4.4/Kt/Ù,4`4/¥.Ùcà4-4/¥,t,4,¥.Ù-t/t.4-K4`4-t-4,4.¥`¥.4`4/¥,¥,4/t.4-H4.4`Ù-4,4.Ù-t/t.4-H4-4/¥`t`¥`Ù/Ù/tb»4`¥/¥.Ùc4.¥/à4,4-4/4.4/t`ÀâÀùYJN¬àô]\õàò[ŸN¬àBÇàù[ò›[€à[ú›\ôPÿ][Ÿ–YZ[ä
+H¬àYà
+\–ÿ][Ÿ–YZ[ä
+JHô]\õàùYN¬àŸ]›]\ 	Ù(4-t-4,4.¥`¥.4`4/¥,¥,4/t.4-H4.¥,4`¥,4.Ù/¥,Ù,4-4/¥`t`¥`Ù/Ù/t/à4`¥/¥.Ùc4.¥/à4,à4,4-4/4.4/Kt/Ù,4/t-t.Ù.âÀùYJN¬àô]\õàò[ŸN¬àBÇàù[ò›[€àXÿ€›[ùõŸö[Jò[YJH¬à€€ú›ÿYôHHõ‹õX[^ôYXÿ€›[ùò[YJò[YJN¬àô]\õàö\ôXò\ŸU\Ÿ\îõŸö[\Àôö[ô
+õ›»Oàõ‹õX[^ôYXÿ€›[ùò[YJõ›ÀõöX⁄€ò[YRŸ^Hõ›ÀõöX⁄€ò[YHõ›ÀöY
+HOOHÿYôJHù[¬àBÇàù[ò›[€à€õ›€ìYÿXﬁPXÿ€›[ù
+ò[YJH¬à€€ú›ÿYôHHõ‹õX[^ôYXÿ€›[ùò[YJò[YJN¬àYà
+\ÿYôJHô]\õàò[ŸN¬àYà
+Xÿ€›[ùõŸö[Jò[YJJHô]\õàùYN¬àYà
+ÿöôX›öŸ^\ ]ò]\ú”X\ﬂJKú€€YJŸ^HOàõ‹õX[^ôYXÿ€›[ùò[YJŸ^JHOOHÿYôJJHô]\õàùYN¬àô]\õà[ùöY\Àú€€YJ[ùûHOà…‹ÿ€‹ô\…À	‹€€ô‘ÿ€‹ô\…À	›ö\›X[ÿ€‹ô\…À	‹\ú€€ò[ÿ€‹ô\…◊Kú€€YJöY[OÇà[ùûVŸöY[H	âàÿöôX›öŸ^\ [ùûVŸöY[JKú€€YJŸ^HOàõ‹õX[^ôYXÿ€›[ùò[YJŸ^JHOOHÿYôJBà
+JN¬àBÇàù[ò›[€à⁄›”ò[YS[Ÿ[
+Y\‹ÿYŸKÿ[ôY]HH	… H¬àYà
+[ò[YS[Ÿ[
+Hô]\õé¬à[Ÿ[ò[YQ\úõ‹ãù^€€ù[ùHY\‹ÿYŸH	…Œ¬à[Ÿ[ò[YR[ú]ùò[YHH›ö[ô ÿ[ôY]H^Sò[YHò[YR[ú]ùò[YKùö[J
+H	… Kùö[J
+N¬àYà
+[Ÿ[Xÿ€›[ù[XZ[
+H[Ÿ[Xÿ€›[ù[XZ[ùò[YHH	…Œ¬àYà
+[Ÿ[Xÿ€›[ù\‹ H¬à[Ÿ[Xÿ€›[ù\‹Àùò[YHH	…Œ¬à[Ÿ[Xÿ€›[ù\‹Àô\ÿXõYHò[ŸN¬àBàò[YS[Ÿ[ò€\‹”\›úô[[›ôJ	⁄Y[â N¬àŸ][Y[›]
+
+
+HOà[Ÿ[ò[YR[ú]ôõÿ›\ 
+K
+N¬àBÇàù[ò›[€àYSò[YS[Ÿ[
+
+H¬àYà
+ò[YS[Ÿ[
+Hò[YS[Ÿ[ò€\‹”\›òY
+	⁄Y[â N¬àYà
+[Ÿ[ò[YQ\úõ‹äH[Ÿ[ò[YQ\úõ‹ãù^€€ù[ùH	…Œ¬àYà
+[Ÿ[Xÿ€›[ù[XZ[
+H[Ÿ[Xÿ€›[ù[XZ[ùò[YHH	…Œ¬àYà
+[Ÿ[Xÿ€›[ù\‹ H¬à[Ÿ[Xÿ€›[ù\‹Àùò[YHH	…Œ¬à[Ÿ[Xÿ€›[ù\‹Àô\ÿXõYHùYN¬àBàò[YR[ú]ùò[YHH^Sò[YHÿÿ[›‹òYŸKôŸ]][JíSPTñW”êSQW“—VJH	…Œ¬àBÇà\ﬁ[ò»ù[ò›[€à€€[Z]öX⁄€ò[YJò[YJH¬à€€ú›ò[H
+ò[YH	… Kùö[J
+N¬àYà
+]ò[
+H¬à⁄›”ò[YS[Ÿ[
+	Ù$¥,¥-t-4.4`¥-H4/t.4.¥/t-t.t/4aÙ`¥/¥,tb»4/Ù`4/¥-4/¥.Ù-¥.4`¥câ N¬àô]\õàò[ŸN¬àBàYà
+XÿŸ\‹”]ô[OOH	ÿYZ[â»	âàZ\–YZ[ìöX⁄€ò[YJò[
+JH¬à⁄›”ò[YS[Ÿ[
+	Ù$4-4/4.4/t`t.¥.4.H4`4-t-¥.4/4-Ù,4.¥`4-t/Ù.Ùdt/H4`¥/¥.Ùc4.¥/à4-Ù,4,4.¥.¥,4`Ù/t`¥,4/4.à4'Ùdt`H4.¥/¥b4,4aÙ.4.Kﬁ^^Y€‹ù‹»4.4&¥/¥a4,âÀò[
+N¬àô]\õàò[ŸN¬àBà€€ú›õŸö[HHXÿ€›[ùõŸö[Jò[
+N¬àYà
+õŸö[H	âàõŸö[Kò]]ZY
+H¬àYà
+TTî””êS–P–”’Sï–UU—SêPìQ
+H¬à⁄›”ò[YS[Ÿ[
+Tî””êS–P–”’Sï—T–PìQ”QT‘–Q—Kò[
+N¬àô]\õàò[ŸN¬àBà€€ú›[XZ[H›ö[ô [Ÿ[Xÿ€›[ù[XZ[Àùò[YH	… Kùö[J
+N¬à€€ú›\‹›€‹ôH›ö[ô [Ÿ[Xÿ€›[ù\‹œÀùò[YH	… N¬àYà
+Y[XZ[
+H¬à⁄›”ò[YS[Ÿ[
+	Ù$¥,¥-t-4.4`¥-H[XZ[4/Ù`4.4,¥cÙ-Ù,4/t/tbÙ.H4.à4ct`¥/¥/4`»4,4.¥.¥,4`Ù/t`¥`ÀâÀò[
+N¬àΩÁè}∂âûÀk∫wµÁH€€ùõ€Àò€\‹”\›òY
+	⁄\ÀY\ùI N¬àKù\ôŸ]ú\ô[ù[[Y[ùú]Y\ûTŸ[X›‹ä	ÀõÿÀ\ò]K]ò[	 Kù^€€ù[ùHõ‹õX][ú]ÿ€‹ôJò[
+N¬àJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHúò]HóI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+JHOà¬àKúô]ô[ùYò][
+
+N¬àYà
+Y[ú›\ôSöX⁄€ò[YJ
+JHô]\õé¬à€€ú›YHùãôŸ]]öXù]J	Ÿ]KZY	 N¬à€€ú›€Y\àH\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹äõÿÀ\€Y\ñŸ]KZYHâ⁄YHóX
+N¬à€€ú›ò[H€[\ÿ€‹ôJ€Y\ãùò[YJN¬à€€ú›[ùûHH[ùöY\–ûRYôŸ]
+›ö[ô Y
+JN¬àYà
+Y[ùûHò[OOHù[
+Hô]\õé¬àûH¬à›\ô\‹–⁄\ùò][ô‘ôYúô\⁄[ù[H]Kõõ› 
+H
+»Ã¬àYà
+\‘\ú€€ò[ÿÿ[J
+JH¬à[ùûKú\ú€€ò[ÿ€‹ô\»H[ùûKú\ú€€ò[ÿ€‹ô\»ﬂN¬à[ùûKú\ú€€ò[ÿ€‹ô\÷€^Sò[YWHHò[¬à]ÿZ]ÿ]ôTò][ô—^ò\ [ùûKöY^Sò[YK»\ú€€ò[ÿ€‹ôNàò[JN¬àH[ŸH¬à[ùûKúÿ€‹ô\»H[ùûKúÿ€‹ô\»ﬂN¬à[ùûKúÿ€‹ô\÷€^Sò[YWHHò[¬à]ÿZ]⁄[ô›Àì‘Q—ãúÿ]ôTò][ô [ùûKöY^Sò[YKò[
+N¬à]ÿZ]ÿ]ôTò][ô—^ò\ [ùûKöY^Sò[YK»ÿ€‹ôNàò[JN¬à\[ôX[ùX[‹ô\íYìZ\‹⁄[ô ^Sò[YK[ùûKù\K[ùûKöY
+N¬àBà›X⁄[ùûPÿX⁄J[ùûJN¬àX\ö‘ò][ô—]P⁄[ôŸY
+
+N¬à€€ú›ÿ\ôHùãò€‹Ÿ\›
+	ÀõÿÀ][öYöYYXÿ\ô	 N¬à€€ú›€€ùõ€Hùãò€‹Ÿ\›
+	ÀõÿÀXÿ\ôXX›[€ú… OÀú]Y\ûTŸ[X›‹ä	ÀõÿÀ\ò]KX€€ùõ€	 N¬àYà
+€€ùõ€
+H¬à€€ùõ€ò€\‹”\›úô[[›ôJ	⁄\ÀY[\IÀ	⁄\ÀY\ùI N¬à€€ùõ€ò€\‹”\›òY
+	⁄\À\ÿ]ôY	 N¬à€€ùõ€ô]\Ÿ]úÿ]ôYH›ö[ô ò[
+N¬àBàYà
+ÿ\ô
+H¬àÿ\ôò€\‹”\›òY
+	€ÿÀXÿ\ô\ò]Y	 N¬à€€ú›ÿ€‹ôSõŸHHÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀ\ŸX\€€ã\ÿ€‹ôI N¬àYà
+ÿ€‹ôSõŸJHÿ€‹ôSõŸKö[õô\íSH	›ö\⁄XõP]ô\òYŸSX\ö›\
+[ùûK]ô [ùûKúÿ€‹ô\ J_O‹[à€\‹œHõÿÀ\ŸX\€€ã\ÿ€‹ôK\›Xàè¥`t`4-t-4/tcÙcœ‹‹[èò¬à€€ú›õ›\”õŸHHÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀ]õ›\… N¬àYà
+õ›\”õŸJH¬àõ›\”õŸKö[õô\íSHÿöôX›ô[ùöY\ [ùûKúÿ€‹ô\»ﬂJKõX\
+
+›õ›\ãÿ€‹ôWJHOà¬à€€ú›Z[ôHHõ›\àOOH^Sò[YH»	»Z[ôI»à	…Œ¬àô]\õà‹[à€\‹œHõÿÀX⁄\	€Z[ô_Hèâÿ]ò]\ëõ‹äõ›\ä_H	Ÿ\ÿÿ\R[
+õ›\ä_Nà	Ÿõ‹õX]ÿ€‹ôJÿ€‹ôJ_O‹‹[èò¬àJKöõ⁄[ä	… N¬àBàBàùãù^€€ù[ùH	Ù&4-Ù/4-t/t.4`¥c4/¥a¥-t/t.¥`…Œ¬àùãò€‹Ÿ\›
+	ÀõÿÀXÿ\ôXX›[€ú… OÀú]Y\ûTŸ[X›‹ä	÷Ÿ]KXX›[€èHô[]K\ò][ô»óI OÀò€\‹”\›úô[[›ôJ	⁄Y[â N¬à\]PXÿ€›[ù\⁄õÿ\ô
+
+N¬àŸ]›]\ 	Ù'¥a¥-t/t.¥,4`t/¥at`4,4/t-t/t,8ß$… N¬àHÿ]⁄
+\úäH¬à€€ú€€Kô\úõ‹ä\úäN¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`t/¥at`4,4/t.4`¥c4/¥a¥-t/t.¥`ÀâÀùYJN¬àBàJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHô[]K\ò][ô»óI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+JHOà¬àYà
+Y[ú›\ôSöX⁄€ò[YJ
+JHô]\õé¬à€€ú›YHKù\ôŸ]ôŸ]]öXù]J	Ÿ]KZY	 N¬àYà
+]⁄[ô›Àò€€ôö\õJ\‘\ú€€ò[ÿÿ[J
+H»	Ù(Ù-4,4.Ù.4`¥c4`¥,¥/¥cà4/¥`¥/4-t`¥.¥`»x†$ÕO…»à	Ù(Ù-4,4.Ù.4`¥c4`¥,¥/¥cà4/¥a¥-t/t.¥`œ… JHô]\õé¬à]ÿZ][]P›\úô[ùò][ô Y^Sò[YK\‘\ú€€ò[ÿÿ[J
+H»	‹\ú€€ò[	»à	‹XõX… N¬àJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHõ‹[ãXÿ\ôóI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬àKú›‹õ‹Yÿ][€ä
+N¬à‹[êÿ\ô[Ÿ[
+ùãôŸ]]öXù]J	Ÿ]KZY	 JN¬àJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHôY]óI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬àYà
+Y[ú›\ôPÿ][Ÿ–YZ[ä
+JHô]\õé¬àY][ô“YHKù\ôŸ]ôŸ]]öXù]J	Ÿ]KZY	 N¬àô[ô\ä
+N¬àJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHòÿ[òŸ[YY]óI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àY][ô“YHù[¬àô[ô\ä
+N¬àJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHúÿ]ôKYY]óI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+JHOà¬àYà
+Y[ú›\ôPÿ][Ÿ–YZ[ä
+JHô]\õé¬à€€ú›YHKù\ôŸ]ôŸ]]öXù]J	Ÿ]KZY	 N¬à€€ú›ÿ\ôH\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹äõÿÀYY]ÿ\ôŸ]KZYHâ⁄YHóX
+N¬à€€ú›[ùûHH[ùöY\–ûRYôŸ]
+›ö[ô Y
+JN¬àYà
+Xÿ\ôY[ùûJHô]\õé¬à€€ú›]HHÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK]]I Kùò[YKùö[J
+N¬àYà
+]]JH»Ÿ]›]\ 	Ù't,4-Ù,¥,4/t.4-H4/t-H4/4/¥-¥-t`à4,tbÙ`¥c4/Ù`Ù`t`¥bÙ/âÀùYJN»ô]\õé»Bà€€ú›ô]’\HHÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK]\I Kùò[YN¬àYà
+\—\Xÿ]U]J]Kô]’\KY
+JH»Ÿ]›]\ 4(¥,4.¥/¥.H	€ô]’\_H4`Ù-¥-H4-t`t`¥cà4'¥-4.4/t,4.¥/¥,¥bÙ-H4/t,4-Ù,¥,4/t.4c»4-Ù,4/Ù`4-tbt-t/tb»4/¥`¥-4-t.Ùc4/t/à4,¥/t`Ù`¥`4.‘4.QòùYJN»ô]\õé»Bà€€ú›ô]ö[›\“[XYŸHH›ö[ô [ùûKö[XYŸH	… Kùö[J
+N¬à€€ú›ô]ö[›\—ò[òX⁄“[XYŸHH›ö[ô [ùûKôò[òX⁄“[XYŸH	… Kùö[J
+N¬à€€ú›ô^[XYŸHHÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKZ[XYŸI Kùò[YKùö[J
+N¬à€€ú›[XYŸP⁄[ôŸYHô^[XYŸHOOHô]ö[›\“[XYŸN¬Çà€€ú›\]Y[ùûHH¬àããô[ùûKà]Kà\Nàô]’\KàYX\éà
+
+
+HOà¬à€€ú›YX\îò]»Hÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK^YX\â Kùò[YKùö[J
+N¬àô]\õàYX\îò]»»\úŸR[ù
+YX\îò]ÀL
+Hàù[¬àJJ
+KàŸX\€€éàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK\ŸX\€€â Kùò[YKà›Y[‹Œà\úŸS\›
+ÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK\›Y[… Kùò[YJKà\ôX›‹úŒà\úŸS\›
+ÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKY\ôX›‹â Kùò[YJKà\ôõ‹õY\úŒà\úŸS\›
+ÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK\\ôõ‹õY\â Kùò[YJKàúò[ò⁄\Ÿ\Œà[ö\]YQúò[ò⁄\ŸS\›
+€X[ëúò[ò⁄\ŸS\›
+ÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKYúò[ò⁄\ŸI Kùò[YJJKàããúÿ[YT€€ô—öY[ ÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK\ÿ[YK\€€ô… OÀùò[YJKà[XYŸNàô^[XYŸKàò[òX⁄“[XYŸNàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKYò[òX⁄ÀZ[XYŸI Kùò[YKùö[J
+Kà[öŒàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK[[ö… Kùò[YKùö[J
+Kàõ›\Œàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK[õ›\… Kùò[YKùö[J
+Kà[\õò]]ôU]\Œà[\õò]]ôU]\—õ‹îÿ]ôJ]Kÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKX[]]\… H»ÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKX[]]\… Kùò[YHà	… Kà\–⁄[ô\ŸNàõ€€X[äÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKX⁄[ô\ŸI H	âàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYKX⁄[ô\ŸI Kò⁄X⁄ŸY
+Kà\”[›öYNàõ€€X[äÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK[[›öYI H	âàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK[[›öYI Kò⁄X⁄ŸY
+Kà\‘⁄‹ù[ôYàõ€€X[äÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK\⁄‹ù[ôY	 H	âàÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK\⁄‹ù[ôY	 Kò⁄X⁄ŸY
+Kà[òŸ\ùZ[î\ôõ‹õY\éàõ€€X[äÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK][òŸ\ùZ[ã\\ôõ‹õY\â OÀò⁄X⁄ŸY
+Kà[òŸ\ùZ[ë\ôX›‹éàõ€€X[äÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK][òŸ\ùZ[ãY\ôX›‹â OÀò⁄X⁄ŸY
+Kà[òŸ\ùZ[í[XYŸNàõ€€X[äÿ\ôú]Y\ûTŸ[X›‹ä	ÀõÿÀYK][òŸ\ùZ[ãZ[XYŸI OÀò⁄X⁄ŸY
+BàN¬ÇàYà
+[XYŸP⁄[ôŸY
+H¬à\]Y[ùûKôò[òX⁄“[XYŸHHô^[XYŸH»ô]ö[›\—ò[òX⁄“[XYŸHà	…Œ¬àBÇàûH¬à]ÿZ]⁄[ô›Àì‘Q—ãù\]S‹[ö[ô Y\]Y[ùûJN¬à]ÿZ]ÿ]ôS‹[ö[ô—^ò\ Y»úò[ò⁄\Ÿ\Œà\]Y[ùûKôúò[ò⁄\Ÿ\À[\õò]]ôU]\Œà\]Y[ùûKò[\õò]]ôU]\À\–⁄[ô\ŸNà\]Y[ùûKö\–⁄[ô\ŸK\”[›öYNà\]Y[ùûKö\”[›öYK\‘⁄‹ù[ôYà\]Y[ùûKö\‘⁄‹ù[ôYÿ[YT€€ô—‹õ›\Yà\]Y[ùûKúÿ[YT€€ô—‹õ›\Yÿ[YT€€ô’]Nà\]Y[ùûKúÿ[YT€€ô’]K[òŸ\ùZ[î\ôõ‹õY\éà\]Y[ùûKù[òŸ\ùZ[î\ôõ‹õY\ã[òŸ\ùZ[ë\ôX›‹éà\]Y[ùûKù[òŸ\ùZ[ë\ôX›‹ã[òŸ\ùZ[í[XYŸNà\]Y[ùûKù[òŸ\ùZ[í[XYŸHJN¬ÇàÿöôX›ò\‹⁄Y€ä[ùûK\]Y[ùûJN¬à›X⁄[ùûPÿX⁄J[ùûJN¬àY][ô“YHù[¬à‹[]Qö[\ì‹[€ú 
+N¬àô[ô\ä
+N¬ÇàYà
+Z[XYŸP⁄[ôŸY
+H¬àŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4`t/¥at`4,4/t-t/tb»8ß$… N¬àô]\õé¬àBÇàYà
+[ô^[XYŸJH¬àŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4`t/¥at`4,4/t-t/tb»8ß$… N¬àYà
+ô]ö[›\—ò[òX⁄“[XYŸJHõ⁄Y
+\ﬁ[ò»
+
+HOà¬àûH¬à]ÿZ][]Qò[òX⁄“[XYŸP€‹Jô]ö[›\—ò[òX⁄“[XYŸJN¬àHÿ]⁄
+[]Q\úõ‹äH¬à€€ú€€Kô\úõ‹ä	”€ò[òX⁄»[XYŸH[][€àòZ[Y	À[]Q\úõ‹äN¬àŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4`t/¥at`4,4/t-t/tbÀ4/t/à4`t`¥,4`4`Ùcà4`4-t-Ù-t`4,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4`Ù-4,4.Ù.4`¥c4/t-H4`Ù-4,4.Ù/¥`tcà	»
+»
+[]Q\úõ‹ãõY\‹ÿYŸH[]Q\úõ‹äKùYJN¬àBàJJ
+N¬àô]\õé¬àBÇàŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4`t/¥at`4,4/t-t/tb»8ß$»4't/¥,¥,4c»4`4-t-Ù-t`4,¥/t,4c»4.¥,4`4`¥.4/t.¥,4`t/¥-Ù-4,4dt`¥`tc»4,à4a4/¥/t-x†)â N¬àõ⁄Y
+\ﬁ[ò»
+
+HOà¬àûH¬à€€ú›‹ôX]Yò[òX⁄“[XYŸHH]ÿZ]‹ôX]Qò[òX⁄“[XYŸP€‹Jô^[XYŸK]Kô]’\JN¬à]ÿZ]⁄[ô›Àì‘Q—ãù\]S‹[ö[ô—ò[òX⁄“[XYŸJY‹ôX]Yò[òX⁄“[XYŸJN¬à[ùûKôò[òX⁄“[XYŸHH‹ôX]Yò[òX⁄“[XYŸN¬à›X⁄[ùûPÿX⁄J[ùûJN¬ÇàYà
+ô]ö[›\—ò[òX⁄“[XYŸH	âàô]ö[›\—ò[òX⁄“[XYŸHOOH‹ôX]Yò[òX⁄“[XYŸJH¬àûH¬à]ÿZ][]Qò[òX⁄“[XYŸP€‹Jô]ö[›\—ò[òX⁄“[XYŸJN¬àHÿ]⁄
+[]Q\úõ‹äH¬à€€ú€€Kô\úõ‹ä	”€ò[òX⁄»[XYŸH[][€àòZ[Y	À[]Q\úõ‹äN¬àŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4`t/¥at`4,4/t-t/tbÀ4/t/à4`t`¥,4`4`Ùcà4`4-t-Ù-t`4,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4`Ù-4,4.Ù.4`¥c4/t-H4`Ù-4,4.Ù/¥`tcà	»
+»
+[]Q\úõ‹ãõY\‹ÿYŸH[]Q\úõ‹äKùYJN¬àô]\õé¬àBàBàŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4.4/t/¥,¥,4c»4`4-t-Ù-t`4,¥/t,4c»4.¥,4`4`¥.4/t.¥,4`t/¥at`4,4/t-t/tb»8ß$… N¬àHÿ]⁄
+òX⁄›\\úõ‹äH¬à€€ú€€Kùÿ\õä	—Y]YòX⁄»ò[òX⁄»[XYŸH\ÿYòZ[Y	ÀòX⁄›\\úõ‹äN¬àŸ]›]\ 	Ù&4-Ù/4-t/t-t/t.4c»4`t/¥at`4,4/t-t/tb»8ß$»4't/à4/t/¥,¥`Ùcà4`4-t-Ù-t`4,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4`t/¥-Ù-4,4`¥c4/t-H4`Ù-4,4.Ù/¥`tcà	»
+»
+òX⁄›\\úõ‹ãõY\‹ÿYŸHòX⁄›\\úõ‹äKùYJN¬àBàJJ
+N¬àHÿ]⁄
+\úäH¬à€€ú€€Kô\úõ‹ä\úäN¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`t/¥at`4,4/t.4`¥c4.4-Ù/4-t/t-t/t.4cŒà	»
+»
+\úãõY\‹ÿYŸH\úäKùYJN¬àBàJN¬àJN¬Çà\›€€ùZ[ô\ãú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KXX›[€èHô[]HóI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+JHOà¬àYà
+Y[ú›\ôPÿ][Ÿ–YZ[ä
+JHô]\õé¬à€€ú›\ôŸ]HKù\ôŸ]¬à€€ú›YH\ôŸ]ôŸ]]öXù]J	Ÿ]KZY	 N¬àYà
+\ôŸ]ôŸ]]öXù]J	Ÿ]KX€€ôö\õI HOOH	ÃI H¬à\ôŸ]úŸ]]öXù]J	Ÿ]KX€€ôö\õIÀ	ÃI N¬à\ôŸ]ù^€€ù[ùH	Ù`¥/¥aÙ/t/à4`Ù-4,4.Ù.4`¥c…Œ¬à\ôŸ]ú›[Kò€€‹àH	»—ëåëMå…Œ¬àYà
+\ôŸ]ó‹ô\Ÿ][Y\äH€X\ï[Y[›]
+\ôŸ]ó‹ô\Ÿ][Y\äN¬à\ôŸ]ó‹ô\Ÿ][Y\àHŸ][Y[›]
+
+
+HOà¬à\ôŸ]úŸ]]öXù]J	Ÿ]KX€€ôö\õIÀ	Ã	 N¬à\ôŸ]ù^€€ù[ùH	Ù`Ù-4,4.Ù.4`¥c4`¥`4-t.âŒ¬à\ôŸ]ú›[Kò€€‹àH	…Œ¬àKÃ
+N¬àô]\õé¬àBà€€ú›[ùûU—[]HH[ùöY\–ûRYôŸ]
+›ö[ô Y
+JN¬à€€ú›ò[òX⁄’—[]HH›ö[ô [ùûU—[]H	âà[ùûU—[]Kôò[òX⁄“[XYŸH	… Kùö[J
+N¬àûH¬à]ÿZ]⁄[ô›Àì‘Q—ãô[]S‹[ö[ô Y
+N¬à[ùöY\»H[ùöY\Àôö[\äOàöYOOHY
+N¬à‹[]Qö[\ì‹[€ú 
+N¬àô[ô\ä
+N¬ÇàYà
+ò[òX⁄’—[]JH¬àûH¬à€€ú›ô[[›ôYH]ÿZ][]Qò[òX⁄“[XYŸP€‹Jò[òX⁄’—[]JN¬àŸ]›]\ ô[[›ôYà»	Ù(¥`4-t.à4.4`4-t-Ù-t`4,¥/t,4c»4.¥,4`4`¥.4/t.¥,4`Ù-4,4.Ù-t/tb»8ß$…¬àà	Ù(¥`4-t.à4`Ù-4,4.Ùdt/Kà4(4-t-Ù-t`4,¥/t,4c»4`t`tbÙ.Ù.¥,4,tbÙ.Ù,4,¥/t-tb4/t-t.K4a4,4.t.»4/t-H4`Ù-4,4.ÙcÙ.Ù`tcÀâ N¬àHÿ]⁄
+[]Q\úõ‹äH¬à€€ú€€Kô\úõ‹ä	—[]YòX⁄»ò[òX⁄»€X[ù\òZ[Y	À[]Q\úõ‹äN¬àŸ]›]\ 	Ù(¥`4-t.à4`Ù-4,4.Ùdt/K4/t/à4`4-t-Ù-t`4,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4`Ù-4,4.Ù.4`¥c4/t-H4`Ù-4,4.Ù/¥`tcà	»
+»
+[]Q\úõ‹ãõY\‹ÿYŸH[]Q\úõ‹äKùYJN¬àBàH[ŸH¬àŸ]›]\ 	Ù(Ù-4,4.Ù-t/t/à8ß$… N¬àBàHÿ]⁄
+\úäH¬à€€ú€€Kô\úõ‹ä\úäN¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`Ù-4,4.Ù.4`¥câÀùYJN¬àBàJN¬àJN¬àô[ô\îŸX\€€ïöY]‹ 
+N¬àYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àYà
+X›]ôUXàOOH	‹›]… Hô[ô\î›]‘YŸJ
+N¬àYà
+X›]ôUXàOOH	›‹L	 Hô[ô\ë€ÿò[‹L
+
+N¬àBÇÇàÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	ÀõÿÀ]XãXùâ Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À]ô[ùOà¬à€€ú›XàHùãô]\Ÿ]ùXé¬àYà
+
+]XàXàOOH	ÿ⁄\ù	 H	âàXXÿŸ\‹”]ô[
+H¬à]ô[ùúô]ô[ùYò][
+
+N¬à⁄›–]][Ÿ[
+	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ã4aÙ`¥/¥,tb»4/¥`¥.¥`4bÙ`¥c4ct`¥/¥`à4`4,4-Ù-4-t.Àâ N¬àô]\õé¬àBàYà
+XäH¬à›⁄]⁄XäXäN¬àBàJN¬àJN¬Çàÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KY[ù]KZ€YWI Kôõ‹ëXX⁄
+ÿ\ôOà¬àÿ\ôòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àYà
+\ô\]Z\ôPXÿ€›[ù
+	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ã4aÙ`¥/¥,tb»4/¥`¥.¥`4bÙ`¥c4.¥/¥.Ù.Ù-t.¥a¥.4.â JHô]\õé¬à›⁄]⁄Xä	Ÿ[ù]KI»
+»ÿ\ôôŸ]]öXù]J	Ÿ]KY[ù]KZ€YI JN¬àJN¬àJN¬ÇàYà
+[ù]P‹ôX]Qõ‹õJH[ù]P‹ôX]Qõ‹õKòY]ô[ù\›[ô\ä	‹›XõZ]	Àÿ]ôQ[ù]P[ù[JN¬àYà
+[ù]Qö[\ú’ŸŸ€JH[ù]Qö[\ú’ŸŸ€KòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬à[ù]Qö[\ú—^[ôYHY[ù]Qö[\ú—^[ôY¬àô[ô\ë[ù]P[ù[\ 
+N¬àJN¬à[ù]P[ù[TŸX\ò⁄[ú]ÀòY]ô[ù\›[ô\ä	⁄[ú]	À
+
+HOà¬à[ù]Pÿ\ôô[ô\ì[Z]H¬àô[ô\ë[ù]P[ù[\ 
+N¬àJN¬à[ù]P[ù[T€‹ùŸ[X›ÀòY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+
+HOà¬à[ù]Pÿ\ôô[ô\ì[Z]H¬àô[ô\ë[ù]P[ù[\ 
+N¬àJN¬àYà
+[ù]PòX⁄–ùäH[ù]PòX⁄–ùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àYà
+X›]ôQ[ù]Pÿ\ôY
+H¬àX›]ôQ[ù]Pÿ\ôYH	…Œ¬àô\Ÿ][ù]P[ù[Qö[\ú 
+N¬àô[ô\ë[ù]P[ù[\ 
+N¬àH[ŸH¬à›⁄]⁄Xä	ÿ⁄\ù	 N¬àBàJN¬àŸ[ù]TŸX\ò⁄[ú][ù]UòX⁄’\TŸ[X›[ù]UòX⁄‘€‹ùŸ[X›[ù]Qúõ€VYX\îŸ[X›[ù]Qúõ€TŸX\€€îŸ[X›[ù]U÷YX\îŸ[X›[ù]U‘ŸX\€€îŸ[X›[ù]TõŸ‹ô\‹‘Ÿ[X›Kôõ‹ëXX⁄
+[Oà¬àYà
+[
+H[òY]ô[ù\›[ô\ä[ùY”ò[YHOOH	“SîU	»»	⁄[ú]	»à	ÿ⁄[ôŸIÀ
+
+HOà¬à[ù]UòX⁄‘ô[ô\ì[Z]HÃ¬àô[ô\ë[ù]P[ù[\ 
+N¬àJN¬àJN¬àYà
+[ù]Tò]P[ùäH[ù]Tò]P[ùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À›\ù[ù]Tò][ô N¬àYà
+[ù]T[ô[
+H[ù]T[ô[òY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»]ô[ùOà¬à€€ú›‹[àH]ô[ùù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KY[ù]K[‹[óI N¬àYà
+‹[à	âàY]ô[ùù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KY[ù]KY[]WI JH¬àX›]ôQ[ù]Pÿ\ôYH‹[ãôŸ]]öXù]J	Ÿ]KY[ù]K[‹[â N¬à[ù]Qö[\ú—^[ôYHò[ŸN¬à[ù]UòX⁄‘ô[ô\ì[Z]HÃ¬àô[ô\ë[ù]P[ù[\ 
+N¬àô]\õé¬àBà€€ú›ò]HH]ô[ùù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KY[ù]K\ò]WI N¬àYà
+ò]JH»›\ù‹[ö[ô‘ò][ô ò]KôŸ]]öXù]J	Ÿ]KY[ù]K\ò]I JN»ô]\õé»Bà€€ú›ô[[›ôHH]ô[ùù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KY[ù]KY[]WI N¬àYà
+ô[[›ôH	âà\–ÿ][Ÿ–YZ[ä
+H	âà€€ôö\õJ	Ù(Ù-4,4.Ù.4`¥c4ct`¥/¥`à4,4.Ùc4,t/¥/… JH¬àûH»]ÿZ]⁄[ô›Àì‘Q—ãô[]Q[ù]Pÿ\ô
+ô[[›ôKôŸ]]öXù]J	Ÿ]KY[ù]KY[]I JN»Ÿ]›]\ 	Ù$4.Ùc4,t/¥/4`Ù-4,4.Ùdt/Kâ N»Bàÿ]⁄
+\úõ‹äH»€€ú€€Kô\úõ‹ä\úõ‹äN»Ÿ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`Ù-4,4.Ù.4`¥c4,4.Ùc4,t/¥/âÀùYJN»BàBàJN¬ÇàŸX\€€ñYX\ú—[òY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬à€€ú›ò]PùàHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]K\ŸX\€€ã\ò]WI N¬àYà
+ò]Pùà	âà\ò]Pùãô\ÿXõY
+H¬àŸ[X›YŸX\€€àH¬àYX\éàù[Xô\äò]PùãôŸ]]öXù]J	Ÿ]K^YX\â JKàŸX\€€éàò]PùãôŸ]]öXù]J	Ÿ]K\ŸX\€€â BàN¬à^[ôYYX\àHŸ[X›YŸX\€€ãûYX\é¬àô[ô\îŸX\€€ïöY]‹ 
+N¬à›\ùŸX\€€îò][ô 
+N¬àô]\õé¬àBÇà€€ú›YX\êùàHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]K\ŸX\€€ã^YX\óI N¬àYà
+YX\êùäH¬à€€ú›YX\àHù[Xô\äYX\êùãôŸ]]öXù]J	Ÿ]K\ŸX\€€ã^YX\â JN¬à^[ôYYX\àH^[ôYYX\àOOHYX\à»ù[àYX\é¬àô[ô\îŸX\€€ïöY]‹ 
+N¬àô]\õé¬àBÇà€€ú›ŸX\€€êùàHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]K\ŸX\€€ã\Ÿ[X›I N¬àYà
+ŸX\€€êùà	âà\ŸX\€€êùãô\ÿXõY
+H¬àŸ[X›YŸX\€€àH¬àYX\éàù[Xô\äŸX\€€êùãôŸ]]öXù]J	Ÿ]K^YX\â JKàŸX\€€éàŸX\€€êùãôŸ]]öXù]J	Ÿ]K\ŸX\€€â BàN¬à^[ôYYX\àHŸ[X›YŸX\€€ãûYX\é¬àô[ô\îŸX\€€ïöY]‹ 
+N¬àBàJN¬ÇàŸX\€€îò]PùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà›\ùŸX\€€îò][ô ò[ŸJJN¬àYà
+ŸX\€€îò]P[ùäHŸX\€€îò]P[ùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà›\ùŸX\€€îò][ô ùYJJN¬àYà
+ŸX\€€îô]êùäHŸX\€€îô]êùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À€’‘ô]ö[›\‘ŸX\€€äN¬Çàÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]K\ŸX\€€ã]\WI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àŸX\€€ï\HHùãô]\Ÿ]úŸX\€€ï\HOOH	—Q	»»	—Q	»à	”‘	Œ¬àô[ô\îŸX\€€ïöY]‹ 
+N¬àJN¬àJN¬ÇàYà
+ŸX\€€ïY\êùäH¬àŸX\€€ïY\êùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àYà
+\Ÿ[X›YŸX\€€äHô]\õé¬àY\îŸ[X›[€àH»\NàŸX\€€ï\KYX\éàŸ[X›YŸX\€€ãûYX\ãŸX\€€éàŸ[X›YŸX\€€ãúŸX\€€àN¬à›⁄]⁄Xä	›Y\â N¬àJN¬àBÇàŸX\€€ì\›[òY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬à€€ú›‹[àHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KXX›[€èHõ‹[ãXÿ\ôóI N¬àYà
+‹[äH»‹[êÿ\ô[Ÿ[
+‹[ãôŸ]]öXù]J	Ÿ]KZY	 JN»ô]\õé»Bà€€ú›ò\⁄Ÿ]ùàHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KXò\⁄Ÿ]XYI N¬àYà
+ò\⁄Ÿ]ùäH¬à€€ú›[ùûHH[ùöY\–ûRYôŸ]
+›ö[ô ò\⁄Ÿ]ùãôŸ]]öXù]J	Ÿ]KXò\⁄Ÿ]XY	 JJN¬àŸŸ€Q[ùûR[ë]ô[ùò\⁄Ÿ]
+[ùûJN¬àô]\õé¬àBà€€ú›ùàHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]K[‹\ò]WI N¬àYà
+XùäHô]\õé¬à›\ù‹[ö[ô‘ò][ô ùãôŸ]]öXù]J	Ÿ]K[‹\ò]I JN¬àJN¬Çà]ò[X]‹ë[òY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+JHOà¬à€€ú›X›[€àHKù\ôŸ]ôŸ]]öXù]J	Ÿ]KY]ò[XX›[€â N¬àYà
+XX›[€äHô]\õé¬àYà
+X›[€àOOH	ÿ€‹ŸI H€‹ŸQ]ò[X]‹ä
+N¬àYà
+X›[€àOOH	ÿõ[ô\›\ù	 H›\ùõ[ôô\ò][ô 
+N¬àYà
+X›[€àOOH	ÿõ[ô\ô\›[YI Hô\›[YPõ[ôô\ò][ô 
+N¬àYà
+X›[€àOOH	ÿõ[ô\ô\XŸI H]ÿZ]ô\€€ôPõ[ôò][ô 	‹ô\XŸI N¬àYà
+X›[€àOOH	ÿõ[ôZŸY\	 H]ÿZ]ô\€€ôPõ[ôò][ô 	⁄ŸY\	 N¬àYà
+X›[€àOOH	ÿõ[ô\⁄⁄\	 H]ÿZ]ô\€€ôPõ[ôò][ô 	‹⁄⁄\	 N¬àYà
+X›[€àOOH	‹⁄⁄\	 H¬àYà
+]ò[X]‹ì[ŸHOOH	‹⁄[ô€I H€‹ŸQ]ò[X]‹ä
+N¬à[ŸH¬àYà
+]ò[X]‹ì[ŸHOOH	ÿõ[ô	»	âàõ[ôŸ\‹⁄[€î›] Hõ[ôŸ\‹⁄[€î›]Àú⁄⁄\Y
+œHN¬àŸX\€€î]Y]YR[ô^
+œHN¬àYà
+]ò[X]‹ì[ŸHOOH	ÿõ[ô	 H\ú⁄\›õ[ôŸ\‹⁄[€ä
+N¬àô[ô\ë]ò[X]‹ä
+N¬àBàBàYà
+X›[€àOOH	Ÿ[]KX›\úô[ù	 H¬à€€ú›[ùûHHŸX\€€î]Y]YV‹ŸX\€€î]Y]YR[ô^N¬àYà
+[ùûH	âà⁄[ô›Àò€€ôö\õJ\‘\ú€€ò[ÿÿ[J
+H»	Ù(Ù-4,4.Ù.4`¥c4`¥,¥/¥cà4/¥`¥/4-t`¥.¥`»x†$ÕO…»à	Ù(Ù-4,4.Ù.4`¥c4`¥,¥/¥cà4/¥a¥-t/t.¥`œ… JH¬à]ÿZ][]P›\úô[ùò][ô [ùûKöY^Sò[YK\‘\ú€€ò[ÿÿ[J
+H»	‹\ú€€ò[	»à	‹XõX… N¬àYà
+]ò[X]‹ì[ŸHOOH	‹⁄[ô€I H€‹ŸQ]ò[X]‹ä
+N¬à[ŸH»ŸX\€€î]Y]YR[ô^
+œHN»ô[ô\ë]ò[X]‹ä
+N»BàBàBàYà
+X›[€àOOH	›ŸŸ€KXÿ[ôY]I H¬à€€ú›[ùûHHŸX\€€î]Y]YV‹ŸX\€€î]Y]YR[ô^N¬à€€ú›ù]€àHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KY]ò[XX›[€èHùŸŸ€KXÿ[ôY]HóI N¬àYà
+Y[ùûHXù]€äHô]\õé¬àù]€ãô\ÿXõYHùYN¬àûH¬à€€ú›X›]ôHH]ÿZ]⁄[ô›Àì–◊–T–îíQ—OÀùŸŸ€U‹ÿ[ôY]OÀä[ùûKöY[ùûKù\JN¬àù]€ãò€\‹”\›ùŸŸ€J	ÿX›]ôIÀõ€€X[äX›]ôJJN¬àù]€ãù^€€ù[ùHX›]ôH»	Ù&¥,4/t-4.4-4,4`à4,à4`¥/¥/¯†$LL8ß$…»à	Ù&¥,4/t-4.4-4,4`à4,à4`¥/¥/¯†$LL	Œ¬àHÿ]⁄
+\úõ‹äH¬àŸ]›]\ \úõ‹èÀõY\‹ÿYŸH	Ù't-H4`Ù-4,4.Ù/¥`tc4.4-Ù/4-t/t.4`¥c4.¥,4/t-4.4-4,4`¥,âÀùYJN¬àHö[ò[H¬àù]€ãô\ÿXõYHò[ŸN¬àBàBàYà
+X›[€àOOH	‹ÿ]ôK[ô^	 H]ÿZ]ÿ]ôQ]ò[X]‹îÿ€‹ôJ
+N¬àJN¬Çàò[YR[ú]òY]ô[ù\›[ô\ä	Ÿõÿ›\…À
+
+HOà»Yà
+\ô\]Z\ôPXÿ€›[ù
+	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ã4aÙ`¥/¥,tb»4,¥bÙ,t`4,4`¥c4/t.4.ãâ JH»ò[YR[ú]òõ\ä
+N»ô]\õé»Hò[YR[ú]ô]\Ÿ]òXÿ€›[ùôYõ‹ôQY]H^Sò[YH	…Œ»JN¬àò[YR[ú]òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà¬à€€ú›ò[HKù\ôŸ]ùò[YKùö[J
+N¬àYà
+]ò[õ‹õX[^ôYXÿ€›[ùò[YJò[
+HOOHõ‹õX[^ôYXÿ€›[ùò[YJ^Sò[YJJH¬àò[YR[ú]ùò[YHH^Sò[YH	…Œ¬àô]\õé¬àBà⁄›”ò[YS[Ÿ[
+	Ù%4.Ùc»4/Ù-t`4-t.¥.Ùc¥aÙ-t/t.4c»4,4.¥.¥,4`Ù/t`¥,4/Ù/¥-4`¥,¥-t`4-4.4,¥at/¥-âÀò[
+N¬àJN¬Çà[Ÿ[ò[YTÿ]ôKòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà€€[Z]öX⁄€ò[YJ[Ÿ[ò[YR[ú]ùò[YJJN¬àYà
+[Ÿ[ò[YP€‹ŸJH[Ÿ[ò[YP€‹ŸKòY]ô[ù\›[ô\ä	ÿ€X⁄…ÀYSò[YS[Ÿ[
+N¬à[Ÿ[ò[YR[ú]òY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+JHOà¬àYà
+KöŸ^HOOH	—[ù\â H¬àKúô]ô[ùYò][
+
+N¬à€€[Z]öX⁄€ò[YJ[Ÿ[ò[YR[ú]ùò[YJN¬àBàJN¬àYà
+[Ÿ[Xÿ€›[ù\‹ H[Ÿ[Xÿ€›[ù\‹ÀòY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+JHOà¬àYà
+KöŸ^HOOH	—[ù\â H¬àKúô]ô[ùYò][
+
+N¬à€€[Z]öX⁄€ò[YJ[Ÿ[ò[YR[ú]ùò[YJN¬àBàJN¬àYà
+õ‹ô€›\‹›€‹ôùäHõ‹ô€›\‹›€‹ôùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+
+HOà¬àYà
+TTî””êS–P–”’Sï–UU—SêPìQ
+H¬à[Ÿ[ò[YQ\úõ‹ãù^€€ù[ùHTî””êS–P–”’Sï—T–PìQ”QT‘–Q—N¬àô]\õé¬àBà€€ú›[XZ[H›ö[ô [Ÿ[Xÿ€›[ù[XZ[Àùò[YH	… Kùö[J
+N¬àYà
+Y[XZ[
+H»[Ÿ[ò[YQ\úõ‹ãù^€€ù[ùH	Ù(t/t,4aÙ,4.Ù,4,¥,¥-t-4.[XZ[4,4.¥.¥,4`Ù/t`¥,âŒ»ô]\õé»BàûH¬à]ÿZ]⁄[ô›Àì‘Q—ãúô\Ÿ]Xÿ€›[ù\‹›€‹ô
+[XZ[
+N¬à[Ÿ[ò[YQ\úõ‹ãù^€€ù[ùH	Ù'Ù.4`tc4/4/à4-4.Ùc»4,¥/¥`t`t`¥,4/t/¥,¥.Ù-t/t.4c»4/¥`¥/Ù`4,4,¥.Ù-t/t/à8ß$…Œ¬àHÿ]⁄
+\úõ‹äH¬à[Ÿ[ò[YQ\úõ‹ãù^€€ù[ùH	Ù't-H4`Ù-4,4.Ù/¥`tc4/¥`¥/Ù`4,4,¥.4`¥c4/Ù.4`tc4/4/éà	»
+»
+\úõ‹èÀõY\‹ÿYŸH\úõ‹äN¬àBàJN¬Çà]ò]\îX⁄Ÿ\ãö[õô\íSHUêUTó”‘S”îÀõX\
+[HOàù]€à\OHòù]€àà]KY[[⁄öOHâŸ[_HèâŸ[_Oÿù]€èò
+Köõ⁄[ä	… Bà
+»]à€\‹œHõÿÀX]ò]\ãX›\›€HèÇà[ú]\OHù^àYHõÿÀX]ò]\ãX›\›€KZ[ú]àXŸZ€\èH¥`t,¥/¥.H4ct/4/¥-4-Ù.
+<'‰ÏH4.¥.Ù,4,¥.4,4`¥`Ù`4,4ct/4/¥-4-Ù.
+HàX^[ô›HéàœÇàù]€à\OHòù]€ààYHõÿÀX]ò]\ãX›\›€KXùàèì“œÿù]€èÇàŸ]èò¬Çà]ò]\êùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà»Kú›‹õ‹Yÿ][€ä
+N»Yà
+\ô\]Z\ôPXÿ€›[ù
+	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ã4aÙ`¥/¥,tb»4.4-Ù/4-t/t.4`¥c4,4,¥,4`¥,4`â JHô]\õé»]ò]\îX⁄Ÿ\ãò€\‹”\›ùŸŸ€J	⁄Y[â N»JN¬àYà
+Z[Pô[
+HZ[Pô[òY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àYà
+\ô\]Z\ôPXÿ€›[ù
+	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ã4aÙ`¥/¥,tb»4/¥`¥.¥`4bÙ`¥c4-t-¥-t-4/t-t,¥/t`Ùcà4/¥a¥-t/t.¥`Àâ JHô]\õé¬à€€ú››]HHZ[P›\úô[ù›]J^Sò[YJN¬àYà
+›]KúŸ][ô‹Àô[òXõY	âà›]Kò]òZ[XõH	âà\›]Kô€ôJH›\ùZ[Tò][ô 
+Kòÿ]⁄
+\úõ‹àOà»€€ú€€Kô\úõ‹ä\úõ‹äN»Ÿ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4/¥`¥.¥`4bÙ`¥c4-4-t.t.Ù.4.ãâÀùYJN»JN¬à[ŸH»›⁄]⁄Xä	‹õŸö[I N»ô[ô\ëZ[TõŸö[T[ô[
+
+N»BàJN¬Çà]ò]\îX⁄Ÿ\ãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+JHOà¬à€€ú›ùàHKù\ôŸ]ò€‹Ÿ\›
+	ÿù]€ñŸ]KY[[⁄öWI N¬àYà
+XùäHô]\õé¬à]ò]\îX⁄Ÿ\ãò€\‹”\›òY
+	⁄Y[â N¬àYà
+]ÿZ]ÿ]ôP]ò]\äùãôŸ]]öXù]J	Ÿ]KY[[⁄öI JJHŸ]›]\ 	Ù$4,¥,4`¥,4`4`t/¥at`4,4/tdt/H4,à4,4.¥.¥,4`Ù/t`¥-H8ß$… N¬àJN¬Çà\ﬁ[ò»ù[ò›[€à\P›\›€P]ò]\ä
+H¬à€€ú›[ú]H	
+	»€ÿÀX]ò]\ãX›\›€KZ[ú]	 N¬à€€ú›ò[H[ú]ùò[YKùö[J
+N¬àYà
+]ò[
+Hô]\õé¬à]ò]\îX⁄Ÿ\ãò€\‹”\›òY
+	⁄Y[â N¬à[ú]ùò[YHH	…Œ¬àYà
+]ÿZ]ÿ]ôP]ò]\äò[
+JHŸ]›]\ 	Ù$4,¥,4`¥,4`4`t/¥at`4,4/tdt/H4,à4,4.¥.¥,4`Ù/t`¥-H8ß$… N¬àBÇà]ò]\îX⁄Ÿ\ãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà»Yà
+Kù\ôŸ]öYOOH	€ÿÀX]ò]\ãX›\›€KXùâ H\P›\›€P]ò]\ä
+N»JN¬à]ò]\îX⁄Ÿ\ãòY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+JHOà¬àYà
+Kù\ôŸ]öYOOH	€ÿÀX]ò]\ãX›\›€KZ[ú]	»	âàKöŸ^HOOH	—[ù\â H¬àKúô]ô[ùYò][
+
+N¬à\P›\›€P]ò]\ä
+N¬àBàJN¬à]ò]\îX⁄Ÿ\ãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà»Yà
+Kù\ôŸ]öYOOH	€ÿÀX]ò]\ãX›\›€KZ[ú]	 HKú›‹õ‹Yÿ][€ä
+N»JN¬àÿ›[Y[ùòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬àYà
+X]ò]\îX⁄Ÿ\ãò€€ùZ[ú Kù\ôŸ]
+H	âàKù\ôŸ]OOH]ò]\êùäH]ò]\îX⁄Ÿ\ãò€\‹”\›òY
+	⁄Y[â N¬àJN¬ÇÇàûH»ÿÿ[›‹òYŸKúô[[›ôR][J	€‹YYX[ö\€€ôÀZ[\‹ù]XúÀ]åI N»Hÿ]⁄
+ HﬂBÇÇÇàYà
+úò[ò⁄\ŸTô\Z\êùäHúò[ò⁄\ŸTô\Z\êùãòY]ô[ù\›[ô\ä	ÿ€X⁄…Àô\Z\êúõ⁄Ÿ[ëúò[ò⁄\Ÿ\ N¬àYà
+úò[ò⁄\ŸTô\Z\ì[Ÿ[
+H¬àúò[ò⁄\ŸTô\Z\ì[Ÿ[òY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬àYà
+Kù\ôŸ]OOHúò[ò⁄\ŸTô\Z\ì[Ÿ[Kù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KYúò[ò⁄\ŸK\ô\Z\ãX€‹ŸWI JH¬à€‹ŸQúò[ò⁄\ŸTô\Z\ì[Ÿ[
+
+N¬àô]\õé¬àBà€€ú›Ÿ[X›[HKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KYúò[ò⁄\ŸK\ô\Z\ã\Ÿ[X›X[I N¬àYà
+Ÿ[X›[
+H¬àúò[ò⁄\ŸTô\Z\ì[Ÿ[ú]Y\ûTŸ[X›‹ê[
+	ÀõÿÀYúò[ò⁄\ŸK\ô\Z\ãX⁄X⁄… Kôõ‹ëXX⁄
+õﬁOà»õﬁò⁄X⁄ŸYHŸ[X›[ò⁄X⁄ŸY»JN¬àô]\õé¬àBàYà
+Kù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KYúò[ò⁄\ŸK\ô\Z\ãX\WI JH\Qúò[ò⁄\ŸTô\Z\ú—úõ€S[Ÿ[
+
+N¬àJN¬àBÇÇàù[ò›[€àŸ][XYŸU\ÿYŸX‹ô]
+
+H¬à]ŸX‹ô]H	…Œ¬àûH¬àÿÿ[›‹òYŸKúô[[›ôR][JSPQ—W’T–Q‘—P‘ëU“—VJN¬àŸX‹ô]HŸ\‹⁄[€î›‹òYŸKôŸ]][JSPQ—W’T–Q‘—P‘ëU“—VJH	…Œ¬àHÿ]⁄
+ HﬂBàYà
+\ŸX‹ô]
+H¬àŸX‹ô]H›ö[ô ⁄[ô›Àúõ€\
+	Ù$¥,¥-t-4.4`¥-HT–Q‘—P‘ëU4.4-»€›Yõ\ôKà4'¥/H4`t/¥at`4,4/t.4`¥`tc»4`¥/¥.Ùc4.¥/à4-4/à4-Ù,4.¥`4bÙ`¥.4c»4,¥.¥.Ù,4-4.¥.â H	… Kùö[J
+N¬àYà
+ŸX‹ô]
+H¬àûH»Ÿ\‹⁄[€î›‹òYŸKúŸ]][JSPQ—W’T–Q‘—P‘ëU“—VKŸX‹ô]
+N»Hÿ]⁄
+ HﬂBàBàBàô]\õàŸX‹ô]¬àBÇàù[ò›[€àõ‹ôŸ][XYŸU\ÿYŸX‹ô]
+
+H¬àûH»ÿÿ[›‹òYŸKúô[[›ôR][JSPQ—W’T–Q‘—P‘ëU“—VJN»Hÿ]⁄
+ HﬂBàûH»Ÿ\‹⁄[€î›‹òYŸKúô[[›ôR][JSPQ—W’T–Q‘—P‘ëU“—VJN»Hÿ]⁄
+ HﬂBà[XYŸSZY‹ò][€î›]\ 	Ù(t/¥at`4,4/tdt/t/tbÙ.H4/Ù,4`4/¥.Ùc4`Ù-4,4.Ùdt/H4`H4ct`¥/¥,Ù/à4`Ù`t`¥`4/¥.t`t`¥,¥,â N¬àBÇàù[ò›[€à€€\X›[XYŸQö[Sò[YJ]K\K€›\òŸJH¬à€€ú›ò\ŸHH›ö[ô ]H	… Kù”›Ÿ\êÿ\ŸJ
+Kõõ‹õX[^ôJ	”ëí—	 Bàúô\XŸJ÷◊LÃWLÕôóKŸÀ	… Kúô\XŸJ÷◊òK^åNWJÀŸÀ	ÀI Bàúô\XŸJ◊ãJﬂJ…ŸÀ	… Kú€XŸJç
+H	›òX⁄…Œ¬à]\⁄HåMçåLÕåçåN¬à€€ú›ò[YHH›]K\K€›\òŸWKöõ⁄[ä	ﬂ	 N¬àõ‹à
+]HH»Hò[YKõ[ô›»J  H¬à\⁄èHò[YKò⁄\ê€ŸP]
+JN¬à\⁄HX]ö[][
+\⁄MçÕÕÕåNJN¬àBàô]\õà	⁄[XYŸ\À…»
+»ò\ŸH
+»	ÀI»
+»\Kù”›Ÿ\êÿ\ŸJ
+H
+»	ÀI»
+»
+\⁄èèà
+Kù‘›ö[ô ÕäH
+»	ÀùŸXú	Œ¬àBÇà\ﬁ[ò»ù[ò›[€à€‹öŸ\í[XYŸTô\]Y\›
+]ŸX‹ô]õŸKô\‹€úŸU\JH¬à€€ú›€€ùõ€\àHô]»Xõ‹ù€€ùõ€\ä
+N¬à€€ú›[Y[›]\»H]OOH	À‹õﬁKZ[XYŸI»»åàÃ¬à€€ú›[Y[›]H⁄[ô›ÀúŸ][Y[›]
+
+
+HOà€€ùõ€\ãòXõ‹ù
+
+K[Y[›]\ N¬àûH¬à€€ú›ô\‹€úŸHH]ÿZ]ô]⁄
+SPQ—W’T–Q’”‘í—Tà
+»]¬àY]Ÿà	‘‘’	ÀàXY\úŒà»	–€€ù[ùU\IŒà	ÿ\Xÿ][€ã⁄ú€€âÀ	÷U\ÿYTŸX‹ô]	ŒàŸX‹ô]KàõŸNàî””ãú›ö[ô⁄YûJõŸJKà⁄Y€ò[à€€ùõ€\ãú⁄Y€ò[àJN¬àYà
+\ô\‹€úŸKõ⁄ H¬à]Y\‹ÿYŸHH	“	»
+»ô\‹€úŸKú›]\Œ¬àûH»€€ú›]HH]ÿZ]ô\‹€úŸKöú€€ä
+N»Y\‹ÿYŸHH]Kô\úõ‹àY\‹ÿYŸN»Hÿ]⁄
+ HﬂBàYà
+ô\‹€úŸKú›]\»OOHJH¬àûH»ÿÿ[›‹òYŸKúô[[›ôR][JSPQ—W’T–Q‘—P‘ëU“—VJN»Hÿ]⁄
+ HﬂBàûH»Ÿ\‹⁄[€î›‹òYŸKúô[[›ôR][JSPQ—W’T–Q‘—P‘ëU“—VJN»Hÿ]⁄
+ HﬂBàBàõ›»ô]»\úõ‹äY\‹ÿYŸJN¬àBàô]\õàô\‹€úŸU\HOOH	ÿõÿâ»»]ÿZ]ô\‹€úŸKòõÿä
+Hà]ÿZ]ô\‹€úŸKöú€€ä
+N¬àHÿ]⁄
+\úõ‹äH¬àYà
+\úõ‹à	âà\úõ‹ãõò[YHOOH	–Xõ‹ù\úõ‹â H¬àõ›»ô]»\úõ‹ä]OOH	À‹õﬁKZ[XYŸI¬à»	Ù&4`t`¥/¥aÙ/t.4.à4.¥,4`4`¥.4/t.¥.4/t-H4/¥`¥,¥-t`¥.4.»4-Ù,å4`t-t.¥`Ù/t-	¬àà	Ù%Ù,4,Ù`4`Ù-Ù.¥,4`4-t-Ù-t`4,¥/t/¥.H4.¥,4`4`¥.4/t.¥.4/t-H4-Ù,4,¥-t`4b4.4.Ù,4`tc4-Ù,Ã4`t-t.¥`Ù/t-	 N¬àBàõ›»\úõ‹é¬àHö[ò[H¬à⁄[ô›Àò€X\ï[Y[›]
+[Y[›]
+N¬àBàBÇàù[ò›[€àÿ[ùò\’’ŸXú
+ÿ[ùò\À]X[]JH¬àô]\õàô]»õ€Z\ŸJ
+ô\€€ôKôZôX›
+HOà¬àÿ[ùò\Àù–õÿäõÿàOà¬àYà
+Xõÿàõÿãù\HOOH	⁄[XYŸK›ŸXú	 HôZôX›
+ô]»\úõ‹ä	Ù$t`4,4`Ù-Ù-t`4/t-H4`t/4/¥,»4`t-¥,4`¥c4.¥,4`4`¥.4/t.¥`»4,àŸXî	 JN¬à[ŸHô\€€ôJõÿäN¬àK	⁄[XYŸK›ŸXú	À]X[]JN¬àJN¬àBÇàù[ò›[€àõÿï–ò\ŸMç
+õÿäH¬àô]\õàô]»õ€Z\ŸJ
+ô\€€ôKôZôX›
+HOà¬à€€ú›ôXY\àHô]»ö[TôXY\ä
+N¬àôXY\ãõ€õÿYH
+
+HOàô\€€ôJ›ö[ô ôXY\ãúô\›[	… Kú‹]
+	À	 VÃWH	… N¬àôXY\ãõ€ô\úõ‹àH
+
+HOàôZôX›
+ô]»\úõ‹ä	Ù't-H4`Ù-4,4.Ù/¥`tc4/Ù`4/¥aÙ.4`¥,4`¥c4`t-¥,4`¥`Ùcà4.¥,4`4`¥.4/t.¥`… JN¬àôXY\ãúôXY\—]UTì
+õÿäN¬àJN¬àBÇà\ﬁ[ò»ù[ò›[€à\ôX›[XYŸTô\]Y\›
+[XYŸU\õ
+H¬à€€ú›€€ùõ€\àHô]»Xõ‹ù€€ùõ€\ä
+N¬à€€ú›[Y[›]H⁄[ô›ÀúŸ][Y[›]
+
+
+HOà€€ùõ€\ãòXõ‹ù
+
+KLå
+N¬àûH¬à€€ú›ô\‹€úŸHH]ÿZ]ô]⁄
+[XYŸU\õ¬àY]Ÿà	——U	Àà[ŸNà	ÿ€‹ú…Àà‹ôY[ùX[Œà	€€Z]	ÀàÿX⁄Nà	€õÀ\›‹ôIÀàôYô\úô\î€XﬁNà	€õÀ\ôYô\úô\âÀàXY\úŒà»	–XÿŸ\	Œà	⁄[XYŸKÿ]öYã[XYŸK›ŸXú[XYŸKÿ\ôÀ[XYŸK ã
+ã é‹OLé	»Kà⁄Y€ò[à€€ùõ€\ãú⁄Y€ò[àJN¬àYà
+\ô\‹€úŸKõ⁄ Hõ›»ô]»\úõ‹ä	Ù.4`t`¥/¥aÙ/t.4.à4,¥-t`4/t`Ù.»	»
+»ô\‹€úŸKú›]\ N¬à€€ú›\HH›ö[ô ô\‹€úŸKöXY\úÀôŸ]
+	–€€ù[ùU\I H	… Kú‹]
+	Œ… VÃKùö[J
+Kù”›Ÿ\êÿ\ŸJ
+N¬àYà
+]\Kú›\ù’⁄]
+	⁄[XYŸK… H\HOOH	⁄[XYŸK‹›ô ﬁ[	 H¬àõ›»ô]»\úõ‹ä	Ù`t`tbÙ.Ù.¥,4/t-H4,¥-t-4dt`à4/t,4`4,4`t`¥`4/¥,¥/¥-H4.4-Ù/¥,t`4,4-¥-t/t.4-I N¬àBà€€ú›[õõ›[òŸYHù[Xô\äô\‹€úŸKöXY\úÀôŸ]
+	–€€ù[ùS[ô›	 H
+N¬àYà
+[õõ›[òŸYàLà
+àLç
+àLç
+Hõ›»ô]»\úõ‹ä	Ù.4`tat/¥-4/t,4c»4.¥,4`4`¥.4/t.¥,4,t/¥.Ùc4b4-HLà4'4$I N¬à€€ú›õÿàH]ÿZ]ô\‹€úŸKòõÿä
+N¬àYà
+õÿãú⁄^ôHàLà
+àLç
+àLç
+Hõ›»ô]»\úõ‹ä	Ù.4`tat/¥-4/t,4c»4.¥,4`4`¥.4/t.¥,4,t/¥.Ùc4b4-HLà4'4$I N¬àô]\õàõÿé¬àHÿ]⁄
+\úõ‹äH¬àYà
+\úõ‹à	âà\úõ‹ãõò[YHOOH	–Xõ‹ù\úõ‹â Hõ›»ô]»\úõ‹ä	Ù.4`t`¥/¥aÙ/t.4.à4/t-H4/¥`¥,¥-t`¥.4.»4-Ù,Là4`t-t.¥`Ù/t-	 N¬àõ›»\úõ‹é¬àHö[ò[H¬à⁄[ô›Àò€X\ï[Y[›]
+[Y[›]
+N¬àBàBÇà\ﬁ[ò»ù[ò›[€à›€õÿYò[òX⁄‘€›\òŸJ[XYŸU\õŸX‹ô]
+H¬à]\ôX›\úõ‹àHù[¬àûH¬àô]\õà»õÿéà]ÿZ]\ôX›[XYŸTô\]Y\›
+[XYŸU\õ
+Kõ›]Nà	Ù/t,4/Ù`4cÙ/4`Ùcà4aÙ-t`4-t-»4,t`4,4`Ù-Ù-t`	»N¬àHÿ]⁄
+\úõ‹äH¬à\ôX›\úõ‹àH\úõ‹é¬àBàûH¬àô]\õà¬àõÿéà]ÿZ]€‹öŸ\í[XYŸTô\]Y\›
+	À‹õﬁKZ[XYŸIÀŸX‹ô]»\õà[XYŸU\õK	ÿõÿâ Kàõ›]Nà	ÙaÙ-t`4-t-»€›Yõ\ôH€‹öŸ\â¬àN¬àHÿ]⁄
+€‹öŸ\ë\úõ‹äH¬à€€ú›\ôX›Y\‹ÿYŸHH\ôX›\úõ‹à	âà\ôX›\úõ‹ãõY\‹ÿYŸH»\ôX›\úõ‹ãõY\‹ÿYŸHà	Ù/t-t.4-Ù,¥-t`t`¥/t,4c»4/¥b4.4,t.¥,	Œ¬à€€ú›€‹öŸ\ìY\‹ÿYŸHH€‹öŸ\ë\úõ‹à	âà€‹öŸ\ë\úõ‹ãõY\‹ÿYŸH»€‹öŸ\ë\úõ‹ãõY\‹ÿYŸHà	Ù/t-t.4-Ù,¥-t`t`¥/t,4c»4/¥b4.4,t.¥,	Œ¬àõ›»ô]»\úõ‹ä	Ù/t,4/Ù`4cÙ/4`Ùcéà	»
+»\ôX›Y\‹ÿYŸH
+»	Œ»4aÙ-t`4-t-»€‹öŸ\éà	»
+»€‹öŸ\ìY\‹ÿYŸJN¬àBàBÇà\ﬁ[ò»ù[ò›[€à‹ôX]Qò[òX⁄“[XYŸP€‹J[XYŸU\õ]K\K€îõŸ‹ô\‹ H¬à]›YŸHH	Ù/Ù`4/¥,¥-t`4.¥,4/Ù,4`4/¥.Ùc»4-Ù,4,Ù`4`Ù-ÙaÙ.4.¥,	Œ¬à]›YŸT›\ùY]H]Kõõ› 
+N¬à]ö]X\Hù[¬à€€ú›ô\‹ùH
+›]K]Z[ HOà¬àYà
+\[Ÿà€îõŸ‹ô\‹»OOH	Ÿù[ò›[€â Hô]\õé¬à€îõŸ‹ô\‹ ¬à›]Kà›YŸKà]Z[Œà]Z[»	…Àà[\ŸY\ŒàX]õX^
+]Kõõ› 
+HH›YŸT›\ùY]
+BàJN¬àN¬à€€ú›ôY⁄[î›YŸHHô^›YŸHOà¬à›YŸHHô^›YŸN¬à›YŸT›\ùY]H]Kõõ› 
+N¬àô\‹ù
+	‹›\ù	 N¬àN¬à€€ú›ö[ö\⁄›YŸHH]Z[»Oàô\‹ù
+	Ÿ€ôIÀ]Z[ N¬àûH¬àôY⁄[î›YŸJ	Ù/Ù`4/¥,¥-t`4.¥,4/Ù,4`4/¥.Ùc»4-Ù,4,Ù`4`Ù-ÙaÙ.4.¥,	 N¬à€€ú›ŸX‹ô]HŸ][XYŸU\ÿYŸX‹ô]
+
+N¬àYà
+\ŸX‹ô]
+Hõ›»ô]»\úõ‹ä	Ù/t-H4,¥,¥-t-4dt/HT–Q‘—P‘ëU	 N¬àö[ö\⁄›YŸJ
+N¬ÇàôY⁄[î›YŸJ	Ù`t.¥,4aÙ.4,¥,4/t.4-H4/¥`t/t/¥,¥/t/¥.H4.¥,4`4`¥.4/t.¥.	 N¬àŸ]›]\ 	Ù(t.¥,4aÙ.4,¥,4cà4/¥`t/t/¥,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4-4.Ùc»4`4-t-Ù-t`4,¥/t/¥.H4.¥/¥/Ù.4.8†)â N¬à€€ú›€›\òŸHH]ÿZ]›€õÿYò[òX⁄‘€›\òŸJ[XYŸU\õŸX‹ô]
+N¬à€€ú›€›\òŸPõÿàH€›\òŸKòõÿé¬àö[ö\⁄›YŸJX]õX^
+KX]úõ›[ô
+€›\òŸPõÿãú⁄^ôH»Lç
+JH
+»	»4&¥$H0≠»	»
+»€›\òŸKúõ›]JN¬ÇàôY⁄[î›YŸJ	Ù-4-t.¥/¥-4.4`4/¥,¥,4/t.4-H4.¥,4`4`¥.4/t.¥.	 N¬àŸ]›]\ 	Ù'Ù`4/¥,¥-t`4cÙcà4.4-4-t.¥/¥-4.4`4`Ùcà4/¥`t/t/¥,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`¯†)â N¬àö]X\H]ÿZ]‹ôX]R[XYŸPö]X\
+€›\òŸPõÿäN¬àYà
+Xö]X\ù⁄YXö]X\öZY⁄ö]X\ù⁄Y
+àö]X\öZY⁄àL
+H¬àõ›»ô]»\úõ‹ä	Ù`t.Ù.4b4.¥/¥/4,t/¥.Ùc4b4/¥-H4`4,4-Ù`4-tb4-t/t.4-H4.4`tat/¥-4/t/¥.H4.¥,4`4`¥.4/t.¥.	 N¬àBàö[ö\⁄›YŸJö]X\ù⁄Y
+»	Â…»
+»ö]X\öZY⁄
+N¬ÇàôY⁄[î›YŸJ	Ù`Ù/4-t/tc4b4-t/t.4-H4.¥,4`4`¥.4/t.¥.	 N¬à€€ú›X^⁄YHHM¬à€€ú›ÿÿ[HHX]õZ[äKX^⁄YH»X]õX^
+ö]X\ù⁄Yö]X\öZY⁄
+JN¬à€€ú›⁄YHX]õX^
+KX]úõ›[ô
+ö]X\ù⁄Y
+àÿÿ[JJN¬à€€ú›ZY⁄HX]õX^
+KX]úõ›[ô
+ö]X\öZY⁄
+àÿÿ[JJN¬à€€ú›ÿ[ùò\»Hÿ›[Y[ùò‹ôX]Q[[Y[ù
+	ÿÿ[ùò\… N¬àÿ[ùò\Àù⁄YH⁄Y»ÿ[ùò\ÀöZY⁄HZY⁄¬à€€ú›€€ù^Hÿ[ùò\ÀôŸ]€€ù^
+	Ãô	À»[Nàò[ŸHJN¬àYà
+X€€ù^
+Hõ›»ô]»\úõ‹ä	Ù,t`4,4`Ù-Ù-t`4/t-H4`t/4/¥,»4`t/¥-Ù-4,4`¥cÿ[ùò\… N¬à€€ù^ôö[›[HH	»ÃLLIŒ¬à€€ù^ôö[ôX›
+⁄YZY⁄
+N¬à€€ù^ôò]“[XYŸJö]X\⁄YZY⁄
+N¬àö]X\ò€‹ŸJ
+N¬àö]X\Hù[¬àö[ö\⁄›YŸJ⁄Y
+»	Â…»
+»ZY⁄
+N¬ÇàôY⁄[î›YŸJ	Ù`t-¥,4`¥.4-H4.¥,4`4`¥.4/t.¥.4,àŸXî	 N¬àŸ]›]\ 	Ù(t-¥.4/4,4cà4.¥,4`4`¥.4/t.¥`»4,àŸXî8†)â N¬à€€ú›ŸXúH]ÿZ]ÿ[ùò\’’ŸXú
+ÿ[ùò\ÀçŒ
+N¬àö[ö\⁄›YŸJX]õX^
+KX]úõ›[ô
+ŸXúú⁄^ôH»Lç
+JH
+»	»4&¥$I N¬ÇàôY⁄[î›YŸJ	Ù/Ù/¥-4,Ù/¥`¥/¥,¥.¥,4.¥,4`4`¥.4/t.¥.4.à4-Ù,4,Ù`4`Ù-Ù.¥-I N¬àŸ]›]\ 	Ù'Ù/¥-4,Ù/¥`¥,4,¥.Ù.4,¥,4cà4`4-t-Ù-t`4,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4.à4-Ù,4,Ù`4`Ù-Ù.¥-x†)â N¬à€€ú›€€ù[ùò\ŸMçH]ÿZ]õÿï–ò\ŸMç
+ŸXú
+N¬à€€ú›]H€€\X›[XYŸQö[Sò[YJ]K\K[XYŸU\õ
+N¬àö[ö\⁄›YŸJ]
+N¬ÇàôY⁄[î›YŸJ	Ù-Ù,4,Ù`4`Ù-Ù.¥,4`4-t-Ù-t`4,¥/t/¥.H4.¥,4`4`¥.4/t.¥.4,à⁄]Xâ N¬àŸ]›]\ 	Ù%Ù,4,Ù`4`Ù-¥,4cà4`4-t-Ù-t`4,¥/t`Ùcà4.¥,4`4`¥.4/t.¥`»4,à[XYŸ\À¯†)â N¬à]ÿZ]€‹öŸ\í[XYŸTô\]Y\›
+	À›\ÿY	ÀŸX‹ô]»]€€ù[ùò\ŸMçK	⁄ú€€â N¬àö[ö\⁄›YŸJ]
+N¬àô]\õà]¬àHÿ]⁄
+\úõ‹äH¬àYà
+ö]X\
+Hö]X\ò€‹ŸJ
+N¬à€€ú›Y\‹ÿYŸHH\úõ‹à	âà\úõ‹ãõY\‹ÿYŸH»\úõ‹ãõY\‹ÿYŸHà›ö[ô \úõ‹à	Ù/t-t.4-Ù,¥-t`t`¥/t,4c»4/¥b4.4,t.¥,	 N¬àô\‹ù
+	Ÿ\úõ‹âÀY\‹ÿYŸJN¬àõ›»ô]»\úõ‹ä	Ù'Ù`4/¥,t.Ù-t/4,4/t,4ct`¥,4/Ù-H0™…»
+»›YŸH
+»	ÆŒà	»
+»Y\‹ÿYŸJN¬àBàBÇÇàù[ò›[€àX[òYŸYò[òX⁄“[XYŸT]
+ò[YJH¬à€€ú›]H›ö[ô ò[YH	… Kùö[J
+Kúô\XŸJ◊óóÀÀ	… N¬àô]\õà◊ö[XYŸ\◊÷ÿK^åNWVÿK^åNKW^ÃN_WùŸXú	⁄Kù\›
+]
+H»]à	…Œ¬àBÇà\ﬁ[ò»ù[ò›[€àô[[›ôQò[òX⁄“[XYŸQúõ€Púõ›‹Ÿ\êÿX⁄J]
+H¬àYà
+J	ÿÿX⁄\…»[à⁄[ô› JHô]\õé¬à€€ú›\õHô]»Tì
+]ÿ›[Y[ùòò\ŸUTíJKöôYé¬à€€ú›ò[Y\»H]ÿZ]ÿX⁄\ÀöŸ^\ 
+N¬à]ÿZ]õ€Z\ŸKò[
+ò[Y\¬àôö[\äò[YHOàò[YKú›\ù’⁄]
+	€‹YYZ[XYŸ\ÀI JBàõX\
+\ﬁ[ò»ò[YHOà¬à€€ú›ÿX⁄HH]ÿZ]ÿX⁄\Àõ‹[äò[YJN¬à]ÿZ]ÿX⁄Kô[]J\õ
+N¬àJJN¬àBÇà\ﬁ[ò»ù[ò›[€à[]Qò[òX⁄“[XYŸP€‹Jò[YJH¬à€€ú›]HX[òYŸYò[òX⁄“[XYŸT]
+ò[YJN¬àYà
+\]
+Hô]\õàò[ŸN¬à€€ú›ŸX‹ô]HŸ][XYŸU\ÿYŸX‹ô]
+
+N¬àYà
+\ŸX‹ô]
+Hõ›»ô]»\úõ‹ä	Ù't-H4,¥,¥-t-4dt/HT–Q‘—P‘ëU	 N¬à]ÿZ]€‹öŸ\í[XYŸTô\]Y\›
+	ÀŸ[]IÀŸX‹ô]»]K	⁄ú€€â N¬à]ÿZ]ô[[›ôQò[òX⁄“[XYŸQúõ€Púõ›‹Ÿ\êÿX⁄J]
+N¬àô]\õàùYN¬àBÇÇàù[ò›[€à^\›[ô“[XYŸSZY‹ò][€êÿ[ôY]\ 
+H¬àô]\õà[ùöY\Àôö[\ä[ùûHOÇà[ùûH	âà[ùûKöY	âà›ö[ô [ùûKö[XYŸH	… Kùö[J
+H	âàT›ö[ô [ùûKôò[òX⁄“[XYŸH	… Kùö[J
+Bà
+N¬àBÇàù[ò›[€à[XYŸSZY‹ò][€î›]\ Y\‹ÿYŸK\úõ‹äH¬à€€ú›[H	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›]\… N¬àYà
+[
+H¬à[ù^€€ù[ùHY\‹ÿYŸH	…Œ¬à[ú›[Kò€€‹àH\úõ‹à»	›ò\äK\[ö I»à	…Œ¬àBàBÇàù[ò›[€à\[ô[XYŸSZY‹ò][€ìŸ Y\‹ÿYŸK\úõ‹äH¬à€€ú›[H	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã[Ÿ… N¬àYà
+Y[
+Hô]\õé¬à€€ú›õ›»Hÿ›[Y[ùò‹ôX]Q[[Y[ù
+	Ÿ]â N¬àõ›Àù^€€ù[ùHY\‹ÿYŸN¬àõ›Àú›[Kò€€‹àH\úõ‹à»	›ò\äK\[ö I»à	›ò\äK[]]Y
+IŒ¬à[ò\[ô⁄[
+õ› N¬à[úÿ‹õ€‹H[úÿ‹õ€ZY⁄¬àBÇàù[ò›[€à‹[í[XYŸSZY‹ò][€ì[Ÿ[
+
+H¬àYà
+Y[ú›\ôPÿ][Ÿ–YZ[ä
+JHô]\õé¬à€€ú›ô[XZ[ö[ô»H^\›[ô“[XYŸSZY‹ò][€êÿ[ôY]\ 
+Kõ[ô›¬à[XYŸSZY‹ò][€î›]\ 	Ù'¥`t`¥,4.Ù/¥`tc4,t-t-»4`4-t-Ù-t`4,¥/t/¥.H4.¥/¥/Ù.4.à	»
+»ô[XZ[ö[ô N¬à[XYŸSZY‹ò][€ì[Ÿ[ò€\‹”\›úô[[›ôJ	⁄Y[â N¬àBÇàù[ò›[€à€‹ŸR[XYŸSZY‹ò][€ì[Ÿ[
+
+H¬àYà
+[XYŸSZY‹ò][€îù[õö[ô H¬à[XYŸSZY‹ò][€î›‹ô\]Y\›YHùYN¬à[XYŸSZY‹ò][€î›]\ 	Ù'¥`t`¥,4/t,4,¥.Ù.4,¥,4cà4/Ù/¥`t.Ù-H4`¥-t.¥`Ùbt-t.H4.¥,4`4`¥.4/t.¥.8†)â N¬àô]\õé¬àBà[XYŸSZY‹ò][€ì[Ÿ[ò€\‹”\›òY
+	⁄Y[â N¬àBÇà\ﬁ[ò»ù[ò›[€àù[ë^\›[ô“[XYŸSZY‹ò][€êò]⁄
+
+H¬àYà
+[XYŸSZY‹ò][€îù[õö[ô»Y[ú›\ôPÿ][Ÿ–YZ[ä
+JHô]\õé¬à€€ú›ÿ[ôY]\»H^\›[ô“[XYŸSZY‹ò][€êÿ[ôY]\ 
+Kú€XŸJL
+N¬àYà
+Xÿ[ôY]\Àõ[ô›
+H¬à[XYŸSZY‹ò][€î›]\ 	Ù$¥`t-H4`t`Ùbt-t`t`¥,¥`Ùc¥bt.4-H4.¥,4`4`¥.4/t.¥.4`Ù-¥-H4/¥,t`4,4,t/¥`¥,4/tb»8ß$… N¬àô]\õé¬àBàYà
+YŸ][XYŸU\ÿYŸX‹ô]
+
+JH¬à[XYŸSZY‹ò][€î›]\ 	Ù't-H4,¥,¥-t-4dt/HT–Q‘—P‘ëUâÀùYJN¬àô]\õé¬àBÇà[XYŸSZY‹ò][€îù[õö[ô»HùYN¬à[XYŸSZY‹ò][€î›‹ô\]Y\›YHò[ŸN¬à	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›\ù	 Kô\ÿXõYHùYN¬à	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›‹	 Kô\ÿXõYHò[ŸN¬à	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã[Ÿ… Kö[õô\íSH	…Œ¬à]›XÿŸ\‹»H¬à]òZ[YH¬Çàõ‹à
+][ô^H»[ô^ÿ[ôY]\Àõ[ô›»[ô^
+  H¬àYà
+[XYŸSZY‹ò][€î›‹ô\]Y\›Y
+HúôXZŒ¬à€€ú›[ùûHHÿ[ôY]\÷⁄[ô^N¬à[XYŸSZY‹ò][€î›]\ 	Ù'¥,t`4,4,t,4`¥bÙ,¥,4cà	»
+»
+[ô^
+»JH
+»	»4.4-»	»
+»ÿ[ôY]\Àõ[ô›
+»	Œà	»
+»[ùûKù]JN¬à\[ô[XYŸSZY‹ò][€ìŸ 	¯•≠à	»
+»
+[ô^
+»JH
+»	À…»
+»ÿ[ôY]\Àõ[ô›
+»	»0≠»	»
+»[ùûKù]JN¬àûH¬à€€ú›ò[òX⁄“[XYŸHH]ÿZ]‹ôX]Qò[òX⁄“[XYŸP€‹J[ùûKö[XYŸK[ùûKù]K[ùûKù\KõŸ‹ô\‹»Oà¬à€€ú›ŸX€€ô»H
+õŸ‹ô\‹Àô[\ŸY\»»L
+Kù—ö^Y
+JH
+»	»4`IŒ¬àYà
+õŸ‹ô\‹Àú›]HOOH	‹›\ù	 H¬à\[ô[XYŸSZY‹ò][€ìŸ 	»8†)à	»
+»õŸ‹ô\‹Àú›YŸJN¬àH[ŸHYà
+õŸ‹ô\‹Àú›]HOOH	Ÿ€ôI H¬à\[ô[XYŸSZY‹ò][€ìŸ 	»8ß$»	»
+»õŸ‹ô\‹Àú›YŸH
+»	»0≠»	»
+»ŸX€€ô»
+»
+õŸ‹ô\‹Àô]Z[»»	»0≠»	»
+»õŸ‹ô\‹Àô]Z[»à	… JN¬àH[ŸH¬à\[ô[XYŸSZY‹ò][€ìŸ 	»8ß%H	»
+»õŸ‹ô\‹Àú›YŸH
+»	»0≠»	»
+»ŸX€€ô»
+»	»0≠»	»
+»õŸ‹ô\‹Àô]Z[ÀùYJN¬àBàJN¬à\[ô[XYŸSZY‹ò][€ìŸ 	»8†)à4`t/¥at`4,4/t-t/t.4-H4`t`tbÙ.Ù.¥.ò[òX⁄“[XYŸH4,àö\ôXò\ŸI N¬à€€ú›ö\ôXò\ŸT›\ùY]H]Kõõ› 
+N¬àYà
+\[Ÿà⁄[ô›Àì‘Q—ãù\]S‹[ö[ô—ò[òX⁄“[XYŸHOOH	Ÿù[ò›[€â H¬à]ÿZ]⁄[ô›Àì‘Q—ãù\]S‹[ö[ô—ò[òX⁄“[XYŸJ[ùûKöYò[òX⁄“[XYŸJN¬àH[ŸH¬à]ÿZ]⁄[ô›Àì‘Q—ãù\]S‹[ö[ô [ùûKöY»ããô[ùûKò[òX⁄“[XYŸHJN¬àBà\[ô[XYŸSZY‹ò][€ìŸ 	»8ß$»4`t/¥at`4,4/t-t/t.4-H4`t`tbÙ.Ù.¥.ò[òX⁄“[XYŸH4,àö\ôXò\ŸH0≠»	»
+»
+
+]Kõõ› 
+HHö\ôXò\ŸT›\ùY]
+H»L
+Kù—ö^Y
+JH
+»	»4`I N¬à[ùûKôò[òX⁄“[XYŸHHò[òX⁄“[XYŸN¬à›XÿŸ\‹  Œ¬à\[ô[XYŸSZY‹ò][€ìŸ 	¯ß$»4$Ù/¥`¥/¥,¥/éà	»
+»[ùûKù]H
+»	»8°§à	»
+»ò[òX⁄“[XYŸJN¬àHÿ]⁄
+\úõ‹äH¬àòZ[Y
+ Œ¬à€€ú›Y\‹ÿYŸHH\úõ‹à	âà\úõ‹ãõY\‹ÿYŸH»\úõ‹ãõY\‹ÿYŸHà	Ù/t-t.4-Ù,¥-t`t`¥/t,4c»4/¥b4.4,t.¥,	Œ¬à\[ô[XYŸSZY‹ò][€ìŸ 	¯ß%H	»
+»[ùûKù]H
+»	Œà	»
+»Y\‹ÿYŸKùYJN¬àYà
+Ù/t-t,¥-t`4/tbÙ.H4/Ù,4`4/¥.Ùc[ò]]‹ö^ôYK⁄Kù\›
+Y\‹ÿYŸJJH¬à[XYŸSZY‹ò][€î›‹ô\]Y\›YHùYN¬à\[ô[XYŸSZY‹ò][€ìŸ 	Ù'Ù,4.¥-t`à4/¥`t`¥,4/t/¥,¥.Ù-t/Nà4/Ù`4/¥,¥-t`4c4`¥-HT–Q‘—P‘ëUâÀùYJN¬àBàBàBÇà[XYŸSZY‹ò][€îù[õö[ô»Hò[ŸN¬à	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›\ù	 Kô\ÿXõYHò[ŸN¬à	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›‹	 Kô\ÿXõYHùYN¬à€€ú›ô[XZ[ö[ô»H^\›[ô“[XYŸSZY‹ò][€êÿ[ôY]\ 
+Kõ[ô›¬à[XYŸSZY‹ò][€î›]\ à
+[XYŸSZY‹ò][€î›‹ô\]Y\›Y»	Ù'¥`t`¥,4/t/¥,¥.Ù-t/t/ãà	»à	Ù'Ù,4aÙ.¥,4-Ù,4,¥-t`4b4-t/t,à	 H
+¬à	Ù(Ù`t/Ù-tb4/t/éà	»
+»›XÿŸ\‹»
+»	À4/¥b4.4,t/¥.éà	»
+»òZ[Y
+»	À4/¥`t`¥,4.Ù/¥`tcà	»
+»ô[XZ[ö[ôÀàòZ[Yàà
+N¬àBÇàYà
+[XYŸSZY‹ò][€êùäH[XYŸSZY‹ò][€êùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À‹[í[XYŸSZY‹ò][€ì[Ÿ[
+N¬àYà
+[XYŸSZY‹ò][€í[õ[ôPùäH[XYŸSZY‹ò][€í[õ[ôPùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À‹[í[XYŸSZY‹ò][€ì[Ÿ[
+N¬àYà
+	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›\ù	 JH	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›\ù	 KòY]ô[ù\›[ô\ä	ÿ€X⁄…Àù[ë^\›[ô“[XYŸSZY‹ò][€êò]⁄
+N¬àYà
+	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›‹	 JH	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ã\›‹	 KòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬à[XYŸSZY‹ò][€î›‹ô\]Y\›YHùYN¬à[XYŸSZY‹ò][€î›]\ 	Ù'¥`t`¥,4/t,4,¥.Ù.4,¥,4cà4/Ù/¥`t.Ù-H4`¥-t.¥`Ùbt-t.H4.¥,4`4`¥.4/t.¥.8†)â N¬àJN¬àYà
+	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ãYõ‹ôŸ]\ŸX‹ô]	 JH	
+	»€ÿÀZ[XYŸK[ZY‹ò][€ãYõ‹ôŸ]\ŸX‹ô]	 KòY]ô[ù\›[ô\ä	ÿ€X⁄…Àõ‹ôŸ][XYŸU\ÿYŸX‹ô]
+N¬àYà
+[XYŸSZY‹ò][€ì[Ÿ[
+H[XYŸSZY‹ò][€ì[Ÿ[òY]ô[ù\›[ô\ä	ÿ€X⁄…À]ô[ùOà¬àYà
+]ô[ùù\ôŸ]OOH[XYŸSZY‹ò][€ì[Ÿ[]ô[ùù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KZ[XYŸK[ZY‹ò][€ãX€‹ŸWI JH€‹ŸR[XYŸSZY‹ò][€ì[Ÿ[
+
+N¬àJN¬Çà	
+	»€ÿÀXYXùâ KòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+
+HOà¬àYà
+Y[ú›\ôPÿ][Ÿ–YZ[ä
+JHô]\õé¬àYà
+Y[ú›\ôSöX⁄€ò[YJ
+JHô]\õé¬Çà€€ú›]HH	
+	»€ÿÀXY]]I Kùò[YKùö[J
+N¬à€€ú›\HH	
+	»€ÿÀXY]\I Kùò[YN¬à€€ú›YX\îò]»H	
+	»€ÿÀXY^YX\â Kùò[YKùö[J
+N¬à€€ú›YX\àHYX\îò]»»\úŸR[ù
+YX\îò]ÀL
+Hàù[¬à€€ú›ŸX\€€àH	
+	»€ÿÀXY\ŸX\€€â Kùò[YN¬à€€ú››Y[‹»H\úŸS\›
+	
+	»€ÿÀXY\›Y[… Kùò[YJN¬à€€ú›\ôX›‹ú»H\úŸS\›
+	
+	»€ÿÀXYY\ôX›‹â Kùò[YJN¬à€€ú›\ôõ‹õY\ú»H\úŸS\›
+	
+	»€ÿÀXY\\ôõ‹õY\â Kùò[YJN¬à€€ú›ÿ[YT€€ô»Hÿ[YT€€ô—öY[ 	
+	»€ÿÀXY\ÿ[YK\€€ô… OÀùò[YJN¬à€€ú›úò[ò⁄\Ÿ\»Húò[ò⁄\Ÿ\—õ‹îÿ]ôJ	
+	»€ÿÀXYYúò[ò⁄\ŸI Kùò[YJN¬à€€ú›[\õò]]ôU]\»H[\õò]]ôU]\—õ‹îÿ]ôJ]K	
+	»€ÿÀXYX[]]\… H»	
+	»€ÿÀXYX[]]\… Kùò[YHà	… N¬à€€ú›[XYŸHH	
+	»€ÿÀXYZ[XYŸI Kùò[YKùö[J
+N¬à]ò[òX⁄“[XYŸHH	
+	»€ÿÀXYYò[òX⁄ÀZ[XYŸI Kùò[YKùö[J
+N¬à€€ú›XZŸR[XYŸPòX⁄›\Hõ€€X[ä	
+	»€ÿÀXYXòX⁄›\Z[XYŸI H	âà	
+	»€ÿÀXYXòX⁄›\Z[XYŸI Kò⁄X⁄ŸY
+N¬à€€ú›[ö»H	
+	»€ÿÀXY[[ö… Kùò[YKùö[J
+N¬à€€ú›\–⁄[ô\ŸHHõ€€X[ä	
+	»€ÿÀXYX⁄[ô\ŸI H	âà	
+	»€ÿÀXYX⁄[ô\ŸI Kò⁄X⁄ŸY
+N¬à€€ú›\”[›öYHHõ€€X[ä	
+	»€ÿÀXY[[›öYI H	âà	
+	»€ÿÀXY[[›öYI Kò⁄X⁄ŸY
+N¬à€€ú›\‘⁄‹ù[ôYHõ€€X[ä	
+	»€ÿÀXY\⁄‹ù[ôY	 H	âà	
+	»€ÿÀXY\⁄‹ù[ôY	 Kò⁄X⁄ŸY
+N¬à€€ú›[òŸ\ùZ[î\ôõ‹õY\àHõ€€X[ä	
+	»€ÿÀXY][òŸ\ùZ[ã\\ôõ‹õY\â OÀò⁄X⁄ŸY
+N¬à€€ú›[òŸ\ùZ[ë\ôX›‹àHõ€€X[ä	
+	»€ÿÀXY][òŸ\ùZ[ãY\ôX›‹â OÀò⁄X⁄ŸY
+N¬à€€ú›[òŸ\ùZ[í[XYŸHHõ€€X[ä	
+	»€ÿÀXY][òŸ\ùZ[ãZ[XYŸI OÀò⁄X⁄ŸY
+N¬Çà€€ú›Y[ùûHH»]K\KYX\ãŸX\€€ã›Y[‹À\ôX›‹úÀ\ôõ‹õY\úÀúò[ò⁄\Ÿ\À[XYŸK[ö»N¬à€€ú›Z\‹⁄[ô—öY[»HZ\‹⁄[ô–Yõ‹õQöY[ Y[ùûJN¬àYà
+Z\‹⁄[ô—öY[Àõ[ô›
+H¬à⁄›”Z\‹⁄[ô—öY[”[Ÿ[
+Z\‹⁄[ô—öY[ N¬àô]\õé¬àBàYà
+\—\Xÿ]U]J]K\Kù[
+JH»Ÿ]›]\ 4(¥,4.¥/¥.H	›\_H4`Ù-¥-H4-t`t`¥cà‘4.Q4/Ù`4/¥,¥-t`4cÙc¥`¥`tc»4/¥`¥-4-t.Ùc4/t/ãòùYJN»ô]\õé»BàYà
+J]ÿZ]€€ôö\õT⁄[Z[\ï]RYìôYYY
+]K\Kù[
+JJH¬àŸ]›]\ 	Ù%4/¥,t,4,¥.Ù-t/t.4-H4/¥`¥/4-t/t-t/t/éà4/Ù/¥at/¥-¥-H4/t,4-4`Ù,t.Ùcâ N¬àô]\õé¬àBÇàûH¬à€€ú›‹ôX]YôYàH]ÿZ]⁄[ô›Àì‘Q—ãòY‹[ö[ô ¬à]Kà\KàYX\ãàŸX\€€ãà›Y[‹Àà\ôX›‹úÀà\ôõ‹õY\úÀàããúÿ[YT€€ôÀàúò[ò⁄\Ÿ\Àà[\õò]]ôU]\Àà[XYŸKàò[òX⁄“[XYŸKà[öÀà\–⁄[ô\ŸKà\”[›öYKà\‘⁄‹ù[ôYà[òŸ\ùZ[î\ôõ‹õY\ãà[òŸ\ùZ[ë\ôX›‹ãà[òŸ\ùZ[í[XYŸKàõ›\Œà	…Àà‹ôX]YûNà^Sò[YBàJN¬àYà
+‹ôX]YôYà	âà‹ôX]YôYãöY
+H]ÿZ]ÿ]ôS‹[ö[ô—^ò\ ‹ôX]YôYãöY»úò[ò⁄\Ÿ\À[\õò]]ôU]\À\–⁄[ô\ŸK\”[›öYK\‘⁄‹ù[ôY[òŸ\ùZ[î\ôõ‹õY\ã[òŸ\ùZ[ë\ôX›‹ã[òŸ\ùZ[í[XYŸKããúÿ[YT€€ô»JN¬àûH»ÿÿ[›‹òYŸKúŸ]][J	€‹YY[\›XYY]]K]åIÀ]JN»Hÿ]⁄
+ HﬂBà⁄[ô›Àì–◊–Q—íQS“T’‘ñOÀòÿ\\ôOÀä
+N¬Çà€€ú›ô\Ÿ]Y€€ùõ€H
+Yò[YK⁄X⁄ŸY
+HOà¬àYà
+⁄[ô›Àì–◊–Q—íQS‘SîœÀö\‘[õôYÀäY
+JHô]\õé¬à€€ú›€€ùõ€H	
+	»…»
+»Y
+N¬àYà
+X€€ùõ€
+Hô]\õé¬àYà
+€€ùõ€ù\HOOH	ÿ⁄X⁄ÿõﬁ	 H€€ùõ€ò⁄X⁄ŸYHõ€€X[ä⁄X⁄ŸY
+N¬à[ŸH¬à€€ùõ€ùò[YHHò[YN¬à€€ùõ€ô\‹]⁄]ô[ù
+ô]»]ô[ù
+	⁄[ú]	À»ùXòõ\ŒàùYHJJN¬àBàN¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY]]IÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY]\IÀ	”‘	 N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY^YX\âÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY\ŸX\€€âÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY\›Y[…À	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYY\ôX›‹âÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY\\ôõ‹õY\âÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY\ÿ[YK\€€ô…À	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYYúò[ò⁄\ŸIÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYX[]]\…À	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYZ[XYŸIÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYYò[òX⁄ÀZ[XYŸIÀ	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY[[ö…À	… N¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYX⁄[ô\ŸIÀ	…Àò[ŸJN¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY[[›öYIÀ	…Àò[ŸJN¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXY\⁄‹ù[ôY	À	…Àò[ŸJN¬à…€ÿÀXY][òŸ\ùZ[ã\\ôõ‹õY\âÀ	€ÿÀXY][òŸ\ùZ[ãY\ôX›‹âÀ	€ÿÀXY][òŸ\ùZ[ãZ[XYŸI◊Kôõ‹ëXX⁄
+YOà¬à€€ú›€€ùõ€H	
+	»…»
+»Y
+N¬àYà
+€€ùõ€
+H¬à€€ùõ€ò⁄X⁄ŸYHò[ŸN¬à€€ùõ€ô\‹]⁄]ô[ù
+ô]»]ô[ù
+	ÿ⁄[ôŸIÀ»ùXòõ\ŒàùYHJJN¬àBàJN¬àô\Ÿ]Y€€ùõ€
+	€ÿÀXYXòX⁄›\Z[XYŸIÀ	…ÀùYJN¬Çà€€ú›⁄›[‹ôX]PòX⁄›\Hõ€€X[ä[XYŸH	âàXZŸR[XYŸPòX⁄›\	âàYò[òX⁄“[XYŸH	âà‹ôX]YôYà	âà‹ôX]YôYãöY
+N¬àYà
+\⁄›[‹ôX]PòX⁄›\
+H¬àŸ]›]\ 	Ù(¥`4-t.à4-4/¥,t,4,¥.Ù-t/H8ß$… N¬àô]\õé¬àBÇàŸ]›]\ 	Ù(¥`4-t.à4-4/¥,t,4,¥.Ù-t/H8ß$»4(4-t-Ù-t`4,¥/t,4c»4.¥,4`4`¥.4/t.¥,4`t/¥-Ù-4,4dt`¥`tc»4,à4a4/¥/t-x†)â N¬àõ⁄Y
+\ﬁ[ò»
+
+HOà¬àûH¬à€€ú›‹ôX]Yò[òX⁄“[XYŸHH]ÿZ]‹ôX]Qò[òX⁄“[XYŸP€‹J[XYŸK]K\JN¬à]ÿZ]⁄[ô›Àì‘Q—ãù\]S‹[ö[ô—ò[òX⁄“[XYŸJ‹ôX]YôYãöY‹ôX]Yò[òX⁄“[XYŸJN¬àŸ]›]\ 	Ù(¥`4-t.à4.4`4-t-Ù-t`4,¥/t,4c»4.¥,4`4`¥.4/t.¥,4-4/¥,t,4,¥.Ù-t/tb»8ß$… N¬àHÿ]⁄
+òX⁄›\\úõ‹äH¬à€€ú€€Kùÿ\õä	—ò[òX⁄»[XYŸH\ÿYòZ[Y	ÀòX⁄›\\úõ‹äN¬à€€ú›Y\‹ÿYŸHHòX⁄›\\úõ‹à	âàòX⁄›\\úõ‹ãõY\‹ÿYŸH»òX⁄›\\úõ‹ãõY\‹ÿYŸHà	Ù/t-t.4-Ù,¥-t`t`¥/t,4c»4/¥b4.4,t.¥,	Œ¬àŸ]›]\ 	Ù(¥`4-t.à4-4/¥,t,4,¥.Ù-t/H8ß$»4't/à4-Ù,4/Ù,4`t/t,4c»4.¥,4`4`¥.4/t.¥,4/t-H4`t/¥-Ù-4,4/t,à	»
+»Y\‹ÿYŸKùYJN¬àBàJJ
+N¬àHÿ]⁄
+\úäH¬à€€ú€€Kô\úõ‹ä\úäN¬à€€ú›Y\‹ÿYŸHH\úà	âà\úãõY\‹ÿYŸH»\úãõY\‹ÿYŸHà	Ù/t-t.4-Ù,¥-t`t`¥/t,4c»4/¥b4.4,t.¥,	Œ¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4-4/¥,t,4,¥.4`¥c4`¥`4-t.éà	»
+»Y\‹ÿYŸKùYJN¬àBàJN¬Çàù[ò›[€àõ‹õX[^ôSXZ[ëö[\îò[ôŸJ
+H¬àYà
+Yö[\úÀôúõ€VYX\àYö[\úÀù÷YX\äHô]\õé¬à€€ú››\ùHù[Xô\äö[\úÀôúõ€VYX\äH
+à
+»—PT””ó”‘ëTãö[ô^Ÿäö[\úÀôúõ€TŸX\€€äN¬à€€ú›[ôHù[Xô\äö[\úÀù÷YX\äH
+à
+»—PT””ó”‘ëTãö[ô^Ÿäö[\úÀù‘ŸX\€€äN¬àYà
+›\ùH[ô
+Hô]\õé¬àŸö[\úÀôúõ€VYX\ãö[\úÀù÷YX\óHHŸö[\úÀù÷YX\ãö[\úÀôúõ€VYX\óN¬àŸö[\úÀôúõ€TŸX\€€ãö[\úÀù‘ŸX\€€óHHŸö[\úÀù‘ŸX\€€ãö[\úÀôúõ€TŸX\€€óN¬àBÇàù[ò›[€à\Qö[\ê⁄[ôŸJ
+H¬àõ‹õX[^ôSXZ[ëö[\îò[ôŸJ
+N¬à\ú⁄\›ö[\î›]\ 
+N¬à⁄\ùYŸHHN¬àõŸö[U‹YŸHH»‘àKQàHN¬à[ò][ô‹‘YŸHH»‘àKQàHN¬àﬁ[ò—ö[\ê€€ùõ€ 
+N¬àô[ô\ä
+N¬àYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬àBÇà€€ú›Xõ›[òŸYö[\ê⁄[ôŸHHXZŸQXõ›[òŸY
+\Qö[\ê⁄[ôŸKçL
+N¬Çàù[ò›[€àö[ô⁄[\Qö[\äŸ[X›‹ãŸ^K\ôŸ]ö[\úÀ]ô[ùò[YHH	ÿ⁄[ôŸI H¬à€€ú›[H	
+Ÿ[X›‹äN¬àYà
+Y[
+Hô]\õé¬à[òY]ô[ù\›[ô\ä]ô[ùò[YK
+JHOà¬à\ôŸ]ö[\ú÷⁄Ÿ^WHHKù\ôŸ]ùò[YN¬àö[\ú»HX›]ôUXàOOH	‹õŸö[I»»õŸö[Qö[\ú»àÿ][Ÿ—ö[\úŒ¬àYà
+]ô[ùò[YHOOH	⁄[ú]	 HXõ›[òŸYö[\ê⁄[ôŸJ
+N¬à[ŸH\Qö[\ê⁄[ôŸJ
+N¬àJN¬àBÇàö[ô⁄[\Qö[\ä	»€ÿÀYã\ŸX\ò⁄	À	‹ŸX\ò⁄	Àÿ][Ÿ—ö[\úÀ	⁄[ú]	 N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\\ŸX\ò⁄	À	‹ŸX\ò⁄	ÀõŸö[Qö[\úÀ	⁄[ú]	 N¬àö[ô⁄[\Qö[\ä	»€ÿÀYã]\IÀ	›\IÀÿ][Ÿ—ö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\]\IÀ	›\IÀõŸö[Qö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀYãYúõ€K^YX\âÀ	Ÿúõ€VYX\âÀÿ][Ÿ—ö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\Yúõ€K^YX\âÀ	Ÿúõ€VYX\âÀõŸö[Qö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀYãYúõ€K\ŸX\€€âÀ	Ÿúõ€TŸX\€€âÀÿ][Ÿ—ö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\Yúõ€K\ŸX\€€âÀ	Ÿúõ€TŸX\€€âÀõŸö[Qö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀYã]À^YX\âÀ	›÷YX\âÀÿ][Ÿ—ö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\]À^YX\âÀ	›÷YX\âÀõŸö[Qö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀYã]À\ŸX\€€âÀ	›‘ŸX\€€âÀÿ][Ÿ—ö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\]À\ŸX\€€âÀ	›‘ŸX\€€âÀõŸö[Qö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀYã\ÿ€‹ôKX€\	À	‹ÿ€‹ôP€\	Àÿ][Ÿ—ö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\\ÿ€‹ôKX€\	À	‹ÿ€‹ôP€\	ÀõŸö[Qö[\ú N¬àö[ô⁄[\Qö[\ä	»€ÿÀYã\ÿ€‹ôK]ò[YIÀ	‹ÿ€‹ôUò[YIÀÿ][Ÿ—ö[\úÀ	⁄[ú]	 N¬àö[ô⁄[\Qö[\ä	»€ÿÀ\\ÿ€‹ôK]ò[YIÀ	‹ÿ€‹ôUò[YIÀõŸö[Qö[\úÀ	⁄[ú]	 N¬à÷…»€ÿÀYã[Z\‹⁄[ô…Àÿ][Ÿ—ö[\ú◊K…»€ÿÀ\[Z\‹⁄[ô…ÀõŸö[Qö[\ú◊WKôõ‹ëXX⁄
+
+‹Ÿ[X›‹ã\ôŸ]ö[\ú◊JHOà¬à€€ú›[H	
+Ÿ[X›‹äN¬àYà
+Y[
+Hô]\õé¬à[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+
+HOà¬à\ôŸ]ö[\úÀõZ\‹⁄[ô”€õHHõ€€X[ä[ò⁄X⁄ŸY
+N¬àö[\ú»HX›]ôUXàOOH	‹õŸö[I»»õŸö[Qö[\ú»àÿ][Ÿ—ö[\úŒ¬à\Qö[\ê⁄[ôŸJ
+N¬àJN¬àJN¬àYà
+€€ù[ùö[\îŸ[X›
+H¬à€€ù[ùö[\îŸ[X›òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOàŸ]€€ù[ùö[\ì[ŸJKù\ôŸ]ùò[YJJN¬àBà	
+	»€ÿÀ\€‹ù	 KòY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà»€‹ù[ŸHHKù\ôŸ]ùò[YN»⁄\ùYŸHHN»ô[ô\ä
+N»JN¬Çàù[ò›[€àö[ô][Qö[\äŸ[X›‹ãö[\íŸ^K\ôŸ]ö[\ú H¬à€€ú›[H	
+Ÿ[X›‹äN¬àYà
+Y[
+Hô]\õé¬à€€ú›\HH
+
+HOà¬à\ôŸ]ö[\ú÷Ÿö[\íŸ^WHH\úò^Kôúõ€J[úŸ[X›Y‹[€ú KõX\
+»OàÀùò[YJN¬àö[\ú»HX›]ôUXàOOH	‹õŸö[I»»õŸö[Qö[\ú»àÿ][Ÿ—ö[\úŒ¬à\Qö[\ê⁄[ôŸJ
+N¬àN¬à[òY]ô[ù\›[ô\ä	€[›\ŸY›€âÀ
+JHOà¬à€€ú›‹[€àHKù\ôŸ]	âàKù\ôŸ]ò€‹Ÿ\›»Kù\ôŸ]ò€‹Ÿ\›
+	€‹[€â Hàù[¬àYà
+[‹[€àY[ò€€ùZ[ú ‹[€äJHô]\õé¬àKúô]ô[ùYò][
+
+N¬à‹[€ãúŸ[X›YH[‹[€ãúŸ[X›Y¬à\J
+N¬à[ôõÿ›\ 
+N¬àJN¬à[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ\JN¬àBàö[ô][Qö[\ä	»€ÿÀYã\›Y[…À	‹›Y[‹…Àÿ][Ÿ—ö[\ú N¬àö[ô][Qö[\ä	»€ÿÀYãY\ôX›‹âÀ	Ÿ\ôX›‹ú…Àÿ][Ÿ—ö[\ú N¬àö[ô][Qö[\ä	»€ÿÀYã\\ôõ‹õY\âÀ	‹\ôõ‹õY\ú…Àÿ][Ÿ—ö[\ú N¬àö[ô][Qö[\ä	»€ÿÀYãYúò[ò⁄\ŸIÀ	Ÿúò[ò⁄\Ÿ\…Àÿ][Ÿ—ö[\ú N¬àö[ô][Qö[\ä	»€ÿÀ\\›Y[…À	‹›Y[‹…ÀõŸö[Qö[\ú N¬àö[ô][Qö[\ä	»€ÿÀ\Y\ôX›‹âÀ	Ÿ\ôX›‹ú…ÀõŸö[Qö[\ú N¬àö[ô][Qö[\ä	»€ÿÀ\\\ôõ‹õY\âÀ	‹\ôõ‹õY\ú…ÀõŸö[Qö[\ú N¬àö[ô][Qö[\ä	»€ÿÀ\Yúò[ò⁄\ŸIÀ	Ÿúò[ò⁄\Ÿ\…ÀõŸö[Qö[\ú N¬Çàÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KYö[\ã\›YŸŸ\›I Kôõ‹ëXX⁄
+[ú]Oà¬à[ú]òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+
+HOàYö[\ïò[YQúõ€R[ú]
+[ú]
+JN¬à[ú]òY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+JHOà»Yà
+KöŸ^HOOH	—[ù\â H»Kúô]ô[ùYò][
+
+N»Yö[\ïò[YQúõ€R[ú]
+[ú]
+N»HJN¬àJN¬Çàÿ›[Y[ùòY]ô[ù\›[ô\ä	⁄[ú]	À
+JHOà¬à€€ú›[ú]HKù\ôŸ]	âàKù\ôŸ]ò€‹Ÿ\›»Kù\ôŸ]ò€‹Ÿ\›
+	⁄[ú]€\›I Hàù[¬àYà
+[ú]
+HôYúô\⁄[ò[ZX—][\›
+[ú]
+N¬àJN¬àÿ›[Y[ùòY]ô[ù\›[ô\ä	Ÿõÿ›\⁄[âÀ
+JHOà¬à€€ú›[ú]HKù\ôŸ]	âàKù\ôŸ]ò€‹Ÿ\›»Kù\ôŸ]ò€‹Ÿ\›
+	⁄[ú]€\›I Hàù[¬àYà
+[ú]
+HôYúô\⁄[ò[ZX—][\›
+[ú]
+N¬àJN¬Çàù[ò›[€àô\Ÿ][ö[\ú 
+H¬àö[\úÀúŸX\ò⁄H	…Œ»ö[\úÀù\HH	…Œ»ö[\úÀôúõ€VYX\àH	…Œ»ö[\úÀôúõ€TŸX\€€àH	›⁄[ù\âŒ»ö[\úÀù÷YX\àH	…Œ»ö[\úÀù‘ŸX\€€àH	Ÿò[	Œ»ö[\úÀúÿ€‹ôP€\H	…Œ»ö[\úÀúÿ€‹ôUò[YHH	…Œ»ö[\úÀõZ\‹⁄[ô”€õHHò[ŸN¬àÀ»4(4-t-¥.4/4/Ù/¥.¥,4-Ù,4.¥.4`¥,4.t`t.¥.4aH»4a4.4.Ùc4/4/¥,à»4`Ù.¥/¥`4/¥aÙ-t/t/tbÙaH4/t-H4`taÙ.4`¥,4-t/4/¥,tbÙaÙ/tbÙ/4a4.4.Ùc4`¥`4/¥/ÇàÀ»4'¥/H4`t/¥at`4,4/tcÙ-t`¥`tc»4/¥`¥-4-t.Ùc4/t/à4.4/t-H4-4/¥.Ù-¥-t/H4`t,t`4,4`tbÙ,¥,4`¥c4`tc»4.¥/t/¥/Ù.¥/¥.H0™Ù(t,t`4/¥`t.4`¥c4a4.4.Ùc4`¥`4bÆÀÇàö[\úÀú›Y[‹»H◊N»ö[\úÀô\ôX›‹ú»H◊N»ö[\úÀú\ôõ‹õY\ú»H◊N»ö[\úÀôúò[ò⁄\Ÿ\»H◊N¬à€‹ù[ŸHH	ÿYYŸ\ÿ…Œ¬à⁄\ùYŸHHN»õŸö[U‹YŸHH»‘àKQàHN»[ò][ô‹‘YŸHH»‘àKQàHN»\îÿ€‹ôQö[\àH	…Œ¬à€€ú›€‹ùH	
+	»€ÿÀ\€‹ù	 N¬àYà
+€‹ù
+H€‹ùùò[YHH	ÿYYŸ\ÿ…Œ¬à\ú⁄\›ö[\î›]\ 
+N¬à‹[]Qö[\ì‹[€ú 
+N¬àﬁ[ò–€€ù[ùö[\îŸ[X›
+
+N¬àô[ô\ä
+N¬àYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬àBÇà	
+	»€ÿÀ\ô\Ÿ]Yö[\ú… KòY]ô[ù\›[ô\ä	ÿ€X⁄…Àô\Ÿ][ö[\ú N¬à	
+	»€ÿÀ\\ô\Ÿ]Yö[\ú… KòY]ô[ù\›[ô\ä	ÿ€X⁄…Àô\Ÿ][ö[\ú N¬à	
+	»€ÿÀ\X€‹KXÿ][ŸÀYö[\ú… OÀòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àÿöôX›ò\‹⁄Y€äõŸö[Qö[\úÀ€€ôQö[\î›]Jÿ][Ÿ—ö[\ú JN¬àö[\ú»HõŸö[Qö[\úŒ¬à\ú⁄\›ö[\î›]\ 
+N¬àﬁ[ò—ö[\ê€€ùõ€ 
+N¬à\Qö[\ê⁄[ôŸJ
+N¬àŸ]›]\ 	Ù)4.4.Ùc4`¥`4b»4.¥,4`¥,4.Ù/¥,Ù,4/Ù-t`4-t/t-t`t-t/tb»4,à4/Ù`4/¥a4.4.Ùc8ß$… N¬àJN¬Çàÿÿ[TŸ[X›òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ\ﬁ[ò»
+JHOà¬à]ÿZ]ÿ]ôTÿÿ[JKù\ôŸ]ùò[YJN¬àô[ô\ä
+N¬àYà
+X›]ôUXàOOH	‹õŸö[I Hô[ô\îõŸö[J
+N¬àYà
+X›]ôUXàOOH	›Y\â Hô[ô\ïY\ì\›
+
+N¬àYà
+X›]ôUXàOOH	‹›]… Hô[ô\î›]‘YŸJ
+N¬àYà
+X›]ôUXàOOH	›‹L	 Hô[ô\ë€ÿò[‹L
+
+N¬àŸ]›]\ 	Ù*4.¥,4.Ù,4/¥a¥-t/t.¥.4/¥,t/t/¥,¥.Ù-t/t,8ß$… N¬àJN¬Çà	
+	»€ÿÀ]‹[ŸK\ÿ€‹ôI KòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOàŸ]‹[ŸJ	‹ÿ€‹ôI JN¬à	
+	»€ÿÀ]‹[ŸK[X[ùX[	 KòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOàŸ]‹[ŸJ	€X[ùX[	 JN¬à€€ú›X[ùX[Y]ùàH	
+	»€ÿÀ[X[ùX[YY]Xùâ N¬à€€ú›X[ùX[ÿ]ôPùàH	
+	»€ÿÀ[X[ùX[\ÿ]ôKXùâ N¬à€€ú›õ[ôô\ò]PùàH	
+	»€ÿÀXõ[ô\ô\ò]KXùâ N¬àYà
+õ[ôô\ò]PùäHõ[ôô\ò]PùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À‹[êõ[ôô\ò][ô‘Ÿ]\
+N¬àYà
+X[ùX[Y]ùäHX[ùX[Y]ùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àYà
+[^Sò[YH[X[ùX[ÿ[YU\Ÿ\äõŸö[U\Ÿ\ã^Sò[YJJHô]\õé¬àX[ùX[Y][ŸHH[X[ùX[Y][ŸN¬àX[ùX[⁄›“Y[àHò[ŸN¬àYà
+X[ùX[Y][ŸJH»[ú›\ôSX[ùX[‹ô\ëõ‹ëY][ô ^Sò[YK	”‘	 N»[ú›\ôSX[ùX[‹ô\ëõ‹ëY][ô ^Sò[YK	—Q	 N»Bàô[ô\îõŸö[J
+N¬àJN¬àYà
+X[ùX[ÿ]ôPùäHX[ùX[ÿ]ôPùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+
+HOà¬àYà
+[^Sò[YH[X[ùX[ÿ[YU\Ÿ\äõŸö[U\Ÿ\ã^Sò[YJJHô]\õé¬àûH¬à[ú›\ôSX[ùX[‹ô\ëõ‹ëY][ô ^Sò[YK	”‘	 N¬à[ú›\ôSX[ùX[‹ô\ëõ‹ëY][ô ^Sò[YK	—Q	 N¬à]ÿZ]ÿ]ôSX[ùX[ò[ö‹ 
+N¬àX[ùX[\ùHHò[ŸN¬àX[ùX[ÿ]ôPùãò€\‹”\›úô[[›ôJ	ÿX›]ôI N¬àô[ô\îõŸö[J
+N¬àŸ]›]\ 	Ù(¥,¥/¥.H4`¥/¥/ÀLL4`t/¥at`4,4/tdt/H4.4,t`Ù-4-t`à4,¥.4-4-t/H4,¥`t-t/8ß$… N¬àHÿ]⁄
+JH¬à€€ú€€Kô\úõ‹äJN¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`t/¥at`4,4/t.4`¥c4`4`ÙaÙ/t/¥.H4`¥/¥/ÀLLâÀùYJN¬àBàJN¬àYà
+X[ùX[Y[ïŸŸ€PùäHX[ùX[Y[ïŸŸ€PùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àX[ùX[⁄›“Y[àH[X[ùX[⁄›“Y[é¬à[ò][ô‹‘YŸHH»‘àKQàHN¬àô[ô\îõŸö[J
+N¬àJN¬àYà
+õŸö[Q[]PùäHõŸö[Q[]PùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà[]TõŸö[Qù[JõŸö[U\Ÿ\äJN¬àõŸö[U\Ÿ\îŸ[X›òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+
+HOà»X[ùX[Y][ŸHHò[ŸN»X[ùX[⁄›“Y[àHò[ŸN»õŸö[U‹^[ôYH»‘àò[ŸKQàò[ŸHN»[ò][ô‹‘YŸHH»‘àKQàHN»õŸö[U‹YŸHH»‘àKQàHN»ô[ô\îõŸö[J
+N»JN¬Çà€€ú›Y\ï\Q[H	
+	»€ÿÀ]Y\ã]\I N¬à€€ú›Y\ñYX\ë[H	
+	»€ÿÀ]Y\ã^YX\â N¬à€€ú›Y\îŸX\€€ë[H	
+	»€ÿÀ]Y\ã\ŸX\€€â N¬àYà
+Y\ï\Q[
+HY\ï\Q[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà»Y\îŸ[X›[€ãù\HHKù\ôŸ]ùò[YN»ô[ô\ïY\ì\›
+
+N»JN¬àYà
+Y\ñYX\ë[
+HY\ñYX\ë[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà»Y\îŸ[X›[€ãûYX\àHù[Xô\äKù\ôŸ]ùò[YJN»ô[ô\ïY\ì\›
+
+N»JN¬àYà
+Y\îŸX\€€ë[
+HY\îŸX\€€ë[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà»Y\îŸ[X›[€ãúŸX\€€àHKù\ôŸ]ùò[YN»ô[ô\ïY\ì\›
+
+N»JN¬Çà€€ú››]’\Q[H	
+	»€ÿÀ\›]À]\I N¬àYà
+›]’\Q[
+H›]’\Q[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà»›]’\Qö[\àHKù\ôŸ]ùò[YN»ô[ô\î›]‘YŸJ
+N»JN¬Çà	
+	»€ÿÀX\ã]\I KòY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà¬à\ï\Qö[\àHKù\ôŸ]ùò[YN¬à[ò][ô‹‘YŸHH»‘àKQàHN¬àô[ô\ê[ò][ô‹ õŸö[U\Ÿ\ã\Qö[\ú“Y€õ‹ö[ô’\J[ùöY\ JN¬àJN¬à€€ú›\ìY]öX—[H	
+	»€ÿÀX\ã[Y]öX… N¬àYà
+\ìY]öX—[
+H\ìY]öX—[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà¬à\îÿ€‹ôSY]öX»HKù\ôŸ]ùò[YH	››[	Œ¬à\îÿ€‹ôQö[\àH	…Œ¬à[ò][ô‹‘YŸHH»‘àKQàHN¬à‹[]P\îÿ€‹ôS‹[€ú õŸö[U\Ÿ\ã\Qö[\ú“Y€õ‹ö[ô’\J[ùöY\ JN¬àô[ô\ê[ò][ô‹ õŸö[U\Ÿ\ã\Qö[\ú“Y€õ‹ö[ô’\J[ùöY\ JN¬àJN¬à	
+	»€ÿÀX\ã\ÿ€‹ôI KòY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+JHOà¬à\îÿ€‹ôQö[\àHKù\ôŸ]ùò[YN¬à[ò][ô‹‘YŸHH»‘àKQàHN¬àô[ô\ê[ò][ô‹ õŸö[U\Ÿ\ã\Qö[\ú“Y€õ‹ö[ô’\J[ùöY\ JN¬àJN¬àYà
+‹[ö[ô”[Ÿ[
+H¬à‹[ö[ô”[Ÿ[òY]ô[ù\›[ô\ä	ÿ€X⁄…À
+JHOà¬à€€ú›ŸŸ€HHKù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]K[‹[ö[ôÀZ[ôõÀ]ŸŸ€WI N¬àYà
+ŸŸ€JH¬à€€ú›[ô[H‹[ö[ô”[Ÿ[ú]Y\ûTŸ[X›‹ä	÷Ÿ]K[‹[ö[ôÀZ[ôõÀ\[ô[I N¬à€€ú›⁄[‹[àH[ô[	âà[ô[ò€\‹”\›ò€€ùZ[ú 	⁄Y[â N¬àYà
+[ô[
+H[ô[ò€\‹”\›ùŸŸ€J	⁄Y[âÀ]⁄[‹[äN¬àŸŸ€Kò€\‹”\›ùŸŸ€J	€‹[âÀõ€€X[ä⁄[‹[äJN¬àŸŸ€KúŸ]]öXù]J	ÿ\öXKY^[ôY	À⁄[‹[à»	›ùYI»à	Ÿò[ŸI N¬àŸŸ€Kù]HH⁄[‹[à»	Ù(t.¥`4bÙ`¥c4/¥/Ù.4`t,4/t.4-I»à	Ù'Ù/¥.¥,4-Ù,4`¥c4/¥/Ù.4`t,4/t.4-IŒ¬àô]\õé¬àBàYà
+Kù\ôŸ]OOH‹[ö[ô”[Ÿ[Kù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]K[[Ÿ[X€‹ŸWI JH€‹ŸPÿ\ô[Ÿ[
+
+N¬àJN¬àBÇàÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KY€ÿò[‹]\WI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬à€ÿò[‹\HHùãô]\Ÿ]ô€ÿò[‹\HOOH	—Q	»»	—Q	»à	”‘	Œ¬à€ÿò[‹ô[ô\ì[Z]HÃ¬àô[ô\ë€ÿò[‹L
+
+N¬àJN¬àJN¬àÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KY€ÿò[‹[[ŸWI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬à€ÿò[‹[ŸHHùãô]\Ÿ]ô€ÿò[‹[ŸHOOH	‹ÿ€‹ôI»»	‹ÿ€‹ôI»à	€X[ùX[	Œ¬à€ÿò[‹ô[ô\ì[Z]HÃ¬àô[ô\ë€ÿò[‹L
+
+N¬àJN¬àJN¬àÿ›[Y[ùú]Y\ûTŸ[X›‹ê[
+	÷Ÿ]KY€ÿò[‹\ÿ€‹WI Kôõ‹ëXX⁄
+ùàOà¬àùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬àYà
+Z\–YZ[ä
+JHô]\õé¬à€ÿò[‹ÿ€‹HHùãô]\Ÿ]ô€ÿò[‹ÿ€‹HOOH	ÿYZ[ú…»»	ÿYZ[ú…»à	ÿ[	Œ¬à€ÿò[‹ô[ô\ì[Z]HÃ¬àô[ô\ë€ÿò[‹L
+
+N¬àJN¬àJN¬Çà]]ôY⁄\›\ì‹[êùèÀòY]ô[ù\›[ô\ä	ÿ€X⁄…À⁄›‘ôY⁄\›ò][€ì[Ÿ[
+N¬àÿ›[Y[ùòY]ô[ù\›[ô\ä	ÿ€X⁄…À]ô[ùOà¬à€€ú›\ôŸ]H]ô[ùù\ôŸ]ò€‹Ÿ\›
+	÷Ÿ]KY[ù]KYö[\ãZ⁄[ôVŸ]KY[ù]KYö[\ã]ò[YWI N¬àYà
+]\ôŸ]
+Hô]\õé¬à]ô[ùúô]ô[ùYò][
+
+N¬à]ô[ùú›‹õ‹Yÿ][€ä
+N¬à\Q[ù]Pÿ\ôö[\ä\ôŸ]ô]\Ÿ]ô[ù]Qö[\í⁄[ô\ôŸ]ô]\Ÿ]ô[ù]Qö[\ïò[YJN¬àJN¬à⁄[ô›ÀòY]ô[ù\›[ô\ä	€‹YXÿ][ŸÀ]öY]ÀX⁄[ôŸIÀ]ô[ùOà¬àÿ][Ÿ’öY]»H]ô[ùô]Z[OOH	ÿ€€\X›	»»	ÿ€€\X›	»à	Ÿ]Z[Y	Œ¬àJN¬àôY⁄\›\ê€‹ŸPùèÀòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà»YTôY⁄\›ò][€ì[Ÿ[
+
+N»⁄›–]][Ÿ[
+	Ù$¥/¥.t-4.4.4.Ù.4`t/¥-Ù-4,4.H4,4.¥.¥,4`Ù/t`ãâ N»JN¬àXÿŸ\‹–òYŸOÀòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà⁄›–]][Ÿ[
+XÿŸ\‹”]ô[»	Ù$¥/¥.t-4.4-Ù,4/t/¥,¥/à4.4.Ù.4`t/4-t/t.4,4.¥.¥,4`Ù/t`ãâ»à	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ãâ JN¬àXÿŸ\‹–òYŸOÀòY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+]ô[ù
+HOà¬àYà
+]ô[ùöŸ^HOOH	—[ù\â»]ô[ùöŸ^HOOH	»	 H¬à]ô[ùúô]ô[ùYò][
+
+N¬à⁄›–]][Ÿ[
+XÿŸ\‹”]ô[»	Ù$¥/¥.t-4.4-Ù,4/t/¥,¥/à4.4.Ù.4`t/4-t/t.4,4.¥.¥,4`Ù/t`ãâ»à	Ù$¥/¥.t-4.4,à4,4.¥.¥,4`Ù/t`ãâ N¬àBàJN¬àYà
+]]ÿ]ôPùäH]]ÿ]ôPùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À€€[Z]\ú€€ò[Ÿ⁄[äN¬àYà
+]]€‹ŸPùäH]]€‹ŸPùãòY]ô[ù\›[ô\ä	ÿ€X⁄…ÀYP]][Ÿ[
+N¬àYà
+]]Y[ùYöY\í[ú]
+H]]Y[ùYöY\í[ú]òY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+JHOà»Yà
+KöŸ^HOOH	—[ù\â H»Kúô]ô[ùYò][
+
+N»]]\‹“[ú]Àôõÿ›\ 
+N»HJN¬àYà
+]]\‹“[ú]
+H]]\‹“[ú]òY]ô[ù\›[ô\ä	⁄Ÿ^Y›€âÀ
+JHOà»Yà
+KöŸ^HOOH	—[ù\â H»Kúô]ô[ùYò][
+
+N»€€[Z]\ú€€ò[Ÿ⁄[ä
+N»HJN¬àYà
+]]õ‹ô€›ùäH]]õ‹ô€›ùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+
+HOà¬à€€ú›Y[ùYöY\àH›ö[ô ]]Y[ùYöY\í[ú]Àùò[YH	… Kùö[J
+N¬à€€ú›[XZ[HY[ùYöY\ãö[ò€Y\ 	–	 H»Y[ùYöY\àà	…Œ¬àYà
+Y[XZ[
+H»⁄›–]][Ÿ[
+	Ù%4.Ùc»4,¥/¥`t`t`¥,4/t/¥,¥.Ù-t/t.4c»4,¥,¥-t-4.[XZ[4,4.¥.¥,4`Ù/t`¥,â N»ô]\õé»BàûH¬à€€ú›àH]ÿZ]ÿZ]õ‹ëö\ôXò\ŸQä
+N¬à]ÿZ]ãúô\Ÿ]Xÿ€›[ù\‹›€‹ô
+[XZ[
+N¬à⁄›–]][Ÿ[
+	Ù'Ù.4`tc4/4/à4-4.Ùc»4,¥/¥`t`t`¥,4/t/¥,¥.Ù-t/t.4c»4/¥`¥/Ù`4,4,¥.Ù-t/t/à8ß$… N¬àHÿ]⁄
+\úõ‹äH»⁄›–]][Ÿ[
+	Ù't-H4`Ù-4,4.Ù/¥`tc4/¥`¥/Ù`4,4,¥.4`¥c4/Ù.4`tc4/4/éà	»
+»
+\úõ‹èÀõY\‹ÿYŸH\úõ‹äJN»BàJN¬à]]Ÿ€›]ùèÀòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+
+HOà¬àûH¬à]ÿZ]⁄[ô›Àì‘Q—èÀõŸ€›]Xÿ€›[ùÀä
+N¬à]][ùXÿ]YZYH	…Œ¬àXÿŸ\‹”]ô[H	…Œ¬à^Sò[YHH	…Œ¬àŸ\‹⁄[€î›‹òYŸKúô[[›ôR][JP–—T‘◊“—VJN¬àÿÿ[›‹òYŸKúô[[›ôR][JíSPTñW”êSQW“—VJN¬àÿÿ[›‹òYŸKúô[[›ôR][JêSQW“—VJN¬àò[YR[ú]ùò[YHH	…Œ¬àYP]][Ÿ[
+
+N¬à\]PXÿŸ\‹’ZJ
+N¬àô[ô\ä
+N¬àŸ]›]\ 	Ù$¥b»4,¥bÙb4.Ù.4.4-»4,4.¥.¥,4`Ù/t`¥,â N¬àHÿ]⁄
+\úõ‹äH¬à⁄›–]][Ÿ[
+	Ù't-H4`Ù-4,4.Ù/¥`tc4,¥bÙ.t`¥.à	»
+»
+\úõ‹èÀõY\‹ÿYŸH\úõ‹äJN¬àBàJN¬ÇàYà
+ôY⁄\›\îÿ]ôPùäHôY⁄\›\îÿ]ôPùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À\ﬁ[ò»
+
+HOà¬à€€ú›öX⁄€ò[YHH›ö[ô ôY⁄\›\ìò[YR[ú]Àùò[YH^Sò[YH	… Kùö[J
+N¬à€€ú›[XZ[H›ö[ô ôY⁄\›\ë[XZ[[ú]Àùò[YH	… Kùö[J
+N¬à€€ú›\‹›€‹ôH›ö[ô ôY⁄\›\î\‹“[ú]Àùò[YH	… N¬à€€ú›€€ôö\õX][€àH›ö[ô ôY⁄\›\î\‹–€€ôö\õR[ú]Àùò[YH	… N¬àYà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	…Œ¬àYà
+[öX⁄€ò[YJH»Yà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	Ù$¥,¥-t-4.4`¥-H4/t.4.¥/t-t.t/âŒ»ô]\õé»BàYà
+K◊ó – ◊ó …Àù\›
+[XZ[
+JH»Yà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	Ù$¥,¥-t-4.4`¥-H4.¥/¥`4`4-t.¥`¥/tbÙ.H[XZ[âŒ»ô]\õé»BàYà
+\‹›€‹ôõ[ô›äH»Yà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	Ù'Ù,4`4/¥.Ùc4-4/¥.Ù-¥-t/H4`t/¥-4-t`4-¥,4`¥c4/4.4/t.4/4`Ù/à4`t.4/4,¥/¥.Ù/¥,ãâŒ»ô]\õé»BàYà
+\‹›€‹ôOOH€€ôö\õX][€äH»Yà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	Ù'Ù,4`4/¥.Ù.4/t-H4`t/¥,¥/Ù,4-4,4c¥`ãâŒ»ô]\õé»BàYà
+TTî””êS–P–”’Sï–UU—SêPìQ
+H¬àYà
+ôY⁄\›\ë\úõ‹äH»ôY⁄\›\ë\úõ‹ãù^€€ù[ùHTî””êS–P–”’Sï—T–PìQ”QT‘–Q—N»ôY⁄\›\ë\úõ‹ãú›[Kò€€‹àH	»—ëêŒM…Œ»Bàô]\õé¬àBà€€ú›^\›[ô»HXÿ€›[ùõŸö[JöX⁄€ò[YJN¬àYà
+^\›[ôœÀò]]ZY
+H»Yà
+ôY⁄\›\ë\úõ‹äHôY⁄\›\ë\úõ‹ãù^€€ù[ùH	Ù%4.Ùc»4ct`¥/¥,Ù/à4/t.4.¥,4.Ù.4aÙ/tbÙ.H4/Ù,4`4/¥.Ùc4`Ù-¥-H4`Ù`t`¥,4/t/¥,¥.Ù-t/KâŒ»ô]\õé»Bà€€ú›ôY⁄\›\êù]€ï^HôY⁄\›\îÿ]ôPùèÀù^€€ù[ù	Ù%Ù,4`4-t,Ù.4`t`¥`4.4`4/¥,¥,4`¥c4,4.¥.¥,4`Ù/t`âŒ¬àYà
+ôY⁄\›\îÿ]ôPùäH»ôY⁄\›\îÿ]ôPùãô\ÿXõYHùYN»ôY⁄\›\îÿ]ôPùãù^€€ù[ùH	Ù(t/¥-Ù-4,4dt/4,4.¥.¥,4`Ù/t`∏†)âŒ»BàYà
+ôY⁄\›\ë\úõ‹äH»ôY⁄\›\ë\úõ‹ãù^€€ù[ùH	Ù(t/¥-Ù-4,4dt/4,4.¥.¥,4`Ù/t`∏†)âŒ»ôY⁄\›\ë\úõ‹ãú›[Kò€€‹àH	»—ëêŒM…Œ»BàûH¬àYà
+]⁄[ô›Àì‘Q—à\[Ÿà⁄[ô›Àì‘Q—ãúôY⁄\›\êXÿ€›[ùOOH	Ÿù[ò›[€â Hõ›»ô]»\úõ‹ä	Ù(t-t`4,¥.4`H4-tbtdH4-Ù,4,Ù`4`Ù-¥,4-t`¥`tcÀà4'Ù/¥/Ù`4/¥,t`Ù.H4aÙ-t`4-t-»4/Ù,4`4`»4`t-t.¥`Ù/t-â N¬à€€ú›ô\›[H]ÿZ]⁄[ô›Àì‘Q—ãúôY⁄\›\êXÿ€›[ù
+öX⁄€ò[YK[XZ[\‹›€‹ôõ€€X[äôY⁄\›\îô[Y[Xô\í[ú]Àò⁄X⁄ŸY
+JN¬à€€ú›]⁄H»]]ZYàô\›[Àù\Ÿ\èÀùZY]]õ›öY\éà	‹\‹›€‹ô	À\‹›€‹ô[òXõYàùYHN¬à€€ú›õ›»HXÿ€›[ùõŸö[JöX⁄€ò[YJN¬àYà
+õ› HÿöôX›ò\‹⁄Y€äõ›À]⁄
+N¬à[ŸHö\ôXò\ŸU\Ÿ\îõŸö[\Àú\⁄
+»Yàõ‹õX[^ôYXÿ€›[ùò[YJöX⁄€ò[YJKöX⁄€ò[YKöX⁄€ò[YRŸ^Nàõ‹õX[^ôYXÿ€›[ùò[YJöX⁄€ò[YJKããú]⁄JN¬àôY⁄\›\ìò[YR[ú]ùò[YHH	…Œ¬àôY⁄\›\ë[XZ[[ú]ùò[YHH	…Œ¬àôY⁄\›\î\‹“[ú]ùò[YHH	…Œ¬àôY⁄\›\î\‹–€€ôö\õR[ú]ùò[YHH	…Œ¬àYà
+ôY⁄\›\îÿ]ôPùäH»ôY⁄\›\îÿ]ôPùãô\ÿXõYHò[ŸN»ôY⁄\›\îÿ]ôPùãù^€€ù[ùHôY⁄\›\êù]€ï^»BàYTôY⁄\›ò][€ì[Ÿ[
+
+N¬à]ÿZ]\T\ú€€ò[Xÿ€›[ùŸ\‹⁄[€äô\›[õ€€X[äôY⁄\›\îô[Y[Xô\í[ú]Àò⁄X⁄ŸY
+JN¬àŸ]›]\ 4$4.¥.¥,4`Ù/t`à0™…€öX⁄€ò[Y_pÆ»4`t/¥-Ù-4,4/K4,¥at/¥-4,¥bÙ/Ù/¥.Ù/t-t/H8ß$ÿ
+N¬àHÿ]⁄
+\úõ‹äH¬à€€ú€€Kô\úõ‹ä	–Xÿ€›[ùôY⁄\›ò][€àòZ[Y	À\úõ‹äN¬à€€ú›€ŸHH›ö[ô \úõ‹èÀò€ŸH	… N¬à€€ú›Y\‹ÿYŸHH€ŸHOOH	ÿ]]€‹\ò][€ã[õ›X[›ŸY	¬à»	Ù(4-t,Ù.4`t`¥`4,4a¥.4c»4`t-t.taÙ,4`H4/t-t-4/¥`t`¥`Ù/Ù/t,â¬àà€ŸHOOH	ÿ]]⁄[ùò[YX‹ôY[ùX[	»€ŸHOOH	ÿ]]›‹õ€ôÀ\\‹›€‹ô	¬à»	Ù+t`¥/¥`à[XZ[4`Ù-¥-H4`t`Ùbt-t`t`¥,¥`Ù-t`ã4/t/à4,¥,¥-t-4dt/H4/t-t,¥-t`4/tbÙ.H4/Ù,4`4/¥.Ùcà4$¥,¥-t-4.4/Ù,4`4/¥.Ùc4/¥`à4ct`¥/¥,Ù/à[XZ[4.4.Ù.4,¥/¥`t`t`¥,4/t/¥,¥.4-t,Ù/ãâ¬àà€ŸHOOH	ÿ]]Ÿ[XZ[[[öŸY]ÀX[õ›\ã[öX⁄€ò[YI¬à»
+\úõ‹èÀõY\‹ÿYŸH	Ù+t`¥/¥`à[XZ[4`Ù-¥-H4`t,¥cÙ-Ù,4/H4`H4-4`4`Ù,Ù.4/4/t.4.¥/¥/â Bàà€ŸHOOH	‹\õZ\‹⁄[€ãY[öYY	»€ŸHOOH	Ÿö\ô\›‹ôK‹\õZ\‹⁄[€ãY[öYY	¬à»	Ù't-H4`Ù-4,4.Ù/¥`tc4`t/¥at`4,4/t.4`¥c4,4.¥.¥,4`Ù/t`ãâ¬àà
+\úõ‹èÀõY\‹ÿYŸH	Ù't-H4`Ù-4,4.Ù/¥`tc4-Ù,4`4-t,Ù.4`t`¥`4.4`4/¥,¥,4`¥c4,4.¥.¥,4`Ù/t`ãâ N¬àYà
+ôY⁄\›\îÿ]ôPùäH»ôY⁄\›\îÿ]ôPùãô\ÿXõYHò[ŸN»ôY⁄\›\îÿ]ôPùãù^€€ù[ùHôY⁄\›\êù]€ï^»BàYà
+ôY⁄\›\ë\úõ‹äH»ôY⁄\›\ë\úõ‹ãù^€€ù[ùHY\‹ÿYŸN»ôY⁄\›\ë\úõ‹ãú›[Kò€€‹àH	»—ëåëMå…Œ»BàBàJN¬Çà€€ú›Y\ë›€õÿYùàH	
+	»€ÿÀ]Y\ãY›€õÿYXùâ N¬àYà
+Y\ë›€õÿYùäHY\ë›€õÿYùãòY]ô[ù\›[ô\ä	ÿ€X⁄…À›€õÿY›\úô[ùY\ì\›
+N¬Çà€€ú›\î€‹ù[ŸQ[H	
+	»€ÿÀX\ã\€‹ù[[ŸI N¬àYà
+\î€‹ù[ŸQ[
+H\î€‹ù[ŸQ[òY]ô[ù\›[ô\ä	ÿ⁄[ôŸIÀ
+]ô[ù
+HOà¬à\î€‹ù[ŸHH]ô[ùù\ôŸ]ùò[YH	‹ÿ€‹ôIŒ¬à\î€‹ù\àH	Ÿ\ÿ…Œ¬à[ò][ô‹‘YŸHH»‘àKQàHN¬à\]P[ò][ô‹‘€‹ùXô[
+
+N¬àô[ô\ê[ò][ô‹ õŸö[U\Ÿ\ã\Qö[\ú“Y€õ‹ö[ô’\J[ùöY\ JN¬àJN¬Çà	
+	»€ÿÀX\ã\€‹ù	 KòY]ô[ù\›[ô\ä	ÿ€X⁄…À
+
+HOà¬à\î€‹ù\àH\î€‹ù\àOOH	Ÿ\ÿ…»»	ÿ\ÿ…»à	Ÿ\ÿ…Œ¬à[ò][ô‹‘YŸHH»‘àKQàHN¬à\]P[ò][ô‹‘€‹ùXô[
+
+N¬àô[ô\ê[ò][ô‹ õŸö[U\Ÿ\ã\Qö[\ú“Y€õ‹ö[ô’\J[ùöY\ JN¬àJN¬Çàù[ò›[€àÿY[êÿ[ùò\ 
+H¬àYà
+⁄[ô›Àö[òÿ[ùò\ Hô]\õàõ€Z\ŸKúô\€€ôJ⁄[ô›Àö[òÿ[ùò\ N¬àYà
+⁄[ô›Àó€‹Y[êÿ[ùò\‘õ€Z\ŸJHô]\õà⁄[ô›Àó€‹Y[êÿ[ùò\‘õ€Z\ŸN¬à⁄[ô›Àó€‹Y[êÿ[ùò\‘õ€Z\ŸHHô]»õ€Z\ŸJ
+ô\€€ôKôZôX›
+HOà¬à€€ú›ÿ‹ö\Hÿ›[Y[ùò‹ôX]Q[[Y[ù
+	‹ÿ‹ö\	 N¬àÿ‹ö\ú‹ò»H	⁄[òÿ[ùò\ÀõZ[ãöúœ›èLKçåIŒ¬àÿ‹ö\ò\ﬁ[ò»HùYN¬àÿ‹ö\õ€õÿYH
+
+HOà⁄[ô›Àö[òÿ[ùò\»»ô\€€ôJ⁄[ô›Àö[òÿ[ùò\ HàôZôX›
+ô]»\úõ‹ä	⁄[òÿ[ùò\»4/t-H4-Ù,4,Ù`4`Ù-Ù.4.Ù`tc… JN¬àÿ‹ö\õ€ô\úõ‹àH
+
+HOà¬à⁄[ô›Àó€‹Y[êÿ[ùò\‘õ€Z\ŸHHù[¬àôZôX›
+ô]»\úõ‹ä	Ù't-H4`Ù-4,4.Ù/¥`tc4-Ù,4,Ù`4`Ù-Ù.4`¥c[òÿ[ùò\… JN¬àN¬àÿ›[Y[ùöXYò\[ô⁄[
+ÿ‹ö\
+N¬àJN¬àô]\õà⁄[ô›Àó€‹Y[êÿ[ùò\‘õ€Z\ŸN¬àBÇàù[ò›[€àÿZ]õ‹í[XYŸ\ õ€›
+H¬à€€ú›[Y‹»H\úò^Kôúõ€Jõ€›ú]Y\ûTŸ[X›‹ê[
+	⁄[Y… JN¬àYà
+Z[Y‹Àõ[ô›
+Hô]\õàõ€Z\ŸKúô\€€ôJ
+N¬àô]\õàõ€Z\ŸKò[
+[Y‹ÀõX\
+[Y»Oàô]»õ€Z\ŸJô\€€ôHOà¬àYà
+[YÀò€€\]JH»ô\€€ôJ
+N»ô]\õé»Bà€€ú›€ôHH
+
+HOàô\€€ôJ
+N¬à[YÀòY]ô[ù\›[ô\ä	€ÿY	À€ôK»€òŸNàùYHJN¬à[YÀòY]ô[ù\›[ô\ä	Ÿ\úõ‹âÀ€ôK»€òŸNàùYHJN¬àŸ][Y[›]
+€ôKçL
+N¬àJJJN¬àBÇà\ﬁ[ò»ù[ò›[€à›€õÿY›\úô[ùY\ì\›
+
+H¬àYà
+[^Sò[YJH»Ÿ]›]\ 	Ù$¥,¥-t-4.4`¥-H4/t.4.¥/t-t.t/4-4.Ùc»4`t.¥,4aÙ.4,¥,4/t.4c»4`¥.4`t.Ù.4`t`¥,âÀùYJN»ô]\õé»Bà€€ú›õÿ\ôH	
+	»€ÿÀ]Y\ã[\›õÿÀ]Y\ãXõÿ\ô	 N¬àYà
+Xõÿ\ôXõÿ\ôú]Y\ûTŸ[X›‹ä	÷Ÿ]K]Y\ãXÿ\ôI JH¬àŸ]›]\ 	Ù$à4ct`¥/¥/4`¥.4`t.Ù.4`t`¥-H4/Ù/¥.¥,4/t-t`à4.¥,4`4`¥/¥aÙ-t.à4-4.Ùc»4`t.¥,4aÙ.4,¥,4/t.4cÀâÀùYJN¬àô]\õé¬àBÇà€€ú›\HHY\îŸ[X›[€ãù\N¬à€€ú›YX\àHY\îŸ[X›[€ãûYX\é¬à€€ú›ŸX\€€àHY\îŸ[X›[€ãúŸX\€€é¬à€€ú›^‹ù‹ò\Hÿ›[Y[ùò‹ôX]Q[[Y[ù
+	Ÿ]â N¬à^‹ù‹ò\ò€\‹”ò[YHH	€ÿÀ]Y\ãY^‹ù]‹ò\	Œ¬à^‹ù‹ò\ú›[Kú‹⁄][€àH	Ÿö^Y	Œ¬à^‹ù‹ò\ú›[KõYùH	ÀLå	Œ¬à^‹ù‹ò\ú›[Kù‹H	Ã	Œ¬à^‹ù‹ò\ú›[Kûí[ô^H	ÀLIŒ¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKXô…À	»ÃåLL	 N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKXÿ\ô	À	»ÃMåLåQâ N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKXÿ\ôZ›ô\âÀ	»ÃQNéI N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKXõ‹ô\âÀ	»ÃêLçÕI N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀK\[ö…À	»—ëåëMå… N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKXﬁX[âÀ	»ÃQâ N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀK]^	À	»—çQå—êI N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀK[]]Y	À	»ŒééN	 N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKY€€	À	»—ëêŒM… N¬à^‹ù‹ò\ú›[KúŸ]õ‹\ùJ	ÀKY‹ôY[âÀ	»ÕQN	 N¬à^‹ù‹ò\ö[õô\íSH]à€\‹œHõÿÀ]Y\ãY^‹ù]]Hè¥$4$t'¥$t$0≠»4`¥.4`t.Ù.4`t`à	Ÿ\ÿÿ\R[
+\J_H0≠»	Ÿ\ÿÿ\R[
+—PT””ó”PëS‹ŸX\€€óJ_H	Ÿ\ÿÿ\R[
+YX\ä_H0≠»	Ÿ\ÿÿ\R[
+^Sò[YJ_OŸ]èò¬à€€ú›€€ôYõÿ\ôHõÿ\ôò€€ôSõŸJùYJN¬à€€ôYõÿ\ôú]Y\ûTŸ[X›‹ê[
+	÷ŸòYŸÿXõWI Kôõ‹ëXX⁄
+[Oà[úô[[›ôP]öXù]J	ŸòYŸÿXõI JN¬à€€ôYõÿ\ôú]Y\ûTŸ[X›‹ê[
+	⁄[Y… Kôõ‹ëXX⁄
+[Y»Oà¬à[YÀúŸ]]öXù]J	ÿ‹õ‹‹€‹öY⁄[âÀ	ÿ[õ€û[[›\… N¬à[YÀúŸ]]öXù]J	‹ôYô\úô\ú€XﬁIÀ	€õÀ\ôYô\úô\â N¬àJN¬à^‹ù‹ò\ò\[ô⁄[
+€€ôYõÿ\ô
+N¬àÿ›[Y[ùòõŸKò\[ô⁄[
+^‹ù‹ò\
+N¬ÇàûH¬à€€ú›[òÿ[ùò\»H]ÿZ]ÿY[êÿ[ùò\ 
+N¬à]ÿZ]ÿZ]õ‹í[XYŸ\ ^‹ù‹ò\
+N¬à€€ú›ÿ[ùò\»H]ÿZ][òÿ[ùò\ ^‹ù‹ò\¬àòX⁄Ÿ‹õ›[ô€€‹éà	»ÃåLL	Àà\ŸP”‘îŒàùYKà[›’Z[ùàò[ŸKàŸŸ⁄[ôŒàò[ŸKà[XYŸU[Y[›]àLàÿÿ[NàX]õZ[äãX]õX^
+K⁄[ô›Àô]öXŸT^[ò][»JJKà⁄[ô›’⁄YàX]õX^
+ÿ›[Y[ùôÿ›[Y[ù[[Y[ùúÿ‹õ€⁄Y^‹ù‹ò\úÿ‹õ€⁄Y
+»
+Kà⁄[ô›“ZY⁄àX]õX^
+ÿ›[Y[ùôÿ›[Y[ù[[Y[ùúÿ‹õ€ZY⁄^‹ù‹ò\úÿ‹õ€ZY⁄
+»
+BàJN¬àÿ[ùò\Àù–õÿäõÿàOà¬à^‹ù‹ò\úô[[›ôJ
+N¬àYà
+XõÿäH»Ÿ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`t/¥-Ù-4,4`¥cëÀâÀùYJN»ô]\õé»Bà€€ú›ô’\õHTìò‹ôX]SÿöôX›Tì
+õÿäN¬à€€ú›HHÿ›[Y[ùò‹ôX]Q[[Y[ù
+	ÿI N¬àKöôYàHô’\õ¬àKô›€õÿYHXõÿòK]Y\ãI›\_KIﬁYX\üKI‹ŸX\€€üKúôÿ¬àÿ›[Y[ùòõŸKò\[ô⁄[
+JN¬àKò€X⁄ 
+N¬àKúô[[›ôJ
+N¬àŸ][Y[›]
+
+
+HOàTìúô]õ⁄ŸSÿöôX›Tì
+ô’\õ
+KÃ
+N¬àŸ]›]\ 	Ù(¥.4`t.Ù.4`t`à4`t.¥,4aÙ,4/H4.¥,4.àëÀt`t.¥`4.4/tb4/¥`à8ß$… N¬àK	⁄[XYŸK‹ô… N¬àHÿ]⁄
+\úäH¬à€€ú€€Kô\úõ‹ä\úäN¬à^‹ù‹ò\úô[[›ôJ
+N¬àŸ]›]\ 	Ù't-H4`Ù-4,4.Ù/¥`tc4`t/¥-Ù-4,4`¥c4.4-Ù/¥,t`4,4-¥-t/t.4-KâÀùYJN¬àBàBÇÇà]\ú€€ò[Ÿ\‹⁄[€îô\›‹ôTõ€Z\ŸHHù[¬Çà\ﬁ[ò»ù[ò›[€àô\›‹ôT\ú€€ò[Ÿ\‹⁄[€ä€X\ï⁄[ìZ\‹⁄[ô»Hò[ŸJH¬àYà
+\ú€€ò[Ÿ\‹⁄[€îô\›‹ôTõ€Z\ŸJHô]\õà\ú€€ò[Ÿ\‹⁄[€îô\›‹ôTõ€Z\ŸN¬à\ú€€ò[Ÿ\‹⁄[€îô\›‹ôTõ€Z\ŸHH
+\ﬁ[ò»
+
+HOà¬àûH¬à€€ú›àH]ÿZ]ÿZ]õ‹ëö\ôXò\ŸQä
+N¬à€€ú›ô\›[YYH]ÿZ]ãúô\›[YT\ú€€ò[Xÿ€›[ù
+
+N¬àYà
+ô\›[YY
+H¬à]ÿZ]\T\ú€€ò[Xÿ€›[ùŸ\‹⁄[€äô\›[YYùYJN¬àô]\õàùYN¬àBàYà
+€X\ï⁄[ìZ\‹⁄[ô H¬à]][ùXÿ]YZYH	…Œ¬àXÿŸ\‹”]ô[H	…Œ¬àŸ\‹⁄[€î›‹òYŸKúô[[›ôR][JP–—T‘◊“—VJN¬à\]PXÿŸ\‹’ZJ
+N¬àBàô]\õàò[ŸN¬àHÿ]⁄
+\úõ‹äH¬à€€ú€€Kùÿ\õä	‘ÿ]ôY\ú€€ò[Ÿ\‹⁄[€àô\›‹ôHòZ[Y	À\úõ‹äN¬àô]\õàò[ŸN¬àHö[ò[H¬à\ú€€ò[Ÿ\‹⁄[€îô\›‹ôTõ€Z\ŸHHù[¬àBàJJ
+N¬àô]\õà\ú€€ò[Ÿ\‹⁄[€îô\›‹ôTõ€Z\ŸN¬àBÇà⁄[ô›ÀòY]ô[ù\›[ô\ä	€‹YXXÿ€›[ù\ô\›‹ôY	À]ô[ùOà¬àYà
+]ô[ùÀô]Z[Àò]][ùXÿ]Y	âàX]][ùXÿ]YZY
+Hõ⁄Yô\›‹ôT\ú€€ò[Ÿ\‹⁄[€äò[ŸJN¬àJN¬Çà
+\ﬁ[ò»ù[ò›[€à[ö]
+
+H¬à\]PXÿŸ\‹’ZJ
+N¬à]ÿZ]ô\›‹ôT\ú€€ò[Ÿ\‹⁄[€äùYJN¬à]ÿZ]ÿYò[YJ
+N¬à]ÿZ]ÿY]ò]\ä
+N¬à]ÿZ]ÿYÿÿ[J
+N¬à]ÿZ]ÿY€€ù[ùö[\ì[ŸJ
+N¬à]ÿZ]ÿY]ò]\ú”X\
+
+N¬à]ÿZ]ÿYX[ùX[ò[ö‹ 
+N¬àYà
+^Sò[YH	âàX]ò]\ú”X\€^Sò[YWJH]ò]\ú”X\€^Sò[YWHH^P]ò]\é¬à]ÿZ]ÿYY\ì‹ô\ú 
+N¬à]ÿZ]ÿY[ùöY\ 
+N¬àôYúô\⁄Z[UZJ
+N¬àYà
+XÿŸ\‹”]ô[	âà[^Sò[YJH⁄›”ò[YS[Ÿ[
+	Ù$¥,¥-t-4.4`¥-H4/t.4.¥/t-t.t/4aÙ`¥/¥,tb»4/Ù`4/¥-4/¥.Ù-¥.4`¥câ N¬àJJ
+N¬àJJ
+N¬
