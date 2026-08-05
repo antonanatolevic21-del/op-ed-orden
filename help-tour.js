@@ -334,6 +334,31 @@
     window.setTimeout(positionStep, 180);
   }
 
+  function ensureBackToTop() {
+    let button = document.querySelector('#oc-back-to-top');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'oc-back-to-top';
+      button.className = 'oc-back-to-top';
+      button.type = 'button';
+      button.textContent = '↑';
+      button.title = 'Наверх';
+      button.setAttribute('aria-label', 'Наверх');
+      document.body.append(button);
+    }
+    if (button.dataset.backToTopGuard !== '1') {
+      button.dataset.backToTopGuard = '1';
+      button.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      const sync = () => button.classList.toggle('visible', window.scrollY > 700);
+      window.addEventListener('scroll', sync, { passive: true });
+      sync();
+    }
+    return button;
+  }
+
+  ensureBackToTop();
+  window.setTimeout(ensureBackToTop, 600);
+
   const helpButton = document.createElement('button');
   helpButton.type = 'button';
   helpButton.className = 'oc-help-launcher';
