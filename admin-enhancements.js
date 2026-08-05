@@ -883,27 +883,9 @@
     return pairs.sort((a, b) => b.score - a.score || (b.firstCount + b.secondCount) - (a.firstCount + a.secondCount));
   }
 
-  function buildSameSongGroups(openings) {
-    const groups = new Map();
-    for (const opening of openings) {
-      const title = String(opening.sameSongTitle || opening.songGroupTitle || '').trim().replace(/\s+/g, ' ');
-      if (!title) continue;
-      const key = normalize(title);
-      if (!groups.has(key)) groups.set(key, { key, title, openings: [] });
-      groups.get(key).openings.push(opening);
-    }
-    return [...groups.values()]
-      .map(group => ({
-        ...group,
-        openings: group.openings.sort((a, b) => String(a.title || a.anime || '').localeCompare(String(b.title || b.anime || ''), 'ru', { numeric: true, sensitivity: 'base' }))
-      }))
-      .sort((a, b) => a.title.localeCompare(b.title, 'ru', { numeric: true, sensitivity: 'base' }));
-  }
-
   function buildIssues(openings) {
     const issues = [
       { id: 'uncertain', label: '🤔 Неуверенные данные', type: 'uncertain', rows: [] },
-      { id: 'same-song-groups', label: '🎵 Одинаковые песни', type: 'sameSongGroups', rows: buildSameSongGroups(openings) },
       { id: 'title', label: 'Без названия', rows: [] },
       { id: 'image', label: 'Без основной картинки', rows: [] },
       { id: 'fallback', label: 'Без запасной картинки', rows: [] },
@@ -1180,26 +1162,6 @@
       return;
     }
 
-    if (issue.type === 'sameSongGroups') {
-      const visibleLimit = issueVisibleLimits.get(issue.id) || Math.max(10, Math.floor(ISSUE_LIMIT / 2));
-      const visibleRows = issue.rows.slice(0, visibleLimit);
-      list.innerHTML = visibleRows.map(group => `
-        <section class="oc-quality-song-group">
-          <header>
-            <strong>${escapeHtml(group.title)}</strong>
-            <span>${group.openings.length} ${group.openings.length === 1 ? 'трек' : 'треков'}</span>
-          </header>
-          <div class="oc-quality-song-group-tracks">
-            ${group.openings.map(opening => {
-              const season = opening.season ? `${SEASON_LABEL[opening.season] || opening.season} ${opening.year || ''}`.trim() : String(opening.year || '—');
-              const title = String(opening.title || opening.anime || 'Без названия');
-              return `<div class="oc-quality-track-row"><button type="button" class="oc-quality-track" data-quality-track="${escapeHtml(opening.id)}" data-quality-title="${escapeHtml(title)}"><span>${escapeHtml(title)}</span><small>${escapeHtml(opening.type || '—')} · ${escapeHtml(season)}</small></button></div>`;
-            }).join('')}
-          </div>
-        </section>`).join('') + (issue.rows.length > visibleRows.length ? `<button type="button" class="oc-quality-more" data-quality-more>Показать ещё группы · сейчас ${visibleRows.length} из ${issue.rows.length}</button>` : '');
-      return;
-    }
-
     const visibleLimit = issueVisibleLimits.get(issue.id) || ISSUE_LIMIT;
       const visibleRows = issue.rows.slice(0, visibleLimit);
     list.innerHTML = visibleRows.map(opening => {
@@ -1405,16 +1367,15 @@
     const uniqueProblemIds = new Set();
     let totalHits = 0;
     for (const issue of issues) {
-      if (issue.type === 'sameSongGroups') continue;
       totalHits += issue.rows.length;
-      if (issue.type !== 'franchisePairs' && issue.type !== 'sameSongGroups') {
+      if (issue.type !== 'franchisePairs') {
         for (const opening of issue.rows) uniqueProblemIds.add(String(opening.id));
       }
     }
 
     const issueHtml = issues.map(issue => `
       <details class="oc-quality-issue" data-quality-issue="${issue.id}">
-        <summary><span>${escapeHtml(issue.label)}</span><strong>${issue.type === 'sameSongGroups' ? `${issue.rows.length} групп · ${issue.rows.reduce((sum, group) => sum + group.openings.length, 0)} треков` : issue.rows.length}</strong></summary>
+        <summary><span>${escapeHtml(issue.label)}</span><strong>${issue.rows.length}</strong></summary>
         <div class="oc-quality-track-list"><div class="oc-quality-more">Список загрузится при открытии раздела</div></div>
       </details>`).join('');
 
@@ -1424,7 +1385,7 @@
           <div>
             <div class="oc-quality-kicker">админ · качество базы</div>
             <h2>Центр качества</h2>
-            <p>Пустые поля, группы одинаковых песен, похожие франшизы и возможные дубликаты. Списки создаются только когда ты раскрываешь нужный раздел.</p>
+            <p>Пустые поля, похожие франшизы, одинаковая песня без группы и возможные дубликаты. Списки создаются только когда ты раскрываешь нужный раздел.</p>
           </div>
           <div class="oc-quality-head-actions">
             <button class="oc-quality-refresh" type="button" data-quality-check-links>Проверить картинки</button>
