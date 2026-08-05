@@ -743,6 +743,9 @@
   }
 
   function init() {
+    if (new URL(location.href).searchParams.get('view') === 'tournaments') {
+      window.setTimeout(() => document.querySelector('.oc-tab-btn[data-tab="tournaments"]')?.click(), 0);
+    }
     mountButton();
     new MutationObserver(mountButton).observe(document.body, { childList: true, subtree: true });
     window.addEventListener('oped:app-data-updated', () => { if (root()) renderHub(); if (!document.querySelector('#oc-tournaments-panel')?.classList.contains('hidden')) renderTournamentPanel(); maybeAutoJoin(); });
