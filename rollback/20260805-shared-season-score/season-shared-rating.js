@@ -383,7 +383,6 @@
     const submission = currentSubmission();
     const score = window.OC_APP_BRIDGE?.userScore?.(entry.id);
     const canSubmit = score !== null && score !== undefined;
-    const ratingOpen = room.status === 'rating';
     const players = room.players || [];
     root.innerHTML = `<div class="oc-shared-room-card">
       <div class="oc-shared-room-head">
@@ -398,14 +397,8 @@
           <div class="oc-shared-track-type">${escapeHtml(entry.type || room.type)}</div>
           <h3>${escapeHtml(entry.title)}</h3>
           <p>${escapeHtml((entry.performers || []).join(', '))}</p>
-          ${submission
-            ? `<button type="button" class="oc-secondary-btn active" disabled>Отправлено: ${escapeHtml(submission.score)} ✓</button>`
-            : !ratingOpen
-              ? '<button type="button" class="oc-secondary-btn" disabled>Приём оценок завершён</button>'
-              : canSubmit
-                ? `<button type="button" class="oc-addbtn" data-room-submit>Отправить оценку · ${escapeHtml(score)}</button>
-                  <button type="button" class="oc-secondary-btn" data-room-rate>Изменить оценку</button>`
-                : '<button type="button" class="oc-addbtn" data-room-rate>Поставить оценку</button>'}
+          <button type="button" class="oc-addbtn" data-room-rate>Открыть оценивание</button>
+          <button type="button" class="oc-secondary-btn${submission ? ' active' : ''}" data-room-submit ${canSubmit && !submission && room.status === 'rating' ? '' : 'disabled'}>${submission ? `Отправлено: ${escapeHtml(submission.score)} ✓` : canSubmit ? `Готово · ${escapeHtml(score)}` : 'Сначала поставь оценку'}</button>
           <div class="oc-shared-note">Следующее видео уже загружается в фоне. Комментарии в комнате не показываются.</div>
           ${renderResults(room)}
         </div>
@@ -426,17 +419,14 @@
       await navigator.clipboard.writeText(location.href);
       event.currentTarget.textContent = 'Ссылка скопирована ✓';
     });
-    root.querySelectorAll('[data-room-rate]').forEach(button => button.addEventListener('click', () => {
+    root.querySelector('[data-room-rate]')?.addEventListener('click', () => {
       const room = state.room;
       const id = room?.trackIds?.[Number(room.currentIndex || 0)];
-      if (!id) return;
-      root.classList.add('oc-shared-room-paused');
-      window.OC_APP_BRIDGE?.rateTrack?.(id);
-      window.setTimeout(() => {
-        const evaluator = document.querySelector('#oc-season-evaluator');
-        if (evaluator?.classList.contains('hidden')) root.classList.remove('oc-shared-room-paused');
-      }, 100);
-    }));
+      if (id) {
+        root.classList.add('oc-shared-room-paused');
+        window.OC_APP_BRIDGE?.rateTrack?.(id);
+      }
+    });
     root.querySelector('[data-room-submit]')?.addEventListener('click', () => void submitScore());
     root.querySelector('[data-room-reveal]')?.addEventListener('click', () => void hostPatch({ status: 'revealed' }));
     root.querySelector('[data-room-next]')?.addEventListener('click', () => void nextTrack());
