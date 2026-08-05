@@ -18,6 +18,9 @@
   opacity:.1;
   transition:opacity .18s ease,transform .18s ease,border-color .18s ease;
 }
+.oc-help-launcher[hidden]{
+  display:none!important;
+}
 .oc-help-launcher:hover,
 .oc-help-launcher:focus-visible{
   border-color:#08d9d6;

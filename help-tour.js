@@ -340,8 +340,35 @@
   helpButton.setAttribute('aria-label', 'Подсказка по возможностям сайта');
   helpButton.title = 'Подсказка по возможностям сайта';
   helpButton.textContent = '?';
+  helpButton.hidden = true;
   helpButton.addEventListener('click', showChooser);
   document.body.append(helpButton);
+
+  function syncAdminVisibility() {
+    const badge = document.querySelector('#oc-access-badge');
+    const admin = Boolean(
+      badge
+      && badge.classList.contains('admin')
+      && String(badge.textContent || '').trim().toLocaleLowerCase('ru') === 'админ'
+    );
+    helpButton.hidden = !admin;
+    if (!admin) {
+      closeChooser();
+      closeTour();
+    }
+  }
+
+  const accessBadge = document.querySelector('#oc-access-badge');
+  if (accessBadge) {
+    new MutationObserver(syncAdminVisibility).observe(accessBadge, {
+      attributes: true,
+      attributeFilter: ['class'],
+      childList: true,
+      characterData: true,
+      subtree: true
+    });
+  }
+  syncAdminVisibility();
 
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {

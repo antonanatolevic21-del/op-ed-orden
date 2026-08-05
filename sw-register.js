@@ -17,7 +17,7 @@
   const trackAddPanelVersion = '20260804-list-suggestions1';
   const profileVersion = '20260804-profile-stats-stable1';
   const adminVersion = '20260805-same-song-groups1';
-  const helpTourVersion = '20260805-guided-help1';
+  const helpTourVersion = '20260805-guided-help-admin1';
   const loadedStyles = new Map();
   const loadedScripts = new Map();
   const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
