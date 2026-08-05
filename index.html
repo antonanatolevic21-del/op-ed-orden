@@ -707,5 +707,23 @@
   <script type="module" src="index-app.js?v=20260805-tournaments-hub1"></script>
   <script type="module" src="firebase-app.js?v=20260803-uncertain-comments1"></script>
   <script src="sw-register.js?v=20260805-tournaments-nav2" defer></script>
+  <script>
+    (() => {
+      const mountTournamentTab = () => {
+        const nav = document.querySelector('.oc-topbar-nav');
+        const tab = document.querySelector('.oc-tab-btn[data-tab="tournaments"]');
+        if (!nav || !tab || nav.contains(tab)) return false;
+        nav.insertBefore(tab, nav.querySelector('.oc-topbar-events'));
+        return true;
+      };
+      if (!mountTournamentTab()) {
+        const observer = new MutationObserver(() => {
+          if (mountTournamentTab()) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        window.setTimeout(() => observer.disconnect(), 15000);
+      }
+    })();
+  </script>
 </body>
 </html>
