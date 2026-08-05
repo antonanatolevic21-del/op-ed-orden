@@ -1,13 +1,13 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
-  const primaryScriptVersion = '20260805-navigation-middle-click3';
+  const primaryScriptVersion = '20260805-tournaments-nav2';
   const discoveryVersion = '20260803-existing-corrections1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
   const sharedSeasonVersion = '20260805-season-layout-votes1';
-  const seasonCommunityVersion = '20260805-tournament-delete1';
+  const seasonCommunityVersion = '20260805-tournaments-hub1';
   const manualTopInsertVersion = '20260726-manual-top-insert13';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';

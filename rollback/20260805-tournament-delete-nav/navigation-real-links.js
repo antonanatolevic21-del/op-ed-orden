@@ -146,22 +146,8 @@
 	// Modified clicks must remain native links and must not reach deep-link capture handlers
 	// that could rewrite the URL of the current tab.
 	document.addEventListener('click', event => {
-		const target = event.target instanceof Element ? event.target : null;
-		const host = target?.closest?.('.oc-nav-real-host');
-		const link = target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]') || host?.querySelector?.(':scope > a.oc-nav-real-hit[data-nav-real-link="1"]');
+		const link = event.target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]');
 		if (link && isModifiedClick(event)) event.stopImmediatePropagation();
-	}, true);
-
-	document.addEventListener('auxclick', event => {
-		if (event.button !== 1) return;
-		const target = event.target instanceof Element ? event.target : null;
-		const host = target?.closest?.('.oc-nav-real-host');
-		const link = target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]') || host?.querySelector?.(':scope > a.oc-nav-real-hit[data-nav-real-link="1"]');
-		if (!link?.href) return;
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		const opened = window.open(link.href, '_blank', 'noopener,noreferrer');
-		if (opened) opened.opener = null;
 	}, true);
 
 	function syncLinks() {

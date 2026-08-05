@@ -361,7 +361,7 @@
     const isHost = user.uid === room.hostUid;
     if (room.status === 'finished') {
       const champion = trackById(room.championId);
-      return `<div class="oc-tournament-finished"><div class="oc-section-label">победитель турнира</div><h3>${escapeHtml(room.title)}</h3>${trackCard(champion, 'champion')}<div class="oc-community-actions"><button type="button" class="oc-secondary-btn" data-tournament-leave>Закрыть турнир</button>${isHost ? '<button type="button" class="oc-danger-btn" data-tournament-delete>Удалить турнир</button>' : ''}</div></div>`;
+      return `<div class="oc-tournament-finished"><div class="oc-section-label">победитель турнира</div><h3>${escapeHtml(room.title)}</h3>${trackCard(champion, 'champion')}<button type="button" class="oc-secondary-btn" data-tournament-leave>Закрыть турнир</button></div>`;
     }
     const pair = room.currentPair || [];
     const first = trackById(pair[0]);
@@ -373,7 +373,7 @@
     const leader = firstVotes === secondVotes ? '' : firstVotes > secondVotes ? String(pair[0]) : String(pair[1]);
     return `<div class="oc-tournament-active">
       <div class="oc-tournament-toolbar"><div><div class="oc-section-label">код ${escapeHtml(room.code)} · ${escapeHtml(room.title)}</div><h3>Раунд ${Number(room.roundNumber || 0) + 1} · матч ${Number(room.matchNumber || 0) + 1}</h3></div>
-      <div><button type="button" class="oc-secondary-btn" data-tournament-copy>Скопировать ссылку</button>${isHost ? '<button type="button" class="oc-danger-btn" data-tournament-delete>Удалить</button>' : ''}<button type="button" class="oc-community-x" data-tournament-leave>×</button></div></div>
+      <div><button type="button" class="oc-secondary-btn" data-tournament-copy>Скопировать ссылку</button><button type="button" class="oc-community-x" data-tournament-leave>×</button></div></div>
       <div class="oc-tournament-pair">
         ${trackCard(first, mine === String(pair[0]) ? 'voted' : '', `<button type="button" data-tournament-vote="${escapeHtml(pair[0])}">${mine === String(pair[0]) ? 'Снять голос' : 'Голосовать'} · ${firstVotes}</button>`)}
         <div class="oc-tournament-vs">VS</div>
@@ -569,24 +569,6 @@
     if (shouldRender && root()) renderHub();
   }
 
-  async function deleteTournament() {
-    const room = state.room;
-    const user = requireUser();
-    if (!room || !user || user.uid !== room.hostUid) return;
-    if (!confirm(`Удалить турнир «${room.title}»? Восстановить его будет нельзя.`)) return;
-    const api = await firebase();
-    const voteQuery = api.query(api.collection(api.db, VOTE_COLLECTION), api.where('gameId', '==', room.id));
-    const voteSnap = await api.getDocs(voteQuery);
-    await Promise.all(voteSnap.docs.map(row => api.deleteDoc(row.ref)));
-    await Promise.all([
-      api.deleteDoc(api.doc(api.db, PERSONAL_COLLECTION, `track-tournament-index-${room.id}`)),
-      api.deleteDoc(api.doc(api.db, ROOM_COLLECTION, room.id))
-    ]);
-    leaveTournament(false);
-    closeHub();
-    renderTournamentPanel();
-  }
-
   async function watchPersonalRows(seasonKey) {
     const api = await firebase();
     state.personalUnsub?.();
@@ -721,7 +703,6 @@
       event.currentTarget.textContent = 'Ссылка скопирована ✓';
     });
     modal.querySelectorAll('[data-tournament-leave]').forEach(button => button.addEventListener('click', leaveTournament));
-    modal.querySelectorAll('[data-tournament-delete]').forEach(button => button.addEventListener('click', () => void deleteTournament().catch(error => alert(error?.message || 'Не удалось удалить турнир.'))));
   }
 
   function mountButton() {
