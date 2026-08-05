@@ -4285,7 +4285,14 @@
     function openingListForSeason(year, season, type = seasonType) {
       return entries
         .filter(e => entryTypeMatches(e, type) && Number(e.year) === Number(year) && e.season === season && entryPassesSeasonVisibility(e))
-        .sort((a, b) => compareNatural(a.title, b.title));
+        .sort((a, b) => {
+          const av = avg(a.scores);
+          const bv = avg(b.scores);
+          if (av === null && bv !== null) return 1;
+          if (av !== null && bv === null) return -1;
+          if (av !== null && bv !== null && bv !== av) return bv - av;
+          return compareNatural(a.title, b.title);
+        });
     }
 
     function openingQueueForSeason(year, season, type = seasonType) {
