@@ -1,6 +1,6 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
-  const primaryScriptVersion = '20260805-tournaments-nav2';
+  const primaryScriptVersion = '20260805-tournaments-hub1';
   const discoveryVersion = '20260803-existing-corrections1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';

@@ -14,7 +14,6 @@
     const discoveryBtn = tab('discovery');
     const topBtn = tab('top100');
     const seasonBtn = tab('season');
-    const tournamentsBtn = tab('tournaments');
     const tierBtn = tab('tier');
     const statsBtn = tab('stats');
     const eventsLink = legacyTabs.querySelector('a[href="events.html"]');
@@ -69,9 +68,7 @@
     ratings.append(ratingsSummary, ratingsMenu);
     nav.append(ratings);
     if (tierBtn) nav.append(tierBtn);
-    nav.append(seasonBtn);
-    if (tournamentsBtn) nav.append(tournamentsBtn);
-    nav.append(eventsLink);
+    nav.append(seasonBtn, eventsLink);
 
     const mobileRatingsMenu = document.createElement('div');
     mobileRatingsMenu.className = 'oc-topbar-mobile-ratings-menu';

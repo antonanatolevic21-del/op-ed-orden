@@ -1,7 +1,7 @@
 (() => {
   if (window.__OC_DEEP_LINKS_READY__) return;
 
-  const VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tournaments', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+  const VIEWS = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
   const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
   const SEASONS = new Set(['winter', 'spring', 'summer', 'fall']);
   let applying = false;

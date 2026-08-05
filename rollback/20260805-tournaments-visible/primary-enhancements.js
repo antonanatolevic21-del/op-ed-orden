@@ -4,7 +4,7 @@
 	if (window.__OC_NAVIGATION_REAL_LINKS_READY__) return;
 	window.__OC_NAVIGATION_REAL_LINKS_READY__ = true;
 
-	const MAIN_VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tournaments', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+	const MAIN_VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const EVENT_MODES = new Set(['rating', 'endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
 	const EVENT_STAGES = new Set(['basket', 'first', 'semi', 'final']);
@@ -574,7 +574,6 @@
     const discoveryBtn = tab('discovery');
     const topBtn = tab('top100');
     const seasonBtn = tab('season');
-    const tournamentsBtn = tab('tournaments');
     const tierBtn = tab('tier');
     const statsBtn = tab('stats');
     const eventsLink = legacyTabs.querySelector('a[href="events.html"]');
@@ -629,9 +628,7 @@
     ratings.append(ratingsSummary, ratingsMenu);
     nav.append(ratings);
     if (tierBtn) nav.append(tierBtn);
-    nav.append(seasonBtn);
-    if (tournamentsBtn) nav.append(tournamentsBtn);
-    nav.append(eventsLink);
+    nav.append(seasonBtn, eventsLink);
 
     const mobileRatingsMenu = document.createElement('div');
     mobileRatingsMenu.className = 'oc-topbar-mobile-ratings-menu';
@@ -1270,7 +1267,7 @@
 (() => {
   if (window.__OC_DEEP_LINKS_READY__) return;
 
-  const VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tournaments', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+  const VIEWS = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
   const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
   const SEASONS = new Set(['winter', 'spring', 'summer', 'fall']);
   let applying = false;
