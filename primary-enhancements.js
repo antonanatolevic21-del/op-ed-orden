@@ -4,7 +4,7 @@
 	if (window.__OC_NAVIGATION_REAL_LINKS_READY__) return;
 	window.__OC_NAVIGATION_REAL_LINKS_READY__ = true;
 
-	const MAIN_VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tournaments', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+	const MAIN_VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
 	const EVENT_MODES = new Set(['rating', 'endingrating', 'guess', 'bestworst', 'predictions', 'codenames', 'blindtier', 'whoami']);
 	const EVENT_STAGES = new Set(['basket', 'first', 'semi', 'final']);
@@ -135,6 +135,9 @@
 					else scheduleRouteSync();
 				}
 			});
+			link.addEventListener('auxclick', event => {
+				if (event.button === 1) event.stopPropagation();
+			});
 		}
 		link.href = href;
 		const label = String(button.childNodes[0]?.textContent || button.textContent || '').trim();
@@ -145,24 +148,8 @@
 	// Modified clicks must remain native links and must not reach deep-link capture handlers
 	// that could rewrite the URL of the current tab.
 	document.addEventListener('click', event => {
-		const target = event.target instanceof Element ? event.target : null;
-		const host = target?.closest?.('.oc-nav-real-host');
-		const link = target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]') || host?.querySelector?.(':scope > a.oc-nav-real-hit[data-nav-real-link="1"]');
+		const link = event.target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]');
 		if (link && isModifiedClick(event)) event.stopImmediatePropagation();
-	}, true);
-
-	// A link nested in a legacy button is not handled consistently by browsers on
-	// middle click. Open its real route explicitly and suppress the button event.
-	document.addEventListener('auxclick', event => {
-		if (event.button !== 1) return;
-		const target = event.target instanceof Element ? event.target : null;
-		const host = target?.closest?.('.oc-nav-real-host');
-		const link = target?.closest?.('a.oc-nav-real-hit[data-nav-real-link="1"]') || host?.querySelector?.(':scope > a.oc-nav-real-hit[data-nav-real-link="1"]');
-		if (!link?.href) return;
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		const opened = window.open(link.href, '_blank', 'noopener,noreferrer');
-		if (opened) opened.opener = null;
 	}, true);
 
 	function syncLinks() {
@@ -587,7 +574,6 @@
     const discoveryBtn = tab('discovery');
     const topBtn = tab('top100');
     const seasonBtn = tab('season');
-    const tournamentsBtn = tab('tournaments');
     const tierBtn = tab('tier');
     const statsBtn = tab('stats');
     const eventsLink = legacyTabs.querySelector('a[href="events.html"]');
@@ -642,9 +628,7 @@
     ratings.append(ratingsSummary, ratingsMenu);
     nav.append(ratings);
     if (tierBtn) nav.append(tierBtn);
-    nav.append(seasonBtn);
-    if (tournamentsBtn) nav.append(tournamentsBtn);
-    nav.append(eventsLink);
+    nav.append(seasonBtn, eventsLink);
 
     const mobileRatingsMenu = document.createElement('div');
     mobileRatingsMenu.className = 'oc-topbar-mobile-ratings-menu';
@@ -1283,7 +1267,7 @@
 (() => {
   if (window.__OC_DEEP_LINKS_READY__) return;
 
-  const VIEWS = new Set(['chart', 'profile', 'rerating', 'discovery', 'top100', 'season', 'tournaments', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
+  const VIEWS = new Set(['chart', 'profile', 'top100', 'season', 'tier', 'stats', 'entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
   const ENTITY_VIEWS = new Set(['entity-studios', 'entity-performers', 'entity-directors', 'entity-franchises']);
   const SEASONS = new Set(['winter', 'spring', 'summer', 'fall']);
   let applying = false;
