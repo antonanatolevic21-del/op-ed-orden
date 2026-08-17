@@ -6,7 +6,9 @@
   const constrained = Boolean(connection?.saveData) || /(^|-)2g$/i.test(String(connection?.effectiveType || ''));
   const preloadDistance = constrained ? 1200 : Math.max(4200, window.innerHeight * 4);
   const maxAheadRequests = constrained ? 3 : 8;
+  const requestTimeout = constrained ? 30000 : 20000;
   const queue = [];
+  const activeLoads = new Map();
   let activeRequests = 0;
   const imageSelector = [
     '#opedchart-root img[loading="lazy"]',
@@ -22,6 +24,7 @@
   function startLoading(image) {
     if (!(image instanceof HTMLImageElement) || image.dataset.aheadLoading === '1') return;
     if (!image.isConnected) return;
+    delete image.dataset.aheadQueued;
     image.dataset.aheadLoading = '1';
     image.loading = 'eager';
 
@@ -34,22 +37,40 @@
       return;
     }
     activeRequests += 1;
+    let settled = false;
+    const requestedSrc = image.currentSrc || image.src;
     const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      image.removeEventListener('load', onLoad);
+      image.removeEventListener('error', onError);
+      activeLoads.delete(image);
       activeRequests = Math.max(0, activeRequests - 1);
       pumpQueue();
     };
-    image.addEventListener('load', () => {
+    const onLoad = () => {
       markLoaded(image);
       if ('decode' in image) image.decode().catch(() => {});
       finish();
-    }, { once: true });
-    image.addEventListener('error', finish, { once: true });
+    };
+    const onError = () => {
+      window.setTimeout(() => {
+        if (image.isConnected && (image.currentSrc || image.src) !== requestedSrc) return;
+        finish();
+      }, 0);
+    };
+    const timeout = window.setTimeout(finish, requestTimeout);
+    activeLoads.set(image, finish);
+    image.addEventListener('load', onLoad);
+    image.addEventListener('error', onError);
   }
 
   function pumpQueue() {
     queue.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
     while (activeRequests < maxAheadRequests && queue.length) {
       const image = queue.shift();
+      if (image) delete image.dataset.aheadQueued;
       if (!image?.isConnected || image.complete && image.naturalWidth) {
         if (image?.naturalWidth) markLoaded(image);
         continue;
@@ -90,16 +111,23 @@
   }
 
   function scan(root = document) {
+    if (root !== document && !root?.isConnected) return;
     if (root instanceof HTMLImageElement) registerImage(root);
     root.querySelectorAll?.(imageSelector).forEach(registerImage);
   }
 
   const scheduledRoots = new Set();
   function scheduleScan(root) {
-    scheduledRoots.add(root || document);
+    const candidate = root?.isConnected ? root : document;
+    if (candidate === document || scheduledRoots.size >= 32) {
+      scheduledRoots.clear();
+      scheduledRoots.add(document);
+    } else if (!scheduledRoots.has(document)) {
+      scheduledRoots.add(candidate);
+    }
     if (scheduleScan.pending) return;
     scheduleScan.pending = true;
-    requestAnimationFrame(() => {
+    queueMicrotask(() => {
       scheduleScan.pending = false;
       const roots = [...scheduledRoots];
       scheduledRoots.clear();
@@ -107,14 +135,53 @@
     });
   }
 
+  function imagesInside(root) {
+    if (!(root instanceof Element)) return [];
+    const images = root instanceof HTMLImageElement ? [root] : [];
+    root.querySelectorAll?.('img').forEach(image => images.push(image));
+    return images;
+  }
+
+  function unregisterTree(root) {
+    const removedImages = new Set(imagesInside(root));
+    if (!removedImages.size) return;
+    removedImages.forEach(image => {
+      observer?.unobserve(image);
+      activeLoads.get(image)?.();
+      delete image.dataset.aheadQueued;
+    });
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      if (removedImages.has(queue[index]) || !queue[index]?.isConnected) queue.splice(index, 1);
+    }
+  }
+
   new MutationObserver(records => {
     for (const record of records) {
+      for (const node of record.removedNodes) {
+        if (node instanceof Element) {
+          unregisterTree(node);
+          for (const root of scheduledRoots) {
+            if (root !== document && (!root.isConnected || node === root || node.contains(root))) scheduledRoots.delete(root);
+          }
+        }
+      }
       for (const node of record.addedNodes) {
         if (node instanceof Element) scheduleScan(node);
       }
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
 
+  window.addEventListener('pagehide', () => {
+    observer?.disconnect();
+    scheduledRoots.clear();
+    queue.splice(0).forEach(image => { delete image.dataset.aheadQueued; });
+    [...activeLoads.entries()].forEach(([image, finish]) => {
+      finish();
+      delete image.dataset.aheadLoading;
+      image.loading = 'lazy';
+    });
+  });
+  window.addEventListener('pageshow', () => scheduleScan(document));
   window.addEventListener('oped:route-ready', () => scheduleScan(document));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan(), { once: true });
   else scan();

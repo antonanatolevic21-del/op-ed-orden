@@ -520,16 +520,26 @@
       return `<button type="button" class="oc-progressive-more" data-progressive-more="${scope}">Показано ${shown} из ${total} · загрузить ещё</button>`;
     }
 
+    const progressiveAutoloadObservers = new WeakMap();
+
     function installProgressiveAutoload(container, scope, callback) {
+      progressiveAutoloadObservers.get(container)?.disconnect();
+      progressiveAutoloadObservers.delete(container);
       const button = container?.querySelector?.(`[data-progressive-more="${scope}"]`);
       if (!button) return;
-      button.addEventListener('click', callback, { once: true });
+      let observer = null;
+      const activate = () => {
+        observer?.disconnect();
+        progressiveAutoloadObservers.delete(container);
+        callback();
+      };
+      button.addEventListener('click', activate, { once: true });
       if (!('IntersectionObserver' in window)) return;
-      const observer = new IntersectionObserver(entries => {
+      observer = new IntersectionObserver(entries => {
         if (!entries.some(entry => entry.isIntersecting)) return;
-        observer.disconnect();
         button.click();
       }, { rootMargin: '500px 0px' });
+      progressiveAutoloadObservers.set(container, observer);
       observer.observe(button);
     }
 
