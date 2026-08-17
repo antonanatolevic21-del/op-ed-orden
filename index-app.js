@@ -432,6 +432,39 @@
         const publicScore = scoreFor(entry, name);
         return publicScore !== null ? publicScore : personalScoreFor(entry, name);
       },
+      ratingConfig() {
+        return {
+          min: ratingMin(),
+          max: ratingMax(),
+          step: scaleStep(),
+          defaultScore: defaultScore(),
+          personal: isPersonalScale()
+        };
+      },
+      async saveTrackScore(id, value) {
+        if (!myName || !currentPersonalUid()) throw new Error('Для сохранения войди в личный аккаунт.');
+        const entry = entriesById.get(String(id || ''));
+        const score = clampScore(value);
+        if (!entry || score === null) throw new Error('Некорректная оценка.');
+        if (isPersonalScale()) {
+          entry.personalScores = entry.personalScores || {};
+          entry.personalScores[myName] = score;
+          await saveRatingExtras(entry.id, myName, { personalScore: score });
+          await removeRateLaterEntry(entry.id);
+          touchEntryCache(entry);
+          markRatingDataChanged();
+        } else {
+          await persistCompleteRating(entry, {
+            score,
+            songScore: songScoreFor(entry, myName),
+            visualScore: visualScoreFor(entry, myName),
+            customScores: customScoresFor(entry, myName),
+            comment: ratingCommentFor(entry, myName)
+          });
+        }
+        publishAppData('shared-rating-saved');
+        return score;
+      },
       isRateLater(id) {
         return rateLaterIdsFor(myName).includes(String(id || ''));
       },
