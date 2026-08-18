@@ -1,6 +1,6 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
-  const primaryScriptVersion = '20260805-navigation-middle-click3';
+  const primaryScriptVersion = '20260818-season-rerate1';
   const discoveryVersion = '20260803-existing-corrections1';
   const tasteComparisonVersion = '20260731-taste-account-fix1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
@@ -17,7 +17,7 @@
   const top100CandidatesVersion = '20260731-top100-candidates1';
   const ratingWorkbenchVersion = '20260804-rating-modifiers-save1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
-  const profileVersion = '20260804-profile-stats-stable1';
+  const profileVersion = '20260818-season-rerate1';
   const adminVersion = '20260805-same-song-groups1';
   const helpTourVersion = '20260805-guided-help-backtop1';
   const loadedStyles = new Map();

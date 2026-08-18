@@ -201,6 +201,7 @@
     const accessBadge = $('#oc-access-badge');
     const franchiseRepairBtn = $('#oc-franchise-repair-btn');
     const profileUserSelect = $('#oc-profile-user');
+    const profileReratePanel = $('#oc-profile-rerate');
     const manualHiddenToggleBtn = $('#oc-manual-hidden-toggle-btn');
     const profileDeleteBtn = $('#oc-profile-delete-btn');
     const seasonYearsEl = $('#oc-season-years');
@@ -470,6 +471,12 @@
       },
       async toggleRateLater(id) {
         return toggleRateLaterEntry(String(id || ''));
+      },
+      isRerate(id) {
+        return rerateIdsFor(myName).includes(String(id || ''));
+      },
+      async toggleRerate(id) {
+        return toggleRerateEntry(String(id || ''));
       },
       async saveProfilePatch(patch) {
         if (!myName || !currentPersonalUid()) throw new Error('Для сохранения войди в личный аккаунт.');
@@ -816,6 +823,7 @@
             await saveRatingExtras(entry.id, name, { score: null, songScore: null, visualScore: null, comment: null });
           }
         }
+        if (manualSameUser(name, myName)) await removeRerateEntry(entry.id);
         touchEntryCache(entry);
         markRatingDataChanged();
         render();
@@ -4008,6 +4016,36 @@
       return true;
     }
 
+    function rerateIdsFor(name = myName) {
+      const profile = dailyProfileFor(name);
+      return Array.from(new Set((Array.isArray(profile?.rerateIds) ? profile.rerateIds : []).map(String).filter(Boolean)));
+    }
+
+    async function setRerateEntry(entryId, active) {
+      if (!myName || !currentPersonalUid()) throw new Error('Для списка переоценки войди в личный аккаунт.');
+      const id = String(entryId || '');
+      if (!id || !entriesById.has(id)) return false;
+      const ids = new Set(rerateIdsFor(myName));
+      const alreadyActive = ids.has(id);
+      if (active) ids.add(id); else ids.delete(id);
+      if (alreadyActive === Boolean(active)) return alreadyActive;
+      await saveDailyProfilePatch({ rerateIds: [...ids].slice(-500) });
+      publishAppData('rerate-list-saved');
+      return Boolean(active);
+    }
+
+    async function toggleRerateEntry(entryId) {
+      const id = String(entryId || '');
+      return setRerateEntry(id, !rerateIdsFor(myName).includes(id));
+    }
+
+    async function removeRerateEntry(entryId) {
+      const id = String(entryId || '');
+      if (!rerateIdsFor(myName).includes(id)) return false;
+      await setRerateEntry(id, false);
+      return true;
+    }
+
     function normalizeDailySettings(raw = {}) {
       return {
         enabled: Boolean(raw.enabled),
@@ -4660,7 +4698,10 @@
         seasonTitleEl.textContent = 'Выберите год и сезон';
         seasonSubtitleEl.textContent = 'Список лет идёт от актуального года до 1990. Будущие сезоны помечаются как «Скоро будет».';
         seasonRateBtn.disabled = true;
-        if (seasonRateAllBtn) seasonRateAllBtn.disabled = true;
+        if (seasonRateAllBtn) {
+          seasonRateAllBtn.disabled = true;
+          seasonRateAllBtn.textContent = 'Переоценить сезон';
+        }
         if (seasonPrevBtn) seasonPrevBtn.disabled = true;
         if (seasonTierBtn) seasonTierBtn.disabled = true;
         seasonRateBtn.textContent = 'Оценить сезон';
@@ -4672,6 +4713,10 @@
       const queue = myName ? openingQueueForSeason(year, season) : list;
       const personalQueue = myName ? personalOpeningQueueForSeason(year, season) : list;
       const activeQueue = isPersonalScale() ? personalQueue : queue;
+      const ratedCount = myName ? list.filter(entry => {
+        const value = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
+        return value !== null;
+      }).length : 0;
       seasonTitleEl.textContent = `${SEASON_LABEL[season]} ${year}`;
       seasonSubtitleEl.textContent = myName
         ? (isPersonalScale()
@@ -4679,7 +4724,10 @@
           : `${typeLabel(seasonType)}: ${list.length}. Не оценено с ника «${myName}»: ${queue.length}.`)
         : `${typeLabel(seasonType)}: ${list.length}. Чтобы скрывать уже оценённые, введите ник справа сверху.`;
       seasonRateBtn.disabled = !list.length || Boolean(myName && activeQueue.length === 0);
-      if (seasonRateAllBtn) seasonRateAllBtn.disabled = !list.length;
+      if (seasonRateAllBtn) {
+        seasonRateAllBtn.disabled = !ratedCount;
+        seasonRateAllBtn.textContent = ratedCount ? `Переоценить сезон · ${ratedCount}` : 'Переоценить сезон';
+      }
       if (seasonPrevBtn) seasonPrevBtn.disabled = !previousSeasonFor(year, season);
       if (seasonTierBtn) seasonTierBtn.disabled = !list.length;
       seasonRateBtn.textContent = isPersonalScale()
@@ -4698,7 +4746,11 @@
         const basketButton = eventBasketCanAdd() && ['OP', 'ED'].includes(entry.type)
           ? `<button type="button" class="oc-season-re-rate oc-basket-add-btn" data-basket-add="${entry.id}">${eventBasketHas(entry) ? 'В корзине ✓' : 'Добавить в корзину'}</button>`
           : '';
-        const controlsHtml = `${basketButton}<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
+        const rerateActive = rerateIdsFor(myName).includes(String(entry.id));
+        const rerateButton = myName && myScore !== null
+          ? `<button type="button" class="oc-season-re-rate oc-rerate-flag${rerateActive ? ' active' : ''}" data-season-rerate-toggle="${entry.id}" aria-pressed="${rerateActive}">${rerateActive ? '⚑ На переоценке ✓' : '⚐ На переоценку'}</button>`
+          : '';
+        const controlsHtml = `${basketButton}${rerateButton}<button type="button" class="oc-season-re-rate" data-op-rate="${entry.id}">${myScore !== null ? 'Переоценить' : 'Оценить'}</button>`;
         return renderUnifiedEntryCard(entry, {
           rankLabel: idx + 1,
           scoreText,
@@ -4999,7 +5051,7 @@
       return Math.max(ratingMin(), Math.min(ratingMax(), Number(rounded.toFixed(1))));
     }
 
-    const PERSISTENT_RATING_MODES = new Set(['season', 'season-all', 'entity', 'collection', 'coverage', 'rate-later']);
+    const PERSISTENT_RATING_MODES = new Set(['season', 'season-all', 'season-rerate', 'rerate', 'entity', 'collection', 'coverage', 'rate-later']);
 
     function ratingSessionStorageKey() {
       return 'op-ed-rating-session-v2:' + manualUserSafeKey(myName);
@@ -5087,6 +5139,43 @@
         type: seasonType,
         includeAll: includeAll ? '1' : '0',
         scale: ratingScale
+      });
+    }
+
+    function startSeasonRerating() {
+      if (!selectedSeason) return;
+      if (!ensureNickname()) return;
+      const queue = openingListForSeason(selectedSeason.year, selectedSeason.season, seasonType)
+        .filter(entry => {
+          const value = isPersonalScale() ? personalScoreFor(entry, myName) : scoreFor(entry, myName);
+          return value !== null;
+        })
+        .sort((a, b) => compareNatural(a.title, b.title));
+      if (!queue.length) {
+        setStatus(`В этом сезоне пока нет оценённых ${typeLabel(seasonType)}.`, true);
+        return;
+      }
+      startPersistentRatingQueue(queue, 'season-rerate', `Переоценка · ${typeLabel(seasonType)} · ${SEASON_LABEL[selectedSeason.season]} ${selectedSeason.year}`, {
+        year: selectedSeason.year,
+        season: selectedSeason.season,
+        type: seasonType,
+        scale: ratingScale
+      });
+    }
+
+    function startProfileRerating(ids = rerateIdsFor(myName)) {
+      if (!ensureNickname()) return;
+      const rows = Array.from(new Set((ids || []).map(String)))
+        .map(id => entriesById.get(id))
+        .filter(Boolean);
+      if (!rows.length) {
+        setStatus('Список переоценки пока пуст.', true);
+        return;
+      }
+      startPersistentRatingQueue(rows, 'rerate', 'На переоценку', {
+        owner: manualUserSafeKey(myName),
+        scale: ratingScale,
+        ids: rows.map(entry => String(entry.id)).join('|')
       });
     }
 
@@ -5315,6 +5404,8 @@
         }
         setStatus(completedMode === 'entity'
           ? 'Альбом полностью просмотрен ✓'
+          : ['season-rerate', 'rerate'].includes(completedMode)
+            ? 'Переоценка завершена ✓'
           : ['collection', 'coverage', 'rate-later'].includes(completedMode)
             ? `${activeEntityQueueLabel || 'Очередь'} полностью оценена ✓`
           : isPersonalScale()
@@ -5332,11 +5423,15 @@
       const savedVisualScore = blindMode ? null : visualScoreFor(entry, myName);
       const savedComment = blindMode ? '' : ratingCommentFor(entry, myName);
       const optionalPublicParts = !isPersonalScale();
+      const canFlagForRerating = ['season', 'season-all'].includes(evaluatorMode);
+      const flaggedForRerating = rerateIdsFor(myName).includes(String(entry.id));
       const inputMin = ratingMin();
       const inputMax = ratingMax();
       const inputStep = scaleStep();
       const progressText = evaluatorMode === 'blind'
         ? `Слепая переоценка · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
+        : ['season-rerate', 'rerate'].includes(evaluatorMode)
+        ? `${activeEntityQueueLabel} · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
         : ['entity', 'collection', 'coverage', 'rate-later'].includes(evaluatorMode)
         ? `${activeEntityQueueLabel} · ${seasonQueueIndex + 1} из ${seasonQueue.length}`
         : evaluatorMode === 'single'
@@ -5366,6 +5461,7 @@
           ${ratingCommentEditorMarkup('oc-eval', savedComment)}
           ${blindMode ? '<div class="oc-blind-comment-hint">Пустое поле сохранит прежний комментарий.</div>' : ''}` : ''}
         </div>
+        ${canFlagForRerating ? `<label class="oc-eval-rerate-flag"><input id="oc-eval-rerate" type="checkbox" ${flaggedForRerating ? 'checked' : ''}><span><b>⚑ На будущую переоценку</b><small>Трек появится в одноимённой вкладке профиля.</small></span></label>` : ''}
         <div class="oc-eval-actions">
           <button class="oc-secondary-btn" data-eval-action="skip">${evaluatorMode === 'single' ? 'Отмена' : 'Пропустить'}</button>
           ${existingScore !== null && !blindMode ? `<button class="oc-secondary-btn" data-eval-action="delete-current">${isPersonalScale() ? 'Удалить отметку' : 'Удалить оценку'}</button>` : ''}
@@ -5394,6 +5490,8 @@
       const comment = commentInput ? String(commentInput.value || '').trim().slice(0, 1000) : ratingCommentFor(entry, myName);
       const detailed = readDetailedRating(evaluatorEl, entry, 'oc-eval');
       const { songScore, visualScore, customScores } = detailed;
+      const rerateCheckbox = $('#oc-eval-rerate');
+      const rerateAfterSave = rerateCheckbox ? Boolean(rerateCheckbox.checked) : null;
       if (score === null) { setStatus(`Введите оценку от ${formatScore(ratingMin())} до ${formatScore(ratingMax())}.`, true); return; }
       if (detailed.error) { setStatus(detailed.error, true); return; }
       if (evaluatorMode === 'blind') {
@@ -5421,12 +5519,15 @@
         } else {
           await persistCompleteRating(entry, { score, songScore, visualScore, customScores, comment });
         }
+        if (rerateAfterSave !== null) await setRerateEntry(entry.id, rerateAfterSave);
+        else if (['season-rerate', 'rerate'].includes(evaluatorMode)) await removeRerateEntry(entry.id);
         touchEntryCache(entry);
         markRatingDataChanged();
         if (evaluatorMode === 'daily') await markDailyEntryDone(entry.id);
         setStatus('Оценка сохранена ✓');
         render();
         renderSeasonViews();
+        if (activeTab === 'profile') renderProfile();
         seasonQueueIndex += 1;
         renderEvaluator();
       } catch (e) {
@@ -6247,6 +6348,45 @@
       }
     }
 
+    function renderProfileRerate(user) {
+      if (!profileReratePanel) return;
+      if (!user) {
+        profileReratePanel.innerHTML = '<div class="oc-empty">Выберите пользователя.</div>';
+        return;
+      }
+      const own = Boolean(myName && manualSameUser(user, myName));
+      if (!own) {
+        profileReratePanel.innerHTML = '<div class="oc-empty">Список переоценки виден только владельцу профиля.</div>';
+        return;
+      }
+      const rows = rerateIdsFor(user).map(id => entriesById.get(String(id))).filter(Boolean);
+      if (!rows.length) {
+        profileReratePanel.innerHTML = `<div class="oc-rerate-profile-head"><div><span>личный список</span><h2>На переоценку</h2><p>Отмечай уже оценённые треки флажком в разделе сезонов — они появятся здесь.</p></div></div><div class="oc-empty">Флажков пока нет.</div>`;
+        return;
+      }
+      const cards = rows.map((entry, index) => {
+        const publicScore = scoreFor(entry, user);
+        const personalScore = personalScoreFor(entry, user);
+        const usesPersonalScore = isPersonalScale() && personalScore !== null;
+        const visibleScore = usesPersonalScore ? personalScore : (publicScore !== null ? publicScore : personalScore);
+        const scoreText = visibleScore === null ? '—' : (usesPersonalScore ? formatFiveScore(visibleScore) : formatScore(visibleScore));
+        const seasonMeta = [entry.year || '', entry.season ? SEASON_LABEL[entry.season] : ''].filter(Boolean).join(' · ');
+        return renderUnifiedEntryCard(entry, {
+          rankLabel: index + 1,
+          scoreText,
+          scoreSub: usesPersonalScore ? 'личная шкала' : 'твоя оценка',
+          fields: ['performers'],
+          extraHtml: seasonMeta ? `<div class="oc-profile-meta">${escapeHtml(seasonMeta)}</div>` : '',
+          controlsHtml: `<button type="button" class="oc-secondary-btn" data-profile-rerate-one="${escapeHtml(entry.id)}">Переоценить</button><button type="button" class="oc-secondary-btn oc-rerate-remove-btn" data-profile-rerate-remove="${escapeHtml(entry.id)}">Снять флажок</button>`,
+          className: 'compact rerate-profile-card has-controls'
+        });
+      }).join('');
+      profileReratePanel.innerHTML = `<div class="oc-rerate-profile-head"><div><span>личный список</span><h2>На переоценку · ${rows.length}</h2><p>После сохранённой повторной оценки флажок снимается автоматически.</p></div><button type="button" class="oc-addbtn" data-profile-rerate-start>Начать переоценку</button></div><div class="oc-rerate-profile-list">${cards}</div>`;
+      profileReratePanel.querySelectorAll('[data-action="open-card"]').forEach(element => {
+        element.addEventListener('click', () => openCardModal(element.getAttribute('data-id')));
+      });
+    }
+
     function renderProfile() {
       populateProfileUsers();
       profileUser = profileUserSelect.value;
@@ -6340,6 +6480,7 @@
 
       populateArScoreOptions(profileUser, allRatingsFiltered);
       renderAllRatings(profileUser, allRatingsFiltered);
+      renderProfileRerate(profileUser);
       renderDailyProfilePanel();
       if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
         registerNameInput.value = myName || '';
@@ -7442,7 +7583,7 @@
     });
 
     seasonRateBtn.addEventListener('click', () => startSeasonRating(false));
-    if (seasonRateAllBtn) seasonRateAllBtn.addEventListener('click', () => startSeasonRating(true));
+    if (seasonRateAllBtn) seasonRateAllBtn.addEventListener('click', startSeasonRerating);
     if (seasonPrevBtn) seasonPrevBtn.addEventListener('click', goToPreviousSeason);
 
     document.querySelectorAll('[data-season-type]').forEach(btn => {
@@ -7460,7 +7601,7 @@
       });
     }
 
-    seasonListEl.addEventListener('click', (e) => {
+    seasonListEl.addEventListener('click', async (e) => {
       const open = e.target.closest('[data-action="open-card"]');
       if (open) { openCardModal(open.getAttribute('data-id')); return; }
       const basketBtn = e.target.closest('[data-basket-add]');
@@ -7469,9 +7610,50 @@
         toggleEntryInEventBasket(entry);
         return;
       }
+      const rerateBtn = e.target.closest('[data-season-rerate-toggle]');
+      if (rerateBtn) {
+        rerateBtn.disabled = true;
+        try {
+          const active = await toggleRerateEntry(rerateBtn.getAttribute('data-season-rerate-toggle'));
+          setStatus(active ? 'Добавлено на переоценку ✓' : 'Флажок переоценки снят ✓');
+          renderSeasonViews();
+          if (activeTab === 'profile') renderProfile();
+        } catch (error) {
+          console.error(error);
+          setStatus(error?.message || 'Не удалось изменить список переоценки.', true);
+          rerateBtn.disabled = false;
+        }
+        return;
+      }
       const btn = e.target.closest('[data-op-rate]');
       if (!btn) return;
       startOpeningRating(btn.getAttribute('data-op-rate'));
+    });
+
+    if (profileReratePanel) profileReratePanel.addEventListener('click', async event => {
+      const start = event.target.closest('[data-profile-rerate-start]');
+      if (start) {
+        startProfileRerating();
+        return;
+      }
+      const rate = event.target.closest('[data-profile-rerate-one]');
+      if (rate) {
+        startProfileRerating([rate.getAttribute('data-profile-rerate-one')]);
+        return;
+      }
+      const remove = event.target.closest('[data-profile-rerate-remove]');
+      if (!remove) return;
+      remove.disabled = true;
+      try {
+        await removeRerateEntry(remove.getAttribute('data-profile-rerate-remove'));
+        renderProfileRerate(profileUser);
+        renderSeasonViews();
+        setStatus('Флажок переоценки снят ✓');
+      } catch (error) {
+        console.error(error);
+        setStatus(error?.message || 'Не удалось снять флажок.', true);
+        remove.disabled = false;
+      }
     });
 
     evaluatorEl.addEventListener('click', async (e) => {

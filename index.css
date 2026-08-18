@@ -67,3 +67,69 @@ html body::before {
 	object-fit: cover;
 	object-position: center;
 }
+
+/* Seasonal re-rating queue */
+#opedchart-root .oc-rerate-flag.active {
+	border-color: rgba(255, 200, 87, .72);
+	background: rgba(255, 200, 87, .12);
+	color: #ffd166;
+}
+
+#opedchart-root .oc-eval-rerate-flag {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	margin: 12px 0 4px;
+	padding: 11px 13px;
+	border: 1px solid #3b3147;
+	border-radius: 11px;
+	background: rgba(255, 200, 87, .05);
+	cursor: pointer;
+}
+
+#opedchart-root .oc-eval-rerate-flag input {
+	width: 18px;
+	height: 18px;
+	accent-color: #ffc857;
+}
+
+#opedchart-root .oc-eval-rerate-flag span {
+	display: grid;
+	gap: 3px;
+}
+
+#opedchart-root .oc-eval-rerate-flag b { color: #f5f3fa; font-size: 12px; }
+#opedchart-root .oc-eval-rerate-flag small { color: #8f879b; font-size: 10px; }
+
+#opedchart-root .oc-profile-rerate {
+	display: grid;
+	gap: 14px;
+}
+
+#opedchart-root .oc-rerate-profile-head {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 18px;
+	padding: 18px;
+	border: 1px solid #352c40;
+	border-radius: 15px;
+	background: linear-gradient(145deg, rgba(255, 200, 87, .08), #110e18 45%);
+}
+
+#opedchart-root .oc-rerate-profile-head span {
+	color: #ffc857;
+	font: 800 9px 'Space Mono', monospace;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+
+#opedchart-root .oc-rerate-profile-head h2 { margin: 5px 0 6px; color: #f5f3fa; }
+#opedchart-root .oc-rerate-profile-head p { margin: 0; color: #91899d; font-size: 11px; }
+#opedchart-root .oc-rerate-profile-list { display: grid; gap: 10px; }
+#opedchart-root .oc-rerate-remove-btn { color: #a9a0b2; }
+
+@media (max-width: 700px) {
+	#opedchart-root .oc-rerate-profile-head { align-items: stretch; flex-direction: column; }
+	#opedchart-root .oc-rerate-profile-head .oc-addbtn { align-self: flex-start; }
+}

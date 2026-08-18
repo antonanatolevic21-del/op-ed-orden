@@ -179,7 +179,7 @@
 (() => {
   if (window.__OC_PROFILE_TABS_READY__) return;
 
-  const VIEWS = new Set(['overview', 'top100', 'ratings', 'comparison', 'daily', 'events']);
+  const VIEWS = new Set(['overview', 'top100', 'ratings', 'rerate', 'comparison', 'daily', 'events']);
   const STORAGE_KEY = 'oc-profile-subtab';
   let currentView = 'overview';
   let statsEnhanceScheduled = false;
@@ -210,6 +210,7 @@
         <button type="button" role="tab" data-profile-view="overview">Обзор</button>
         <button type="button" role="tab" data-profile-view="top100">Мой топ-100</button>
         <button type="button" role="tab" data-profile-view="ratings">Все оценки</button>
+        <button type="button" role="tab" data-profile-view="rerate">На переоценку</button>
         <button type="button" role="tab" data-profile-view="comparison">Сравнение вкусов</button>
         <button type="button" role="tab" data-profile-view="daily">Дейлики</button>
         <button type="button" role="tab" data-profile-view="events">Мои ивенты</button>`;
@@ -375,6 +376,7 @@
     setVisible('#oc-profile-stats', currentView === 'overview');
     setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns', currentView === 'top100');
     setVisible('.oc-allratings', currentView === 'ratings');
+    setVisible('#oc-profile-rerate', currentView === 'rerate');
     setVisible('#oc-profile-taste-comparison', currentView === 'comparison');
     setVisible('#oc-profile-top-duel', currentView === 'top100');
     setVisible('#oc-daily-panel', currentView === 'daily');
