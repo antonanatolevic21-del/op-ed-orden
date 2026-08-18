@@ -1100,12 +1100,49 @@
       return '';
     }
 
+    function getVkVideoEmbedUrl(url, autoplay = false) {
+      const host = url.hostname.replace(/^www\./, '').toLowerCase();
+      const domains = ['vk.com', 'vkvideo.ru', 'vk.ru'];
+      if (!domains.some(domain => host === domain || host.endsWith(`.${domain}`))) return '';
+
+      const buildEmbedUrl = (ownerId, videoId, hash = '', hd = '2') => {
+        if (!/^-?\d+$/.test(ownerId) || !/^\d+$/.test(videoId)) return '';
+        const embed = new URL('https://vk.com/video_ext.php');
+        embed.searchParams.set('oid', ownerId);
+        embed.searchParams.set('id', videoId);
+        if (hash && /^[a-z0-9_-]{1,200}$/i.test(hash)) embed.searchParams.set('hash', hash);
+        embed.searchParams.set('hd', /^\d+$/.test(hd) ? hd : '2');
+        if (autoplay) embed.searchParams.set('autoplay', '1');
+        return embed.href;
+      };
+
+      if (url.pathname.toLowerCase() === '/video_ext.php') {
+        return buildEmbedUrl(
+          url.searchParams.get('oid') || '',
+          url.searchParams.get('id') || '',
+          url.searchParams.get('hash') || '',
+          url.searchParams.get('hd') || '2'
+        );
+      }
+
+      const candidates = [url.pathname, url.searchParams.get('z') || '', url.hash || ''];
+      for (const candidate of candidates) {
+        let decoded = candidate;
+        try { decoded = decodeURIComponent(candidate); } catch (e) {}
+        const match = decoded.match(/(?:video|clip)(-?\d+)_(\d+)/i);
+        if (match) return buildEmbedUrl(match[1], match[2]);
+      }
+      return '';
+    }
+
     function getVideoEmbedUrl(value) {
       const href = safeUrl(value);
       if (!href || getDirectVideoType(href)) return '';
       try {
         const url = new URL(href);
         const host = url.hostname.replace(/^www\./, '').toLowerCase();
+        const vkEmbed = getVkVideoEmbedUrl(url, true);
+        if (vkEmbed) return vkEmbed;
         if (host === 'youtu.be') {
           const id = url.pathname.split('/').filter(Boolean)[0];
           return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
