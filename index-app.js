@@ -7043,6 +7043,7 @@
       const myComment = ratingCommentFor(entry, myName);
       const savedScore = myPublicScore !== null ? clampOpeningModalScore(myPublicScore) : 5;
       const hasAnyMyRating = myPublicScore !== null || mySongScore !== null || myVisualScore !== null;
+      const rerateActive = rerateIdsFor(myName).includes(String(entry.id));
       openingModal.classList.remove('hidden');
       openingModal.innerHTML = `<div class="oc-eval-modal oc-opening-detail-modal" data-entry-id="${escapeHtml(entry.id)}">
         <div class="oc-eval-top">
@@ -7076,6 +7077,7 @@
           </div>
           <div class="oc-opening-rate-actions">
             ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn" data-card-action="delete-rating">Удалить оценку</button>` : ''}
+            ${hasAnyMyRating ? `<button type="button" class="oc-secondary-btn oc-rerate-flag${rerateActive ? ' active' : ''}" data-card-action="toggle-rerate" aria-pressed="${rerateActive}">${rerateActive ? '⚑ На переоценке ✓' : '⚐ На переоценку'}</button>` : ''}
             <button type="button" class="oc-secondary-btn oc-top-candidate-btn${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? ' active' : ''}" data-card-action="toggle-candidate">${window.OC_APP_BRIDGE?.isTopCandidate?.(entry.id, entry.type) ? 'Кандидат в топ‑100 ✓' : 'Кандидат в топ‑100'}</button>
             <button type="button" class="oc-addbtn" data-card-action="save-rating">Сохранить оценку</button>
           </div>
@@ -7104,6 +7106,24 @@
       }
       const saveBtn = openingModal.querySelector('[data-card-action="save-rating"]');
       if (saveBtn) saveBtn.addEventListener('click', () => saveCardModalRating(entry.id));
+      const rerateBtn = openingModal.querySelector('[data-card-action="toggle-rerate"]');
+      if (rerateBtn) rerateBtn.addEventListener('click', async () => {
+        rerateBtn.disabled = true;
+        try {
+          const active = await toggleRerateEntry(entry.id);
+          rerateBtn.classList.toggle('active', Boolean(active));
+          rerateBtn.setAttribute('aria-pressed', String(Boolean(active)));
+          rerateBtn.textContent = active ? '⚑ На переоценке ✓' : '⚐ На переоценку';
+          renderSeasonViews();
+          if (activeTab === 'profile') renderProfile();
+          setStatus(active ? 'Добавлено на переоценку ✓' : 'Флажок переоценки снят ✓');
+        } catch (error) {
+          console.error(error);
+          setStatus(error?.message || 'Не удалось изменить список переоценки.', true);
+        } finally {
+          rerateBtn.disabled = false;
+        }
+      });
       const candidateBtn = openingModal.querySelector('[data-card-action="toggle-candidate"]');
       if (candidateBtn) candidateBtn.addEventListener('click', async () => {
         candidateBtn.disabled = true;
