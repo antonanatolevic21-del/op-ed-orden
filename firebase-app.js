@@ -2,8 +2,7 @@
     import {
       getFirestore,
       initializeFirestore,
-      persistentLocalCache,
-      persistentMultipleTabManager,
+      memoryLocalCache,
       collection,
       doc,
       addDoc,
@@ -34,9 +33,10 @@
     let db;
     try {
       db = initializeFirestore(app, {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager()
-        })
+        // Каталог уже имеет отдельный компактный IndexedDB-снимок. Второй
+        // постоянный кэш Firestore только дублировал его и мог выбросить
+        // QuotaExceededError на устройствах с малым свободным хранилищем.
+        localCache: memoryLocalCache()
       });
     } catch (error) {
       // Firestore мог быть инициализирован раньше другим модулем страницы.
@@ -47,6 +47,20 @@
     const auth = getAuth(app);
     const ACCOUNT_PROFILE_CACHE_KEY = 'op-ed-auth-profile-v1';
     let initPromise = null;
+
+    function safeStorageSet(storage, key, value) {
+      try {
+        storage.setItem(key, value);
+        return true;
+      } catch (error) {
+        const quota = error?.name === 'QuotaExceededError'
+          || error?.code === 22
+          || String(error?.message || '').toLowerCase().includes('quota');
+        if (!quota) throw error;
+        console.warn(`Storage quota reached for ${key}; continuing without persistent cache.`);
+        return false;
+      }
+    }
 
     function normalizeNickname(nickname) {
       return String(nickname || "")
@@ -87,8 +101,8 @@
     function cacheAccountProfile(user, profile, remember) {
       if (!user?.uid || !profile) return;
       const payload = JSON.stringify({ uid: user.uid, profile });
-      sessionStorage.setItem(ACCOUNT_PROFILE_CACHE_KEY, payload);
-      if (remember) localStorage.setItem(ACCOUNT_PROFILE_CACHE_KEY, payload);
+      safeStorageSet(sessionStorage, ACCOUNT_PROFILE_CACHE_KEY, payload);
+      if (remember) safeStorageSet(localStorage, ACCOUNT_PROFILE_CACHE_KEY, payload);
       else localStorage.removeItem(ACCOUNT_PROFILE_CACHE_KEY);
     }
 
@@ -318,6 +332,7 @@
       let deliveredCachedRows = false;
       let cachedRowsById = new Map();
       let unsubscribe = () => {};
+      const roomInvite = new URL(window.location.href).searchParams.has('seasonRoom');
       const startLiveWatcher = () => {
         if (!active) return;
         unsubscribe = onSnapshot(collection(db, "openings"), snapshot => {
@@ -343,8 +358,12 @@
         if (!active || !snapshot?.rows?.length) return;
         deliveredCachedRows = true;
         cachedRowsById = new Map(snapshot.rows.map(row => [String(row.id || ''), row]));
-        callback(snapshot.rows, { cached: true, stale: Boolean(snapshot.stale) });
-      }).catch(error => console.warn("catalog cache read failed", error)).finally(startLiveWatcher);
+        callback(snapshot.rows, { cached: true, stale: Boolean(snapshot.stale), inviteOptimized: roomInvite });
+      }).catch(error => console.warn("catalog cache read failed", error)).finally(() => {
+        // Гостю по ссылке комнаты достаточно ежедневного статического снимка.
+        // Не читаем всю коллекцию openings ради одного приглашения.
+        if (!roomInvite || !deliveredCachedRows) startLiveWatcher();
+      });
 
       return () => {
         active = false;

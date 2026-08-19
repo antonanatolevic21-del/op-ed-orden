@@ -65,8 +65,16 @@
 
   const FALLBACK_CACHE_KEY = 'oc-events-image-fallback-map-v1';
   const MAX_FALLBACK_CACHE_ROWS = 180;
+  const memoryStorage = new Map();
+  const originalGetItem = Storage.prototype.getItem;
   const originalSetItem = Storage.prototype.setItem;
   const originalRemoveItem = Storage.prototype.removeItem;
+
+  function isQuotaError(error) {
+    return error?.name === 'QuotaExceededError'
+      || error?.code === 22
+      || String(error?.message || '').toLowerCase().includes('quota');
+  }
 
   function compactFallbackCache(value) {
     try {
@@ -96,23 +104,45 @@
 
   compactStoredFallbackCache();
 
+  Storage.prototype.getItem = function(key) {
+    if (this === localStorage && memoryStorage.has(String(key))) {
+      return memoryStorage.get(String(key));
+    }
+    return originalGetItem.call(this, key);
+  };
+
   Storage.prototype.setItem = function(key, value) {
     const isLocalStorage = this === localStorage;
+    const storageKey = String(key);
     const nextValue = isLocalStorage && String(key) === FALLBACK_CACHE_KEY
       ? compactFallbackCache(value)
-      : value;
+      : String(value);
 
     try {
-      return originalSetItem.call(this, key, nextValue);
+      const result = originalSetItem.call(this, storageKey, nextValue);
+      if (isLocalStorage) memoryStorage.delete(storageKey);
+      return result;
     } catch (error) {
-      const quotaExceeded = error?.name === 'QuotaExceededError'
-        || error?.code === 22
-        || String(error?.message || '').toLowerCase().includes('quota');
-      if (!isLocalStorage || !quotaExceeded) throw error;
+      if (!isLocalStorage || !isQuotaError(error)) throw error;
 
       clearFallbackCache();
-      if (String(key) === FALLBACK_CACHE_KEY) return;
-      return originalSetItem.call(this, key, nextValue);
+      if (storageKey === FALLBACK_CACHE_KEY) return;
+      try {
+        const result = originalSetItem.call(this, storageKey, nextValue);
+        memoryStorage.delete(storageKey);
+        return result;
+      } catch (retryError) {
+        if (!isQuotaError(retryError)) throw retryError;
+        // Не ломаем вход и открытие приглашения из-за переполненного локального кэша.
+        // Значение проживёт до перезагрузки страницы, а Firebase продолжит работать.
+        memoryStorage.set(storageKey, nextValue);
+        window.dispatchEvent(new CustomEvent('oped:storage-quota', { detail: { key: storageKey } }));
+      }
     }
+  };
+
+  Storage.prototype.removeItem = function(key) {
+    if (this === localStorage) memoryStorage.delete(String(key));
+    return originalRemoveItem.call(this, key);
   };
 })();

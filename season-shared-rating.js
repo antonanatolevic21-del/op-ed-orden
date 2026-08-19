@@ -41,6 +41,21 @@
   const normalizeName = value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/[^a-zа-я0-9]+/gi, '');
   const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 
+  function roomErrorMessage(error, fallback = 'Не удалось открыть комнату.') {
+    const code = clean(error?.code).toLowerCase();
+    const name = clean(error?.name).toLowerCase();
+    const message = clean(error?.message);
+    const lower = message.toLowerCase();
+    if (code.includes('resource-exhausted') || lower.includes('quota exceeded')) {
+      return 'Лимит базы данных временно исчерпан. Попробуй открыть приглашение немного позже.';
+    }
+    if (name.includes('quotaexceeded') || lower.includes('quotaexceeded')) {
+      return 'Браузеру не хватило места для локального кэша. Обнови страницу — комната откроется без постоянного кэша.';
+    }
+    if (code.includes('permission-denied')) return 'Нет доступа к этой комнате. Проверь аккаунт и ссылку приглашения.';
+    return message || fallback;
+  }
+
   function itemTerms(type) {
     return String(type || '').toUpperCase() === 'ED'
       ? { one: 'эндинг', genitive: 'эндинга', plural: 'эндингов' }
@@ -278,7 +293,7 @@
     if (!user) return;
     if (!context.year || !context.season || !context.tracks.length) {
       const code = prompt('Сезон не выбран. Введи код комнаты или сначала выбери сезон, чтобы создать свою:');
-      if (code) void joinRoom(code).catch(error => alert(error?.message || 'Не удалось войти в комнату.'));
+      if (code) void joinRoom(code).catch(error => alert(roomErrorMessage(error, 'Не удалось войти в комнату.')));
       return;
     }
     document.querySelector('.oc-shared-setup')?.remove();
@@ -326,7 +341,7 @@
   function showSetupError(modal, error) {
     console.error(error);
     const box = modal.querySelector('.oc-shared-error');
-    if (box) box.textContent = error?.message || 'Не удалось открыть комнату.';
+    if (box) box.textContent = roomErrorMessage(error);
   }
 
   function initialPlayback(trackId, api) {
@@ -1149,7 +1164,7 @@
     state.autoJoinTried = true;
     void joinRoom(code).catch(error => {
       console.error(error);
-      alert(error?.message || 'Не удалось войти в комнату.');
+      alert(roomErrorMessage(error, 'Не удалось войти в комнату.'));
       closeRoomLocal();
     });
   }

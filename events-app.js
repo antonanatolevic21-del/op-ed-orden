@@ -6,6 +6,8 @@
       setDoc,
       deleteDoc,
       onSnapshot,
+      query,
+      where,
       arrayUnion,
       arrayRemove,
       serverTimestamp
@@ -41,6 +43,35 @@
     const EVENT_UI_PREFS_KEY = 'aboba-events-ui-preferences-v1';
     const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
     const compareNatural = (left, right) => NATURAL_COLLATOR.compare(String(left ?? ''), String(right ?? ''));
+
+    function parseEventRoomInvite() {
+      const match = String(location.hash || '').match(/^#event-room=([^:]+):([^:]+):(.+)$/);
+      if (!match) return null;
+      try {
+        const mode = decodeURIComponent(match[1]);
+        const id = decodeURIComponent(match[2]);
+        const code = decodeURIComponent(match[3]);
+        if (!['bestworst', 'codenames', 'whoami'].includes(mode) || !id || !code) return null;
+        return { mode, id, code };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    const INITIAL_EVENT_ROOM_INVITE = parseEventRoomInvite();
+
+    function eventLoadErrorMessage(error, fallback = 'Не удалось загрузить комнату.') {
+      const code = String(error?.code || '').toLowerCase();
+      const message = String(error?.message || '');
+      const lower = message.toLowerCase();
+      if (code.includes('resource-exhausted') || lower.includes('quota exceeded')) {
+        return 'Лимит базы данных временно исчерпан. Попробуй открыть приглашение немного позже.';
+      }
+      if (String(error?.name || '').toLowerCase().includes('quotaexceeded') || lower.includes('quotaexceeded')) {
+        return 'Локальный кэш браузера переполнен. Перезагрузи страницу — приглашение откроется без постоянного кэша.';
+      }
+      return message || fallback;
+    }
 
     function readEventUiPreferences() {
       try {
@@ -464,6 +495,45 @@
     function eventRoomRef(mode, id = eventRoomId(mode)) {
       if (!id) throw new Error('Сначала выбери лобби.');
       return doc(db, eventRoomCollection(mode), id);
+    }
+
+    let inviteSubmissionUnsubscribe = null;
+    let inviteSubmissionGameId = '';
+
+    function watchInvitedBestWorstSubmissions(room) {
+      const gameId = String(room?.gameId || '');
+      if (!gameId || inviteSubmissionGameId === gameId) return;
+      inviteSubmissionUnsubscribe?.();
+      inviteSubmissionGameId = gameId;
+      inviteSubmissionUnsubscribe = onSnapshot(
+        query(collection(db, BW_SUBMISSION_COLLECTION), where('gameId', '==', gameId)),
+        snapshot => {
+          bestWorstSubmissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          void bwMaybeAutoReveal();
+          scheduleFirebaseRender('other');
+        },
+        error => {
+          console.error('invited bestWorstSubmissions snapshot error', error);
+          bestWorstStatus = eventLoadErrorMessage(error, 'Не удалось прочитать ответы комнаты.');
+          scheduleFirebaseRender('other');
+        }
+      );
+    }
+
+    function subscribeInitialEventRoomInvite(invite) {
+      onSnapshot(eventRoomRef(invite.mode, invite.id), snapshot => {
+        if (!snapshot.exists()) {
+          appEl.innerHTML = '<div class="ev-empty">Комната из приглашения не найдена или уже удалена.</div>';
+          return;
+        }
+        const room = { id: snapshot.id, ...snapshot.data() };
+        eventRoomCache[invite.mode].set(invite.id, room);
+        if (invite.mode === 'bestworst') watchInvitedBestWorstSubmissions(room);
+        refreshEventRoomList(invite.mode);
+      }, error => {
+        console.error('invited event room snapshot error', error);
+        appEl.innerHTML = `<div class="ev-empty">${escapeHtml(eventLoadErrorMessage(error))}</div>`;
+      });
     }
 
     function currentEventRoom(mode) {
@@ -7987,7 +8057,7 @@
           nameError.textContent = error?.code === 'auth/invalid-credential' ? 'Неверный личный пароль.' : ('Не удалось войти: ' + (error?.message || error));
           return;
         }
-      } else if (!profile && !knownEventAccount(name) && normalizeNickname(name) !== normalizeNickname(myName)) {
+      } else if (!INITIAL_EVENT_ROOM_INVITE && !profile && !knownEventAccount(name) && normalizeNickname(name) !== normalizeNickname(myName)) {
         nameError.textContent = 'Такого аккаунта нет. Сначала зарегистрируй его на странице профиля основного сайта.';
         return;
       }
@@ -7999,6 +8069,33 @@
       updateAccessUi();
       render();
       maybeShowCompletionNotice();
+    }
+
+    function applyOpeningRows(rows, source = 'openings') {
+      const firstOpeningLoad = openings.length === 0;
+      const nextOpenings = (Array.isArray(rows) ? rows : []).map(row => normalizeOpening(row));
+      const previousSignatures = new Map(openings.map(opening => [String(opening.id), openingGameSignature(opening)]));
+      const gameDataChanged = nextOpenings.length !== openings.length || nextOpenings.some(opening =>
+        previousSignatures.get(String(opening.id)) !== openingGameSignature(opening)
+      );
+      openings = nextOpenings;
+      openingsById = new Map(openings.map(opening => [String(opening.id), opening]));
+      if (gameDataChanged) scheduleFirebaseRender(firstOpeningLoad ? `${source}-initial` : source);
+    }
+
+    async function loadInviteCatalogSnapshot() {
+      try {
+        const response = await fetch('./catalog.snapshot.json', { cache: 'force-cache' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const snapshot = await response.json();
+        const rows = Array.isArray(snapshot) ? snapshot : snapshot.rows;
+        if (!Array.isArray(rows) || !rows.length) throw new Error('Пустой снимок каталога');
+        applyOpeningRows(rows, 'invite-catalog');
+      } catch (error) {
+        console.warn('Invite catalog snapshot failed', error);
+        // Сама комната всё равно может открыться: неизвестные названия будут
+        // показаны заглушками, без дорогостоящего чтения всей коллекции.
+      }
     }
 
     async function init() {
@@ -8015,6 +8112,10 @@
       } catch (e) {
         console.error('anonymous auth failed', e);
       }
+      if (INITIAL_EVENT_ROOM_INVITE) {
+        await loadInviteCatalogSnapshot();
+        subscribeInitialEventRoomInvite(INITIAL_EVENT_ROOM_INVITE);
+      } else {
       onSnapshot(collection(db, 'openings'), snapshot => {
         const firstOpeningLoad = openings.length === 0;
         const nextOpenings = snapshot.docs.map(d => normalizeOpening({ id: d.id, ...d.data() }));
@@ -8144,6 +8245,7 @@
           eventNotifications = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
           maybeShowCompletionNotice();
         }, error => console.error('eventNotifications snapshot error', error));
+      }
       }
       if (LOCAL_EVENTS_MODE) {
         window.addEventListener('storage', (e) => {

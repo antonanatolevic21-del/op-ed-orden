@@ -27,6 +27,17 @@ function requestedMode() {
   return String(params.get('mode') || '').trim();
 }
 
+function requestedInviteMode() {
+  const match = String(location.hash || '').match(/^#event-room=([^:]+):/);
+  if (!match) return '';
+  try {
+    const mode = decodeURIComponent(match[1]);
+    return ['bestworst', 'codenames', 'whoami'].includes(mode) ? mode : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 function isFullRequest() {
   return new URLSearchParams(location.search).get('full') === '1';
 }
@@ -154,7 +165,7 @@ async function clickRequestedMode(mode) {
 async function loadFull(mode = '', profile = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260818-vk-video1');
+  await import('./events-app.js?v=20260819-invite-quota1');
   if (mode) void clickRequestedMode(mode);
 
   document.addEventListener('click', event => {
@@ -171,7 +182,16 @@ async function loadFull(mode = '', profile = null) {
 async function start() {
   if (typeof auth.authStateReady === 'function') await auth.authStateReady();
   const user = auth.currentUser;
-  const mode = requestedMode();
+  const inviteMode = requestedInviteMode();
+  const mode = inviteMode || requestedMode();
+
+  // Ссылка-приглашение всегда должна открывать полную игровую комнату, а не
+  // облегчённый экран участника сезонного ивента.
+  if (inviteMode) {
+    prepareRegisteredFullAccess(user);
+    await loadFull(inviteMode);
+    return;
+  }
 
   if (isFullRequest() || (mode && mode !== 'rating')) {
     prepareRegisteredFullAccess(user);
