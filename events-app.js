@@ -445,25 +445,25 @@
       await setDoc(eventRoomRegistryRef(mode), { roomIds:arrayRemove(id), registryUpdatedAt:serverTimestamp() }, { merge:true });
     }
 
-    function refreshEventRoomList(mode) {
+    function refreshEventRoomList(mode, options = {}) {
       const rows = [...eventRoomCache[mode].values()];
       if (mode === 'bestworst') {
         bestWorstRooms = rows;
         bestWorstRoom = rows.find(room => room.id === eventRoomId(mode)) || null;
-        restoreEventRoomPresence(mode, bestWorstRoom);
+        if (!options.skipPresence) restoreEventRoomPresence(mode, bestWorstRoom);
         if (bestWorstRoom?.status === 'lobby' && bestWorstRoom.settings) Object.assign(bestWorstFilters, normalizeBestWorstSettings(bestWorstRoom.settings));
         if (!bestWorstRoom || bestWorstRoom.status !== 'playing') bestWorstDraftKey = '';
         void bwMaybeAutoReveal();
       } else if (mode === 'codenames') {
         codenamesRooms = rows;
         codenamesRoom = rows.find(room => room.id === eventRoomId(mode)) || null;
-        restoreEventRoomPresence(mode, codenamesRoom);
+        if (!options.skipPresence) restoreEventRoomPresence(mode, codenamesRoom);
       } else {
         whoAmIRooms = rows;
         whoAmIRoom = rows.find(room => room.id === eventRoomId(mode)) || null;
-        restoreEventRoomPresence(mode, whoAmIRoom);
+        if (!options.skipPresence) restoreEventRoomPresence(mode, whoAmIRoom);
       }
-      void consumeEventRoomInvite();
+      if (!options.skipInvite) void consumeEventRoomInvite();
       if (activeMode === mode) scheduleFirebaseRender(mode === 'whoami' ? 'whoami' : 'other');
     }
 
@@ -499,6 +499,8 @@
 
     let inviteSubmissionUnsubscribe = null;
     let inviteSubmissionGameId = '';
+    let inviteAdmissionState = 'pending';
+    let inviteLoginPending = false;
 
     function watchInvitedBestWorstSubmissions(room) {
       const gameId = String(room?.gameId || '');
@@ -520,6 +522,46 @@
       );
     }
 
+    function hasPersonalEventLogin() {
+      return Boolean(auth.currentUser && !auth.currentUser.isAnonymous);
+    }
+
+    async function admitInitialEventRoomInvite(invite, room) {
+      if (inviteAdmissionState !== 'pending') return;
+      inviteAdmissionState = 'checking';
+      if (room.isPrivate && room.accessCodeHash !== await eventRoomCodeHash(invite.code, room.accessCodeSalt || '')) {
+        inviteAdmissionState = 'rejected';
+        alert('Ссылка на закрытую комнату содержит неверный код.');
+        return;
+      }
+
+      unlockedEventRooms.add(invite.id);
+      saveUnlockedEventRooms();
+      selectedEventRooms[invite.mode] = invite.id;
+      activeMode = invite.mode;
+      eventRoomInviteHandled = true;
+      refreshEventRoomList(invite.mode, { skipPresence: true, skipInvite: true });
+      render();
+
+      // Сначала показываем загруженную комнату, затем решаем, можно ли в ней остаться.
+      await new Promise(resolve => requestAnimationFrame(() => window.setTimeout(resolve, 250)));
+      if (!hasPersonalEventLogin()) {
+        inviteAdmissionState = 'waiting-login';
+        inviteLoginPending = true;
+        selectedEventRooms[invite.mode] = '';
+        saveEventRoomSelection();
+        refreshEventRoomList(invite.mode, { skipPresence: true, skipInvite: true });
+        render();
+        showNameModal('Комната загружена. Войди в личный аккаунт, чтобы остаться в ней.');
+        return;
+      }
+
+      inviteAdmissionState = 'active';
+      eventRoomInviteHandled = false;
+      if (invite.mode === 'bestworst') watchInvitedBestWorstSubmissions(room);
+      refreshEventRoomList(invite.mode);
+    }
+
     function subscribeInitialEventRoomInvite(invite) {
       onSnapshot(eventRoomRef(invite.mode, invite.id), snapshot => {
         if (!snapshot.exists()) {
@@ -528,8 +570,11 @@
         }
         const room = { id: snapshot.id, ...snapshot.data() };
         eventRoomCache[invite.mode].set(invite.id, room);
-        if (invite.mode === 'bestworst') watchInvitedBestWorstSubmissions(room);
-        refreshEventRoomList(invite.mode);
+        if (inviteAdmissionState === 'pending') void admitInitialEventRoomInvite(invite, room);
+        else if (inviteAdmissionState === 'active') {
+          if (invite.mode === 'bestworst') watchInvitedBestWorstSubmissions(room);
+          refreshEventRoomList(invite.mode);
+        }
       }, error => {
         console.error('invited event room snapshot error', error);
         appEl.innerHTML = `<div class="ev-empty">${escapeHtml(eventLoadErrorMessage(error))}</div>`;
@@ -4720,7 +4765,8 @@
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
       document.querySelectorAll('.ev-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.stage === activeStage));
       stageTabs?.classList.toggle('hidden', !['rating', 'endingrating'].includes(activeMode));
-      if (!hasAccess()) {
+      const invitePreview = Boolean(INITIAL_EVENT_ROOM_INVITE && inviteAdmissionState === 'checking');
+      if (!hasAccess() && !invitePreview) {
         appEl.innerHTML = '<div class="ev-empty">Введите пароль, чтобы открыть страницу ивентов.</div>';
         return;
       }
@@ -8018,11 +8064,11 @@
       maybeShowCompletionNotice();
     }
 
-    function showNameModal() {
+    function showNameModal(message = '') {
       modalName.value = myName || '';
       if (modalAccountEmail) modalAccountEmail.value = '';
       if (modalAccountPass) modalAccountPass.value = '';
-      nameError.textContent = '';
+      nameError.textContent = message;
       nameModal.classList.remove('hidden');
       setTimeout(() => modalName.focus(), 50);
     }
@@ -8038,7 +8084,29 @@
         return;
       }
       const profile = protectedProfile(name);
-      if (profile && auth.currentUser?.uid !== profile.authUid) {
+      if (inviteLoginPending && !hasPersonalEventLogin()) {
+        const email = String(modalAccountEmail?.value || '').trim();
+        const password = String(modalAccountPass?.value || '');
+        if (!email || !password) {
+          nameError.textContent = 'Для комнаты нужны email и личный пароль.';
+          return;
+        }
+        try {
+          await setPersistence(auth, rememberAccountInput?.checked ? browserLocalPersistence : browserSessionPersistence);
+          const credential = await signInWithEmailAndPassword(auth, email.toLowerCase(), password);
+          const accountName = String(credential.user.displayName || name).trim();
+          myName = accountName;
+          accessLevel = isAdminUid(credential.user.uid) ? 'admin' : 'user';
+          guestSlot = 0;
+          adminUnlocked = accessLevel === 'admin';
+          localStorage.setItem(ACCESS_KEY, accessLevel);
+          localStorage.setItem(GUEST_SLOT_KEY, '0');
+          localStorage.setItem(ADMIN_UNLOCKED_KEY, adminUnlocked ? '1' : '0');
+        } catch (error) {
+          nameError.textContent = error?.code === 'auth/invalid-credential' ? 'Неверный email или личный пароль.' : ('Не удалось войти: ' + (error?.message || error));
+          return;
+        }
+      } else if (profile && auth.currentUser?.uid !== profile.authUid) {
         if (!PERSONAL_ACCOUNT_AUTH_ENABLED) {
           nameError.textContent = PERSONAL_ACCOUNT_DISABLED_MESSAGE;
           return;
@@ -8061,12 +8129,17 @@
         nameError.textContent = 'Такого аккаунта нет. Сначала зарегистрируй его на странице профиля основного сайта.';
         return;
       }
-      myName = name;
+      myName = inviteLoginPending ? (myName || name) : name;
       localStorage.setItem(NAME_KEY, myName);
       nameModal.classList.add('hidden');
       if (modalAccountEmail) modalAccountEmail.value = '';
       if (modalAccountPass) modalAccountPass.value = '';
       updateAccessUi();
+      if (inviteLoginPending && hasPersonalEventLogin()) {
+        inviteLoginPending = false;
+        location.reload();
+        return;
+      }
       render();
       maybeShowCompletionNotice();
     }
@@ -8262,7 +8335,7 @@
           }
         });
       }, 10 * 60 * 1000);
-      if (!hasAccess()) showAuthModal('Введите пароль для входа.');
+      if (!hasAccess() && !INITIAL_EVENT_ROOM_INVITE) showAuthModal('Введите пароль для входа.');
       else if (isAdmin() && !myName) showNameModal();
       render();
     }

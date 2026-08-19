@@ -342,6 +342,7 @@
 
     window.OC_APP_BRIDGE = {
       snapshot: appDataSnapshot,
+      requestLogin: message => showAuthModal(message || 'Войди в личный аккаунт.'),
       openTrack: id => openCardModal(String(id || '')),
       rateTrack: id => startOpeningRating(String(id || '')),
       top100Meta(type) {

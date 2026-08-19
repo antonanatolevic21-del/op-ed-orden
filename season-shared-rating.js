@@ -33,6 +33,8 @@
     presenceBusy: false,
     takeoverBusy: false,
     leaving: false,
+    previewOnly: false,
+    awaitingLogin: false,
     youtubePromise: null
   };
 
@@ -106,22 +108,26 @@
     };
   }
 
-  async function firebase() {
-    if (state.firebase) return state.firebase;
-    const [appApi, authApi, firestore] = await Promise.all([
-      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`),
-      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-auth.js`),
-      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`)
-    ]);
-    for (let attempt = 0; attempt < 120 && !appApi.getApps().length; attempt += 1) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+  async function firebase(options = {}) {
+    if (!state.firebase) {
+      const [appApi, authApi, firestore] = await Promise.all([
+        import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`),
+        import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-auth.js`),
+        import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`)
+      ]);
+      for (let attempt = 0; attempt < 120 && !appApi.getApps().length; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (!appApi.getApps().length) throw new Error('Firebase ещё не готов.');
+      const app = appApi.getApp();
+      const auth = authApi.getAuth(app);
+      if (typeof auth.authStateReady === 'function') await auth.authStateReady();
+      if (!auth.currentUser) await authApi.signInAnonymously(auth);
+      state.firebase = { db: firestore.getFirestore(app), auth, ...firestore };
     }
-    if (!appApi.getApps().length) throw new Error('Firebase ещё не готов.');
-    const app = appApi.getApp();
-    const auth = authApi.getAuth(app);
-    if (typeof auth.authStateReady === 'function') await auth.authStateReady();
-    if (!auth.currentUser || auth.currentUser.isAnonymous) throw new Error('Нужен зарегистрированный аккаунт.');
-    state.firebase = { db: firestore.getFirestore(app), auth, ...firestore };
+    if (!options.allowAnonymous && (!state.firebase.auth.currentUser || state.firebase.auth.currentUser.isAnonymous)) {
+      throw new Error('Нужен зарегистрированный аккаунт.');
+    }
     return state.firebase;
   }
 
@@ -381,11 +387,38 @@
   }
 
   async function joinRoom(code) {
-    const user = requireUser();
-    if (!user) return;
-    const api = await firebase();
+    const api = await firebase({ allowAnonymous: true });
     const id = roomDocId(code);
     const reference = api.doc(api.db, ROOM_COLLECTION, id);
+    const previewSnapshot = await api.getDoc(reference);
+    if (!previewSnapshot.exists()) throw new Error('Комната с таким кодом не найдена.');
+    const previewRoom = previewSnapshot.data();
+    if (previewRoom.roomType !== 'season-rating') throw new Error('Этот код принадлежит другой комнате.');
+
+    state.roomId = id;
+    state.room = { id: previewSnapshot.id, ...previewRoom };
+    state.previewOnly = true;
+    updateRoomUrl(state.room.code);
+    renderRoom();
+    preloadUpcoming();
+
+    // Даём браузеру действительно показать комнату до проверки авторизации.
+    await new Promise(resolve => requestAnimationFrame(() => window.setTimeout(resolve, 250)));
+    const bridgeUser = currentUser();
+    const authUser = api.auth.currentUser;
+    const user = {
+      uid: bridgeUser.uid || clean(authUser?.uid),
+      name: bridgeUser.name || clean(authUser?.displayName),
+      avatar: bridgeUser.avatar
+    };
+    if (!user.uid || !user.name || !authUser || authUser.isAnonymous) {
+      state.awaitingLogin = true;
+      closeRoomLocal({ preserveInvite: true });
+      window.OC_APP_BRIDGE?.requestLogin?.('Комната загружена. Войди в личный аккаунт, чтобы остаться в ней.');
+      return false;
+    }
+
+    state.previewOnly = false;
     await api.runTransaction(api.db, async transaction => {
       const snapshot = await transaction.get(reference);
       if (!snapshot.exists()) throw new Error('Комната с таким кодом не найдена.');
@@ -405,6 +438,7 @@
       });
     });
     await watchRoom(id);
+    return true;
   }
 
   async function watchRoom(id) {
@@ -461,7 +495,7 @@
     state.pendingPlayback = null;
   }
 
-  function closeRoomLocal() {
+  function closeRoomLocal(options = {}) {
     stopRoomSubscriptions();
     destroyPlayer();
     cleanVideo(state.preloader);
@@ -469,10 +503,10 @@
     state.preloaderId = '';
     if (state.presenceTimer) window.clearInterval(state.presenceTimer);
     state.presenceTimer = 0;
-    Object.assign(state, { roomId: '', room: null, submissions: [], renderKey: '', dynamicKey: '', leaving: false });
+    Object.assign(state, { roomId: '', room: null, submissions: [], renderKey: '', dynamicKey: '', leaving: false, previewOnly: false });
     document.querySelector('.oc-shared-room')?.remove();
     const url = new URL(location.href);
-    url.searchParams.delete('seasonRoom');
+    if (!options.preserveInvite) url.searchParams.delete('seasonRoom');
     history.replaceState(history.state, '', url);
   }
 
@@ -1159,6 +1193,7 @@
 
   function maybeAutoJoin() {
     if (state.autoJoinTried) return;
+    if (state.awaitingLogin && !currentUser().uid) return;
     const code = new URL(location.href).searchParams.get('seasonRoom');
     if (!code) return;
     state.autoJoinTried = true;
@@ -1174,6 +1209,10 @@
     new MutationObserver(mountButton).observe(document.body, { childList: true, subtree: true });
     window.addEventListener('oped:app-data-updated', () => {
       if (state.room) renderRoom();
+      if (state.awaitingLogin && currentUser().uid) {
+        state.awaitingLogin = false;
+        state.autoJoinTried = false;
+      }
       maybeAutoJoin();
     });
     window.addEventListener('oped:route-ready', maybeAutoJoin);
