@@ -344,6 +344,7 @@
 
     window.OC_APP_BRIDGE = {
       snapshot: appDataSnapshot,
+      refreshRouteSubscriptions: () => syncRouteDataSubscriptions(activeTab),
       requestLogin: message => showAuthModal(message || 'Войди в личный аккаунт.'),
       openTrack: id => openCardModal(String(id || '')),
       rateTrack: id => startOpeningRating(String(id || '')),
@@ -2886,6 +2887,8 @@
     }
 
     function preferredRatingsScope(tab = activeTab) {
+      const profileTop100 = tab === 'profile' && profilePanel?.dataset.profileView === 'top100';
+      if (profileTop100) return myName || authenticatedUid ? 'user' : 'none';
       if (!catalogHasRatingAggregates()) return 'all';
       if (tab === 'profile' || tab === 'stats' || tab === 'discovery') return 'all';
       if (myName || authenticatedUid) return 'user';
