@@ -6460,13 +6460,14 @@
         return list.slice(0, 100);
       }
 
+      let topFilteredById = null;
       function topForManual(type) {
         const ownProfile = !!myName && manualSameUser(profileUser, myName);
         const order = manualOrderFor(profileUser, type, manualEditMode && ownProfile);
-        const entriesById = new Map(topFiltered.map(entry => [String(entry.id), entry]));
+        topFilteredById ||= new Map(topFiltered.map(entry => [String(entry.id), entry]));
         return order
           .map(id => {
-            const entry = entriesById.get(String(id));
+            const entry = topFilteredById.get(String(id));
             const e = entry?.type === type ? entry : null;
             return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
           })
