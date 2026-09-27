@@ -53,12 +53,21 @@
     return { db: firestore.getFirestore(getApp()), ...firestore };
   }
 
+  function mergeLiveCatalog(rows = window.OC_APP_BRIDGE?.snapshot?.()?.entries) {
+    if (!Array.isArray(rows)) return;
+    rows.forEach(row => {
+      if (row?.id !== undefined && row?.id !== null) state.catalog.set(String(row.id), row);
+    });
+  }
+
   async function loadCatalog() {
-    if (state.catalog.size) return;
-    try {
-      const rows = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
-      state.catalog = new Map((rows || []).map(row => [String(row.id), row]));
-    } catch (error) { console.warn('Top-100 editor catalog load failed', error); }
+    if (!state.catalog.size) {
+      try {
+        const rows = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
+        state.catalog = new Map((rows || []).map(row => [String(row.id), row]));
+      } catch (error) { console.warn('Top-100 editor catalog load failed', error); }
+    }
+    mergeLiveCatalog();
   }
 
   async function loadUserScores(user, tools) {
@@ -598,14 +607,19 @@
     });
     const edit = editButton(); if (edit) new MutationObserver(() => setTimeout(handleEditState, 0)).observe(edit, { attributes:true, attributeFilter:['class'] });
     const panel = profilePanel();
-    if (panel) new MutationObserver(() => { if (isTopView()) void loadSaved(viewedUser(), state.key !== normalize(viewedUser())); }).observe(panel, { attributes:true, attributeFilter:['data-profile-view','class'] });
+    if (panel) new MutationObserver(() => {
+      syncTop100ViewState();
+      if (isTopView()) void loadSaved(viewedUser(), state.key !== normalize(viewedUser()));
+    }).observe(panel, { attributes:true, attributeFilter:['data-profile-view','class'] });
     document.querySelector('#oc-profile-user')?.addEventListener('change', () => {
       state.loaded = false; state.expanded = { OP:false, ED:false }; setTimeout(() => void loadSaved(viewedUser(), true), 0);
     });
   }
 
   async function init() {
-    ensureToolbar(); monitorDom(); if (isTopView()) await loadSaved(viewedUser(), true); document.documentElement.classList.remove('oc-top100-loading');
+    ensureToolbar(); monitorDom(); syncTop100ViewState();
+    if (isTopView()) await loadSaved(viewedUser(), true);
+    document.documentElement.classList.remove('oc-top100-loading');
   }
 
   window.OC_TOP100_DRAFT = {
@@ -628,8 +642,18 @@
 
   window.addEventListener('oped-db-ready', () => { if (isTopView()) void loadSaved(viewedUser(), !state.loaded); });
   window.addEventListener('oped-account-restored', () => { if (isTopView()) void loadSaved(viewedUser(), true); });
+  let previousTopView = null;
+  function syncTop100ViewState() {
+    const current = isTopView();
+    if (previousTopView === current) return;
+    previousTopView = current;
+    void window.OC_APP_BRIDGE?.refreshRouteSubscriptions?.();
+    if (current) void loadSaved(viewedUser(), true);
+  }
+
   window.addEventListener('oped:app-data-updated', event => {
     const reason = clean(event.detail?.reason);
+    if (reason === 'catalog-updated') mergeLiveCatalog(event.detail?.snapshot?.entries);
     if (!isTopView() || (state.editing && dirty())) return;
     if (reason === 'manual-ranks-saved' || reason === 'top100-candidates-added' || reason === 'top100-pins-saved') {
       void loadSaved(viewedUser(), true);

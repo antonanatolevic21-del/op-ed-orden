@@ -297,6 +297,8 @@
     let manualRanksVersion = 0;
     let avatarsVersion = 0;
     let entriesById = new Map();
+    let entrySearchIndexes = new WeakMap();
+    let searchRelevanceCache = new WeakMap();
     let filterOptionsVersion = -1;
     let categoryCacheVersion = -1;
     let categoryCache = { studios: [], directors: [], performers: [], franchises: [], years: [] };
@@ -342,6 +344,7 @@
 
     window.OC_APP_BRIDGE = {
       snapshot: appDataSnapshot,
+      refreshRouteSubscriptions: () => syncRouteDataSubscriptions(activeTab),
       requestLogin: message => showAuthModal(message || 'Войди в личный аккаунт.'),
       openTrack: id => openCardModal(String(id || '')),
       rateTrack: id => startOpeningRating(String(id || '')),
@@ -647,6 +650,8 @@
         }
       });
       delete entry.__ocSearchText;
+      entrySearchIndexes.delete(entry);
+      searchRelevanceCache.delete(entry);
       return entry;
     }
 
@@ -657,6 +662,8 @@
         catalogVersion += 1;
         filterOptionsVersion = -1;
         categoryCacheVersion = -1;
+        entrySearchIndexes = new WeakMap();
+        searchRelevanceCache = new WeakMap();
       }
       profileUsersCache.key = '';
       clearDerivedCaches();
@@ -2880,6 +2887,8 @@
     }
 
     function preferredRatingsScope(tab = activeTab) {
+      const profileTop100 = tab === 'profile' && profilePanel?.dataset.profileView === 'top100';
+      if (profileTop100) return myName || authenticatedUid ? 'user' : 'none';
       if (!catalogHasRatingAggregates()) return 'all';
       if (tab === 'profile' || tab === 'stats' || tab === 'discovery') return 'all';
       if (myName || authenticatedUid) return 'user';
@@ -3367,20 +3376,43 @@
       return String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ');
     }
 
-    function fuzzySearchPosition(value, query) {
-      const text = normalizedSearchValue(value);
-      const target = normalizedSearchValue(query);
+    function entrySearchIndex(entry) {
+      let index = entrySearchIndexes.get(entry);
+      if (index) return index;
+
+      const title = normalizedSearchValue(entry.title);
+      const alternatives = (entry.alternativeTitles || []).map(normalizedSearchValue);
+      const metadata = [
+        entry.type, entry.year, SEASON_LABEL[entry.season], entry.image,
+        entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
+        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
+      ].map(normalizedSearchValue).filter(Boolean);
+      const wordsFor = value => Array.from(value.matchAll(/[a-zа-я0-9]+/giu), match => ({
+        word: match[0],
+        position: match.index || 0
+      }));
+
+      index = {
+        title,
+        alternatives,
+        metadata,
+        titleWords: wordsFor(title),
+        alternativeWords: alternatives.flatMap(wordsFor)
+      };
+      entrySearchIndexes.set(entry, index);
+      return index;
+    }
+
+    function fuzzySearchWords(words, target) {
       if (!target || target.includes(' ') || target.length < 4) return null;
-      const words = [...text.matchAll(/[a-zа-я0-9]+/giu)];
       let best = null;
-      words.forEach(match => {
-        const word = match[0];
+      words.forEach(({ word, position }) => {
         if (!word || word[0] !== target[0] || Math.abs(word.length - target.length) > 2) return;
         const distance = levenshteinDistance(target, word);
         const allowed = target.length <= 8 ? 1 : 2;
         const ratio = 1 - distance / Math.max(target.length, word.length);
         if (distance > allowed || ratio < .78) return;
-        const candidate = { distance, position: match.index || 0 };
+        const candidate = { distance, position };
         if (!best || candidate.distance < best.distance || (candidate.distance === best.distance && candidate.position < best.position)) best = candidate;
       });
       return best;
@@ -3389,41 +3421,48 @@
     function entrySearchRelevance(entry, query) {
       const target = normalizedSearchValue(query);
       if (!entry || !target) return 0;
-      const title = normalizedSearchValue(entry.title);
-      const titlePosition = title.indexOf(target);
-      if (titlePosition >= 0) return titlePosition;
+      const cached = searchRelevanceCache.get(entry);
+      if (cached?.query === target) return cached.relevance;
 
-      let bestAlternative = Infinity;
-      (entry.alternativeTitles || []).forEach(value => {
-        const position = normalizedSearchValue(value).indexOf(target);
-        if (position >= 0) bestAlternative = Math.min(bestAlternative, position);
-      });
-      if (bestAlternative < Infinity) return 100000 + bestAlternative;
-
-      const titleFuzzy = fuzzySearchPosition(entry.title, target);
-      if (titleFuzzy) return 200000 + titleFuzzy.distance * 1000 + titleFuzzy.position;
-
-      const metadata = [
-        entry.type, entry.year, SEASON_LABEL[entry.season], entry.image,
-        entryIsChinese(entry) ? 'китайский' : '', entryIsMovie(entry) ? 'фильм movie' : '', entryIsShortened(entry) ? 'укороченный короткий short shortened 30sec' : '',
-        ...(entry.studios || []), ...(entry.directors || []), ...(entry.performers || []), ...(entry.franchises || [])
-      ].map(normalizedSearchValue).filter(Boolean);
-      let bestMetadata = Infinity;
-      if (target.length >= 3) {
-        metadata.forEach(value => {
+      const index = entrySearchIndex(entry);
+      const titlePosition = index.title.indexOf(target);
+      let relevance;
+      if (titlePosition >= 0) {
+        relevance = titlePosition;
+      } else {
+        let bestAlternative = Infinity;
+        index.alternatives.forEach(value => {
           const position = value.indexOf(target);
-          if (position >= 0) bestMetadata = Math.min(bestMetadata, position);
+          if (position >= 0) bestAlternative = Math.min(bestAlternative, position);
         });
+        if (bestAlternative < Infinity) {
+          relevance = 100000 + bestAlternative;
+        } else {
+          const titleFuzzy = fuzzySearchWords(index.titleWords, target);
+          if (titleFuzzy) {
+            relevance = 200000 + titleFuzzy.distance * 1000 + titleFuzzy.position;
+          } else {
+            let bestMetadata = Infinity;
+            if (target.length >= 3) {
+              index.metadata.forEach(value => {
+                const position = value.indexOf(target);
+                if (position >= 0) bestMetadata = Math.min(bestMetadata, position);
+              });
+            }
+            if (bestMetadata < Infinity) {
+              relevance = 300000 + bestMetadata;
+            } else {
+              const fuzzyAlternative = fuzzySearchWords(index.alternativeWords, target);
+              relevance = fuzzyAlternative
+                ? 400000 + fuzzyAlternative.distance * 1000 + fuzzyAlternative.position
+                : Infinity;
+            }
+          }
+        }
       }
-      if (bestMetadata < Infinity) return 300000 + bestMetadata;
 
-      let bestFuzzyAlternative = null;
-      (entry.alternativeTitles || []).forEach(value => {
-        const candidate = fuzzySearchPosition(value, target);
-        if (!candidate) return;
-        if (!bestFuzzyAlternative || candidate.distance < bestFuzzyAlternative.distance || (candidate.distance === bestFuzzyAlternative.distance && candidate.position < bestFuzzyAlternative.position)) bestFuzzyAlternative = candidate;
-      });
-      return bestFuzzyAlternative ? 400000 + bestFuzzyAlternative.distance * 1000 + bestFuzzyAlternative.position : Infinity;
+      searchRelevanceCache.set(entry, { query: target, relevance });
+      return relevance;
     }
 
     function missingRequiredFields(entry) {

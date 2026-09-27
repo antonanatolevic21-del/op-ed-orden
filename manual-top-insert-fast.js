@@ -86,39 +86,34 @@
     if (status) status.textContent = message;
   }
 
-  async function firebaseTools() {
-    const [{ getApp, getApps }, firestore] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js')
-    ]);
-    for (let attempt = 0; attempt < 120 && !getApps().length; attempt += 1) await new Promise(resolve => setTimeout(resolve, 50));
-    if (!getApps().length) throw new Error('Firebase ещё не готов.');
-    return { db: firestore.getFirestore(getApp()), ...firestore };
-  }
-
   async function candidates(user, type) {
     const key = `${normalize(user)}|${type}`;
     if (cache.has(key)) return cache.get(key);
     const promise = (async () => {
-      const tools = await firebaseTools();
-      const snapshots = [];
-      try { snapshots.push(await tools.getDocs(tools.query(tools.collection(tools.db, 'ratings'), tools.where('nicknameKey', '==', normalize(user))))); } catch (_) {}
-      if (!snapshots.some(snap => snap.size)) {
-        try { snapshots.push(await tools.getDocs(tools.query(tools.collection(tools.db, 'ratings'), tools.where('nickname', '==', user)))); } catch (_) {}
-      }
-      const scores = new Map();
-      snapshots.forEach(snapshot => snapshot.docs.forEach(doc => {
-        const row = doc.data() || {};
-        const id = clean(row.openingId);
-        const score = [row.score, row.personalScore, row.songScore, row.visualScore].find(value => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)));
-        if (id && score !== undefined) scores.set(id, Number(score));
-      }));
-      const catalog = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
-      const topMeta = window.OC_APP_BRIDGE?.top100Meta?.(type) || {};
-      const prioritized = new Set((topMeta.candidates || []).map(String));
-      return (catalog || [])
-        .filter(entry => entry?.type === type && (scores.has(String(entry.id)) || prioritized.has(String(entry.id))))
-        .map(entry => ({ ...entry, score: scores.get(String(entry.id)), isTopCandidate: prioritized.has(String(entry.id)) }))
+      const bridge = window.OC_APP_BRIDGE;
+      const cached = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
+      const liveEntries = bridge?.snapshot?.()?.entries;
+      const byId = new Map();
+      (cached || []).forEach(entry => {
+        const id = clean(entry?.id);
+        if (id) byId.set(id, entry);
+      });
+      if (Array.isArray(liveEntries)) liveEntries.forEach(entry => {
+        const id = clean(entry?.id);
+        if (id) byId.set(id, entry);
+      });
+      const prioritized = new Set((bridge?.top100Meta?.(type)?.candidates || []).map(String));
+      return [...byId.values()]
+        .filter(entry => entry?.type === type)
+        .map(entry => {
+          const rawScore = bridge?.userScore?.(entry.id, user);
+          const score = rawScore !== undefined && rawScore !== null && rawScore !== '' && Number.isFinite(Number(rawScore))
+            ? Number(rawScore)
+            : undefined;
+          const searchTerms = [entry.title, ...(Array.isArray(entry.alternativeTitles) ? entry.alternativeTitles : [])]
+            .map(value => clean(value).toLocaleLowerCase('ru').replace(/ё/g, 'е'));
+          return { ...entry, score, searchTerms, isTopCandidate: prioritized.has(String(entry.id)) };
+        })
         .sort((a, b) => Number(b.isTopCandidate) - Number(a.isTopCandidate) || (Number(b.score) || 0) - (Number(a.score) || 0) || compareNatural(a.title, b.title));
     })();
     cache.set(key, promise);
@@ -133,11 +128,10 @@
   }
 
   function renderRows(rows, type, query, list, selectedId, onSelect) {
-    const q = clean(query).toLocaleLowerCase('ru');
-    const filtered = rows.filter(row => !q || [row.title, ...(Array.isArray(row.alternativeTitles) ? row.alternativeTitles : [])]
-      .some(value => clean(value).toLocaleLowerCase('ru').includes(q))).slice(0, 30);
+    const q = clean(query).toLocaleLowerCase('ru').replace(/ё/g, 'е');
+    const filtered = rows.filter(row => !q || row.searchTerms.some(value => value.includes(q))).slice(0, 30);
     if (!filtered.length) {
-      list.innerHTML = '<div class="oc-empty">Подходящих оценённых треков не найдено.</div>';
+      list.innerHTML = '<div class="oc-empty">Подходящих записей не найдено.</div>';
       return;
     }
     list.innerHTML = filtered.map(row => {
@@ -149,7 +143,7 @@
   }
 
   window.addEventListener('oped:app-data-updated', event => {
-    if (String(event.detail?.reason || '').includes('top100')) cache.clear();
+    if (/(top100|ratings?|catalog)/i.test(String(event.detail?.reason || ''))) cache.clear();
   });
 
   function dispatchPlacement(type, id, place, row) {
@@ -199,11 +193,11 @@
     panel.dataset.top100InlinePanel = '1';
     panel.innerHTML = `
       <div class="oc-manual-insert-head">
-        <div><strong>Вставить на ${targetPlace}-е место · ${panelAnchor.type}</strong><small>Поиск среди оценённых треков</small></div>
+        <div><strong>Вставить на ${targetPlace}-е место · ${panelAnchor.type}</strong><small>Поиск по каталогу</small></div>
         <button type="button" class="oc-manual-insert-close" aria-label="Закрыть">×</button>
       </div>
       <input class="oc-manual-insert-search" type="search" placeholder="Название трека…" autocomplete="off">
-      <div class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю оценённые треки…</div></div>
+      <div class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю каталог…</div></div>
       <div class="oc-top100-inline-search-panel-actions">
         <button type="button" class="oc-soft-btn oc-top100-inline-confirm" disabled>Вставить сюда</button>
       </div>`;
@@ -222,7 +216,11 @@
     });
 
     panel.querySelector('.oc-manual-insert-close').addEventListener('click', closePanel);
-    search.addEventListener('input', render);
+    let searchRenderTimer = 0;
+    search.addEventListener('input', () => {
+      window.clearTimeout(searchRenderTimer);
+      searchRenderTimer = window.setTimeout(render, 100);
+    });
     confirm.addEventListener('click', () => {
       if (!selectedId || !panelAnchor) return;
       const row = rows.find(item => String(item.id) === String(selectedId));
