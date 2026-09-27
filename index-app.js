@@ -6431,17 +6431,17 @@
       populateProfileUsers();
       profileUser = profileUserSelect.value;
 
-      const filtered = applyFilters(entries);
+      const top100Only = profilePanel?.dataset.profileView === 'top100';
+      const filtered = top100Only ? [] : applyFilters(entries);
       const topFiltered = applyFiltersIgnoringType(entries);
-      const allRatingsFiltered = applyFiltersIgnoringType(entries);
-      if (profilePanel) {
+      const allRatingsFiltered = top100Only ? [] : applyFiltersIgnoringType(entries);
+      if (profilePanel && !top100Only) {
         profilePanel.dataset.profileRatingsReady = String(
           firebaseRatingsScope === 'all' && remoteDataState.ratings.ready
         );
         profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
+        renderProfileStats(computeProfileStats(profileUser, filtered));
       }
-
-      renderProfileStats(computeProfileStats(profileUser, filtered));
 
       function topForScore(type) {
         const manualOrder = manualOrderFor(profileUser, type);
@@ -6463,9 +6463,11 @@
       function topForManual(type) {
         const ownProfile = !!myName && manualSameUser(profileUser, myName);
         const order = manualOrderFor(profileUser, type, manualEditMode && ownProfile);
+        const entriesById = new Map(topFiltered.map(entry => [String(entry.id), entry]));
         return order
           .map(id => {
-            const e = topFiltered.find(x => x.id === id && x.type === type);
+            const entry = entriesById.get(String(id));
+            const e = entry?.type === type ? entry : null;
             return e ? { entry: e, score: scoreFor(e, profileUser) } : null;
           })
           .filter(Boolean)
@@ -6517,6 +6519,8 @@
         profileDeleteBtn.disabled = !isAdmin() || !profileUser;
         profileDeleteBtn.style.display = isAdmin() ? '' : 'none';
       }
+
+      if (top100Only) return;
 
       populateArScoreOptions(profileUser, allRatingsFiltered);
       renderAllRatings(profileUser, allRatingsFiltered);
