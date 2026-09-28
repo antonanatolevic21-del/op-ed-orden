@@ -59,6 +59,11 @@
       .oc-top100-inline-search-panel{position:relative!important;z-index:40!important;grid-column:1/-1;width:100%!important;max-width:none!important;margin:10px 0 14px!important;box-sizing:border-box}
       .oc-top100-inline-search-panel .oc-manual-insert-search{margin-top:10px}
       .oc-top100-inline-search-panel .oc-manual-insert-results{grid-template-columns:repeat(2,minmax(0,1fr));max-height:420px}
+      .oc-top100-inline-search-panel .oc-manual-insert-result.selected{border-color:#08d9d6;background:#123b40;box-shadow:inset 0 0 0 1px #08d9d6}
+      .oc-top100-inline-search-panel .oc-top100-selected-badge{display:none;margin-top:5px;color:#7ffbf0;font:800 11px Inter,sans-serif}
+      .oc-top100-inline-search-panel .selected .oc-top100-selected-badge{display:block}
+      .oc-top100-inline-selection{margin:10px 0 0;color:#b9fff5;font:600 12px/1.5 Inter,sans-serif;overflow-wrap:anywhere}
+      .oc-top100-inline-search-panel .oc-manual-insert-result:focus-visible{outline:2px solid #fff;outline-offset:2px}
       .oc-top100-inline-search-panel-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
       .oc-top100-inline-search-panel-actions .oc-soft-btn{min-height:40px}
       @media(max-width:760px),(hover:none) and (pointer:coarse){
@@ -127,7 +132,7 @@
     return index >= 0 ? index + 1 : null;
   }
 
-  function renderRows(rows, type, query, list, selectedId, onSelect) {
+  function renderRows(rows, type, query, list, selectedId) {
     const q = clean(query).toLocaleLowerCase('ru').replace(/ё/g, 'е');
     const filtered = rows.filter(row => !q || row.searchTerms.some(value => value.includes(q))).slice(0, 30);
     if (!filtered.length) {
@@ -137,9 +142,8 @@
     list.innerHTML = filtered.map(row => {
       const rank = currentRank(type, row.id);
       const image = clean(row.fallbackImage || row.image);
-      return `<button type="button" class="oc-manual-insert-result${String(selectedId) === String(row.id) ? ' selected' : ''}${row.isTopCandidate ? ' candidate' : ''}" data-id="${esc(row.id)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span class="oc-manual-insert-noimage">—</span>'}<span class="oc-manual-insert-result-main"><span class="oc-manual-insert-result-title">${row.isTopCandidate ? '<b class="oc-top-candidate-badge">кандидат</b>' : ''}${esc(row.title || row.id)}</span><span class="oc-manual-insert-result-meta">${rank ? `сейчас №${rank}` : 'сейчас вне топ-100'}</span></span><span class="oc-manual-insert-result-score">${Number.isFinite(Number(row.score)) ? esc(row.score) : '—'}</span></button>`;
+      return `<button type="button" class="oc-manual-insert-result${String(selectedId) === String(row.id) ? ' selected' : ''}${row.isTopCandidate ? ' candidate' : ''}" data-id="${esc(row.id)}" aria-pressed="${String(selectedId) === String(row.id)}">${image ? `<img src="${esc(image)}" alt="" loading="lazy">` : '<span class="oc-manual-insert-noimage">—</span>'}<span class="oc-manual-insert-result-main"><span class="oc-manual-insert-result-title">${row.isTopCandidate ? '<b class="oc-top-candidate-badge">кандидат</b>' : ''}${esc(row.title || row.id)}</span><span class="oc-top100-selected-badge">✓ Выбрано</span><span class="oc-manual-insert-result-meta">${rank ? `сейчас №${rank}` : 'сейчас вне топ-100'}</span></span><span class="oc-manual-insert-result-score">${Number.isFinite(Number(row.score)) ? esc(row.score) : '—'}</span></button>`;
     }).join('');
-    list.querySelectorAll('.oc-manual-insert-result').forEach(button => button.addEventListener('click', () => onSelect(button.dataset.id)));
   }
 
   window.addEventListener('oped:app-data-updated', event => {
@@ -193,46 +197,77 @@
     panel.dataset.top100InlinePanel = '1';
     panel.innerHTML = `
       <div class="oc-manual-insert-head">
-        <div><strong>Вставить на ${targetPlace}-е место · ${panelAnchor.type}</strong><small>Поиск по каталогу</small></div>
+        <div><strong>Вставить на ${targetPlace}-е место · ${panelAnchor.type}</strong><small>Щелчок — выбрать · двойной щелчок — вставить на это место</small></div>
         <button type="button" class="oc-manual-insert-close" aria-label="Закрыть">×</button>
       </div>
       <input class="oc-manual-insert-search" type="search" placeholder="Название трека…" autocomplete="off">
       <div class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю каталог…</div></div>
+      <p class="oc-top100-inline-selection" role="status" aria-live="polite">Выбери трек для вставки.</p>
       <div class="oc-top100-inline-search-panel-actions">
         <button type="button" class="oc-soft-btn oc-top100-inline-confirm" disabled>Вставить сюда</button>
       </div>`;
     card.parentElement.insertBefore(panel, mode === 'before' ? card : card.nextSibling);
 
-    const search = panel.querySelector('.oc-manual-insert-search');
-    const list = panel.querySelector('.oc-manual-insert-results');
-    const confirm = panel.querySelector('.oc-top100-inline-confirm');
+    const currentPanel = panel;
+    const panelType = panelAnchor.type;
+    const search = currentPanel.querySelector('.oc-manual-insert-search');
+    const list = currentPanel.querySelector('.oc-manual-insert-results');
+    const confirm = currentPanel.querySelector('.oc-top100-inline-confirm');
+    const selection = currentPanel.querySelector('.oc-top100-inline-selection');
     let rows = [];
     let selectedId = '';
+    let inserted = false;
 
-    const render = () => renderRows(rows, panelAnchor.type, search.value, list, selectedId, id => {
-      selectedId = id;
+    const render = () => {
+      if (panel !== currentPanel || !currentPanel.isConnected) return;
+      renderRows(rows, panelType, search.value, list, selectedId);
+    };
+    const select = id => {
+      const row = rows.find(item => String(item.id) === String(id));
+      if (!row) return;
+      selectedId = String(id);
+      // Keep the clicked node intact so the browser can deliver dblclick.
+      list.querySelectorAll('.oc-manual-insert-result').forEach(button => {
+        const selected = button.dataset.id === selectedId;
+        button.classList.toggle('selected', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      });
       confirm.disabled = false;
-      render();
+      const message = `Выбран: ${row.title || id} · место №${targetPlace}`;
+      if (selection.textContent !== message) selection.textContent = message;
+    };
+    const insertSelected = () => {
+      if (inserted || !selectedId || panel !== currentPanel || !currentPanel.isConnected) return;
+      const row = rows.find(item => String(item.id) === selectedId);
+      if (!row) return;
+      inserted = true;
+      dispatchPlacement(panelType, selectedId, targetPlace, row);
+      closePanel();
+      toast(`${row.title || selectedId}: поставлен на ${targetPlace}-е место.`, 'success');
+    };
+    list.addEventListener('click', event => {
+      const button = event.target.closest('.oc-manual-insert-result');
+      if (button && list.contains(button)) select(button.dataset.id);
+    });
+    list.addEventListener('dblclick', event => {
+      const button = event.target.closest('.oc-manual-insert-result');
+      if (!button || !list.contains(button)) return;
+      event.preventDefault();
+      select(button.dataset.id);
+      insertSelected();
     });
 
-    panel.querySelector('.oc-manual-insert-close').addEventListener('click', closePanel);
+    currentPanel.querySelector('.oc-manual-insert-close').addEventListener('click', closePanel);
     let searchRenderTimer = 0;
     search.addEventListener('input', () => {
       window.clearTimeout(searchRenderTimer);
       searchRenderTimer = window.setTimeout(render, 100);
     });
-    confirm.addEventListener('click', () => {
-      if (!selectedId || !panelAnchor) return;
-      const row = rows.find(item => String(item.id) === String(selectedId));
-      const { type: currentType, place: currentPlace } = panelAnchor;
-      dispatchPlacement(currentType, selectedId, currentPlace, row);
-      closePanel();
-      toast(`${row?.title || selectedId}: поставлен на ${currentPlace}-е место.`, 'success');
-    });
+    confirm.addEventListener('click', insertSelected);
 
     try {
-      rows = await candidates(user, panelAnchor.type);
-      if (!panel?.isConnected || !panelAnchor) return;
+      rows = await candidates(user, panelType);
+      if (panel !== currentPanel || !currentPanel.isConnected) return;
       render();
       search.focus({ preventScroll: true });
     } catch (error) {
