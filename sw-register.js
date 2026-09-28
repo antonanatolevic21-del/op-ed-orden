@@ -8,7 +8,7 @@
   const seasonFillVersion = '20260730-natural-sort1';
   const sharedSeasonVersion = '20260819-invite-login1';
   const seasonCommunityVersion = '20260805-tournament-delete1';
-  const manualTopInsertVersion = '20260928-top100-selection1';
+  const manualTopInsertVersion = '20260928-top100-empty-add1';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
   const top100EditorVersion = '20260927-top100-live-catalog1';
