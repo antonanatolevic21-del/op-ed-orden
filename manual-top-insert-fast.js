@@ -206,7 +206,14 @@
       <div class="oc-top100-inline-search-panel-actions">
         <button type="button" class="oc-soft-btn oc-top100-inline-confirm" disabled>Вставить сюда</button>
       </div>`;
-    card.parentElement.insertBefore(panel, mode === 'before' ? card : card.nextSibling);
+    const container = containerFor(panelAnchor.type);
+    if (!container) { closePanel(); return; }
+    if (card?.parentElement === container) {
+      container.insertBefore(panel, mode === 'before' ? card : card.nextSibling);
+    } else {
+      // An empty top has no card to anchor the catalog picker to.
+      container.prepend(panel);
+    }
 
     const currentPanel = panel;
     const panelType = panelAnchor.type;
@@ -336,10 +343,6 @@
     button.addEventListener('click', () => {
       const type = activeType();
       const card = firstCard(type);
-      if (!card) {
-        toast('Для пустого топа сначала добавь трек из раздела «Все оценки».', 'error');
-        return;
-      }
       void openInlinePanel(card, 'before', type, 1);
     });
     extra.append(button);
