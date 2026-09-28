@@ -182,6 +182,11 @@
     }
   }
 
+  // Assigning identical textContent still replaces DOM children and notifies observers.
+  function setText(node, value) {
+    if (node && node.textContent !== value) node.textContent = value;
+  }
+
   function decorate() {
     decoratePending = false;
     const root = document.querySelector('#oc-profile-top-duel');
@@ -189,16 +194,16 @@
 
     const description = root.querySelector('.oc-discovery-head p');
     if (description) {
-      description.textContent = 'До 150 элементов проходят два этапа. Работа разбита на блоки по 50 сравнений. После завершения результат переносится в предварительный порядок редактора и публикуется только обычной кнопкой сохранения топа.';
+      setText(description, 'До 150 элементов проходят два этапа. Работа разбита на блоки по 50 сравнений. После завершения результат переносится в предварительный порядок редактора и публикуется только обычной кнопкой сохранения топа.');
     }
 
     const finalButton = root.querySelector('#oc-profile-duel-save');
     if (finalButton) {
       if (root.dataset.duelDraftApplied) {
-        finalButton.textContent = 'Перенесено в редактор';
+        setText(finalButton, 'Перенесено в редактор');
         finalButton.disabled = true;
       } else {
-        finalButton.textContent = 'Перенести в редактор';
+        setText(finalButton, 'Перенести в редактор');
       }
     }
 
@@ -208,7 +213,7 @@
     const completeDetails = completeBar?.querySelector('span');
     if (completeDetails) {
       const comparisons = clean(completeDetails.textContent).match(/\d+/)?.[0] || '';
-      completeDetails.textContent = `${comparisons ? comparisons + ' сравнений. ' : ''}Результат готов к переносу в предварительный топ-100 для ручной правки.`;
+      setText(completeDetails, `${comparisons ? comparisons + ' сравнений. ' : ''}Результат готов к переносу в предварительный топ-100 для ручной правки.`);
     }
 
     const candidateBar = Array.from(root.querySelectorAll('.oc-top100-candidate-bar')).find(bar =>
@@ -216,7 +221,7 @@
     );
     const candidateDetails = candidateBar?.querySelector('span');
     if (candidateDetails) {
-      candidateDetails.textContent = `Они попадут в пул первыми. В дуэль берётся до 150 незакреплённых элементов; итоговые первые 100 станут предварительным порядком редактора.`;
+      setText(candidateDetails, `Они попадут в пул первыми. В дуэль берётся до 150 незакреплённых элементов; итоговые первые 100 станут предварительным порядком редактора.`);
     }
 
     const draft = storedDraft();
@@ -230,11 +235,11 @@
     const strong = draftBar.querySelector('strong');
     const details = draftBar.querySelector('span');
     const stage = Number(draft.stage) === 2 ? 2 : 1;
-    if (strong) strong.textContent = `Этап ${stage} · блок ${block} завершён`;
-    if (details) details.textContent = `${BLOCK_SIZE} сравнений в блоке · ${Number(draft.comparisons) || 0} всего. Промежуточный результат сохранён на этом устройстве.`;
+    if (strong) setText(strong, `Этап ${stage} · блок ${block} завершён`);
+    if (details) setText(details, `${BLOCK_SIZE} сравнений в блоке · ${Number(draft.comparisons) || 0} всего. Промежуточный результат сохранён на этом устройстве.`);
 
     const resume = draftBar.querySelector('#oc-profile-duel-resume');
-    if (resume) resume.textContent = `Продолжить · блок ${block + 1}`;
+    if (resume) setText(resume, `Продолжить · блок ${block + 1}`);
   }
 
   function scheduleDecorate() {

@@ -152,7 +152,7 @@
       ['profile-enhancements.js', profileVersion],
       ['profile-taste-comparison.js', tasteComparisonVersion],
       ['profile-top-duel.js', discoveryVersion],
-      ['profile-top-duel-blocks.js', discoveryVersion]
+      ['profile-top-duel-blocks.js', '20260928-duel-observer-fix1']
     ])
       .catch(error => {
         console.error('Profile package load failed', error);
