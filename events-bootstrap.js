@@ -162,12 +162,14 @@ async function clickRequestedMode(mode) {
   }
 }
 
-async function loadFull(mode = '', profile = null) {
+async function loadFull(mode = '', profile = null, seasons = null) {
+  window.OC_EVENTS_REGISTERED_SEASON_GUEST = seasons?.length ? { profile, uid: String(auth.currentUser?.uid || '') } : null;
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260819-invite-login1');
+  await import('./events-app.js?v=20260929-season-guest1');
   if (mode) void clickRequestedMode(mode);
 
+  if (seasons?.length) return;
   document.addEventListener('click', event => {
     const button = event.target.closest?.('.ev-mode-tab[data-mode="rating"]');
     const current = auth.currentUser;
@@ -193,7 +195,7 @@ async function start() {
     return;
   }
 
-  if (isFullRequest() || (mode && mode !== 'rating')) {
+  if (mode && mode !== 'rating') {
     prepareRegisteredFullAccess(user);
     await loadFull(mode);
     return;
@@ -204,17 +206,12 @@ async function start() {
     return;
   }
 
-  if (readFullMarker(user.uid)) {
-    prepareRegisteredFullAccess(user);
-    await loadFull(mode);
-    return;
-  }
 
   const profile = await resolveProfile(user);
   if (!profile) {
     prepareRegisteredFullAccess(user);
     writeFullMarker(user.uid);
-    location.replace(fullUrl(mode));
+    await loadFull(mode);
     return;
   }
 
@@ -228,24 +225,17 @@ async function start() {
   if (!seasons.length) {
     prepareRegisteredFullAccess(user, profile);
     writeFullMarker(user.uid);
-    location.replace(fullUrl(mode));
+    await loadFull(mode, profile);
     return;
   }
 
   clearFullMarker();
-  addParticipantStyle();
-  window.__OC_EVENTS_LIGHT_PARTICIPANT__ = true;
-  window.OC_EVENT_PARTICIPANT_CONTEXT = { app, auth, db, profile, seasons, currentYear: CURRENT_EVENT_YEAR };
-  window.OC_EVENTS_OPEN_FULL_MODE = modeName => {
-    prepareRegisteredFullAccess(user, profile);
-    location.assign(fullUrl(modeName));
-  };
-  await import('./events-participant-suite.js?v=20260729-ending-basket2');
+  await loadFull('rating', profile, seasons);
 }
 
-start().catch(error => {
+start().catch(async error => {
   console.error('Events bootstrap failed', error);
   prepareRegisteredFullAccess(auth.currentUser);
   writeFullMarker(auth.currentUser?.uid || '');
-  location.replace(fullUrl(requestedMode()));
+  await loadFull(requestedMode());
 });

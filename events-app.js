@@ -902,12 +902,21 @@
       return null;
     }
 
+    function registeredSeasonProfile() {
+      const context = window.OC_EVENTS_REGISTERED_SEASON_GUEST;
+      const user = auth.currentUser;
+      if (!context?.profile || !user || user.isAnonymous || isAdminUid(user.uid) ||
+          String(context.uid) !== String(user.uid)) return null;
+      return context.profile;
+    }
+
     async function restoreMainSiteLogin() {
       if (typeof auth.authStateReady === 'function') await auth.authStateReady();
       const firebaseUser = auth.currentUser;
       const authenticated = firebaseUser && !firebaseUser.isAnonymous;
       const cachedProfile = authenticated ? cachedMainProfile(firebaseUser.uid) : null;
-      const profileName = String(cachedProfile?.nickname || cachedProfile?.nicknameKey || firebaseUser?.displayName || '').trim();
+      const seasonalProfile = registeredSeasonProfile();
+      const profileName = String(seasonalProfile?.nickname || seasonalProfile?.nicknameKey || cachedProfile?.nickname || cachedProfile?.nicknameKey || firebaseUser?.displayName || '').trim();
       const mainAccess = String(sessionStorage.getItem(MAIN_ACCESS_KEY) || '').trim();
       const savedName = String(localStorage.getItem(PRIMARY_NAME_KEY) || localStorage.getItem(NAME_KEY) || '').trim();
       const restoredName = profileName || savedName;
@@ -915,8 +924,9 @@
 
       myName = restoredName;
       const verifiedPersonalAdmin = authenticated && isAdminUid(firebaseUser.uid);
-      accessLevel = verifiedPersonalAdmin ? 'admin' : 'user';
+      accessLevel = verifiedPersonalAdmin ? 'admin' : seasonalProfile ? 'guest' : 'user';
       guestSlot = 0;
+      if (seasonalProfile) activeMode = 'rating';
       adminUnlocked = accessLevel === 'admin';
       localStorage.setItem(NAME_KEY, myName);
       localStorage.setItem(ACCESS_KEY, accessLevel);
@@ -951,12 +961,24 @@
     }
 
     function getGuestNicknameForSeason(state) {
-      if (!isGuest() || !guestSlot) return '';
+      if (!isGuest()) return '';
+      const profile = registeredSeasonProfile();
+      if (profile) {
+        const key = normalizeNickname(profile.nicknameKey || profile.nickname);
+        const slots = Array.isArray(state.allowedNicknames) ? state.allowedNicknames.slice(0, 15) : [];
+        const nickname = slots.find(name => normalizeNickname(name) === key);
+        if (!nickname || state.closed) return '';
+        const bindings = Array.isArray(state.participantBindings) ? state.participantBindings : [];
+        const binding = bindings.find(row => normalizeNickname(row.nicknameKey || row.nickname) === key);
+        if (binding?.authUid && String(binding.authUid) !== currentActorUid()) return '';
+        return String(nickname).trim();
+      }
+      if (!guestSlot) return '';
       return String(state.allowedNicknames[guestSlot - 1] || '').trim();
     }
 
     function findGuestSeasonStates() {
-      if (!isGuest() || !guestSlot) return [];
+      if (!isGuest() || (!guestSlot && !registeredSeasonProfile())) return [];
       const myKey = normalizeNickname(myName);
       if (!myKey) return [];
       // В админском гостевом режиме ник в шапке остаётся админским,
@@ -1040,6 +1062,7 @@
     function hasAccess() { return isUser() || accessLevel === 'guest' || isAdmin(); }
     function canAccessMode(mode) {
       const requested = String(mode || 'rating');
+      if (registeredSeasonProfile()) return requested === 'rating';
       if (requested === 'rating' || requested === 'endingrating') return isGuest() || isAdmin();
       if (requested === 'predictions') return isAdmin();
       return !isGuest();
@@ -1076,11 +1099,11 @@
 
     function updateAccessUi() {
       const isAdminPreview = adminUnlocked && isGuest();
-      accessBadge.textContent = isAdmin() ? 'админ' : isUser() ? 'участник' : isGuest() ? `${isAdminPreview ? 'просмотр · ' : ''}гость #${String(guestSlot).padStart(2, '0')}` : 'вход не выполнен';
+      accessBadge.textContent = isAdmin() ? 'админ' : isUser() ? 'участник' : isGuest() && registeredSeasonProfile() ? 'гость · аккаунт' : isGuest() ? `${isAdminPreview ? 'просмотр · ' : ''}гость #${String(guestSlot).padStart(2, '0')}` : 'вход не выполнен';
       accessBadge.style.color = isAdmin() ? 'var(--pink)' : isUser() ? 'var(--green)' : isGuest() ? 'var(--cyan)' : 'var(--muted)';
       if (nameInput) {
         nameInput.value = myName;
-        nameInput.disabled = isAdminPreview;
+        nameInput.disabled = isAdminPreview || Boolean(registeredSeasonProfile());
         nameInput.placeholder = isAdminPreview ? 'админский аккаунт' : (isGuest() ? 'введите свой ник' : 'ваш ник');
       }
       if (roleSwitch) {
@@ -1434,7 +1457,8 @@
         season,
         stage: 'first',
         closed: !!docData.closed,
-        allowedNicknames: cleanParticipantSlots(docData.allowedNicknames || []),
+        allowedNicknames: registeredSeasonProfile() ? (Array.isArray(docData.allowedNicknames) ? docData.allowedNicknames.slice(0, 15) : []) : cleanParticipantSlots(docData.allowedNicknames || []),
+        participantBindings: Array.isArray(docData.participantBindings) ? docData.participantBindings : [],
         selectedOpeningIds,
         basketTarget: [10, 15, 20].includes(Number(docData.basketTarget)) ? Number(docData.basketTarget) : getBasketState(season).target,
         semifinalOpeningIds: Array.isArray(docData.semifinalOpeningIds) ? docData.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [],
@@ -7079,7 +7103,7 @@
             <div>
               <div class="ev-section-label">Гостевой вход #${escapeHtml(String(guestSlot).padStart(2, '0'))}</div>
               <h2>Нет доступных сезонов для оценки</h2>
-              <div class="ev-hint">Ник должен совпадать с участником #${escapeHtml(String(guestSlot).padStart(2, '0'))}.</div>
+              <div class="ev-hint">${registeredSeasonProfile() ? 'Твой аккаунт пока не приглашён в открытые сезоны.' : `Ник должен совпадать с участником #${escapeHtml(String(guestSlot).padStart(2, '0'))}.`}</div>
             </div>
           </section>
         `;
@@ -7090,7 +7114,7 @@
           <div>
             <div class="ev-section-label">Сезоны для оценки</div>
             <h2>${CURRENT_EVENT_YEAR} · доступные открытые сезоны</h2>
-            <div class="ev-hint">Ты вошёл как участник #${escapeHtml(String(guestSlot).padStart(2, '0'))}: <strong style="color:var(--cyan);">${escapeHtml(myName)}</strong>. Показаны все открытые сезоны, где этот ник стоит в указанной строке участника.</div>
+            <div class="ev-hint">Ты вошёл как ${registeredSeasonProfile() ? 'гость со своим аккаунтом' : `участник #${escapeHtml(String(guestSlot).padStart(2, '0'))}`}: <strong style="color:var(--cyan);">${escapeHtml(myName)}</strong>. ${registeredSeasonProfile() ? 'Показаны все открытые сезоны, куда приглашён твой аккаунт.' : 'Показаны все открытые сезоны, где этот ник стоит в указанной строке участника.'}</div>
           </div>
         </section>
         <div class="ev-guest-season-stack">
