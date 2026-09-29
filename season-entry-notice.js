@@ -102,6 +102,7 @@ function showNotice(rows) {
     const link = document.createElement('a');
     link.href = 'events.html?season=' + encodeURIComponent(row.season);
     link.textContent = row.done ? 'Продолжить оценивание' : 'Начать оценивание';
+    link.addEventListener('click', closeNotice);
     item.append(title, progress, link);
     list.append(item);
   });
