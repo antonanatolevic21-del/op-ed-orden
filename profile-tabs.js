@@ -95,7 +95,7 @@
     statsEnhanceScheduled = false;
     const root = panel();
     const stats = root?.querySelector('#oc-profile-stats');
-    if (!stats) return;
+    if (!stats || (root.dataset.profileView && root.dataset.profileView !== 'overview')) return;
 
     const cards = [...stats.children].filter(element => element.classList.contains('oc-stat-card'));
     if (!cards.length) return;
@@ -112,12 +112,12 @@
 
     let summary = stats.querySelector('.oc-profile-overview-heading-summary');
     if (!summary) summary = overviewHeading('summary', 'Ключевые показатели', 'Средние оценки и прогресс по каталогу без лишней россыпи карточек.');
-    if (firstMetric) stats.insertBefore(summary, firstMetric);
+    if (firstMetric && summary.nextElementSibling !== firstMetric) stats.insertBefore(summary, firstMetric);
 
     let leaders = stats.querySelector('.oc-profile-overview-heading-leaders');
     if (firstLeader) {
       if (!leaders) leaders = overviewHeading('leaders', 'Лидеры', 'Студии, исполнители, режиссёры, франшизы и сезоны — крупными, читаемыми блоками.');
-      stats.insertBefore(leaders, firstLeader);
+      if (leaders.nextElementSibling !== firstLeader) stats.insertBefore(leaders, firstLeader);
     } else if (leaders) {
       leaders.remove();
     }
