@@ -8,6 +8,7 @@
       onSnapshot,
       query,
       where,
+      documentId,
       arrayUnion,
       arrayRemove,
       serverTimestamp
@@ -210,7 +211,7 @@
     let guestSlot = Math.max(0, Math.min(15, Number(localStorage.getItem(GUEST_SLOT_KEY) || 0) || 0));
     let adminUnlocked = false;
     let myName = localStorage.getItem(NAME_KEY) || '';
-    let activeMode = String(savedEventUiPreferences.activeMode || 'rating');
+    let activeMode = String(window.OC_EVENTS_INITIAL_MODE || savedEventUiPreferences.activeMode || 'rating');
     let activeStage = String(savedEventUiPreferences.activeStage || 'basket');
     let activeSeason = SEASONS.includes(savedEventUiPreferences.activeSeason) ? savedEventUiPreferences.activeSeason : 'winter';
     let activeEndingPeriod = savedEventUiPreferences.activeEndingPeriod === 'h2' ? 'h2' : 'h1';
@@ -4785,6 +4786,7 @@
     function render() {
       saveEventUiPreferences();
       if (!canAccessMode(activeMode)) activeMode = defaultAccessibleMode();
+      syncEventData();
       updateAccessUi();
       document.querySelectorAll('.ev-mode-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === activeMode));
       document.querySelectorAll('.ev-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.stage === activeStage));
@@ -4793,6 +4795,17 @@
       if (!hasAccess() && !invitePreview) {
         appEl.innerHTML = '<div class="ev-empty">Введите пароль, чтобы открыть страницу ивентов.</div>';
         return;
+      }
+      if (eventDataReady && !INITIAL_EVENT_ROOM_INVITE) {
+        const pending = [...eventDataSubscriptions.values()];
+        if (pending.some(item => item.error)) {
+          appEl.innerHTML = '<div class="ev-empty">Не удалось загрузить данные раздела. Обновите страницу, чтобы повторить.</div>';
+          return;
+        }
+        if (pending.some(item => !item.ready)) {
+          appEl.innerHTML = '<div class="ev-empty" role="status">Загружаю данные раздела…</div>';
+          return;
+        }
       }
       if (activeMode === 'endingrating') {
         renderEndingYearEvent();
@@ -8195,6 +8208,222 @@
       }
     }
 
+    // A subscription exists only while its screen needs it. Generation guards
+    // discard late callbacks after navigation or after the selection changes.
+    let eventDataReady = false;
+    const eventDataSubscriptions = new Map();
+    function demandEventData(key, signature, start) {
+      const previous = eventDataSubscriptions.get(key);
+      if (previous?.signature === signature) return;
+      previous?.stop();
+      const token = { signature, ready: false, error: false, stop: () => {} };
+      eventDataSubscriptions.set(key, token);
+      const current = callback => (...args) => {
+        if (eventDataSubscriptions.get(key) === token) { token.ready = true; token.error = false; callback(...args); }
+      };
+      current.guard = callback => (...args) => { if (eventDataSubscriptions.get(key) === token) callback(...args); };
+      current.fail = callback => (...args) => {
+        if (eventDataSubscriptions.get(key) !== token) return;
+        token.error = true; token.ready = false; callback(...args); scheduleFirebaseRender('other');
+      };
+      token.stop = start(current) || (() => {});
+    }
+    function dropEventData(key) {
+      const item = eventDataSubscriptions.get(key);
+      eventDataSubscriptions.delete(key);
+      item?.stop();
+      if (eventRoomSubscriptions[key]) {
+        eventRoomSubscriptions[key].forEach(stop => stop());
+        eventRoomSubscriptions[key].clear();
+      }
+    }
+    function watchEventRows(name, constraints, callback, current) {
+      const target = constraints.length ? query(collection(db, name), ...constraints) : collection(db, name);
+      return onSnapshot(target, current(snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })))), current.fail(error => {
+        console.error(`${name} snapshot error`, error);
+      }));
+    }
+    function watchEventIds(name, field, ids, callback, current) {
+      const unique = [...new Set(ids.map(String).filter(Boolean))].sort();
+      if (!unique.length) { current(callback)([]); return () => {}; }
+      const batches = [];
+      for (let i = 0; i < unique.length; i += 30) batches.push(unique.slice(i, i + 30));
+      const results = new Map();
+      const stops = batches.map((batch, i) => onSnapshot(query(collection(db, name), where(field, 'in', batch)), current.guard(snapshot => {
+        results.set(i, snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        // Publish only a complete set, including ratings and alternative links.
+        if (results.size === batches.length) current(callback)([...results.values()].flat());
+      }), current.fail(error => console.error(`${name} snapshot error`, error))));
+      return () => stops.forEach(stop => stop());
+    }
+    function neededEventSeasons() {
+      return [...seasonDocs.values()].filter(row => {
+        if (activeMode === 'endingrating') return String(row.id).startsWith(`ending_${CURRENT_EVENT_YEAR}_`);
+        if (!SEASONS.some(season => row.id === seasonKey(season))) return false;
+        return !isGuest() || Boolean(getGuestNicknameForSeason(row));
+      });
+    }
+    function syncEventData() {
+      if (!eventDataReady || INITIAL_EVENT_ROOM_INVITE) return;
+      const rating = ['rating', 'endingrating', 'predictions'].includes(activeMode);
+      const wanted = new Set();
+      const use = (key, signature, start) => { wanted.add(key); demandEventData(key, signature, start); };
+      if (rating) {
+        if (LOCAL_EVENTS_MODE) loadLocalEventData();
+        else {
+          const seasonIds = [...SEASONS.map(seasonKey), SEMIFINAL_META_KEY, ...['h1','h2'].map(endingPeriodKey)];
+          use('seasons', 'year', current => watchEventIds('eventSeasons', documentId(), seasonIds, rows => {
+            seasonDocs = new Map(rows.map(row => [row.id, row]));
+            syncEventData();
+            scheduleFirebaseRender('other');
+          }, current));
+          const states = neededEventSeasons();
+          const keys = states.map(row => row.id).sort();
+          const ids = [...new Set(states.flatMap(row => [...(row.selectedOpeningIds || []), ...(row.semifinalOpeningIds || [])]).map(String))].sort();
+          const catalogSignature = isAdmin() && activeStage === 'basket' ? 'current-year' : JSON.stringify(ids);
+          use('catalog', catalogSignature, current => {
+            const receive = rows => applyOpeningRows(rows);
+            return catalogSignature === 'current-year'
+              ? watchEventRows('openings', [where('year', 'in', [CURRENT_EVENT_YEAR, String(CURRENT_EVENT_YEAR)])], receive, current)
+              : watchEventIds('openings', documentId(), ids, receive, current);
+          });
+          use('event-ratings', JSON.stringify(keys), current => watchEventIds('eventRatings', 'seasonKey', keys, rows => {
+            eventRatings = rows; scheduleFirebaseRender('other');
+          }, current));
+          use('alt-links', JSON.stringify(ids), current => watchEventIds('eventAltLinks', documentId(), ids, rows => {
+            eventAltLinks = new Map(rows.map(row => [row.id, row])); scheduleFirebaseRender('other');
+          }, current));
+          if (isAdmin()) {
+            use('basket', 'year', current => watchEventIds('eventBasket', documentId(), seasonIds, rows => {
+              eventBasket = Object.fromEntries(rows.map(row => [row.id, row]));
+              eventBasketError = ''; scheduleFirebaseRender('other');
+            }, current));
+            use('notifications', 'year', current => watchEventRows('eventNotifications', [where('year', '==', CURRENT_EVENT_YEAR)], rows => {
+              eventNotifications = new Map(rows.map(row => [row.id, row])); maybeShowCompletionNotice();
+            }, current));
+          }
+        }
+      } else {
+        // Random selection and game builders need the full pool, seasonal guests do not.
+        use('catalog', 'all', current => watchEventRows('openings', [], rows => applyOpeningRows(rows), current));
+      }
+      const games = rating ? (isAdmin() ? ['profiles', ...(activeMode === 'predictions' ? ['predictions'] : [])] : [])
+        : ['ratings', 'profiles', ...(activeMode === 'guess' ? ['guess'] : []),
+           ...(['bestworst','codenames','whoami','predictions'].includes(activeMode) ? [activeMode] : []),
+           ...(activeMode === 'bestworst' ? ['submissions'] : [])];
+      for (const key of games) use(key, key, current => startEventModeData(key, current));
+      for (const key of eventDataSubscriptions.keys()) if (!wanted.has(key)) dropEventData(key);
+    }
+    window.addEventListener('pagehide', () => {
+      for (const key of eventDataSubscriptions.keys()) dropEventData(key);
+    });
+    window.addEventListener('pageshow', event => { if (event.persisted) { syncEventData(); scheduleRender(); } });
+
+    function startEventModeData(key, current) {
+      const subscribe = (target, receive, fail) => onSnapshot(target, current(receive), current.fail(fail));
+      if (key === 'ratings') {
+        return subscribe(collection(db, 'ratings'), snapshot => {
+        mainRatings = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleFirebaseRender('other');
+      }, error => {
+        console.error('ratings snapshot error', error);
+        mainRatings = [];
+        scheduleFirebaseRender('other');
+      });
+      }
+      if (key === 'profiles') {
+        return subscribe(collection(db, 'userProfiles'), snapshot => {
+        userProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleFirebaseRender('other');
+      }, error => {
+        console.error('userProfiles snapshot error', error);
+        userProfiles = [];
+        scheduleFirebaseRender('other');
+      });
+      }
+      if (key === 'guess') {
+        return subscribe(collection(db, 'guessCollections'), snapshot => {
+        guessCollections = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        scheduleFirebaseRender('other');
+      }, error => {
+        console.error('guessCollections snapshot error', error);
+        guessCollections = [];
+        guessCollectionStatus = 'Не удалось загрузить подборки.';
+        scheduleFirebaseRender('other');
+      });
+      }
+      if (key === 'bestworst') {
+        return subscribe(eventRoomRegistryRef('bestworst'), snapshot => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        if (snapshot.exists() && data.status) eventRoomCache.bestworst.set(BW_ROOM_ID, { id:BW_ROOM_ID, ...data });
+        else eventRoomCache.bestworst.delete(BW_ROOM_ID);
+        syncEventRoomSubscriptions('bestworst', data.roomIds || []);
+      }, error => {
+        console.error('bestWorstRooms registry snapshot error', error);
+        bestWorstRoom = null;
+        bestWorstStatus = 'Не удалось загрузить лобби.';
+        scheduleFirebaseRender('other');
+      });
+      }
+      if (key === 'submissions') {
+        return subscribe(collection(db, BW_SUBMISSION_COLLECTION), snapshot => {
+        bestWorstSubmissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        void bwMaybeAutoReveal();
+        scheduleFirebaseRender('other');
+      }, error => {
+        console.error('bestWorstSubmissions snapshot error', error);
+        bestWorstSubmissions = [];
+        bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
+        scheduleFirebaseRender('other');
+      });
+      }
+      if (key === 'codenames') {
+        return subscribe(eventRoomRegistryRef('codenames'), snapshot => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        if (snapshot.exists() && data.status) eventRoomCache.codenames.set(CODENAMES_ROOM_ID, { id:CODENAMES_ROOM_ID, ...data });
+        else eventRoomCache.codenames.delete(CODENAMES_ROOM_ID);
+        syncEventRoomSubscriptions('codenames', data.roomIds || []);
+      }, error => {
+        console.error('codenames registry snapshot error', error);
+        codenamesRooms = [];
+        codenamesRoom = null;
+        codenamesStatus = 'Не удалось загрузить игру.';
+        if (activeMode === 'codenames') scheduleFirebaseRender('other');
+      });
+      }
+      if (key === 'whoami') {
+        return subscribe(eventRoomRegistryRef('whoami'), snapshot => {
+        const data = snapshot.exists() ? snapshot.data() : {};
+        if (snapshot.exists() && data.status) eventRoomCache.whoami.set(WHO_AM_I_ROOM_ID, { id:WHO_AM_I_ROOM_ID, ...data });
+        else eventRoomCache.whoami.delete(WHO_AM_I_ROOM_ID);
+        syncEventRoomSubscriptions('whoami', data.roomIds || []);
+      }, error => {
+        console.error('whoami registry snapshot error', error);
+        whoAmIRooms = [];
+        whoAmIRoom = null;
+        whoAmIStatus = 'Не удалось загрузить комнаты «Кто я?».';
+        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
+      });
+      }
+      if (key === 'predictions') {
+        return subscribe(collection(db, PREDICTION_COLLECTION), snapshot => {
+        const currentKey = predictionDocKey();
+        const ownDocumentChanged = snapshot.docChanges().some(change => change.doc.id === currentKey);
+        predictionDocs = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
+        if (ownDocumentChanged && !predictionDraftDirty) {
+          predictionDraft = null;
+          predictionDraftKey = '';
+          if (activeMode === 'predictions') scheduleFirebaseRender('other');
+        }
+      }, error => {
+        console.error('eventPredictions snapshot error', error);
+        predictionDocs = new Map();
+        predictionStatus = 'Не удалось загрузить предикты.';
+        if (activeMode === 'predictions') scheduleFirebaseRender('other');
+      });
+      }
+    }
+
     async function init() {
       if (!['user', 'admin', 'guest'].includes(accessLevel)) accessLevel = '';
       if (accessLevel === 'admin') accessLevel = '';
@@ -8213,136 +8442,8 @@
         await loadInviteCatalogSnapshot();
         subscribeInitialEventRoomInvite(INITIAL_EVENT_ROOM_INVITE);
       } else {
-      onSnapshot(collection(db, 'openings'), snapshot => {
-        const firstOpeningLoad = openings.length === 0;
-        const nextOpenings = snapshot.docs.map(d => normalizeOpening({ id: d.id, ...d.data() }));
-        const previousSignatures = new Map(openings.map(opening => [String(opening.id), openingGameSignature(opening)]));
-        const gameDataChanged = nextOpenings.length !== openings.length || nextOpenings.some(opening =>
-          previousSignatures.get(String(opening.id)) !== openingGameSignature(opening)
-        );
-        openings = nextOpenings;
-        openingsById = new Map(openings.map(o => [String(o.id), o]));
-        if (gameDataChanged) scheduleFirebaseRender(firstOpeningLoad ? 'openings-initial' : 'openings');
-      }, error => {
-        console.error('openings snapshot error', error);
-        appEl.innerHTML = '<div class="ev-empty">Не удалось загрузить OP/ED.</div>';
-      });
-      onSnapshot(collection(db, 'ratings'), snapshot => {
-        mainRatings = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        scheduleFirebaseRender('other');
-      }, error => {
-        console.error('ratings snapshot error', error);
-        mainRatings = [];
-        scheduleFirebaseRender('other');
-      });
-      onSnapshot(collection(db, 'userProfiles'), snapshot => {
-        userProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        scheduleFirebaseRender('other');
-      }, error => {
-        console.error('userProfiles snapshot error', error);
-        userProfiles = [];
-        scheduleFirebaseRender('other');
-      });
-      onSnapshot(collection(db, 'guessCollections'), snapshot => {
-        guessCollections = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        scheduleFirebaseRender('other');
-      }, error => {
-        console.error('guessCollections snapshot error', error);
-        guessCollections = [];
-        guessCollectionStatus = 'Не удалось загрузить подборки.';
-        scheduleFirebaseRender('other');
-      });
-      onSnapshot(eventRoomRegistryRef('bestworst'), snapshot => {
-        const data = snapshot.exists() ? snapshot.data() : {};
-        if (snapshot.exists() && data.status) eventRoomCache.bestworst.set(BW_ROOM_ID, { id:BW_ROOM_ID, ...data });
-        else eventRoomCache.bestworst.delete(BW_ROOM_ID);
-        syncEventRoomSubscriptions('bestworst', data.roomIds || []);
-      }, error => {
-        console.error('bestWorstRooms registry snapshot error', error);
-        bestWorstRoom = null;
-        bestWorstStatus = 'Не удалось загрузить лобби.';
-        scheduleFirebaseRender('other');
-      });
-      onSnapshot(collection(db, BW_SUBMISSION_COLLECTION), snapshot => {
-        bestWorstSubmissions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        void bwMaybeAutoReveal();
-        scheduleFirebaseRender('other');
-      }, error => {
-        console.error('bestWorstSubmissions snapshot error', error);
-        bestWorstSubmissions = [];
-        bestWorstStatus = 'Не удалось прочитать ответы bestWorstSubmissions.';
-        scheduleFirebaseRender('other');
-      });
-      onSnapshot(eventRoomRegistryRef('codenames'), snapshot => {
-        const data = snapshot.exists() ? snapshot.data() : {};
-        if (snapshot.exists() && data.status) eventRoomCache.codenames.set(CODENAMES_ROOM_ID, { id:CODENAMES_ROOM_ID, ...data });
-        else eventRoomCache.codenames.delete(CODENAMES_ROOM_ID);
-        syncEventRoomSubscriptions('codenames', data.roomIds || []);
-      }, error => {
-        console.error('codenames registry snapshot error', error);
-        codenamesRooms = [];
-        codenamesRoom = null;
-        codenamesStatus = 'Не удалось загрузить игру.';
-        if (activeMode === 'codenames') scheduleFirebaseRender('other');
-      });
-      onSnapshot(eventRoomRegistryRef('whoami'), snapshot => {
-        const data = snapshot.exists() ? snapshot.data() : {};
-        if (snapshot.exists() && data.status) eventRoomCache.whoami.set(WHO_AM_I_ROOM_ID, { id:WHO_AM_I_ROOM_ID, ...data });
-        else eventRoomCache.whoami.delete(WHO_AM_I_ROOM_ID);
-        syncEventRoomSubscriptions('whoami', data.roomIds || []);
-      }, error => {
-        console.error('whoami registry snapshot error', error);
-        whoAmIRooms = [];
-        whoAmIRoom = null;
-        whoAmIStatus = 'Не удалось загрузить комнаты «Кто я?».';
-        if (activeMode === 'whoami') scheduleFirebaseRender('whoami');
-      });
-      onSnapshot(collection(db, PREDICTION_COLLECTION), snapshot => {
-        const currentKey = predictionDocKey();
-        const ownDocumentChanged = snapshot.docChanges().some(change => change.doc.id === currentKey);
-        predictionDocs = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-        if (ownDocumentChanged && !predictionDraftDirty) {
-          predictionDraft = null;
-          predictionDraftKey = '';
-          if (activeMode === 'predictions') scheduleFirebaseRender('other');
-        }
-      }, error => {
-        console.error('eventPredictions snapshot error', error);
-        predictionDocs = new Map();
-        predictionStatus = 'Не удалось загрузить предикты.';
-        if (activeMode === 'predictions') scheduleFirebaseRender('other');
-      });
-      if (LOCAL_EVENTS_MODE) {
-        loadLocalEventData();
-        scheduleFirebaseRender('other');
-      } else {
-        onSnapshot(collection(db, 'eventSeasons'), snapshot => {
-          seasonDocs = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-          scheduleFirebaseRender('other');
-        }, error => console.error('eventSeasons snapshot error', error));
-        onSnapshot(collection(db, 'eventRatings'), snapshot => {
-          eventRatings = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          scheduleFirebaseRender('other');
-        }, error => console.error('eventRatings snapshot error', error));
-        onSnapshot(collection(db, 'eventBasket'), snapshot => {
-          eventBasketError = '';
-          eventBasket = {};
-          snapshot.docs.forEach(d => { eventBasket[d.id] = { id: d.id, ...d.data() }; });
-          scheduleFirebaseRender('other');
-        }, error => {
-          console.error('eventBasket snapshot error', error);
-          eventBasketError = 'Не удалось загрузить корзину.';
-          scheduleFirebaseRender('other');
-        });
-        onSnapshot(collection(db, 'eventAltLinks'), snapshot => {
-          eventAltLinks = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-          scheduleFirebaseRender('other');
-        }, error => console.error('eventAltLinks snapshot error', error));
-        onSnapshot(collection(db, 'eventNotifications'), snapshot => {
-          eventNotifications = new Map(snapshot.docs.map(d => [d.id, { id: d.id, ...d.data() }]));
-          maybeShowCompletionNotice();
-        }, error => console.error('eventNotifications snapshot error', error));
-      }
+      eventDataReady = true;
+      syncEventData();
       }
       if (LOCAL_EVENTS_MODE) {
         window.addEventListener('storage', (e) => {

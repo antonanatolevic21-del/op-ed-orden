@@ -14,6 +14,7 @@
       onSnapshot,
       query,
       where,
+      documentId,
       limit,
       orderBy,
       serverTimestamp,
@@ -371,6 +372,25 @@
       };
     }
 
+    function watchOpeningsByIds(ids, callback) {
+      const unique = [...new Set((ids || []).map(String).filter(Boolean))].sort();
+      let active = true;
+      if (!unique.length) { queueMicrotask(() => { if (active) callback([]); }); return () => { active = false; }; }
+      const batches = [];
+      for (let i = 0; i < unique.length; i += 30) batches.push(unique.slice(i, i + 30));
+      const results = new Map();
+      const stops = batches.map((batch, index) => onSnapshot(query(collection(db, 'openings'), where(documentId(), 'in', batch)), snapshot => {
+        if (!active) return;
+        results.set(index, snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        if (results.size === batches.length) callback([...results.values()].flat());
+      }, error => {
+        if (!active) return;
+        console.error('watchOpeningsByIds failed', error);
+        callback([], { error: true });
+      }));
+      return () => { active = false; stops.forEach(stop => stop()); };
+    }
+
     function watchRatings(callback) {
       return onSnapshot(collection(db, "ratings"), snapshot => callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))), error => {
         console.error("watchRatings error", error);
@@ -719,6 +739,7 @@
     window.OPED_DB = {
       init,
       watchOpenings,
+      watchOpeningsByIds,
       watchRatings,
       watchRatingsForUser,
       watchManualRanks,
