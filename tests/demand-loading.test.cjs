@@ -14,7 +14,7 @@ const sandbox = {
   activeMode:'rating',activeStage:'first',seasonDocs:new Map(),
   isGuest:()=>!sandbox.admin,isAdmin:()=>!!sandbox.admin,
   getGuestNicknameForSeason:row=>!row.closed && row.allowedNicknames?.includes('Alice')?'Alice':'',
-  applyOpeningRows:rows=>{sandbox.loaded=rows;},scheduleFirebaseRender(){},scheduleRender(){},
+  applyOpeningRows:rows=>{sandbox.loaded=rows;},scheduleFirebaseRender(){sandbox.renderRequests=(sandbox.renderRequests||0)+1;},scheduleRender(){},
   eventRoomSubscriptions:{}, maybeShowCompletionNotice(){},
 };
 vm.createContext(sandbox);
@@ -51,6 +51,9 @@ assert.equal(active('openings')[0].target.constraints[0].field,'year');
 assert.deepEqual(Array.from(active('openings')[0].target.constraints[0].value),[2026,'2026']);
 active('openings')[0].error(new Error('expected test failure'));
 assert.equal(vm.runInContext("eventDataSubscriptions.get('catalog').error",sandbox),true);
+const beforeReady = sandbox.renderRequests;
+vm.runInContext("demandEventData('readiness-test', '1', current => { current(() => {})(); });",sandbox);
+assert.ok(sandbox.renderRequests > beforeReady, 'last subscription becoming ready must dismiss the loading screen');
 console.log('PASS: seasonal ID-only subscriptions, batching, readiness, errors, stale callbacks, mode cleanup, admin year pool');
 
 (async () => {

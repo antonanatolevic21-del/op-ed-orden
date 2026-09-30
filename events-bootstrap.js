@@ -167,7 +167,7 @@ async function loadFull(mode = '', profile = null, seasons = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   window.OC_EVENTS_INITIAL_MODE = mode;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260930-demand-data1');
+  await import('./events-app.js?v=20260930-demand-data2');
   if (mode) void clickRequestedMode(mode);
 
   if (seasons?.length) return;

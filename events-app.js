@@ -8219,7 +8219,11 @@
       const token = { signature, ready: false, error: false, stop: () => {} };
       eventDataSubscriptions.set(key, token);
       const current = callback => (...args) => {
-        if (eventDataSubscriptions.get(key) === token) { token.ready = true; token.error = false; callback(...args); }
+        if (eventDataSubscriptions.get(key) !== token) return;
+        const becameReady = !token.ready || token.error;
+        token.ready = true; token.error = false;
+        callback(...args);
+        if (becameReady) scheduleFirebaseRender('other');
       };
       current.guard = callback => (...args) => { if (eventDataSubscriptions.get(key) === token) callback(...args); };
       current.fail = callback => (...args) => {
