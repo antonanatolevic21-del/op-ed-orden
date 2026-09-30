@@ -18,7 +18,7 @@ const ctx = {
   }
 };
 vm.createContext(ctx);
-vm.runInContext(firebase.slice(firebase.indexOf('    function watchRatingsForUser('), firebase.indexOf('    function watchManualRanks(callback)')), ctx);
+vm.runInContext(firebase.slice(firebase.indexOf('    function watchRatingsForUser('), firebase.indexOf('    function watchManualRanks(callback)')).replace('import.meta.url', '"https://example.test/firebase-app.js"'), ctx);
 let result;
 const stop = ctx.watchRatingsForUsers([{ nickname: 'Alice', uid: 'uid-a' }, { nickname: 'Bob' }], rows => { result = rows; });
 assert.equal(subscriptions.length, 5);
