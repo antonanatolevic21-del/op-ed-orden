@@ -62,3 +62,14 @@
 @media(max-width:1050px){#oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace{grid-template-columns:minmax(260px,38%) minmax(0,1fr);gap:12px}.oc-workspace-candidate{grid-template-columns:48px minmax(0,1fr) 25px 18px;padding:8px;gap:6px}.oc-workspace-candidate>img,.oc-workspace-noimage{width:48px;height:38px}#oc-profile-panel.oc-top100-workspace-editing .oc-profile-item.manual{grid-template-columns:34px 54px minmax(0,1fr) auto;gap:7px}#oc-profile-panel.oc-top100-workspace-editing .oc-profile-item.manual>.oc-image-link{width:54px}#oc-profile-panel.oc-top100-workspace-editing .oc-profile-thumb{width:54px;height:40px}#oc-profile-panel.oc-top100-workspace-editing .oc-move-btns{grid-column:3;flex-direction:row}#oc-profile-panel.oc-top100-workspace-editing .oc-manual-row-actions{grid-column:4;grid-row:2}}
 @media(max-width:700px){#oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace{grid-template-columns:1fr}.oc-top100-workspace.editing>.oc-workspace-candidates{height:300px;min-height:260px;padding:12px}#oc-profile-panel.oc-top100-workspace-editing .oc-profile-list{height:60vh;min-height:360px}.oc-workspace-candidates footer{font-size:9px}.oc-workspace-candidate{grid-template-columns:62px minmax(0,1fr) 30px 26px}.oc-workspace-candidate>img,.oc-workspace-noimage{width:62px;height:44px}}
 #oc-profile-panel:not([data-profile-view="top100"]) .oc-top100-workspace{display:none!important}
+
+/* Optional duels stay above, outside the two-column editor. */
+#oc-profile-top-duel{width:100%;min-width:0;box-sizing:border-box}
+.oc-profile-duel-details{border:1px solid #352c40;border-radius:12px;background:#14101c;margin:0 0 16px}
+.oc-profile-duel-details>summary{cursor:pointer;padding:13px 16px;color:#eee8f6;font-weight:700;font-size:13px}
+.oc-profile-duel-details>summary span{margin-left:10px;color:#9787a5;font-size:11px;font-weight:400}
+.oc-profile-duel-details>summary:focus-visible{outline:2px solid #80dbc2;outline-offset:2px;border-radius:10px}
+.oc-profile-duel-content{padding:0 16px 16px}
+#oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace>.oc-profile-columns{grid-column:2;grid-row:1}
+#oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace>.oc-workspace-candidates{grid-column:1;grid-row:1}
+@media(max-width:700px){#oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace>.oc-profile-columns{grid-column:1;grid-row:2}.oc-profile-duel-details>summary span{display:block;margin:5px 0 0}}
