@@ -60,14 +60,12 @@
     });
   }
 
-  async function loadCatalog() {
-    if (!state.catalog.size) {
-      try {
-        const rows = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
-        state.catalog = new Map((rows || []).map(row => [String(row.id), row]));
-      } catch (error) { console.warn('Top-100 editor catalog load failed', error); }
-    }
+  async function loadCatalog(ids = []) {
     mergeLiveCatalog();
+    const missing = ids.filter(id => !state.catalog.has(String(id)));
+    if (!missing.length) return;
+    const rows = await window.OC_CATALOG_CACHE.byIds(missing);
+    mergeLiveCatalog(rows);
   }
 
   async function loadUserScores(user, tools) {
@@ -283,7 +281,7 @@
     if (!key || state.loading || (!force && state.loaded && state.key === key)) return;
     state.loading = true;
     try {
-      await loadCatalog(); captureMetaFromDom();
+      captureMetaFromDom();
       const tools = await firebaseTools();
       const [snap] = await Promise.all([
         tools.getDoc(tools.doc(tools.db, 'manualRanks', key)),
@@ -296,6 +294,7 @@
       state.user = user; state.key = key; state.baseline = cloneOrder(saved);
       const local = isOwnProfile() ? readLocalDraft(key) : null;
       state.draft = local || cloneOrder(saved); state.undo = []; state.redo = []; state.loaded = true;
+      await loadCatalog([...state.baseline.OP, ...state.baseline.ED, ...state.draft.OP, ...state.draft.ED]);
       state.editing = isEditing() && isOwnProfile(); renderAll();
       if (local && dirty() && state.editing) toast('Несохранённый черновик топа восстановлен.', 'success');
     } catch (error) {

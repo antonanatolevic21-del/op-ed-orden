@@ -91,12 +91,12 @@
     if (status) status.textContent = message;
   }
 
-  async function candidates(user, type) {
-    const key = `${normalize(user)}|${type}`;
+  async function candidates(user, type, searchCatalog = false) {
+    const key = `${normalize(user)}|${type}|${searchCatalog}`;
     if (cache.has(key)) return cache.get(key);
     const promise = (async () => {
       const bridge = window.OC_APP_BRIDGE;
-      const cached = window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
+      const cached = searchCatalog && window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
       const liveEntries = bridge?.snapshot?.()?.entries;
       const byId = new Map();
       (cached || []).forEach(entry => {
@@ -201,7 +201,7 @@
         <button type="button" class="oc-manual-insert-close" aria-label="Закрыть">×</button>
       </div>
       <input class="oc-manual-insert-search" type="search" placeholder="Название трека…" autocomplete="off">
-      <div class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю каталог…</div></div>
+      <div class="oc-manual-insert-results"><div class="oc-manual-insert-loading">Загружаю доступные записи…</div></div>
       <p class="oc-top100-inline-selection" role="status" aria-live="polite">Выбери трек для вставки.</p>
       <div class="oc-top100-inline-search-panel-actions">
         <button type="button" class="oc-soft-btn oc-top100-inline-confirm" disabled>Вставить сюда</button>
@@ -266,20 +266,30 @@
 
     currentPanel.querySelector('.oc-manual-insert-close').addEventListener('click', closePanel);
     let searchRenderTimer = 0;
+    let searchRequest = 0;
+    const refreshCandidates = async () => {
+      const request = ++searchRequest;
+      const searching = Boolean(clean(search.value));
+      try {
+        if (searching) list.innerHTML = '<div class="oc-manual-insert-loading">Поиск…</div>';
+        const nextRows = await candidates(user, panelType, searching);
+        if (request !== searchRequest || panel !== currentPanel || !currentPanel.isConnected) return;
+        rows = nextRows;
+        render();
+        if (!searching && !rows.length) list.innerHTML = '<div class="oc-empty">Начни вводить название песни.</div>';
+      } catch (error) {
+        if (request !== searchRequest || panel !== currentPanel) return;
+        list.innerHTML = `<div class="oc-manual-insert-error">${esc(error?.message || 'Не удалось выполнить поиск.')}</div>`;
+      }
+    };
     search.addEventListener('input', () => {
+      ++searchRequest;
       window.clearTimeout(searchRenderTimer);
-      searchRenderTimer = window.setTimeout(render, 100);
+      searchRenderTimer = window.setTimeout(refreshCandidates, 250);
     });
     confirm.addEventListener('click', insertSelected);
-
-    try {
-      rows = await candidates(user, panelType);
-      if (panel !== currentPanel || !currentPanel.isConnected) return;
-      render();
-      search.focus({ preventScroll: true });
-    } catch (error) {
-      if (list) list.innerHTML = `<div class="oc-manual-insert-error">${esc(error?.message || 'Не удалось загрузить оценки.')}</div>`;
-    }
+    search.focus({ preventScroll: true });
+    await refreshCandidates();
   }
 
   function clearDecorations(container) {

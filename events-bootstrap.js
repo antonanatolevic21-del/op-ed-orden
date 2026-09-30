@@ -165,8 +165,9 @@ async function clickRequestedMode(mode) {
 async function loadFull(mode = '', profile = null, seasons = null) {
   window.OC_EVENTS_REGISTERED_SEASON_GUEST = seasons?.length ? { profile, uid: String(auth.currentUser?.uid || '') } : null;
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
+  window.OC_EVENTS_INITIAL_MODE = mode;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20260929-season-guest1');
+  await import('./events-app.js?v=20260930-demand-data1');
   if (mode) void clickRequestedMode(mode);
 
   if (seasons?.length) return;

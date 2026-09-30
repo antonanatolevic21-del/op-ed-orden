@@ -8,10 +8,10 @@
   const seasonFillVersion = '20260730-natural-sort1';
   const sharedSeasonVersion = '20260819-invite-login1';
   const seasonCommunityVersion = '20260805-tournament-delete1';
-  const manualTopInsertVersion = '20260928-top100-empty-add1';
+  const manualTopInsertVersion = '20260930-demand-data1';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20260725-top100-suite2';
-  const top100EditorVersion = '20260927-top100-live-catalog1';
+  const top100EditorVersion = '20260930-demand-data1';
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
@@ -110,7 +110,7 @@
     addStyle('top100-drag.css', top100DragVersion);
     addStyle('top100-rank-readability.css', primaryVersion);
     top100Promise = addScriptsOrdered([
-      ['catalog-cache.js', primaryVersion],
+      ['catalog-cache.js', '20260930-demand-data1'],
       ['top100-rank-readability.js', top100ExportVersion],
       ['profile-top-single.js', top100SuiteVersion],
       ['top100-editor-v2.js', top100EditorVersion],
@@ -129,7 +129,7 @@
     addStyle('season-navigation.css', primaryVersion);
     addStyle('season-shared-rating.css', sharedSeasonVersion);
     seasonPromise = addScriptsOrdered([
-      ['catalog-cache.js', primaryVersion],
+      ['catalog-cache.js', '20260930-demand-data1'],
       ['season-quality-fill.js', seasonFillVersion],
       ['season-navigation.js', primaryVersion],
       ['season-shared-rating.js', sharedSeasonVersion]
