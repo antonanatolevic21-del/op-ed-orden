@@ -203,7 +203,8 @@
     const controls = editable
       ? `<div class="oc-move-btns"><button type="button" class="oc-move-btn" data-top100-action="up" data-type="${type}" data-id="${esc(id)}" ${index === 0 ? 'disabled' : ''}>▲</button><button type="button" class="oc-move-btn" data-top100-action="down" data-type="${type}" data-id="${esc(id)}">▼</button></div><div class="oc-manual-row-actions"><button type="button" class="oc-ar-top-btn" data-top100-action="remove" data-type="${type}" data-id="${esc(id)}">Удалить из топа</button></div><button type="button" class="oc-top100-drag-handle" data-type="${type}" data-id="${esc(id)}" aria-label="Перетащить">⋮⋮</button>`
       : '';
-    card.innerHTML = `${rank}${image}<div><div class="oc-profile-name"><span>${esc(meta.title)}</span></div>${meta.meta ? `<div class="oc-profile-meta">${esc(meta.meta)}</div>` : ''}</div><div class="oc-profile-score">${esc(meta.score)}</div>${controls}`;
+    const play = `<button type="button" class="oc-top100-play" data-top100-video="${esc(id)}" aria-label="Смотреть ${esc(meta.title)}">▶ Смотреть</button>`;
+    card.innerHTML = `${rank}${image}<div><div class="oc-profile-name"><span>${esc(meta.title)}</span> ${play}</div>${meta.meta ? `<div class="oc-profile-meta">${esc(meta.meta)}</div>` : ''}</div><div class="oc-profile-score">${esc(meta.score)}</div>${controls}`;
     return card;
   }
 
@@ -288,6 +289,18 @@
     state.undo.push(cloneOrder(state.draft)); state.redo = []; state.draft = cloneOrder(state.baseline); clearLocalDraft(); renderAll();
   }
 
+  async function clearTop(button) {
+    if (!state.loaded || !state.editing || !isOwnProfile() || state.saving) return;
+    const type = activeType();
+    if (!window.confirm(`Обнулить весь топ ${type}? Порядок и закрепления будут удалены сразу. Пометки кандидатов и оценки сохранятся; другой топ останется на месте.`)) return;
+    const previous = cloneOrder(state.draft);
+    const next = cloneOrder(previous); next[type] = [];
+    setDraft(next); state.selected = null;
+    const saved = await saveCurrent(button, { clearType: type });
+    if (!saved) { state.draft = previous; persistDraft(); renderAll(); }
+    else { state.candidateQuery = ''; state.candidateFilter = 'available'; void refreshCandidates(); }
+  }
+
   async function loadSaved(user, force = false) {
     const key = normalize(user);
     if (!key || state.loading || (!force && state.loaded && state.key === key)) return;
@@ -314,7 +327,7 @@
     } finally { state.loading = false; }
   }
 
-  async function saveCurrent(button) {
+  async function saveCurrent(button, options = {}) {
     if (state.saving || !state.loaded || !isOwnProfile()) return;
     state.saving = true;
     const oldText = button?.textContent || 'Сохранить топ-100';
@@ -334,6 +347,13 @@
         ...(hasPreviousOrder && fingerprint(previousOrder) !== fingerprint(payload) ? [historyEntry(previousOrder, previousTime)] : []),
         ...(Array.isArray(previousRow.history) ? previousRow.history : [])
       ]);
+      if (options.clearType) {
+        payload.manualCreated = Boolean(payload.OP.length || payload.ED.length);
+        payload[`pins${options.clearType}`] = [];
+        for (const type of ['OP', 'ED']) {
+          if (Array.isArray(previousRow[`candidates${type}`])) payload[`candidates${type}`] = previousRow[`candidates${type}`].slice();
+        }
+      }
       await db.saveManualRanks(state.user, payload);
       await tools.setDoc(manualRef, { history }, { merge: true });
       const snap = await tools.getDoc(manualRef);
@@ -342,9 +362,11 @@
       if (fingerprint(verified) !== fingerprint(payload)) throw new Error('Firebase сохранил другой порядок.');
       state.baseline = cloneOrder(verified); state.draft = cloneOrder(verified); state.undo = []; state.redo = []; clearLocalDraft(); renderAll();
       document.dispatchEvent(new CustomEvent('oc:top100-saved', { detail: { user: state.user, OP: verified.OP.slice(), ED: verified.ED.slice(), editorV2: true } }));
-      toast('Топ-100 сохранён и сразу применён ✓', 'success');
+      toast(options.clearType ? 'Топ обнулён. Помеченные кандидаты остались в корзинах.' : 'Топ-100 сохранён и сразу применён ✓', 'success');
+      return true;
     } catch (error) {
       console.error('Top-100 editor save failed', error); toast(error?.message || 'Не удалось сохранить топ-100.', 'error');
+      return false;
     } finally {
       state.saving = false;
       if (button) { button.disabled = false; button.textContent = oldText; }
@@ -442,7 +464,7 @@
     if (state.candidateError) { list.innerHTML = '<div class="oc-empty">Не удалось загрузить кандидатов.<br><button type="button" data-workspace-retry>Повторить</button></div>'; return; }
     list.innerHTML = rows.slice(0,state.candidateLimit).map(entry => {
       const id = String(entry.id), meta = metaFor(type,id), selected = state.selected?.type === type && state.selected?.id === id;
-      return `<article class="oc-workspace-candidate${selected?' oc-workspace-selected':''}" data-workspace-candidate="${esc(id)}" data-type="${type}" role="button" tabindex="0" aria-pressed="${selected}">${meta.image?`<img src="${esc(meta.image)}" alt="" loading="lazy" decoding="async">`:`<span class="oc-workspace-noimage">${type}</span>`}<div><strong>${esc(meta.title)}</strong><small>${esc([entry.anime,meta.meta,...(entry.performers || [])].filter(Boolean).join(' · '))}</small><span>${esc(meta.score)} ✦</span></div><button type="button" data-workspace-add aria-label="Добавить ${esc(meta.title)}">+</button><button type="button" class="oc-top100-drag-handle" aria-label="Перетащить ${esc(meta.title)}">⋮⋮</button></article>`;
+      return `<article class="oc-workspace-candidate${selected?' oc-workspace-selected':''}" data-workspace-candidate="${esc(id)}" data-type="${type}" role="button" tabindex="0" aria-pressed="${selected}">${meta.image?`<img src="${esc(meta.image)}" alt="" loading="lazy" decoding="async">`:`<span class="oc-workspace-noimage">${type}</span>`}<div><strong>${esc(meta.title)}</strong><small>${esc([entry.anime,meta.meta,...(entry.performers || [])].filter(Boolean).join(' · '))}</small><span>${esc(meta.score)} ✦</span><button type="button" class="oc-top100-play" data-top100-video="${esc(id)}" aria-label="Смотреть ${esc(meta.title)}">▶</button></div><button type="button" data-workspace-add aria-label="Добавить ${esc(meta.title)}">+</button><button type="button" class="oc-top100-drag-handle" aria-label="Перетащить ${esc(meta.title)}">⋮⋮</button></article>`;
     }).join('') || `<div class="oc-empty">${state.candidateFilter==='available'?'Кандидатов пока нет. Выбери «Все песни» и найди недостающие.':'Ничего не найдено.'}</div>`;
     if (rows.length > state.candidateLimit) list.insertAdjacentHTML('beforeend','<button type="button" data-workspace-more>Показать ещё 40</button>');
     list.scrollTop = scroll;
@@ -504,7 +526,7 @@
     const columns = document.querySelector('#oc-profile-panel .oc-profile-columns');
     if (!columns) return;
     const toolbar = document.createElement('div'); toolbar.className = 'oc-top100-toolbar';
-    toolbar.innerHTML = `<div class="oc-top100-toolbar-type"></div><div class="oc-top100-search-wrap"><input id="oc-top100-search" type="search" placeholder="Найти в топе…" autocomplete="off"><div id="oc-top100-search-results" class="oc-top100-search-results" hidden></div></div><div class="oc-top100-jump"><input id="oc-top100-jump" type="number" min="1" max="100" placeholder="№"><button type="button" data-top100-jump>Перейти</button></div><div class="oc-top100-history-actions"><button type="button" data-top100-undo title="Отменить">↶</button><button type="button" data-top100-redo title="Вернуть">↷</button><button type="button" data-top100-reset>Сбросить</button></div><span class="oc-top100-dirty" data-top100-dirty>Сохранено</span><div class="oc-top100-extra"><button type="button" data-top100-history>История</button><button type="button" data-top100-compare>Сравнить</button></div><div class="oc-top100-toolbar-save"></div>`;
+    toolbar.innerHTML = `<div class="oc-top100-toolbar-type"></div><div class="oc-top100-search-wrap"><input id="oc-top100-search" type="search" placeholder="Найти в топе…" autocomplete="off"><div id="oc-top100-search-results" class="oc-top100-search-results" hidden></div></div><div class="oc-top100-jump"><input id="oc-top100-jump" type="number" min="1" max="100" placeholder="№"><button type="button" data-top100-jump>Перейти</button></div><div class="oc-top100-history-actions"><button type="button" data-top100-undo title="Отменить">↶</button><button type="button" data-top100-redo title="Вернуть">↷</button><button type="button" data-top100-reset>Сбросить</button><button type="button" data-top100-clear>Обнулить</button></div><span class="oc-top100-dirty" data-top100-dirty>Сохранено</span><div class="oc-top100-extra"><button type="button" data-top100-history>История</button><button type="button" data-top100-compare>Сравнить</button></div><div class="oc-top100-toolbar-save"></div>`;
     columns.before(toolbar);
     const switcher = document.querySelector('.oc-profile-top-type-switch'); if (switcher) toolbar.querySelector('.oc-top100-toolbar-type').append(switcher);
     const edit = editButton(), save = saveButton();
@@ -513,6 +535,7 @@
     toolbar.querySelector('[data-top100-undo]').addEventListener('click', undo);
     toolbar.querySelector('[data-top100-redo]').addEventListener('click', redo);
     toolbar.querySelector('[data-top100-reset]').addEventListener('click', resetDraft);
+    toolbar.querySelector('[data-top100-clear]').addEventListener('click', event => void clearTop(event.currentTarget));
     toolbar.querySelector('[data-top100-history]').addEventListener('click', () => void openHistory());
     toolbar.querySelector('[data-top100-compare]').addEventListener('click', () => void openCompare());
     toolbar.querySelector('[data-top100-jump]').addEventListener('click', () => jumpTo(toolbar.querySelector('#oc-top100-jump').value));
@@ -555,6 +578,8 @@
     if (undoButton) undoButton.disabled = !state.editing || !state.undo.length;
     if (redoButton) redoButton.disabled = !state.editing || !state.redo.length;
     if (resetButton) resetButton.disabled = !state.editing || !dirty();
+    const clearButton = toolbar.querySelector('[data-top100-clear]');
+    if (clearButton) clearButton.disabled = !state.editing || state.saving || !state.loaded;
     const save = saveButton(); if (save) { save.classList.toggle('active', state.editing && dirty()); save.disabled = !isOwnProfile() || state.saving; }
   }
 
@@ -581,6 +606,111 @@
     });
     return modal;
   }
+
+  function safeExternalUrl(value) {
+    try { const parsed = new URL(clean(value)); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : ''; } catch (_) { return ''; }
+  }
+    function getDirectVideoType(url) {
+      const href = safeExternalUrl(url);
+      if (!href) return '';
+      try {
+        const parsed = new URL(href);
+        const text = `${parsed.pathname} ${parsed.search}`.toLowerCase();
+        if (/\.webm(?:$|[?#&\s])/.test(text) || text.includes('.webm')) return 'video/webm';
+        if (/\.mp4(?:$|[?#&\s])/.test(text) || text.includes('.mp4')) return 'video/mp4';
+        if (/\.ogg(?:$|[?#&\s])/.test(text) || text.includes('.ogv')) return 'video/ogg';
+      } catch (e) {}
+      return '';
+    }
+
+    function getVkVideoEmbedUrl(parsed, autoplay = false) {
+      const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+      const domains = ['vk.com', 'vkvideo.ru', 'vk.ru'];
+      if (!domains.some(domain => host === domain || host.endsWith(`.${domain}`))) return '';
+
+      const buildEmbedUrl = (ownerId, videoId, hash = '', hd = '2') => {
+        if (!/^-?\d+$/.test(ownerId) || !/^\d+$/.test(videoId)) return '';
+        const embed = new URL('https://vk.com/video_ext.php');
+        embed.searchParams.set('oid', ownerId);
+        embed.searchParams.set('id', videoId);
+        if (hash && /^[a-z0-9_-]{1,200}$/i.test(hash)) embed.searchParams.set('hash', hash);
+        embed.searchParams.set('hd', /^\d+$/.test(hd) ? hd : '2');
+        if (autoplay) embed.searchParams.set('autoplay', '1');
+        return embed.href;
+      };
+
+      if (parsed.pathname.toLowerCase() === '/video_ext.php') {
+        return buildEmbedUrl(
+          parsed.searchParams.get('oid') || '',
+          parsed.searchParams.get('id') || '',
+          parsed.searchParams.get('hash') || '',
+          parsed.searchParams.get('hd') || '2'
+        );
+      }
+
+      const candidates = [parsed.pathname, parsed.searchParams.get('z') || '', parsed.hash || ''];
+      for (const candidate of candidates) {
+        let decoded = candidate;
+        try { decoded = decodeURIComponent(candidate); } catch (e) {}
+        const match = decoded.match(/(?:video|clip)(-?\d+)_(\d+)/i);
+        if (match) return buildEmbedUrl(match[1], match[2]);
+      }
+      return '';
+    }
+
+    function getVideoEmbedUrl(url) {
+      const href = safeExternalUrl(url);
+      if (!href || getDirectVideoType(href)) return '';
+      try {
+        const parsed = new URL(href);
+        const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+        const vkEmbed = getVkVideoEmbedUrl(parsed, true);
+        if (vkEmbed) return vkEmbed;
+        if (host === 'youtu.be') {
+          const id = parsed.pathname.split('/').filter(Boolean)[0];
+          return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
+        }
+        if ((host === 'youtube.com' || host.endsWith('.youtube.com'))) {
+          if (parsed.pathname.startsWith('/embed/')) return `${parsed.origin}${parsed.pathname}?autoplay=1&rel=0`;
+          if (parsed.pathname.startsWith('/shorts/')) {
+            const id = parsed.pathname.split('/').filter(Boolean)[1];
+            return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
+          }
+          const id = parsed.searchParams.get('v');
+          return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0` : '';
+        }
+        if ((host === 'vimeo.com' || host.endsWith('.vimeo.com'))) {
+          const id = parsed.pathname.split('/').filter(Boolean).find(part => /^\d+$/.test(part));
+          return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}?autoplay=1` : '';
+        }
+        if ((host === 'rutube.ru' || host.endsWith('.rutube.ru'))) {
+          const parts = parsed.pathname.split('/').filter(Boolean);
+          const idx = parts.findIndex(part => part === 'video');
+          const id = idx >= 0 ? parts[idx + 1] : '';
+          return id ? `https://rutube.ru/play/embed/${encodeURIComponent(id)}` : '';
+        }
+      } catch (e) {}
+      return '';
+    }
+
+  async function showTopVideo(id) {
+    const modal = modalRoot('video'), body = modal.querySelector('.oc-top100-modal-body');
+    body.innerHTML = '<p>Загружаю видео…</p>';
+    try {
+      await loadCatalog([String(id)]);
+      if (!modal.isConnected) return;
+      const entry = state.catalog.get(String(id));
+      const href = safeExternalUrl(entry?.link);
+      const direct = getDirectVideoType(href), embed = getVideoEmbedUrl(href);
+      body.innerHTML = `<h2>${esc(entry?.title || id)}</h2>${direct ? `<video class="oc-top100-video-player" controls autoplay playsinline preload="metadata" src="${esc(href)}"></video>` : embed ? `<iframe class="oc-top100-video-player" src="${esc(embed)}" title="Видео" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>` : '<p>Встроенный просмотр недоступен для этой ссылки.</p>'}${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Открыть видео в новой вкладке ↗</a>` : '<p>Ссылка на видео пока не добавлена.</p>'}`;
+      modal.querySelector('.oc-top100-modal-close')?.focus();
+    } catch (error) {
+      if (modal.isConnected) body.innerHTML = `<p>${esc(error?.message || 'Не удалось загрузить видео.')}</p>`;
+    }
+  }
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') document.querySelector('.oc-top100-modal[data-kind="video"]')?.remove();
+  });
 
   const rowUser = row => clean(row.nickname || row.displayName || row.name || row.id);
   const rowOrder = (row, type) => uniqueIds(row?.[type] || row?.[`manual${type}`]);
@@ -665,6 +795,10 @@
 
   document.addEventListener('click', event => {
     if (Date.now() < state.suppressClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+    const play = event.target.closest?.('[data-top100-video]');
+    if (play && isTopView()) {
+      event.preventDefault(); event.stopImmediatePropagation(); void showTopVideo(play.dataset.top100Video); return;
+    }
     const save = event.target.closest?.('#oc-manual-save-btn');
     if (save && isTopView() && isOwnProfile()) {
       event.preventDefault(); event.stopImmediatePropagation(); void saveCurrent(save); return;
