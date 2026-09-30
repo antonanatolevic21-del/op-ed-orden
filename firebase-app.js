@@ -494,7 +494,8 @@
         nickname: displayName,
         nicknameKey: safeName,
         ownerUid: requirePersonalUid(),
-        manualCreated: true,
+        // Metadata-only candidate saves must not publish a manual top.
+        manualCreated: ranks?.manualCreated !== false,
         OP: cleanRanks.OP,
         ED: cleanRanks.ED,
         manualOP: cleanRanks.OP,
