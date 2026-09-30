@@ -56,6 +56,9 @@
 
   function allUsers() {
     const names = new Map();
+    [...(document.querySelector('#oc-profile-user')?.options || [])].forEach(option => {
+      if (option.value) names.set(normalize(option.value), option.value);
+    });
     (snapshot().userProfiles || []).forEach(profile => {
       const name = profileName(profile);
       if (name) names.set(normalize(name), name);
@@ -187,6 +190,9 @@
     if (!host) return;
     const users = allUsers();
     syncParticipants(users);
+    if (document.querySelector('#oc-profile-panel')?.dataset.profileView === 'comparison') {
+      window.dispatchEvent(new CustomEvent('oped:profile-comparison-users', { detail: { users: [firstUser, secondUser].filter(Boolean) } }));
+    }
     const data = firstUser && secondUser ? comparisonData(firstUser, secondUser) : null;
     const compatibility = data ? Math.max(0, Math.min(100, Math.round((data.correlation + 1) * 50))) : 0;
 

@@ -401,32 +401,78 @@
     function watchRatingsForUser(user, callback) {
       const uid = String(user?.uid || '').trim();
       const nicknameKey = normalizeNickname(user?.nickname || '');
-      const rowsBySource = { uid: [], nickname: [] };
+      const rowsBySource = { uid: [], nickname: [], legacy: [] };
       const ready = new Set();
       const unsubs = [];
+      let active = true;
+      const expected = Number(Boolean(uid)) + Number(Boolean(nicknameKey)) + Number(Boolean(user?.nickname));
       const emit = () => {
+        if (!active) return;
         const merged = new Map();
-        [...rowsBySource.uid, ...rowsBySource.nickname].forEach(row => merged.set(String(row.id || ''), row));
+        [...rowsBySource.uid, ...rowsBySource.nickname, ...rowsBySource.legacy].forEach(row => merged.set(String(row.id || ''), row));
         callback([...merged.values()]);
       };
       const subscribe = (source, constraint) => {
         unsubs.push(onSnapshot(query(collection(db, "ratings"), constraint), snapshot => {
           rowsBySource[source] = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
           ready.add(source);
-          if (ready.size === unsubs.length) emit();
+          if (ready.size === expected) emit();
         }, error => {
           console.error(`watchRatingsForUser ${source} error`, error);
           ready.add(source);
-          if (ready.size === unsubs.length) emit();
+          if (ready.size === expected) emit();
         }));
       };
       if (uid) subscribe('uid', where('ownerUid', '==', uid));
       if (nicknameKey) subscribe('nickname', where('nicknameKey', '==', nicknameKey));
+      if (user?.nickname) subscribe('legacy', where('nickname', '==', String(user.nickname).trim()));
       if (!unsubs.length) {
         callback([]);
         return () => {};
       }
-      return () => unsubs.forEach(unsubscribe => unsubscribe());
+      return () => { active = false; unsubs.forEach(unsubscribe => unsubscribe()); };
+    }
+
+    // Only subscribe to documents belonging to the profiles being viewed.
+    function watchProfileDocuments(collectionName, names, callback) {
+      const keys = [...new Set(names.map(normalizeNickname).filter(Boolean))];
+      const rows = new Map(), ready = new Set();
+      let active = true;
+      const emit = () => {
+        if (active && ready.size === keys.length) callback([...rows.values()]);
+      };
+      const unsubs = keys.map(key => onSnapshot(doc(db, collectionName, key), snapshot => {
+        if (!active) return;
+        if (snapshot.exists()) rows.set(key, { id: snapshot.id, ...snapshot.data() });
+        else rows.delete(key);
+        ready.add(key); emit();
+      }, error => {
+        if (!active) return;
+        console.error(`${collectionName} profile watch error`, error);
+        ready.add(key); emit();
+      }));
+      if (!keys.length) queueMicrotask(emit);
+      return () => { active = false; unsubs.forEach(stop => stop()); };
+    }
+    function watchManualRanksForUsers(names, callback) {
+      return watchProfileDocuments('manualRanks', names, callback);
+    }
+    function watchUserProfilesForUsers(names, callback) {
+      return watchProfileDocuments('userProfiles', names, callback);
+    }
+    function watchRatingsForUsers(users, callback) {
+      const rows = new Map(), ready = new Set();
+      let active = true;
+      const unsubs = users.map((user, i) => watchRatingsForUser(user, result => {
+        if (!active) return;
+        rows.set(i, result); ready.add(i);
+        if (ready.size !== users.length) return;
+        const merged = new Map();
+        rows.forEach(list => list.forEach(row => merged.set(row.id, row)));
+        callback([...merged.values()]);
+      }));
+      if (!users.length) queueMicrotask(() => { if (active) callback([]); });
+      return () => { active = false; unsubs.forEach(stop => stop()); };
     }
 
     function watchManualRanks(callback) {
@@ -742,6 +788,9 @@
       watchOpeningsByIds,
       watchRatings,
       watchRatingsForUser,
+      watchRatingsForUsers,
+      watchManualRanksForUsers,
+      watchUserProfilesForUsers,
       watchManualRanks,
       watchUserProfiles,
       watchEntityCards,

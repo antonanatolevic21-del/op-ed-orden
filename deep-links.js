@@ -78,7 +78,11 @@
     const section = url.searchParams.get('section');
     const select = await waitUntil(() => document.querySelector('#oc-profile-user'), 3000);
     if (profile && select) {
-      const option = await waitUntil(() => profileOption(select, profile), 4000);
+      let option = profileOption(select, profile);
+      if (!option) {
+        option = new Option(profile, profile);
+        select.add(option);
+      }
       if (option) {
         select.value = option.value;
         dispatchValue(select);
