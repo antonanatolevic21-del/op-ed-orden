@@ -374,7 +374,11 @@
 
   function ensureWorkspace() {
     let workspace = document.querySelector('.oc-top100-workspace');
-    if (workspace) return workspace;
+    if (workspace) {
+      const duel = profilePanel()?.querySelector('#oc-profile-top-duel');
+      if (duel && workspace.contains(duel)) workspace.before(duel);
+      return workspace;
+    }
     const columns = profilePanel()?.querySelector('.oc-profile-columns');
     if (!columns) return null;
     workspace = document.createElement('div'); workspace.className = 'oc-top100-workspace';

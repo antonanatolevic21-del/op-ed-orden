@@ -6,7 +6,7 @@
   const STAGE_ONE_ROUNDS = 4;
   const STAGE_TWO_LIMIT = 100;
   const DRAFT_VERSION = 2;
-  const state = { type: 'OP', mode: 'new', duel: null, query: '', busy: false, notice: '' };
+  const state = { type: 'OP', mode: 'new', duel: null, query: '', busy: false, notice: '', expanded: false };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
   const norm = value => String(value || '').trim().toLocaleLowerCase('ru').replace(/ё/g, 'е');
   const NATURAL_COLLATOR = new Intl.Collator(['ru', 'en'], { numeric: true, sensitivity: 'base' });
@@ -397,8 +397,9 @@
       root.className = 'oc-profile-top-duel oc-profile-section-hidden';
     }
     const columns = profile.querySelector('.oc-profile-columns');
-    if (columns) columns.before(root);
-    else profile.append(root);
+    const anchor = profile.querySelector('.oc-top100-workspace') || columns;
+    if (anchor && (root.parentElement !== anchor.parentElement || root.nextElementSibling !== anchor)) anchor.before(root);
+    else if (!anchor && root.parentElement !== profile) profile.append(root);
     return root;
   }
 
@@ -414,7 +415,7 @@
     const pins = meta().pins;
     const candidates = meta().candidates;
     const canPublish = Boolean(state.duel?.stage === 2 && state.duel?.complete && state.duel?.order);
-    root.innerHTML = `<div class="oc-discovery-head"><div><div class="oc-section-label">мой топ‑100</div><h3>Дуэльное ранжирование</h3><p>До 150 элементов проходят два этапа: около 300 сравнений для грубого распределения и ещё 100 для уточнения. Черновик можно сохранить и продолжить позже.</p></div></div>
+    root.innerHTML = `<details class="oc-profile-duel-details"${state.expanded ? ' open' : ''}><summary>Дуэльное ранжирование <span>необязательно · раскрыть / свернуть</span></summary><div class="oc-profile-duel-content"><div class="oc-discovery-head"><div><div class="oc-section-label">мой топ‑100</div><h3>Дуэльное ранжирование</h3><p>До 150 элементов проходят два этапа: около 300 сравнений для грубого распределения и ещё 100 для уточнения. Черновик можно сохранить и продолжить позже.</p></div></div>
       <div class="oc-duel-controls">
         <div><select class="oc-discovery-control" id="oc-profile-duel-type"><option value="OP" ${state.type === 'OP' ? 'selected' : ''}>OP</option><option value="ED" ${state.type === 'ED' ? 'selected' : ''}>ED</option></select>
         <select class="oc-discovery-control" id="oc-profile-duel-mode"><option value="new" ${state.mode === 'new' ? 'selected' : ''}>Собрать заново · два этапа</option><option value="refine" ${state.mode === 'refine' ? 'selected' : ''}>Только уточнить текущий</option></select></div>
@@ -425,7 +426,11 @@
         <div class="oc-top100-pin-search"><input id="oc-top-pin-search" value="${esc(state.query)}" placeholder="Найти OP/ED для закрепления…" autocomplete="off"><input id="oc-top-pin-rank" type="number" min="1" max="100" value="1"><span>место</span></div>
         <div class="oc-top100-pin-results">${pinSearch().map(entry => `<button type="button" data-pin-track="${esc(entry.id)}">${meta().candidates.includes(String(entry.id)) ? '<b>кандидат</b>' : ''}<span>${esc(entry.title)}</span></button>`).join('')}</div>
         <div class="oc-top100-pins">${pins.map(pin => `<div><span><b>№${pin.rank}</b> ${esc(map.get(String(pin.id))?.title || pin.id)}</span><button type="button" data-unpin-track="${esc(pin.id)}">Открепить</button></div>`).join('') || '<div class="oc-discovery-meta">Закреплений пока нет.</div>'}</div>
-      </div>${bodyMarkup()}`;
+      </div>${bodyMarkup()}</div></details>`;
+    const details = root.querySelector('.oc-profile-duel-details');
+    details?.addEventListener('toggle', () => {
+      if (root.querySelector('.oc-profile-duel-details') === details) state.expanded = details.open;
+    });
   }
 
   async function savePins(nextPins) {
@@ -496,6 +501,6 @@
   window.addEventListener('beforeunload', () => persistDraft());
   window.addEventListener('oped:app-data-updated', render);
   window.addEventListener('oped:profile-top-open', render);
-  document.querySelector('#oc-profile-user')?.addEventListener('change', () => { state.duel = null; state.notice = ''; render(); });
+  document.querySelector('#oc-profile-user')?.addEventListener('change', () => { state.duel = null; state.notice = ''; state.expanded = false; render(); });
   render();
 })();
