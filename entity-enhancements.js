@@ -65,6 +65,8 @@
 
 	function syncLinks() {
 		window.clearTimeout(syncTimer);
+		const panel = document.querySelector('#oc-entity-panel');
+		if (!panel || panel.classList.contains('hidden')) return;
 		syncAlbumPlaceholders();
 		document.querySelectorAll('.oc-entity-card[data-entity-open]').forEach(card => {
 			const id = clean(card.getAttribute('data-entity-open'));
@@ -75,11 +77,14 @@
 				link.className = 'oc-entity-card-link';
 				card.prepend(link);
 			}
-			link.href = albumHref(id);
-			link.dataset.entityAlbumLink = id;
+			const href = albumHref(id);
+			if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+			if (link.dataset.entityAlbumLink !== id) link.dataset.entityAlbumLink = id;
 			const title = clean(card.querySelector('.oc-entity-card-body h3')?.textContent);
-			link.setAttribute('aria-label', title ? `Открыть альбом «${title}»` : 'Открыть альбом');
-			link.title = title ? `Открыть «${title}»` : 'Открыть альбом';
+			const label = title ? `Открыть альбом «${title}»` : 'Открыть альбом';
+			const tooltip = title ? `Открыть «${title}»` : 'Открыть альбом';
+			if (link.getAttribute('aria-label') !== label) link.setAttribute('aria-label', label);
+			if (link.title !== tooltip) link.title = tooltip;
 		});
 	}
 
@@ -107,7 +112,15 @@
 		event.preventDefault();
 	}, true);
 
-	new MutationObserver(() => queueSync(20)).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'data-tab'] });
+	const panel = document.querySelector('#oc-entity-panel');
+	if (panel) {
+		new MutationObserver(records => {
+			if (records.some(record => [...record.addedNodes].some(node =>
+				node.nodeType === 1 && (node.matches?.('.oc-entity-card, .oc-progressive-more, .oc-empty') || node.querySelector?.('.oc-entity-card'))
+			))) queueSync(20);
+		}).observe(panel, { childList: true, subtree: true });
+		new MutationObserver(() => queueSync(0)).observe(panel, { attributes: true, attributeFilter: ['class'] });
+	}
 	window.addEventListener('popstate', () => queueSync(0));
 	window.addEventListener('oped:route-ready', event => {
 		if (String(event?.detail?.tab || '').startsWith('entity-')) queueSync(0);
