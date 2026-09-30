@@ -73,3 +73,8 @@
 #oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace>.oc-profile-columns{grid-column:2;grid-row:1}
 #oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace>.oc-workspace-candidates{grid-column:1;grid-row:1}
 @media(max-width:700px){#oc-profile-panel.oc-top100-workspace-editing .oc-top100-workspace>.oc-profile-columns{grid-column:1;grid-row:2}.oc-profile-duel-details>summary span{display:block;margin:5px 0 0}}
+
+.oc-top100-play{cursor:pointer;border:1px solid #514061;border-radius:7px;padding:6px 9px;background:#23192e;color:#ddd1ec;font-size:11px;white-space:nowrap}
+.oc-top100-video-player{display:block;width:100%;aspect-ratio:16/9;border:0;background:#000;margin:14px 0}
+.oc-top100-toolbar [data-top100-clear]{color:#ffa5a5;border-color:#704242}
+.oc-top100-modal[data-kind="video"]{z-index:100000}
