@@ -58,7 +58,7 @@
 			const image = card.querySelector('img');
 			return {
 				place: index + 1,
-				title: clean(card.querySelector('.oc-profile-name')?.textContent) || `Место ${index + 1}`,
+				title: clean(card.querySelector('[data-top100-title]')?.textContent || card.querySelector('.oc-profile-name')?.textContent) || `Место ${index + 1}`,
 				meta: clean(card.querySelector('.oc-profile-meta')?.textContent) || type,
 				image: clean(image?.currentSrc || image?.getAttribute('src')),
 				fallback: clean(image?.dataset.fallback)

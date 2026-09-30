@@ -109,7 +109,7 @@
         if (!id) return;
         const img = card.querySelector('img');
         state.meta.set(`${type}:${id}`, {
-          title: clean(card.querySelector('.oc-profile-name')?.textContent),
+          title: clean(card.querySelector('[data-top100-title]')?.textContent || state.catalog.get(String(id))?.title || card.querySelector('.oc-profile-name')?.textContent),
           meta: clean(card.querySelector('.oc-profile-meta')?.textContent),
           score: clean(card.querySelector('.oc-profile-score')?.textContent),
           image: clean(img?.getAttribute('src')), fallback: clean(img?.dataset.fallback)
@@ -177,7 +177,7 @@
     const entry = state.catalog.get(String(id)) || {};
     const seasons = { winter:'Зима', spring:'Весна', summer:'Лето', fall:'Осень' };
     return {
-      title: cached.title || clean(entry.title || entry.anime || id),
+      title: clean(entry.title) || cached.title || clean(entry.anime || id),
       meta: cached.meta || [entry.year, seasons[entry.season] || entry.season].filter(Boolean).join(' · '),
       score: state.scoresLoaded
         ? (state.scores.has(String(id)) ? displayScore(state.scores.get(String(id))) : '—')
@@ -204,7 +204,7 @@
       ? `<div class="oc-move-btns"><button type="button" class="oc-move-btn" data-top100-action="up" data-type="${type}" data-id="${esc(id)}" ${index === 0 ? 'disabled' : ''}>▲</button><button type="button" class="oc-move-btn" data-top100-action="down" data-type="${type}" data-id="${esc(id)}">▼</button></div><div class="oc-manual-row-actions"><button type="button" class="oc-ar-top-btn" data-top100-action="remove" data-type="${type}" data-id="${esc(id)}">Удалить из топа</button></div><button type="button" class="oc-top100-drag-handle" data-type="${type}" data-id="${esc(id)}" aria-label="Перетащить">⋮⋮</button>`
       : '';
     const play = `<button type="button" class="oc-top100-play" data-top100-video="${esc(id)}" aria-label="Смотреть ${esc(meta.title)}">▶ Смотреть</button>`;
-    card.innerHTML = `${rank}${image}<div><div class="oc-profile-name"><span>${esc(meta.title)}</span> ${play}</div>${meta.meta ? `<div class="oc-profile-meta">${esc(meta.meta)}</div>` : ''}</div><div class="oc-profile-score">${esc(meta.score)}</div>${controls}`;
+    card.innerHTML = `${rank}${image}<div><div class="oc-profile-name"><span data-top100-title>${esc(meta.title)}</span></div>${meta.meta ? `<div class="oc-profile-meta">${esc(meta.meta)}</div>` : ''}${play}</div><div class="oc-profile-score">${esc(meta.score)}</div>${controls}`;
     return card;
   }
 
