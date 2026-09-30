@@ -546,7 +546,9 @@
     function resetRemoteDataSubscription(name) {
       const state = remoteDataState[name];
       if (!state) return;
+      state.resolve?.();
       state.started = false;
+      state.ready = false;
       state.promise = null;
       state.resolve = null;
     }
@@ -1401,13 +1403,16 @@
 
     function rebuildManualRanksFromFirebase() {
       if (!Array.isArray(firebaseManualRanks)) return;
-      const next = {};
+      const next = activeTab === 'profile' ? { ...manualRanks } : {};
+      if (activeTab === 'profile') openedProfileUsers().forEach(name => {
+        Object.keys(next).forEach(key => { if (manualSameUser(key, name) || manualSameUser(next[key]?.nickname, name)) delete next[key]; });
+      });
       firebaseManualRanks.forEach(row => mergeManualRankRowInto(next, row));
       manualRanks = next;
       persistManualRanksCache();
       refreshAfterManualRankCacheChange();
       publishAppData('manual-ranks-updated');
-      if (usesTopOnlyCatalog() && firebaseDbInstance) void ensureOpeningsWatcher(firebaseDbInstance, topProfileOpeningIds());
+      refreshScopedProfileCatalog();
     }
 
     function rebuildManualRanksFromRatingDocs() {
@@ -1423,7 +1428,7 @@
       persistManualRanksCache();
       refreshAfterManualRankCacheChange();
       publishAppData('manual-ranks-updated');
-      if (usesTopOnlyCatalog() && firebaseDbInstance) void ensureOpeningsWatcher(firebaseDbInstance, topProfileOpeningIds());
+      refreshScopedProfileCatalog();
     }
 
     function rebuildUserProfilesFromFirebase() {
@@ -2871,6 +2876,34 @@
     let openingsScopeGeneration = 0;
     let ratingsUserKey = '';
     let ratingsScopeGeneration = 0;
+    let comparisonProfileUsers = [];
+    function openedProfileUsers() {
+      const selected = profileUserSelect?.value || profileUser || myName;
+      const names = profilePanel?.dataset.profileView === 'comparison' && comparisonProfileUsers.length
+        ? comparisonProfileUsers : [selected];
+      return [...new Map(names.filter(Boolean).map(name => [manualUserSafeKey(name), name])).values()];
+    }
+    function scopedProfileOpeningIds() {
+      const ids = new Set();
+      openedProfileUsers().forEach(name => {
+        const ranks = getManualRanksForUser(name) || {};
+        ['OP', 'ED', 'candidatesOP', 'candidatesED'].forEach(key => (ranks[key] || []).forEach(id => ids.add(String(id))));
+        const profile = dailyProfileFor(name) || {};
+        ['rerateIds', 'rateLaterIds'].forEach(key => (profile[key] || []).forEach(id => ids.add(String(id))));
+        Object.values(profile.dailyAssignments || {}).forEach(list => { if (Array.isArray(list)) list.forEach(id => ids.add(String(id))); });
+      });
+      firebaseRatings.forEach(row => { if (row.openingId && !String(row.openingId).startsWith('__')) ids.add(String(row.openingId)); });
+      return [...ids].sort();
+    }
+    function usesScopedProfileCatalog(tab = activeTab) {
+      // Daily selection needs the eligible catalogue to generate new assignments.
+      return tab === 'profile' && profilePanel?.dataset.profileView !== 'daily';
+    }
+    function refreshScopedProfileCatalog() {
+      if (usesScopedProfileCatalog() && firebaseDbInstance && remoteDataState.ratings.ready && remoteDataState.manualRanks.ready && remoteDataState.userProfiles.ready) {
+        void ensureOpeningsWatcher(firebaseDbInstance, scopedProfileOpeningIds());
+      }
+    }
     function usesTopOnlyCatalog(tab = activeTab) {
       return tab === 'profile' && profilePanel?.dataset.profileView === 'top100';
     }
@@ -2913,8 +2946,7 @@
     }
 
     function preferredRatingsScope(tab = activeTab) {
-      const profileTop100 = tab === 'profile' && profilePanel?.dataset.profileView === 'top100';
-      if (profileTop100) return profileUserSelect?.value || myName || authenticatedUid ? 'user' : 'none';
+      if (tab === 'profile') return openedProfileUsers().length ? 'user' : 'none';
       if (!catalogHasRatingAggregates()) return 'all';
       if (tab === 'profile' || tab === 'stats' || tab === 'discovery') return 'all';
       if (myName || authenticatedUid) return 'user';
@@ -2935,8 +2967,9 @@
         rebuildEntriesFromFirebase();
         return Promise.resolve();
       }
-      const ratingName = usesTopOnlyCatalog() ? (profileUserSelect?.value || profileUser || myName) : myName;
-      const nextUserKey = nextScope === 'user' ? ratingName : '';
+      const ratingNames = activeTab === 'profile' ? openedProfileUsers() : [myName];
+      const ratingName = ratingNames[0];
+      const nextUserKey = nextScope === 'user' ? JSON.stringify([ratingNames, currentPersonalUid()]) : '';
       if (state.started && firebaseRatingsScope === nextScope && ratingsUserKey === nextUserKey) return createRemoteDataPromise('ratings');
       ratingsUserKey = nextUserKey;
       const generation = ++ratingsScopeGeneration;
@@ -2956,77 +2989,51 @@
         rebuildEntriesFromFirebase();
         rebuildManualRanksFromRatingDocs();
         markRemoteDataReady('ratings', { count: firebaseRatings.length, scope: firebaseRatingsScope });
+        refreshScopedProfileCatalog();
       };
-      firebaseUnsubRatings = nextScope === 'user' && typeof db.watchRatingsForUser === 'function'
-        ? db.watchRatingsForUser({ uid: manualSameUser(ratingName, myName) ? currentPersonalUid() : '', nickname: ratingName }, callback)
+      firebaseUnsubRatings = nextScope === 'user'
+        ? db.watchRatingsForUsers(ratingNames.map(name => ({ uid: manualSameUser(name, myName) ? currentPersonalUid() : '', nickname: name })), callback)
         : db.watchRatings(callback);
       return readyPromise;
     }
 
-    function ensureManualRanksWatcher(db = firebaseDbInstance) {
-      const state = remoteDataState.manualRanks;
-      if (state.started) return createRemoteDataPromise('manualRanks');
+    const profileWatcherKeys = {}, profileWatcherGenerations = {};
+    function ensureProfileWatcher(kind, db, apply) {
+      const state = remoteDataState[kind];
+      const names = activeTab === 'profile' ? openedProfileUsers() : null;
+      const key = JSON.stringify(names);
+      if (state.started && profileWatcherKeys[kind] === key) return createRemoteDataPromise(kind);
+      if (kind === 'manualRanks') stopManualRanksWatcher(); else stopUserProfilesWatcher();
+      profileWatcherKeys[kind] = key;
+      const generation = profileWatcherGenerations[kind];
       state.started = true;
-      const readyPromise = createRemoteDataPromise('manualRanks');
-      if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
-      if (db && typeof db.watchManualRanks === 'function') {
-        firebaseUnsubManualRanks = db.watchManualRanks(rows => {
-          firebaseManualRanks = rows || [];
-          rebuildManualRanksFromFirebase();
-          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
-        });
-        return readyPromise;
-      }
-      void getExtendedDb().then(ext => {
-        firebaseUnsubManualRanks = ext.onSnapshot(ext.collection(ext.db, 'manualRanks'), snapshot => {
-          firebaseManualRanks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          rebuildManualRanksFromFirebase();
-          markRemoteDataReady('manualRanks', { count: firebaseManualRanks.length });
-        }, err => {
-          console.error('manualRanks watch error', err);
-          markRemoteDataReady('manualRanks', { error: true });
-        });
-      }).catch(err => {
-        console.error('manualRanks watch setup error', err);
-        markRemoteDataReady('manualRanks', { error: true });
-      });
-      return readyPromise;
+      const promise = createRemoteDataPromise(kind);
+      const callback = rows => {
+        if (generation !== profileWatcherGenerations[kind]) return;
+        apply(rows || []);
+        markRemoteDataReady(kind, { count: rows?.length || 0 });
+        refreshScopedProfileCatalog();
+      };
+      const stop = names === null
+        ? db[kind === 'manualRanks' ? 'watchManualRanks' : 'watchUserProfiles'](callback)
+        : db[kind === 'manualRanks' ? 'watchManualRanksForUsers' : 'watchUserProfilesForUsers'](names, callback);
+      if (kind === 'manualRanks') firebaseUnsubManualRanks = stop; else firebaseUnsubUserProfiles = stop;
+      return promise;
     }
-
-    function ensureUserProfilesWatcher(db = firebaseDbInstance) {
-      const state = remoteDataState.userProfiles;
-      if (state.started) return createRemoteDataPromise('userProfiles');
-      state.started = true;
-      const readyPromise = createRemoteDataPromise('userProfiles');
-      if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
-      if (db && typeof db.watchUserProfiles === 'function') {
-        firebaseUnsubUserProfiles = db.watchUserProfiles(rows => {
-          firebaseUserProfiles = rows || [];
-          window.OC_APP_DATA = window.OC_APP_DATA || {};
-          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
-          rebuildUserProfilesFromFirebase();
-          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
-          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
-        });
-        return readyPromise;
-      }
-      void getExtendedDb().then(ext => {
-        firebaseUnsubUserProfiles = ext.onSnapshot(ext.collection(ext.db, 'userProfiles'), snapshot => {
-          firebaseUserProfiles = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          window.OC_APP_DATA = window.OC_APP_DATA || {};
-          window.OC_APP_DATA.userProfiles = firebaseUserProfiles;
-          rebuildUserProfilesFromFirebase();
-          dispatchAppEvent('oped:user-profiles-updated', { rows: firebaseUserProfiles });
-          markRemoteDataReady('userProfiles', { count: firebaseUserProfiles.length });
-        }, err => {
-          console.error('userProfiles watch error', err);
-          markRemoteDataReady('userProfiles', { error: true });
-        });
-      }).catch(err => {
-        console.error('userProfiles watch setup error', err);
-        markRemoteDataReady('userProfiles', { error: true });
+    function ensureManualRanksWatcher(db = firebaseDbInstance) {
+      return ensureProfileWatcher('manualRanks', db, rows => {
+        firebaseManualRanks = rows;
+        rebuildManualRanksFromFirebase();
       });
-      return readyPromise;
+    }
+    function ensureUserProfilesWatcher(db = firebaseDbInstance) {
+      return ensureProfileWatcher('userProfiles', db, rows => {
+        firebaseUserProfiles = rows;
+        window.OC_APP_DATA = window.OC_APP_DATA || {};
+        window.OC_APP_DATA.userProfiles = rows;
+        rebuildUserProfilesFromFirebase();
+        dispatchAppEvent('oped:user-profiles-updated', { rows });
+      });
     }
 
     function ensureEntityCardsWatcher(db = firebaseDbInstance) {
@@ -3052,12 +3059,14 @@
     }
 
     function stopManualRanksWatcher() {
+      profileWatcherGenerations.manualRanks = (profileWatcherGenerations.manualRanks || 0) + 1;
       if (firebaseUnsubManualRanks) firebaseUnsubManualRanks();
       firebaseUnsubManualRanks = null;
       resetRemoteDataSubscription('manualRanks');
     }
 
     function stopUserProfilesWatcher() {
+      profileWatcherGenerations.userProfiles = (profileWatcherGenerations.userProfiles || 0) + 1;
       if (firebaseUnsubUserProfiles) firebaseUnsubUserProfiles();
       firebaseUnsubUserProfiles = null;
       resetRemoteDataSubscription('userProfiles');
@@ -3086,7 +3095,15 @@
       if (!needsEventBasket) stopEventBasketWatcher();
 
       const required = [];
-      if (!usesTopOnlyCatalog(tab)) {
+      if (usesScopedProfileCatalog(tab) && (openingsScopeKey === 'all' || ratingsUserKey !== JSON.stringify([openedProfileUsers(), currentPersonalUid()]))) {
+        ++openingsScopeGeneration;
+        firebaseUnsubOpenings?.();
+        firebaseUnsubOpenings = null;
+        resetRemoteDataSubscription('openings');
+        firebaseOpenings = [];
+        rebuildEntriesFromFirebase();
+      }
+      if (!usesScopedProfileCatalog(tab)) {
         await ensureOpeningsWatcher(firebaseDbInstance);
         if (syncId !== routeDataSyncId || tab !== activeTab) return;
       }
@@ -3103,12 +3120,18 @@
 
       await Promise.allSettled(required);
       if (syncId !== routeDataSyncId || tab !== activeTab) return;
-      if (usesTopOnlyCatalog(tab)) await ensureOpeningsWatcher(firebaseDbInstance, topProfileOpeningIds());
+      if (usesScopedProfileCatalog(tab)) await ensureOpeningsWatcher(firebaseDbInstance, scopedProfileOpeningIds());
       if (syncId !== routeDataSyncId || tab !== activeTab) return;
       refreshVisiblePanels({ forceFilters: false });
       dispatchAppEvent('oped:route-ready', { tab });
     }
 
+    window.addEventListener('oped:profile-comparison-users', event => {
+      const names = event.detail?.users || [];
+      if (JSON.stringify(names) === JSON.stringify(comparisonProfileUsers)) return;
+      comparisonProfileUsers = names;
+      if (activeTab === 'profile' && profilePanel.dataset.profileView === 'comparison') void syncRouteDataSubscriptions(activeTab);
+    });
     let observedProfileView = profilePanel?.dataset.profileView;
     if (profilePanel) new MutationObserver(() => {
       if (observedProfileView === profilePanel.dataset.profileView) return;
@@ -3122,9 +3145,15 @@
         firebaseDbInstance = db;
         await db.init();
         const initialUrl = new URL(location.href);
-        if (initialUrl.searchParams.get('view') === 'profile' && initialUrl.searchParams.get('section') === 'top100' && accessLevel) {
+        if (initialUrl.searchParams.get('view') === 'profile' && accessLevel) {
           activeTab = 'profile';
-          profilePanel.dataset.profileView = 'top100';
+          profilePanel.dataset.profileView = initialUrl.searchParams.get('section') || 'overview';
+          const requestedName = initialUrl.searchParams.get('profile');
+          if (requestedName) {
+            profileUserSelect.add(new Option(requestedName, requestedName));
+            profileUserSelect.value = requestedName;
+            profileUser = requestedName;
+          }
         }
         await syncRouteDataSubscriptions(activeTab);
         dispatchAppEvent('oped:app-ready', { stage: 'catalog' });
@@ -3388,6 +3417,8 @@
       });
       Object.keys(avatarsMap || {}).forEach(n => names.add(n));
       if (myName) names.add(myName);
+      if (profileUserSelect?.value) names.add(profileUserSelect.value);
+      comparisonProfileUsers.forEach(name => names.add(name));
       return Array.from(names).sort(compareNatural);
     }
 
@@ -3397,7 +3428,7 @@
       const prev = profileUserSelect.value;
       let names;
       if (!force && profileUsersCache.key === key && profileUsersCache.names.length) {
-        names = profileUsersCache.names;
+        names = [...new Set([...profileUsersCache.names, prev].filter(Boolean))];
       } else {
         names = allVoterNames();
         profileUsersCache = { key, names };
@@ -4366,6 +4397,8 @@
 
     async function startDailyRating(key = dailyClock().key) {
       if (!ensureNickname()) return;
+      // Generating a new daily queue needs the full eligible pool, only on demand.
+      await ensureOpeningsWatcher(firebaseDbInstance);
       const profile = dailyProfileFor(myName);
       const settings = normalizeDailySettings(profile?.dailySettings || {});
       if (!settings.enabled) { switchTab('profile'); setStatus('Сначала подключи ежедневную оценку в своём профиле.', true); return; }
@@ -6566,7 +6599,7 @@
       }
       if (profilePanel && !top100Only) {
         profilePanel.dataset.profileRatingsReady = String(
-          firebaseRatingsScope === 'all' && remoteDataState.ratings.ready
+          firebaseRatingsScope !== 'none' && remoteDataState.ratings.ready && remoteDataState.openings.ready
         );
         if (view === 'overview' || view === 'comparison') {
           profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
@@ -8679,6 +8712,20 @@
       renderProfile();
     });
     if (profileDeleteBtn) profileDeleteBtn.addEventListener('click', () => deleteProfileFully(profileUser));
+    const profileLookup = document.createElement('form');
+    profileLookup.className = 'oc-profile-lookup';
+    profileLookup.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px';
+    profileLookup.innerHTML = '<input type="text" aria-label="Никнейм профиля" placeholder="Открыть профиль по никнейму" maxlength="60"><button type="submit">Открыть</button>';
+    profileUserSelect.insertAdjacentElement('afterend', profileLookup);
+    profileLookup.addEventListener('submit', event => {
+      event.preventDefault();
+      const name = profileLookup.querySelector('input').value.trim();
+      if (!name) return;
+      const existing = [...profileUserSelect.options].find(option => manualSameUser(option.value, name));
+      if (!existing) profileUserSelect.add(new Option(name, name));
+      profileUserSelect.value = existing?.value || name;
+      profileUserSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     profileUserSelect.addEventListener('change', () => { void syncRouteDataSubscriptions(activeTab); manualEditMode = false; manualShowHidden = false; profileTopExpanded = { OP: false, ED: false }; allRatingsPage = { OP: 1, ED: 1 }; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
 
     const tierTypeEl = $('#oc-tier-type');

@@ -24,7 +24,7 @@ console.log('PASS: overview decoration settles after one pass instead of trigger
 const source=fs.readFileSync('index-app.js','utf8');
 const calls=[];
 const ctx={profilePanel:{dataset:{profileView:'overview'}},profileUserSelect:{value:'Alice'},profileDeleteBtn:null,registerNameInput:null,
- myName:'Alice',entries:[],filters:{},ratingScale:'int',dataVersion:1,firebaseRatingsScope:'all',remoteDataState:{ratings:{ready:true}},
+ myName:'Alice',entries:[],filters:{},ratingScale:'int',dataVersion:1,firebaseRatingsScope:'all',remoteDataState:{ratings:{ready:true},openings:{ready:true}},
  populateProfileUsers(){},ratedListFor:()=>[],applyFilters:rows=>rows,applyFiltersIgnoringType:rows=>rows,
  computeProfileStats:()=>{calls.push('compute');return {};},renderProfileStats:()=>calls.push('overview'),
  populateArScoreOptions:()=>calls.push('score-options'),renderAllRatings:()=>calls.push('ratings'),renderProfileRerate:()=>calls.push('rerate'),renderDailyProfilePanel:()=>calls.push('daily')};

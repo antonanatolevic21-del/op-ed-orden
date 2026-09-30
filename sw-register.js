@@ -1,8 +1,8 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
-  const primaryScriptVersion = '20260818-season-rerate1';
+  const primaryScriptVersion = '20260930-profile-scope1';
   const discoveryVersion = '20260803-existing-corrections1';
-  const tasteComparisonVersion = '20260731-taste-account-fix1';
+  const tasteComparisonVersion = '20260930-profile-scope1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
   const seasonFillVersion = '20260730-natural-sort1';
