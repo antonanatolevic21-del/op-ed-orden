@@ -59,8 +59,8 @@ console.log('PASS: seasonal ID-only subscriptions, batching, readiness, errors, 
 (async () => {
   const picker = readFileSync('manual-top-insert-fast.js','utf8');
   let fullReads=0;
-  const context = { cache:new Map(), normalize:s=>s,clean:s=>String(s||'').trim(), compareNatural:(a,b)=>a.localeCompare(b),
-    window:{OC_CATALOG_CACHE:{load:async()=>{fullReads++;return [{id:'remote',title:'Remote',type:'OP'}];}},OC_APP_BRIDGE:{snapshot:()=>({entries:[{id:'local',title:'Local',type:'OP'}]}),top100Meta:()=>({candidates:[]}),userScore:()=>null}} };
+  const context = { cache:new Map(), searchCatalogPromise:null, normalize:s=>s,clean:s=>String(s||'').trim(), compareNatural:(a,b)=>a.localeCompare(b),
+    window:{OC_CATALOG_CACHE:{load:async force=>{assert.equal(force,true,'typed search includes newly added songs');fullReads++;return [{id:'remote',title:'Remote',type:'OP'}];}},OC_APP_BRIDGE:{snapshot:()=>({entries:[{id:'local',title:'Local',type:'OP'}]}),top100Meta:()=>({candidates:[]}),userScore:()=>null}} };
   vm.createContext(context);
   vm.runInContext(picker.slice(picker.indexOf('  async function candidates('),picker.indexOf('  function currentRank(')),context);
   const initial=await context.candidates('Alice','OP');

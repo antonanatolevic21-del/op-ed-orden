@@ -17,6 +17,7 @@
   const containerFor = type => document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
 
   let cache = new Map();
+  let searchCatalogPromise = null;
   let panel = null;
   let panelAnchor = null;
   let mountTimer = 0;
@@ -96,7 +97,13 @@
     if (cache.has(key)) return cache.get(key);
     const promise = (async () => {
       const bridge = window.OC_APP_BRIDGE;
-      const cached = searchCatalog && window.OC_CATALOG_CACHE?.load ? await window.OC_CATALOG_CACHE.load() : [];
+      if (searchCatalog && !searchCatalogPromise && window.OC_CATALOG_CACHE?.load) {
+        searchCatalogPromise = window.OC_CATALOG_CACHE.load(true).catch(error => {
+          searchCatalogPromise = null;
+          throw error;
+        });
+      }
+      const cached = searchCatalog ? await (searchCatalogPromise || []) : [];
       const liveEntries = bridge?.snapshot?.()?.entries;
       const byId = new Map();
       (cached || []).forEach(entry => {
