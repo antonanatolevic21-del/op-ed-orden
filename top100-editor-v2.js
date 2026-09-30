@@ -9,7 +9,9 @@
   const state = {
     user: '', key: '', loaded: false, loading: false, editing: false, applying: false, saving: false,
     baseline: { OP: [], ED: [] }, draft: { OP: [], ED: [] }, undo: [], redo: [], expanded: { OP: false, ED: false },
-    catalog: new Map(), meta: new Map(), scores: new Map(), scoresLoaded: false, rerenderTimer: 0, drag: null
+    catalog: new Map(), meta: new Map(), scores: new Map(), scoresLoaded: false, rerenderTimer: 0, drag: null,
+    candidateQuery: '', candidateFilter: 'available', candidateLimit: 40, selected: null, candidateRequest: 0,
+    candidateLoadedKey: '', candidateLoading: false, candidateError: '', searchTimer: 0, catalogSearch: null, suppressClickUntil: 0
   };
 
   const clean = value => String(value ?? '').trim();
@@ -96,7 +98,7 @@
   }
 
   function displayScore(value) {
-    const score = Number(value);
+    const score = value === null || value === undefined || value === '' ? NaN : Number(value);
     return Number.isFinite(score) ? score.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) : '—';
   }
 
@@ -189,6 +191,8 @@
     const card = document.createElement('div');
     card.className = `oc-profile-item${editable ? ' manual oc-top100-editor-card' : ' oc-top100-editor-view-card'}`;
     card.dataset.top100Id = String(id);
+    card.dataset.type = type;
+    if (editable) { card.tabIndex = 0; card.classList.toggle('oc-workspace-selected', state.selected?.id === String(id) && state.selected?.type === type); }
     const rankClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : '';
     const rank = editable
       ? `<button type="button" class="oc-rank-jump-btn" data-top100-action="set-rank" data-type="${type}" data-id="${esc(id)}" title="Изменить место">${index + 1}</button>`
@@ -209,7 +213,11 @@
     const order = state.editing ? state.draft[type] : state.baseline[type];
     const visible = order;
     const fragment = document.createDocumentFragment();
-    visible.forEach((id, index) => fragment.append(makeCard(type, id, index, state.editing)));
+    visible.forEach((id, index) => {
+      if (state.editing) fragment.append(makeDropGap(type, index));
+      fragment.append(makeCard(type, id, index, state.editing));
+    });
+    if (state.editing) fragment.append(makeDropGap(type, visible.length));
     if (!visible.length) {
       const empty = document.createElement('div');
       empty.className = 'oc-empty';
@@ -222,7 +230,11 @@
   function renderAll() {
     if (!state.loaded || !isTopView()) return;
     state.applying = true;
-    try { captureMetaFromDom(); renderType('OP'); renderType('ED'); updateToolbar(); }
+    try { captureMetaFromDom();
+      const scroll = ['OP', 'ED'].map(type => containerFor(type)?.scrollTop || 0);
+      renderType('OP'); renderType('ED'); updateToolbar(); syncWorkspace();
+      ['OP', 'ED'].forEach((type, index) => { if (containerFor(type)) containerFor(type).scrollTop = scroll[index]; });
+    }
     finally { requestAnimationFrame(() => { state.applying = false; }); }
   }
 
@@ -339,6 +351,149 @@
       updateToolbar();
     }
   }
+
+  function makeDropGap(type, index) {
+    const gap = document.createElement('button');
+    gap.type = 'button'; gap.className = 'oc-workspace-drop-gap'; gap.dataset.workspaceGap = String(index); gap.dataset.type = type;
+    gap.setAttribute('aria-label', `Вставить песню перед местом ${index + 1}`);
+    gap.textContent = 'Вставить сюда'; return gap;
+  }
+
+  function insertDraftGap(type, id, gap) {
+    if (!state.editing || !isOwnProfile() || !['OP','ED'].includes(type)) return;
+    const entry = state.catalog.get(String(id));
+    if (entry && entry.type !== type) return;
+    const order = state.draft[type];
+    const from = order.indexOf(String(id));
+    if (from < 0 && order.length >= 100) { toast('В топе уже 100 песен. Удали одну, чтобы добавить новую.', 'error'); return; }
+    const cleanGap = Math.max(0, Math.min(order.length, Math.round(Number(gap) || 0)));
+    const target = cleanGap - (from >= 0 && from < cleanGap ? 1 : 0);
+    if (from === target) return;
+    place(type, id, target + 1);
+  }
+
+  function ensureWorkspace() {
+    let workspace = document.querySelector('.oc-top100-workspace');
+    if (workspace) return workspace;
+    const columns = profilePanel()?.querySelector('.oc-profile-columns');
+    if (!columns) return null;
+    workspace = document.createElement('div'); workspace.className = 'oc-top100-workspace';
+    const panel = document.createElement('aside'); panel.className = 'oc-workspace-candidates';
+    panel.innerHTML = `<header><div><h2>Кандидаты</h2><p>Перетаскивай песни на нужное место</p></div><span data-workspace-count></span></header><input class="oc-workspace-search" type="search" placeholder="Песня, аниме, исполнитель…" aria-label="Поиск кандидатов" autocomplete="off"><div class="oc-workspace-filters"><button type="button" data-workspace-filter="available">Мои кандидаты и оценки</button><button type="button" data-workspace-filter="all">Все песни</button></div><div class="oc-workspace-candidate-list"></div><footer>Нажатие — выбрать · двойное — добавить в конец.<br>На телефоне перетаскивай за ⋮⋮ или выбери песню и нажми место вставки.</footer>`;
+    columns.before(workspace); workspace.append(panel, columns);
+    panel.querySelector('.oc-workspace-search').addEventListener('input', event => {
+      state.candidateQuery = event.target.value; state.candidateLimit = 40;
+      state.candidateRequest += 1; clearTimeout(state.searchTimer);
+      state.searchTimer = setTimeout(() => void refreshCandidates(), 250);
+    });
+    panel.addEventListener('click', event => {
+      const filter = event.target.closest('[data-workspace-filter]');
+      if (filter) { state.candidateFilter = filter.dataset.workspaceFilter; state.candidateLimit = 40; void refreshCandidates(); return; }
+      const more = event.target.closest('[data-workspace-more]');
+      if (more) { state.candidateLimit += 40; renderCandidates(); return; }
+      const retry = event.target.closest('[data-workspace-retry]');
+      if (retry) { state.candidateLoadedKey = ''; void refreshCandidates(); return; }
+      const card = event.target.closest('[data-workspace-candidate]');
+      if (!card || !state.editing) return;
+      selectWorkspaceSong(activeType(), card.dataset.workspaceCandidate);
+      if (event.target.closest('[data-workspace-add]')) insertDraftGap(activeType(), card.dataset.workspaceCandidate, state.draft[activeType()].length);
+    });
+    panel.addEventListener('dblclick', event => {
+      const card = event.target.closest('[data-workspace-candidate]');
+      if (card && !event.target.closest('button')) insertDraftGap(activeType(), card.dataset.workspaceCandidate, state.draft[activeType()].length);
+    });
+    return workspace;
+  }
+
+  function selectWorkspaceSong(type, id) {
+    state.selected = { type, id:String(id) };
+    document.querySelectorAll('[data-workspace-candidate],.oc-top100-editor-card').forEach(card => {
+      const selected = clean(card.dataset.workspaceCandidate || card.dataset.top100Id) === String(id) && (card.dataset.type || activeType()) === type;
+      card.classList.toggle('oc-workspace-selected', selected);
+      if (card.hasAttribute('data-workspace-candidate')) card.setAttribute('aria-pressed', String(selected));
+    });
+  }
+
+  function candidateTerms(entry) {
+    return [entry.title, entry.anime, ...(entry.alternativeTitles || []), ...(entry.performers || [])].join(' ').toLocaleLowerCase('ru').replace(/ё/g,'е');
+  }
+
+  function candidateRows(type) {
+    const prioritized = new Set((window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || []).map(String));
+    const added = new Set(state.draft[type]);
+    const q = clean(state.candidateQuery).toLocaleLowerCase('ru').replace(/ё/g,'е');
+    return [...state.catalog.values()].filter(entry => entry.type === type && !added.has(String(entry.id)))
+      .filter(entry => state.candidateFilter === 'all' || state.scores.has(String(entry.id)) || prioritized.has(String(entry.id)))
+      .filter(entry => !q || candidateTerms(entry).includes(q))
+      .sort((a,b) => Number(prioritized.has(String(b.id))) - Number(prioritized.has(String(a.id))) || (state.scores.get(String(b.id)) ?? -1) - (state.scores.get(String(a.id)) ?? -1) || clean(a.title).localeCompare(clean(b.title),'ru',{numeric:true}));
+  }
+
+  function renderCandidates() {
+    const panel = document.querySelector('.oc-workspace-candidates'); if (!panel) return;
+    const list = panel.querySelector('.oc-workspace-candidate-list'), scroll = list.scrollTop;
+    panel.querySelectorAll('[data-workspace-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.workspaceFilter === state.candidateFilter)));
+    const type = activeType(), rows = candidateRows(type);
+    panel.querySelector('[data-workspace-count]').textContent = `${rows.length} доступно`;
+    if (state.candidateLoading) { list.innerHTML = '<div class="oc-empty">Загружаю кандидатов…</div>'; return; }
+    if (state.candidateError) { list.innerHTML = '<div class="oc-empty">Не удалось загрузить кандидатов.<br><button type="button" data-workspace-retry>Повторить</button></div>'; return; }
+    list.innerHTML = rows.slice(0,state.candidateLimit).map(entry => {
+      const id = String(entry.id), meta = metaFor(type,id), selected = state.selected?.type === type && state.selected?.id === id;
+      return `<article class="oc-workspace-candidate${selected?' oc-workspace-selected':''}" data-workspace-candidate="${esc(id)}" data-type="${type}" role="button" tabindex="0" aria-pressed="${selected}">${meta.image?`<img src="${esc(meta.image)}" alt="" loading="lazy" decoding="async">`:`<span class="oc-workspace-noimage">${type}</span>`}<div><strong>${esc(meta.title)}</strong><small>${esc([entry.anime,meta.meta,...(entry.performers || [])].filter(Boolean).join(' · '))}</small><span>${esc(meta.score)} ✦</span></div><button type="button" data-workspace-add aria-label="Добавить ${esc(meta.title)}">+</button><button type="button" class="oc-top100-drag-handle" aria-label="Перетащить ${esc(meta.title)}">⋮⋮</button></article>`;
+    }).join('') || `<div class="oc-empty">${state.candidateFilter==='available'?'Кандидатов пока нет. Выбери «Все песни» и найди недостающие.':'Ничего не найдено.'}</div>`;
+    if (rows.length > state.candidateLimit) list.insertAdjacentHTML('beforeend','<button type="button" data-workspace-more>Показать ещё 40</button>');
+    list.scrollTop = scroll;
+  }
+
+  async function refreshCandidates() {
+    if (!state.editing || !isOwnProfile()) return;
+    const request = ++state.candidateRequest, key = state.key, type = activeType();
+    state.candidateLoading = true; state.candidateError = ''; renderCandidates();
+    try {
+      mergeLiveCatalog();
+      if (state.candidateFilter === 'all' && clean(state.candidateQuery)) {
+        state.catalogSearch ||= window.OC_CATALOG_CACHE.load().catch(error => { state.catalogSearch = null; throw error; });
+        mergeLiveCatalog(await state.catalogSearch);
+      } else {
+        const ids = [...state.scores.keys(), ...(window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || [])];
+        await loadCatalog(ids);
+      }
+      if (request !== state.candidateRequest || key !== state.key || !state.editing) return;
+      state.candidateLoadedKey = `${key}|${type}`;
+    } catch(error) {
+      if (request !== state.candidateRequest || key !== state.key) return;
+      state.candidateError = error?.message || 'Ошибка загрузки';
+    } finally {
+      if (request === state.candidateRequest && key === state.key) { state.candidateLoading = false; renderCandidates(); }
+    }
+  }
+
+  function syncWorkspace() {
+    const workspace = ensureWorkspace(); if (!workspace) return;
+    const enabled = state.editing && state.loaded && isOwnProfile() && isTopView();
+    workspace.classList.toggle('editing', enabled);
+    profilePanel()?.classList.toggle('oc-top100-workspace-editing', enabled);
+    if (!enabled) { state.candidateRequest += 1; state.candidateLoading = false; return; }
+    renderCandidates();
+    if (state.candidateLoadedKey !== `${state.key}|${activeType()}` && !state.candidateLoading && !state.candidateError) void refreshCandidates();
+  }
+
+  document.addEventListener('click', event => {
+    if (event.target.closest?.('.oc-profile-top-type-btn')) { state.selected = null; state.candidateLimit = 40; setTimeout(() => syncWorkspace(),0); return; }
+    if (!state.editing || !isOwnProfile()) return;
+    const gap = event.target.closest?.('[data-workspace-gap]');
+    if (gap) {
+      event.preventDefault();
+      if (state.selected?.type === gap.dataset.type) insertDraftGap(gap.dataset.type,state.selected.id,Number(gap.dataset.workspaceGap));
+      else toast('Сначала выбери песню слева или в топе.');
+      return;
+    }
+    const card = event.target.closest?.('.oc-top100-editor-card');
+    if (card && !event.target.closest('button')) selectWorkspaceSong(card.dataset.type,card.dataset.top100Id);
+  });
+  document.addEventListener('keydown', event => {
+    const card = event.target.closest?.('[data-workspace-candidate],.oc-top100-editor-card');
+    if (state.editing && card && event.target === card && ['Enter',' '].includes(event.key)) { event.preventDefault(); selectWorkspaceSong(card.dataset.type,card.dataset.workspaceCandidate || card.dataset.top100Id); }
+  });
 
   function ensureToolbar() {
     if (document.querySelector('.oc-top100-toolbar')) return;
@@ -505,6 +660,7 @@
   });
 
   document.addEventListener('click', event => {
+    if (Date.now() < state.suppressClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); return; }
     const save = event.target.closest?.('#oc-manual-save-btn');
     if (save && isTopView() && isOwnProfile()) {
       event.preventDefault(); event.stopImmediatePropagation(); void saveCurrent(save); return;
@@ -554,38 +710,86 @@
     }
   }, true);
 
+  let dragScrollFrame = 0;
+  function clearDropIndicator() {
+    document.querySelectorAll('.oc-workspace-drop-active').forEach(node => node.classList.remove('oc-workspace-drop-active'));
+  }
+  function dragTarget(x, y, type) {
+    const container = containerFor(type);
+    const hit = document.elementFromPoint(x, y);
+    if (!container || !hit || !container.contains(hit)) return null;
+    const gap = hit.closest('[data-workspace-gap]');
+    if (gap) return Number(gap.dataset.workspaceGap);
+    const card = hit.closest('.oc-top100-editor-card');
+    if (card) {
+      const index = state.draft[type].indexOf(clean(card.dataset.top100Id));
+      return index + (y > card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2 ? 1 : 0);
+    }
+    return state.draft[type].length;
+  }
+  function updateDragTarget(drag) {
+    drag.gap = dragTarget(drag.x, drag.y, drag.type);
+    clearDropIndicator();
+    if (drag.gap !== null) containerFor(drag.type)?.querySelector(`[data-workspace-gap="${drag.gap}"]`)?.classList.add('oc-workspace-drop-active');
+  }
+  function scrollWhileDragging() {
+    const drag = state.drag;
+    if (!drag?.moved) { dragScrollFrame = 0; return; }
+    const container = containerFor(drag.type), rect = container?.getBoundingClientRect();
+    if (rect && drag.x >= rect.left && drag.x <= rect.right && drag.y >= rect.top && drag.y <= rect.bottom) {
+      const margin = 55;
+      const speed = drag.y < rect.top + margin ? -10 : drag.y > rect.bottom - margin ? 10 : 0;
+      if (speed) { container.scrollTop += speed; updateDragTarget(drag); }
+    }
+    dragScrollFrame = requestAnimationFrame(scrollWhileDragging);
+  }
   document.addEventListener('pointerdown', event => {
-    const handle = event.target.closest?.('.oc-top100-drag-handle');
-    if (!handle || !state.editing || !isTopView()) return;
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    const card = handle.closest('.oc-profile-item.manual'), container = card?.parentElement; if (!card || !container) return;
-    event.preventDefault(); state.drag = { pointerId:event.pointerId, handle, card, container, moved:false };
-    try { handle.setPointerCapture(event.pointerId); } catch (_) {}
-    card.classList.add('oc-top100-card-dragging'); handle.classList.add('active'); document.documentElement.classList.add('oc-top100-drag-active');
+    if (!state.editing || !isTopView() || !isOwnProfile() || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const candidate = event.target.closest?.('[data-workspace-candidate]');
+    const card = candidate || event.target.closest?.('.oc-top100-editor-card');
+    if (!card) return;
+    const handle = event.target.closest('.oc-top100-drag-handle');
+    if (!handle && (event.pointerType !== 'mouse' || event.target.closest('button,input,a'))) return;
+    const type = candidate ? activeType() : card.dataset.type;
+    const id = clean(candidate?.dataset.workspaceCandidate || card.dataset.top100Id);
+    const capture = handle || card;
+    state.drag = { pointerId:event.pointerId, capture, card, type, id, startX:event.clientX, startY:event.clientY, x:event.clientX, y:event.clientY, moved:false, gap:null };
+    if (handle) event.preventDefault();
+    event.stopImmediatePropagation();
+    try { capture.setPointerCapture(event.pointerId); } catch (_) {}
   }, true);
-
   document.addEventListener('pointermove', event => {
     const drag = state.drag; if (!drag || drag.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('.oc-profile-item.manual');
-    if (!target || target === drag.card || target.parentElement !== drag.container) return;
-    const rect = target.getBoundingClientRect(), before = event.clientY < rect.top + rect.height / 2;
-    drag.container.insertBefore(drag.card, before ? target : target.nextElementSibling); drag.moved = true;
-  }, { capture:true, passive:false });
-
-  function finishDrag(event) {
-    const drag = state.drag; if (!drag || (event && drag.pointerId !== event.pointerId)) return;
-    try { drag.handle.releasePointerCapture(drag.pointerId); } catch (_) {}
-    if (drag.moved) {
-      const type = drag.container.id === 'oc-profile-ed' ? 'ED' : 'OP';
-      const ids = [...drag.container.querySelectorAll(':scope > .oc-profile-item.manual')].map(card => clean(card.dataset.top100Id)).filter(Boolean);
-      const next = cloneOrder(state.draft); next[type] = ids; setDraft(next);
+    drag.x = event.clientX; drag.y = event.clientY;
+    if (!drag.moved && Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < 6) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (!drag.moved) {
+      drag.moved = true;
+      drag.card.classList.add('oc-top100-card-dragging');
+      document.documentElement.classList.add('oc-top100-drag-active');
+      const ghost = document.createElement('div'); ghost.className = 'oc-workspace-drag-ghost';
+      ghost.textContent = metaFor(drag.type, drag.id).title; document.body.append(ghost); drag.ghost = ghost;
+      dragScrollFrame = requestAnimationFrame(scrollWhileDragging);
     }
-    drag.card.classList.remove('oc-top100-card-dragging'); drag.handle.classList.remove('active'); document.documentElement.classList.remove('oc-top100-drag-active'); state.drag = null;
+    drag.ghost.style.transform = `translate(${drag.x + 16}px,${drag.y + 12}px)`;
+    updateDragTarget(drag);
+  }, { capture:true, passive:false });
+  function finishDrag(event, cancel = false) {
+    const drag = state.drag; if (!drag || (event && drag.pointerId !== event.pointerId)) return;
+    if (event && !cancel && drag.moved) { drag.x = event.clientX; drag.y = event.clientY; updateDragTarget(drag); }
+    try { drag.capture.releasePointerCapture(drag.pointerId); } catch (_) {}
+    cancelAnimationFrame(dragScrollFrame); dragScrollFrame = 0;
+    drag.ghost?.remove(); drag.card.classList.remove('oc-top100-card-dragging');
+    document.documentElement.classList.remove('oc-top100-drag-active'); clearDropIndicator(); state.drag = null;
+    if (!cancel && drag.moved && drag.gap !== null && state.editing && isOwnProfile()) {
+      event?.preventDefault(); state.suppressClickUntil = Date.now() + 300;
+      state.selected = { type:drag.type, id:drag.id };
+      insertDraftGap(drag.type, drag.id, drag.gap);
+    }
   }
-
-  document.addEventListener('pointerup', finishDrag, true);
-  document.addEventListener('pointercancel', finishDrag, true);
+  document.addEventListener('pointerup', event => finishDrag(event), true);
+  document.addEventListener('pointercancel', event => finishDrag(event, true), true);
+  window.addEventListener('blur', () => finishDrag(null, true));
   document.addEventListener('keydown', event => {
     if (!state.editing || !isTopView() || /input|textarea|select/i.test(event.target?.tagName || '')) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
@@ -611,7 +815,7 @@
       if (isTopView()) void loadSaved(viewedUser(), state.key !== normalize(viewedUser()));
     }).observe(panel, { attributes:true, attributeFilter:['data-profile-view','class'] });
     document.querySelector('#oc-profile-user')?.addEventListener('change', () => {
-      state.loaded = false; state.expanded = { OP:false, ED:false }; setTimeout(() => void loadSaved(viewedUser(), true), 0);
+      state.loaded = false; state.selected = null; state.candidateRequest += 1; state.candidateLoadedKey = ''; state.candidateError = ''; state.expanded = { OP:false, ED:false }; setTimeout(() => void loadSaved(viewedUser(), true), 0);
     });
   }
 
@@ -646,6 +850,7 @@
     const current = isTopView();
     if (previousTopView === current) return;
     previousTopView = current;
+    if (!current) { finishDrag(null, true); syncWorkspace(); }
     void window.OC_APP_BRIDGE?.refreshRouteSubscriptions?.();
     if (current) void loadSaved(viewedUser(), true);
   }

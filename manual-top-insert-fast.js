@@ -12,7 +12,7 @@
   };
   const viewedUser = () => clean(document.querySelector('#oc-profile-user')?.value || document.querySelector('#oc-myname')?.value);
   const activeType = () => document.querySelector('.oc-profile-top-type-btn.active')?.dataset.type === 'ED' ? 'ED' : 'OP';
-  const editing = () => Boolean(document.querySelector('#oc-manual-edit-btn')?.classList.contains('active'));
+  const editing = () => !document.querySelector('.oc-top100-workspace.editing') && Boolean(document.querySelector('#oc-manual-edit-btn')?.classList.contains('active'));
   const topVisible = () => document.querySelector('#oc-profile-panel')?.dataset.profileView === 'top100';
   const containerFor = type => document.querySelector(type === 'ED' ? '#oc-profile-ed' : '#oc-profile-op');
 

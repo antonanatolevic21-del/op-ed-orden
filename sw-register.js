@@ -8,10 +8,10 @@
   const seasonFillVersion = '20260730-natural-sort1';
   const sharedSeasonVersion = '20260819-invite-login1';
   const seasonCommunityVersion = '20260805-tournament-delete1';
-  const manualTopInsertVersion = '20260930-demand-data2';
+  const manualTopInsertVersion = '20260930-two-column-editor1';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
-  const top100SuiteVersion = '20260725-top100-suite2';
-  const top100EditorVersion = '20260930-demand-data1';
+  const top100SuiteVersion = '20260930-two-column-editor1';
+  const top100EditorVersion = '20260930-two-column-editor1';
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
