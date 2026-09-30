@@ -382,12 +382,12 @@
         const current = getManualRanksForUser(myName) || {};
         const candidates = (current[`candidates${cleanType}`] || []).map(String);
         const order = applyTopPins(
-          Array.from(new Set([...candidates, ...(current[cleanType] || []).map(String)])),
+          Array.from(new Set([...candidates, ...savedManualOrderFor(myName, cleanType)])),
           current[`pins${cleanType}`]
         );
-        const next = { ...current, [cleanType]: order };
+        const next = { ...current, manualCreated: true, [cleanType]: order };
         rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
+        await saveManualRanks(true);
         publishAppData('top100-candidates-added');
         return next;
       },
@@ -398,11 +398,12 @@
         const cleanPins = sanitizeTopPins(pins);
         const next = {
           ...current,
-          [cleanType]: applyTopPins(current[cleanType] || [], cleanPins),
+          manualCreated: true,
+          [cleanType]: applyTopPins(savedManualOrderFor(myName, cleanType), cleanPins),
           [`pins${cleanType}`]: cleanPins
         };
         rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
+        await saveManualRanks(true);
         publishAppData('top100-pins-saved');
         return next;
       },
@@ -412,10 +413,11 @@
         const current = getManualRanksForUser(myName) || {};
         const next = {
           ...current,
+          manualCreated: true,
           [cleanType]: Array.from(new Set((order || []).map(String).filter(Boolean))).slice(0, 100)
         };
         rememberManualRanksForUser(myName, next);
-        await saveManualRanks();
+        await saveManualRanks(true);
         manualDirty = false;
         publishAppData('manual-ranks-saved');
         return next;
@@ -807,7 +809,6 @@
       await window.OPED_DB.saveRating(entry.id, myName, score);
       await saveRatingExtras(entry.id, myName, { songScore, visualScore, customScores, comment });
       await removeRateLaterEntry(entry.id);
-      appendManualOrderIfMissing(myName, entry.type, entry.id);
       touchEntryCache(entry);
       markRatingDataChanged();
       return { score, songScore, visualScore, customScores, comment };
@@ -1357,7 +1358,7 @@
       const safeKey = identity.safeKey;
       if (!display && !safeKey) return;
       const provenanceKey = String(safeKey || manualUserSafeKey(display)).trim().toLowerCase();
-      if (row.manualCreated !== true && !CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(provenanceKey)) return;
+      const manualCreated = row.manualCreated === true || CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(provenanceKey);
       const hasOP = Array.isArray(row.OP) || Array.isArray(row.manualOP) || Array.isArray(row.op);
       const hasED = Array.isArray(row.ED) || Array.isArray(row.manualED) || Array.isArray(row.ed);
       const hasExcludedOP = Array.isArray(row.excludedOP);
@@ -1374,11 +1375,14 @@
       const profileRow = {
         ...prev,
         nickname: display,
+        manualCreated,
         nicknameKey: safeKey || manualUserSafeKey(display)
       };
-      if (hasOP) profileRow.OP = op.slice(0, 100);
+      if (!manualCreated) profileRow.OP = [];
+      else if (hasOP) profileRow.OP = op.slice(0, 100);
       else if (!Array.isArray(profileRow.OP)) profileRow.OP = [];
-      if (hasED) profileRow.ED = ed.slice(0, 100);
+      if (!manualCreated) profileRow.ED = [];
+      else if (hasED) profileRow.ED = ed.slice(0, 100);
       else if (!Array.isArray(profileRow.ED)) profileRow.ED = [];
       if (hasExcludedOP) profileRow.excludedOP = Array.from(new Set(excludedOP));
       else if (!Array.isArray(profileRow.excludedOP)) profileRow.excludedOP = [];
@@ -2727,7 +2731,7 @@
       } catch (e) { manualRanks = {}; }
     }
 
-    async function saveManualRanks() {
+    async function saveManualRanks(explicitCreate = false) {
       try { await window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); }
       catch (e) { console.error('Could not save manual ranks locally', e); }
 
@@ -2735,9 +2739,11 @@
       const ranks = getManualRanksForUser(myName) || {};
       const excludedOP = Array.from(new Set((Array.isArray(ranks.excludedOP) ? ranks.excludedOP : []).map(String).filter(Boolean)));
       const excludedED = Array.from(new Set((Array.isArray(ranks.excludedED) ? ranks.excludedED : []).map(String).filter(Boolean)));
+      const existingTopCreated = ranks.manualCreated === true || CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(manualUserSafeKey(myName));
       const cleanRanks = {
-        OP: Array.isArray(ranks.OP) ? ranks.OP.map(String).filter(id => !excludedOP.includes(id)).slice(0, 100) : [],
-        ED: Array.isArray(ranks.ED) ? ranks.ED.map(String).filter(id => !excludedED.includes(id)).slice(0, 100) : [],
+        manualCreated: explicitCreate || ranks.manualCreated === true || CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(manualUserSafeKey(myName)),
+        OP: existingTopCreated && Array.isArray(ranks.OP) ? ranks.OP.map(String).filter(id => !excludedOP.includes(id)).slice(0, 100) : [],
+        ED: existingTopCreated && Array.isArray(ranks.ED) ? ranks.ED.map(String).filter(id => !excludedED.includes(id)).slice(0, 100) : [],
         excludedOP,
         excludedED,
         candidatesOP: Array.from(new Set((ranks.candidatesOP || []).map(String).filter(Boolean))),
@@ -2766,6 +2772,7 @@
           nickname: myName,
           nicknameKey: safeName,
           ownerUid: requirePersonalUid(),
+          manualCreated: cleanRanks.manualCreated,
           OP: cleanRanks.OP,
           ED: cleanRanks.ED,
           manualOP: cleanRanks.OP,
@@ -5913,19 +5920,6 @@
       return undefined;
     }
 
-    function appendManualOrderIfMissing(user, type, id) {
-      const raw = String(user || '').trim();
-      const openingId = String(id || '').trim();
-      if (!raw || !openingId) return false;
-      const current = getManualRanksForUser(raw) || {};
-      const order = Array.isArray(current[type]) ? current[type].map(String) : savedManualOrderFor(raw, type);
-      if (order.includes(openingId)) return false;
-      order.push(openingId);
-      rememberManualRanksForUser(raw, { ...current, [type]: order });
-      markManualDirty();
-      return true;
-    }
-
     function manualRankRowHasTop(row, type) {
       return !!(row && Array.isArray(row[type]) && row[type].length);
     }
@@ -6042,23 +6036,16 @@
     function savedManualOrderFor(user, type) {
       if (!user) return [];
       const row = getManualRanksForUser(user);
-      const saved = row && Array.isArray(row[type]) ? row[type].map(String) : [];
+      const created = row?.manualCreated === true || CONFIRMED_LEGACY_MANUAL_TOP_KEYS.has(manualUserSafeKey(user));
+      const saved = created && Array.isArray(row[type]) ? row[type].map(String) : [];
       const valid = new Set(entries.filter(e => e.type === type).map(e => String(e.id)));
       const seen = new Set();
       return saved.filter(id => valid.has(String(id)) && !seen.has(String(id)) && (seen.add(String(id)) || true));
     }
 
     function ensureManualOrderForEditing(user, type) {
-      if (!user) return [];
-      const current = getManualRanksForUser(user);
-      rememberManualRanksForUser(user, current);
-      const saved = savedManualOrderFor(user, type);
-      const seen = new Set(saved.map(String));
-      const excluded = manualExcludedSet(user, type);
-      const missing = ratedIdsForManual(user, type).filter(id => !seen.has(String(id)) && !excluded.has(String(id)));
-      const order = saved.concat(missing);
-      rememberManualRanksForUser(user, { ...getManualRanksForUser(user), [type]: order });
-      return order;
+      // Opening the editor must never turn ratings into a manual top.
+      return savedManualOrderFor(user, type);
     }
 
     function manualOrderFor(user, type, includeMissing = false) {
@@ -6072,6 +6059,7 @@
     }
 
     function markManualDirty() {
+      if (myName) rememberManualRanksForUser(myName, { ...getManualRanksForUser(myName), manualCreated: true });
       manualDirty = true;
       const saveBtn = $('#oc-manual-save-btn');
       if (saveBtn) saveBtn.classList.add('active');
@@ -7499,7 +7487,6 @@
               entry.scores[myName] = val;
               await window.OPED_DB.saveRating(entry.id, myName, val);
               await saveRatingExtras(entry.id, myName, { score: val });
-              appendManualOrderIfMissing(myName, entry.type, entry.id);
             }
             touchEntryCache(entry);
             markRatingDataChanged();
@@ -8696,7 +8683,7 @@
       try {
         ensureManualOrderForEditing(myName, 'OP');
         ensureManualOrderForEditing(myName, 'ED');
-        await saveManualRanks();
+        await saveManualRanks(true);
         manualDirty = false;
         manualSaveBtn.classList.remove('active');
         renderProfile();
