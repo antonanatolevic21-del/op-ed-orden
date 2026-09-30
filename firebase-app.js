@@ -438,9 +438,9 @@
     function listProfileNicknames() {
       if (profileNicknameDirectoryPromise) return profileNicknameDirectoryPromise;
       profileNicknameDirectoryPromise = (async () => {
-        await init();
-        const token = await auth.currentUser.getIdToken();
-        const headers = { Authorization: `Bearer ${token}` };
+        // Nicknames are public under the userProfiles read rules. Do not make
+        // this lightweight directory depend on account restoration or token refresh.
+        const headers = {};
         if (appCheckInstance) headers['X-Firebase-AppCheck'] = (await getAppCheckToken(appCheckInstance)).token;
         const names = new Map();
         let pageToken = '';
@@ -452,7 +452,7 @@
           ['nickname', 'displayName', 'name'].forEach(field => url.searchParams.append('mask.fieldPaths', field));
           if (pageToken) url.searchParams.set('pageToken', pageToken);
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 15000);
+          const timeout = setTimeout(() => controller.abort(), 5000);
           let response, body;
           try {
             response = await fetch(url, { headers, signal: controller.signal });
@@ -467,7 +467,19 @@
           pageToken = body.nextPageToken || '';
         } while (pageToken);
         return [...names.values()].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' }));
-      })().catch(error => { profileNicknameDirectoryPromise = null; throw error; });
+      })().catch(async error => {
+        console.warn('Live nickname directory unavailable; using public names snapshot', error);
+        try {
+          const response = await fetch(new URL('./profile-nicknames.snapshot.json?v=20260930-nickname-retry1', import.meta.url));
+          if (!response.ok) throw error;
+          const names = await response.json();
+          if (!Array.isArray(names) || !names.every(name => typeof name === 'string')) throw error;
+          return names;
+        } catch (fallbackError) {
+          profileNicknameDirectoryPromise = null;
+          throw fallbackError;
+        }
+      });
       return profileNicknameDirectoryPromise;
     }
 
