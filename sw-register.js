@@ -164,7 +164,7 @@
   function loadEntityPackage() {
     if (entityPromise) return entityPromise;
     addStyle('entity-enhancements.css', primaryVersion);
-    entityPromise = addScript('entity-enhancements.js', primaryVersion, true)
+    entityPromise = addScript('entity-enhancements.js', '20260930-albums-fast1', true)
       .catch(error => {
         console.error('Entity package load failed', error);
         throw error;

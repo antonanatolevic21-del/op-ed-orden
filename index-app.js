@@ -698,6 +698,7 @@
       else if (activeTab === 'tier') renderTierList();
       else if (activeTab === 'stats') renderStatsPage();
       else if (activeTab === 'discovery') publishAppData('visible-refresh');
+      else if (activeTab.startsWith('entity-')) renderEntityAlbums();
     }
 
     function scheduleVisibleRefresh(options = {}) {
@@ -3040,6 +3041,7 @@
       if (firebaseUnsubEntityCards) firebaseUnsubEntityCards();
       firebaseUnsubEntityCards = db.watchEntityCards(rows => {
         firebaseEntityCards = rows || [];
+        entityCardDataVersion += 1;
         window.OC_APP_DATA = window.OC_APP_DATA || {};
         window.OC_APP_DATA.entityCards = firebaseEntityCards;
         if (activeTab.startsWith('entity-')) renderEntityAlbums();
@@ -4865,11 +4867,58 @@
       return String(value || '').trim().toLocaleLowerCase('ru');
     }
 
+    let entityIndexVersion = -1;
+    let entityEntryIndex = new Map();
+    let entityEligibleCache = new Map();
+    let entityProgressCache = new Map();
+    let entityProgressKey = '';
+    let entityCreateOptionsKey = '';
+    let entityCardDataVersion = 0;
+    let entityListCache = { key: '', cards: [] };
+    const entityBatchStates = new WeakMap();
+
+    function ensureEntityIndex() {
+      if (entityIndexVersion === dataVersion) return;
+      const index = new Map();
+      for (const [type, meta] of Object.entries(ENTITY_ALBUM_META)) index.set(type, new Map());
+      for (const entry of entries) {
+        for (const [type, meta] of Object.entries(ENTITY_ALBUM_META)) {
+          const groups = index.get(type);
+          const seen = new Set();
+          for (const raw of entry[meta.field] || []) {
+            const key = normalizedEntityValue(raw);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            if (!groups.has(key)) groups.set(key, { value: String(raw).trim(), entries: [] });
+            groups.get(key).entries.push(entry);
+          }
+        }
+      }
+      entityEntryIndex = index;
+      entityIndexVersion = dataVersion;
+      entityEligibleCache.clear();
+    }
+
     function entriesForEntity(type, value) {
-      const field = (ENTITY_ALBUM_META[type] || {}).field;
-      const key = normalizedEntityValue(value);
-      if (!field || !key) return [];
-      return entries.filter(entry => (entry[field] || []).some(item => normalizedEntityValue(item) === key));
+      ensureEntityIndex();
+      return entityEntryIndex.get(type)?.get(normalizedEntityValue(value))?.entries || [];
+    }
+
+    // Preserve existing image/card nodes when another page is appended.
+    function renderEntityBatch(container, key, items, scope, renderRow, emptyHtml, wrapperClass = '') {
+      const previous = entityBatchStates.get(container);
+      if (previous?.key === key && previous.count <= items.length && previous.root.isConnected) {
+        previous.root.querySelector(`[data-progressive-more="${scope}"]`)?.remove();
+        previous.root.insertAdjacentHTML('beforeend', items.slice(previous.count).map((item, index) => renderRow(item, previous.count + index)).join(''));
+        previous.count = items.length;
+        return previous.root;
+      }
+      container.innerHTML = items.length
+        ? (wrapperClass ? `<div class="${wrapperClass}">${items.map(renderRow).join('')}</div>` : items.map(renderRow).join(''))
+        : emptyHtml;
+      const root = wrapperClass && items.length ? container.firstElementChild : container;
+      entityBatchStates.set(container, { key, count: items.length, root });
+      return root;
     }
 
     function entityHasRating(entry) {
@@ -4914,24 +4963,30 @@
     }
 
     function entityCardProgress(card) {
+      const context = `${dataVersion}|${myName}|${ratingScale}`;
+      if (entityProgressKey !== context) {
+        entityProgressKey = context;
+        entityProgressCache.clear();
+      }
+      const key = `${card.type}::${normalizedEntityValue(card.value)}`;
+      if (entityProgressCache.has(key)) return entityProgressCache.get(key);
       const related = entriesForEntity(card.type, card.value);
       const rated = related.filter(entityHasRating).length;
-      return { related, rated, complete: related.length >= ENTITY_MIN_TRACKS && rated === related.length };
+      const progress = { related, rated, complete: related.length >= ENTITY_MIN_TRACKS && rated === related.length };
+      entityProgressCache.set(key, progress);
+      return progress;
     }
 
     function eligibleEntityValues(type) {
-      const field = (ENTITY_ALBUM_META[type] || {}).field;
-      const names = new Map();
-      if (!field) return [];
-      entries.forEach(entry => (entry[field] || []).forEach(raw => {
-        const value = String(raw || '').trim();
-        const key = normalizedEntityValue(value);
-        if (!key) return;
-        if (!names.has(key)) names.set(key, { value, ids: new Set() });
-        names.get(key).ids.add(String(entry.id));
-      }));
-      return Array.from(names.values()).filter(item => item.ids.size >= ENTITY_MIN_TRACKS)
-        .sort((a, b) => compareNatural(a.value, b.value)).map(item => ({ value: item.value, count: item.ids.size }));
+      ensureEntityIndex();
+      if (!entityEligibleCache.has(type)) {
+        const groups = entityEntryIndex.get(type) || new Map();
+        entityEligibleCache.set(type, [...groups.values()]
+          .filter(group => group.entries.length >= ENTITY_MIN_TRACKS)
+          .sort((a, b) => compareNatural(a.value, b.value))
+          .map(group => ({ value: group.value, count: group.entries.length })));
+      }
+      return entityEligibleCache.get(type);
     }
 
     function resetEntityAlbumFilters() {
@@ -4947,7 +5002,7 @@
       if (entityToSeasonSelect) entityToSeasonSelect.value = '';
       if (entityProgressSelect) entityProgressSelect.value = '';
       activeEntityFilteredEntries = [];
-      if (entityTracksEl) entityTracksEl.replaceChildren();
+      if (entityTracksEl) { entityTracksEl.replaceChildren(); entityBatchStates.delete(entityTracksEl); }
     }
 
     function renderEntityAlbums() {
@@ -4955,29 +5010,7 @@
       const meta = ENTITY_ALBUM_META[activeEntityType] || ENTITY_ALBUM_META.studios;
       const albumQuery = normalizedEntityValue(entityAlbumSearchInput?.value);
       const albumSort = String(entityAlbumSortSelect?.value || 'title');
-      const cards = firebaseEntityCards.filter(card => card.type === activeEntityType)
-        .filter(card => !albumQuery || normalizedEntityValue(card.value).includes(albumQuery))
-        .map(card => ({ card, progress: entityCardProgress(card) }))
-        .sort((a, b) => {
-          if (albumSort === 'unfinished') {
-            const completeDiff = Number(a.progress.complete) - Number(b.progress.complete);
-            if (completeDiff) return completeDiff;
-          } else if (albumSort === 'progress') {
-            const aRatio = a.progress.related.length ? a.progress.rated / a.progress.related.length : 0;
-            const bRatio = b.progress.related.length ? b.progress.rated / b.progress.related.length : 0;
-            if (aRatio !== bRatio) return aRatio - bRatio;
-          } else if (albumSort === 'tracks' && a.progress.related.length !== b.progress.related.length) {
-            return b.progress.related.length - a.progress.related.length;
-          }
-          return compareNatural(a.card.value, b.card.value);
-        })
-        .map(row => row.card);
-      const eligible = eligibleEntityValues(activeEntityType);
-      const existing = new Set(cards.map(card => normalizedEntityValue(card.value)));
-      entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум ' + ENTITY_MIN_TRACKS + ' трека)</option>' +
-        eligible.filter(item => !existing.has(normalizedEntityValue(item.value)))
-          .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' · ' + item.count + '</option>').join('');
-      entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId));
+      entityCreateForm.classList.toggle('hidden', Boolean(activeEntityCardId) || !isCatalogAdmin());
       entityBackBtn.classList.remove('hidden');
       entityBackBtn.textContent = activeEntityCardId ? '← Ко всем альбомам' : '← На главную';
       entityGridEl.classList.toggle('hidden', Boolean(activeEntityCardId));
@@ -4989,7 +5022,10 @@
         entityFiltersToggle.innerHTML = (entityFiltersExpanded ? 'Скрыть фильтры <span aria-hidden="true">⌃</span>' : 'Показать фильтры <span aria-hidden="true">⌄</span>');
       }
       entityTracksEl.classList.toggle('hidden', !activeEntityCardId);
-      if (!activeEntityCardId) entityTracksEl.replaceChildren();
+      if (!activeEntityCardId && entityTracksEl.childNodes.length) {
+        entityTracksEl.replaceChildren();
+        entityBatchStates.delete(entityTracksEl);
+      }
 
       if (activeEntityCardId) {
         const card = firebaseEntityCards.find(item => item.id === activeEntityCardId);
@@ -5031,13 +5067,15 @@
         activeEntityFilteredEntries = filtered;
         entityRateAllBtn.disabled = !filtered.length;
         const visibleTracks = filtered.slice(0, entityTrackRenderLimit);
-        entityTracksEl.innerHTML = filtered.length ? '<div class="oc-entity-track-list">' + visibleTracks.map((entry, index) =>
+        const trackKey = JSON.stringify([dataVersion, myName, ratingScale, activeEntityCardId, search, trackType, fromYear, fromSeason, toYear, toSeason, progressFilter, trackSort]);
+        const trackRoot = renderEntityBatch(entityTracksEl, trackKey, visibleTracks, 'entity-tracks', (entry, index) =>
           renderUnifiedEntryCard(entry, {
             rankLabel: index + 1,
             className: entityHasRating(entry) ? 'oc-entity-track-rated' : '',
             controlsHtml: '<button class="oc-secondary-btn" type="button" data-entity-rate="' + escapeHtml(entry.id) + '">' + (entityHasRating(entry) ? 'Изменить оценку' : 'Оценить') + '</button>'
           })
-        ).join('') + progressiveMoreMarkup('entity-tracks', visibleTracks.length, filtered.length) + '</div>' : '<div class="oc-empty">По этим фильтрам треков нет.</div>';
+        , '<div class="oc-empty">По этим фильтрам треков нет.</div>', 'oc-entity-track-list');
+        trackRoot.insertAdjacentHTML('beforeend', progressiveMoreMarkup('entity-tracks', visibleTracks.length, filtered.length));
         installProgressiveAutoload(entityTracksEl, 'entity-tracks', () => {
           entityTrackRenderLimit += 30;
           renderEntityAlbums();
@@ -5045,10 +5083,45 @@
         return;
       }
 
+      const listKey = JSON.stringify([dataVersion, entityCardDataVersion, myName, ratingScale, activeEntityType, albumQuery, albumSort]);
+      if (entityListCache.key !== listKey) {
+        const cards = firebaseEntityCards.filter(card => card.type === activeEntityType)
+          .filter(card => !albumQuery || normalizedEntityValue(card.value).includes(albumQuery))
+          .map(card => ({ card, progress: entityCardProgress(card) }))
+          .sort((a, b) => {
+            if (albumSort === 'unfinished') {
+              const completeDiff = Number(a.progress.complete) - Number(b.progress.complete);
+              if (completeDiff) return completeDiff;
+            } else if (albumSort === 'progress') {
+              const aRatio = a.progress.related.length ? a.progress.rated / a.progress.related.length : 0;
+              const bRatio = b.progress.related.length ? b.progress.rated / b.progress.related.length : 0;
+              if (aRatio !== bRatio) return aRatio - bRatio;
+            } else if (albumSort === 'tracks' && a.progress.related.length !== b.progress.related.length) {
+              return b.progress.related.length - a.progress.related.length;
+            }
+            return compareNatural(a.card.value, b.card.value);
+          })
+          .map(row => row.card);
+        entityListCache = { key: listKey, cards };
+      }
+      const cards = entityListCache.cards;
+      if (isCatalogAdmin()) {
+        const existing = new Set(firebaseEntityCards.filter(card => card.type === activeEntityType).map(card => normalizedEntityValue(card.value)));
+        const optionsKey = `${dataVersion}|${activeEntityType}|${[...existing].sort().join('¦')}`;
+        if (entityCreateOptionsKey !== optionsKey) {
+          entityCreateOptionsKey = optionsKey;
+          const selectedValue = entityValueSelect.value;
+          entityValueSelect.innerHTML = '<option value="">Выберите ' + meta.one + ' (минимум ' + ENTITY_MIN_TRACKS + ' трека)</option>' +
+            eligibleEntityValues(activeEntityType).filter(item => !existing.has(normalizedEntityValue(item.value)))
+              .map(item => '<option value="' + escapeHtml(item.value) + '">' + escapeHtml(item.value) + ' · ' + item.count + '</option>').join('');
+          entityValueSelect.value = selectedValue;
+        }
+      }
       entityTitleEl.textContent = meta.title;
       entitySubtitleEl.textContent = 'Альбомы с треками из каталога. Создать новый можно для объекта, у которого есть минимум ' + ENTITY_MIN_TRACKS + ' трека.';
       const visibleCards = cards.slice(0, entityCardRenderLimit);
-      entityGridEl.innerHTML = cards.length ? visibleCards.map(card => {
+      const gridKey = `${listKey}|${isCatalogAdmin()}`;
+      const gridRoot = renderEntityBatch(entityGridEl, gridKey, visibleCards, 'entity-cards', card => {
         const progress = entityCardProgress(card);
         return '<article class="oc-entity-card' + (progress.complete ? ' complete' : '') + '" data-entity-open="' + escapeHtml(card.id) + '">' +
           '<div class="oc-entity-cover">' + (card.image ? '<img src="' + escapeHtml(normalizeUrl(card.image)) + '" alt="" loading="lazy" />' : '<span>' + meta.icon + '</span>') + '</div>' +
@@ -5058,7 +5131,8 @@
           (isCatalogAdmin() ? '<button class="oc-entity-edit" type="button" data-entity-edit="' + escapeHtml(card.id) + '" title="Редактировать альбом" aria-label="Редактировать альбом">✎</button>' : '') +
           (isCatalogAdmin() ? '<button class="oc-entity-delete" type="button" data-entity-delete="' + escapeHtml(card.id) + '" aria-label="Удалить альбом">×</button>' : '') +
           '</div></article>';
-      }).join('') + progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length) : `<div class="oc-empty">${albumQuery ? 'По этому запросу альбомов не найдено.' : 'Альбомов пока нет.'}</div>`;
+      }, `<div class="oc-empty">${albumQuery ? 'По этому запросу альбомов не найдено.' : 'Альбомов пока нет.'}</div>`);
+      gridRoot.insertAdjacentHTML('beforeend', progressiveMoreMarkup('entity-cards', visibleCards.length, cards.length));
       installProgressiveAutoload(entityGridEl, 'entity-cards', () => {
         entityCardRenderLimit += 40;
         renderEntityAlbums();
@@ -7623,9 +7697,14 @@
       entityFiltersExpanded = !entityFiltersExpanded;
       renderEntityAlbums();
     });
+    let entitySearchTimer = 0;
+    const scheduleEntitySearch = () => {
+      clearTimeout(entitySearchTimer);
+      entitySearchTimer = setTimeout(() => { if (activeTab.startsWith('entity-')) renderEntityAlbums(); }, 180);
+    };
     entityAlbumSearchInput?.addEventListener('input', () => {
       entityCardRenderLimit = 40;
-      renderEntityAlbums();
+      scheduleEntitySearch();
     });
     entityAlbumSortSelect?.addEventListener('change', () => {
       entityCardRenderLimit = 40;
@@ -7643,7 +7722,7 @@
     [entitySearchInput, entityTrackTypeSelect, entityTrackSortSelect, entityFromYearSelect, entityFromSeasonSelect, entityToYearSelect, entityToSeasonSelect, entityProgressSelect].forEach(el => {
       if (el) el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', () => {
         entityTrackRenderLimit = 30;
-        renderEntityAlbums();
+        if (el.tagName === 'INPUT') scheduleEntitySearch(); else renderEntityAlbums();
       });
     });
     if (entityRateAllBtn) entityRateAllBtn.addEventListener('click', startEntityRating);
