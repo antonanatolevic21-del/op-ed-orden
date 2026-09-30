@@ -6551,21 +6551,47 @@
       });
     }
 
+    let profileOverviewRenderKey = '';
     function renderProfile() {
       populateProfileUsers();
       profileUser = profileUserSelect.value;
-
-      const top100Only = profilePanel?.dataset.profileView === 'top100';
-      const filtered = top100Only ? [] : applyFilters(entries);
-      const topFiltered = applyFiltersIgnoringType(entries);
-      const allRatingsFiltered = top100Only ? [] : applyFiltersIgnoringType(entries);
+      const view = profilePanel?.dataset.profileView || 'overview';
+      const top100Only = view === 'top100';
+      if (profileDeleteBtn) {
+        profileDeleteBtn.disabled = !isAdmin() || !profileUser;
+        profileDeleteBtn.style.display = isAdmin() ? '' : 'none';
+      }
+      if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
+        registerNameInput.value = myName || '';
+      }
       if (profilePanel && !top100Only) {
         profilePanel.dataset.profileRatingsReady = String(
           firebaseRatingsScope === 'all' && remoteDataState.ratings.ready
         );
-        profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
-        renderProfileStats(computeProfileStats(profileUser, filtered));
+        if (view === 'overview' || view === 'comparison') {
+          profilePanel.dataset.profileRatingCount = String(ratedListFor(profileUser, entries).length);
+        }
       }
+      if (!top100Only) {
+        if (view === 'overview') {
+          const key = JSON.stringify([dataVersion, profileUser, ratingScale, filters]);
+          if (profileOverviewRenderKey !== key) {
+            renderProfileStats(computeProfileStats(profileUser, applyFilters(entries)));
+            profileOverviewRenderKey = key;
+          }
+        } else if (view === 'ratings') {
+          const list = applyFiltersIgnoringType(entries);
+          populateArScoreOptions(profileUser, list);
+          renderAllRatings(profileUser, list);
+        } else if (view === 'rerate') {
+          renderProfileRerate(profileUser);
+        } else if (view === 'daily') {
+          renderDailyProfilePanel();
+        }
+        // Comparison and invitations have their own route modules.
+        return;
+      }
+      const topFiltered = applyFiltersIgnoringType(entries);
 
       function topForScore(type) {
         const manualOrder = manualOrderFor(profileUser, type);
@@ -6645,15 +6671,6 @@
         profileDeleteBtn.style.display = isAdmin() ? '' : 'none';
       }
 
-      if (top100Only) return;
-
-      populateArScoreOptions(profileUser, allRatingsFiltered);
-      renderAllRatings(profileUser, allRatingsFiltered);
-      renderProfileRerate(profileUser);
-      renderDailyProfilePanel();
-      if (registerNameInput && (!registerNameInput.value || normalizedAccountName(registerNameInput.value) === normalizedAccountName(myName))) {
-        registerNameInput.value = myName || '';
-      }
     }
 
     function setTopMode(mode) {

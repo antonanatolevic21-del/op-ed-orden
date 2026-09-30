@@ -17,7 +17,7 @@
   const top100CandidatesVersion = '20260731-top100-candidates1';
   const ratingWorkbenchVersion = '20260804-rating-modifiers-save1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
-  const profileVersion = '20260818-season-rerate1';
+  const profileVersion = '20260930-profile-fast1';
   const adminVersion = '20260805-same-song-groups1';
   const helpTourVersion = '20260805-guided-help-backtop1';
   const loadedStyles = new Map();
