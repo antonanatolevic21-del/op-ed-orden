@@ -405,7 +405,7 @@
     if (!columns) return null;
     workspace = document.createElement('div'); workspace.className = 'oc-top100-workspace';
     const panel = document.createElement('aside'); panel.className = 'oc-workspace-candidates';
-    panel.innerHTML = `<header><div><h2>Кандидаты</h2><p>Перетаскивай песни на нужное место</p></div><span data-workspace-count></span></header><input class="oc-workspace-search" type="search" placeholder="Песня, аниме, исполнитель…" aria-label="Поиск кандидатов" autocomplete="off"><div class="oc-workspace-filters"><button type="button" data-workspace-filter="available">Мои кандидаты и оценки</button><button type="button" data-workspace-filter="all">Все песни</button></div><div class="oc-workspace-candidate-list"></div><footer>Нажатие — выбрать · двойное — добавить в конец.<br>На телефоне перетаскивай за ⋮⋮ или выбери песню и нажми место вставки.</footer>`;
+    panel.innerHTML = `<header><div><h2>Кандидаты</h2><p>Перетаскивай песни на нужное место</p></div><span data-workspace-count></span></header><input class="oc-workspace-search" type="search" placeholder="Песня, аниме, исполнитель…" aria-label="Поиск кандидатов" autocomplete="off"><div class="oc-workspace-candidate-list"></div><footer>Нажатие — выбрать · двойное — добавить в конец.<br>На телефоне перетаскивай за ⋮⋮ или выбери песню и нажми место вставки.</footer>`;
     columns.before(workspace); workspace.append(panel, columns);
     panel.querySelector('.oc-workspace-search').addEventListener('input', event => {
       state.candidateQuery = event.target.value; state.candidateLimit = 40;
@@ -449,7 +449,7 @@
     const added = new Set(state.draft[type]);
     const q = clean(state.candidateQuery).toLocaleLowerCase('ru').replace(/ё/g,'е');
     return [...state.catalog.values()].filter(entry => entry.type === type && !added.has(String(entry.id)))
-      .filter(entry => state.candidateFilter === 'all' || state.scores.has(String(entry.id)) || prioritized.has(String(entry.id)))
+      .filter(entry => prioritized.has(String(entry.id)))
       .filter(entry => !q || candidateTerms(entry).includes(q))
       .sort((a,b) => Number(prioritized.has(String(b.id))) - Number(prioritized.has(String(a.id))) || (state.scores.get(String(b.id)) ?? -1) - (state.scores.get(String(a.id)) ?? -1) || clean(a.title).localeCompare(clean(b.title),'ru',{numeric:true}));
   }
@@ -465,7 +465,7 @@
     list.innerHTML = rows.slice(0,state.candidateLimit).map(entry => {
       const id = String(entry.id), meta = metaFor(type,id), selected = state.selected?.type === type && state.selected?.id === id;
       return `<article class="oc-workspace-candidate${selected?' oc-workspace-selected':''}" data-workspace-candidate="${esc(id)}" data-type="${type}" role="button" tabindex="0" aria-pressed="${selected}">${meta.image?`<img src="${esc(meta.image)}" alt="" loading="lazy" decoding="async">`:`<span class="oc-workspace-noimage">${type}</span>`}<div><strong>${esc(meta.title)}</strong><small>${esc([entry.anime,meta.meta,...(entry.performers || [])].filter(Boolean).join(' · '))}</small><span>${esc(meta.score)} ✦</span><button type="button" class="oc-top100-play" data-top100-video="${esc(id)}" aria-label="Смотреть ${esc(meta.title)}">▶</button></div><button type="button" data-workspace-add aria-label="Добавить ${esc(meta.title)}">+</button><button type="button" class="oc-top100-drag-handle" aria-label="Перетащить ${esc(meta.title)}">⋮⋮</button></article>`;
-    }).join('') || `<div class="oc-empty">${state.candidateFilter==='available'?'Кандидатов пока нет. Выбери «Все песни» и найди недостающие.':'Ничего не найдено.'}</div>`;
+    }).join('') || `<div class="oc-empty">${clean(state.candidateQuery) ? 'Среди кандидатов ничего не найдено.' : 'Доступных кандидатов пока нет. Пометь песни кандидатами в их карточках.'}</div>`;
     if (rows.length > state.candidateLimit) list.insertAdjacentHTML('beforeend','<button type="button" data-workspace-more>Показать ещё 40</button>');
     list.scrollTop = scroll;
   }
@@ -476,13 +476,8 @@
     state.candidateLoading = true; state.candidateError = ''; renderCandidates();
     try {
       mergeLiveCatalog();
-      if (state.candidateFilter === 'all' && clean(state.candidateQuery)) {
-        state.catalogSearch ||= window.OC_CATALOG_CACHE.load().catch(error => { state.catalogSearch = null; throw error; });
-        mergeLiveCatalog(await state.catalogSearch);
-      } else {
-        const ids = [...state.scores.keys(), ...(window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || [])];
-        await loadCatalog(ids);
-      }
+      const ids = window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || [];
+      await loadCatalog(ids);
       if (request !== state.candidateRequest || key !== state.key || !state.editing) return;
       state.candidateLoadedKey = `${key}|${type}`;
     } catch(error) {
