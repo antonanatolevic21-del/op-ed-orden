@@ -21,12 +21,13 @@
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
     import { getAuth, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, deleteUser, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, updateProfile } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
-    import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app-check.js";
+    import { initializeAppCheck, ReCaptchaV3Provider, getToken as getAppCheckToken } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app-check.js";
     import { firebaseConfig, adminUids, appCheckSiteKey } from './firebase-config.js';
 
     const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    let appCheckInstance = null;
     if (appCheckSiteKey) {
-      initializeAppCheck(app, {
+      appCheckInstance = initializeAppCheck(app, {
         provider: new ReCaptchaV3Provider(appCheckSiteKey),
         isTokenAutoRefreshEnabled: true
       });
@@ -433,6 +434,43 @@
       return () => { active = false; unsubs.forEach(unsubscribe => unsubscribe()); };
     }
 
+    let profileNicknameDirectoryPromise = null;
+    function listProfileNicknames() {
+      if (profileNicknameDirectoryPromise) return profileNicknameDirectoryPromise;
+      profileNicknameDirectoryPromise = (async () => {
+        await init();
+        const token = await auth.currentUser.getIdToken();
+        const headers = { Authorization: `Bearer ${token}` };
+        if (appCheckInstance) headers['X-Firebase-AppCheck'] = (await getAppCheckToken(appCheckInstance)).token;
+        const names = new Map();
+        let pageToken = '';
+        do {
+          const url = new URL(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/userProfiles`);
+          url.searchParams.set('pageSize', '1000');
+          // A server-side field mask keeps ratings, tops, queues and settings out
+          // of the response, rather than downloading full profiles and discarding them.
+          ['nickname', 'displayName', 'name'].forEach(field => url.searchParams.append('mask.fieldPaths', field));
+          if (pageToken) url.searchParams.set('pageToken', pageToken);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 15000);
+          let response, body;
+          try {
+            response = await fetch(url, { headers, signal: controller.signal });
+            if (!response.ok) throw new Error(`Не удалось загрузить список профилей (${response.status}).`);
+            body = await response.json();
+          } finally { clearTimeout(timeout); }
+          (body.documents || []).forEach(document => {
+            const fields = document.fields || {};
+            const name = String(fields.nickname?.stringValue || fields.displayName?.stringValue || fields.name?.stringValue || '').trim();
+            if (name) names.set(normalizeNickname(name), name);
+          });
+          pageToken = body.nextPageToken || '';
+        } while (pageToken);
+        return [...names.values()].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true, sensitivity: 'base' }));
+      })().catch(error => { profileNicknameDirectoryPromise = null; throw error; });
+      return profileNicknameDirectoryPromise;
+    }
+
     // Only subscribe to documents belonging to the profiles being viewed.
     function watchProfileDocuments(collectionName, names, callback) {
       const keys = [...new Set(names.map(normalizeNickname).filter(Boolean))];
@@ -790,6 +828,7 @@
       watchRatings,
       watchRatingsForUser,
       watchRatingsForUsers,
+      listProfileNicknames,
       watchManualRanksForUsers,
       watchUserProfilesForUsers,
       watchManualRanks,
