@@ -732,6 +732,8 @@
   const EVENT_DATALIST_ID = 'ev-known-participants';
   const ADMIN_ORDER = ['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа'];
   let knownByKey = new Map();
+  let directoryNames = window.OC_PROFILE_NICKNAMES || [];
+  let selectedProfileRows = [];
   let profilesLoaded = false;
   let syncQueued = false;
 
@@ -777,7 +779,8 @@
   }
 
   function setProfiles(rows) {
-    const profiles = knownRows(rows);
+    selectedProfileRows = Array.isArray(rows) ? rows : [];
+    const profiles = knownRows([...directoryNames.map(nickname => ({ nickname })), ...selectedProfileRows]);
     knownByKey = new Map(profiles.map(row => [normalize(row.nicknameKey || profileName(row)), row]));
     profilesLoaded = true;
     scheduleSync();
@@ -884,6 +887,10 @@
   }, true);
 
   new MutationObserver(scheduleSync).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener('oped:profile-nicknames-updated', event => {
+    directoryNames = event.detail?.names || [];
+    setProfiles(selectedProfileRows);
+  });
   window.addEventListener('oped:user-profiles-updated', event => setProfiles(event?.detail?.rows));
   window.addEventListener('oped:route-ready', event => {
     if (event?.detail?.tab === 'profile') scheduleSync();

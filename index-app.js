@@ -2883,6 +2883,23 @@
     let openingsScopeGeneration = 0;
     let ratingsUserKey = '';
     let ratingsScopeGeneration = 0;
+    let profileNicknameDirectory = [];
+    let profileNicknameDirectoryLoading = null;
+    let profileNicknameDirectoryReady = false;
+    function loadProfileNicknameDirectory() {
+      if (profileNicknameDirectoryReady || profileNicknameDirectoryLoading || !firebaseDbInstance?.listProfileNicknames) return;
+      profileNicknameDirectoryLoading = firebaseDbInstance.listProfileNicknames().then(names => {
+        profileNicknameDirectory = names;
+        window.OC_PROFILE_NICKNAMES = names;
+        dispatchAppEvent('oped:profile-nicknames-updated', { names });
+        profileNicknameDirectoryReady = true;
+        populateProfileUsers(true);
+        publishAppData('profile-nicknames-loaded');
+      }).catch(error => {
+        console.error('Profile nickname directory load failed', error);
+        if (activeTab === 'profile') setStatus('Не удалось загрузить список никнеймов. Попробуйте открыть профиль ещё раз.', true);
+      }).finally(() => { profileNicknameDirectoryLoading = null; });
+    }
     let comparisonProfileUsers = [];
     function openedProfileUsers() {
       const selected = profileUserSelect?.value || profileUser || myName;
@@ -3088,6 +3105,7 @@
     async function syncRouteDataSubscriptions(tab = activeTab) {
       if (!firebaseDbInstance) return;
       const syncId = ++routeDataSyncId;
+      if (tab === 'profile') loadProfileNicknameDirectory();
       const needsProfileData = tab === 'profile' || tab === 'top100' || tab === 'discovery';
       const needsEntityCards = tab.startsWith('entity-');
       const needsTierData = tab === 'tier';
@@ -3408,7 +3426,7 @@
     }
 
     function allVoterNames() {
-      const names = new Set();
+      const names = new Set(profileNicknameDirectory);
       entries.forEach(e => {
         Object.keys(e.scores || {}).forEach(n => names.add(n));
         Object.keys(e.songScores || {}).forEach(n => names.add(n));
@@ -8699,20 +8717,6 @@
       renderProfile();
     });
     if (profileDeleteBtn) profileDeleteBtn.addEventListener('click', () => deleteProfileFully(profileUser));
-    const profileLookup = document.createElement('form');
-    profileLookup.className = 'oc-profile-lookup';
-    profileLookup.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px';
-    profileLookup.innerHTML = '<input type="text" aria-label="Никнейм профиля" placeholder="Открыть профиль по никнейму" maxlength="60"><button type="submit">Открыть</button>';
-    profileUserSelect.insertAdjacentElement('afterend', profileLookup);
-    profileLookup.addEventListener('submit', event => {
-      event.preventDefault();
-      const name = profileLookup.querySelector('input').value.trim();
-      if (!name) return;
-      const existing = [...profileUserSelect.options].find(option => manualSameUser(option.value, name));
-      if (!existing) profileUserSelect.add(new Option(name, name));
-      profileUserSelect.value = existing?.value || name;
-      profileUserSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
     profileUserSelect.addEventListener('change', () => { void syncRouteDataSubscriptions(activeTab); manualEditMode = false; manualShowHidden = false; profileTopExpanded = { OP: false, ED: false }; allRatingsPage = { OP: 1, ED: 1 }; profileTopPage = { OP: 1, ED: 1 }; renderProfile(); });
 
     const tierTypeEl = $('#oc-tier-type');
