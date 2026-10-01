@@ -405,7 +405,7 @@
     if (!columns) return null;
     workspace = document.createElement('div'); workspace.className = 'oc-top100-workspace';
     const panel = document.createElement('aside'); panel.className = 'oc-workspace-candidates';
-    panel.innerHTML = `<header><div><h2>Кандидаты</h2><p>Перетаскивай песни на нужное место</p></div><span data-workspace-count></span></header><input class="oc-workspace-search" type="search" placeholder="Песня, аниме, исполнитель…" aria-label="Поиск кандидатов" autocomplete="off"><div class="oc-workspace-candidate-list"></div><footer>Нажатие — выбрать · двойное — добавить в конец.<br>На телефоне перетаскивай за ⋮⋮ или выбери песню и нажми место вставки.</footer>`;
+    panel.innerHTML = `<header><div><h2>Кандидаты</h2><p>Перетаскивай песни на нужное место</p></div><span data-workspace-count></span></header><div class="oc-workspace-filters" aria-label="Источник песен"><button type="button" data-workspace-filter="available" aria-pressed="true">Кандидаты</button><button type="button" data-workspace-filter="all" aria-pressed="false">Поиск песен</button></div><input class="oc-workspace-search" type="search" placeholder="Песня, аниме, исполнитель…" aria-label="Поиск кандидатов" autocomplete="off"><div class="oc-workspace-candidate-list"></div><footer>Нажатие — выбрать · двойное — добавить в конец.<br>На телефоне перетаскивай за ⋮⋮ или выбери песню и нажми место вставки.</footer>`;
     columns.before(workspace); workspace.append(panel, columns);
     panel.querySelector('.oc-workspace-search').addEventListener('input', event => {
       state.candidateQuery = event.target.value; state.candidateLimit = 40;
@@ -414,7 +414,11 @@
     });
     panel.addEventListener('click', event => {
       const filter = event.target.closest('[data-workspace-filter]');
-      if (filter) { state.candidateFilter = filter.dataset.workspaceFilter; state.candidateLimit = 40; void refreshCandidates(); return; }
+      if (filter) {
+        state.candidateFilter = filter.dataset.workspaceFilter; state.candidateQuery = ''; state.candidateLimit = 40; state.selected = null;
+        panel.querySelector('.oc-workspace-search').value = ''; clearTimeout(state.searchTimer);
+        void refreshCandidates(); return;
+      }
       const more = event.target.closest('[data-workspace-more]');
       if (more) { state.candidateLimit += 40; renderCandidates(); return; }
       const retry = event.target.closest('[data-workspace-retry]');
@@ -448,8 +452,9 @@
     const prioritized = new Set((window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || []).map(String));
     const added = new Set(state.draft[type]);
     const q = clean(state.candidateQuery).toLocaleLowerCase('ru').replace(/ё/g,'е');
+    if (state.candidateFilter === 'all' && !q) return [];
     return [...state.catalog.values()].filter(entry => entry.type === type && !added.has(String(entry.id)))
-      .filter(entry => prioritized.has(String(entry.id)))
+      .filter(entry => state.candidateFilter === 'all' || prioritized.has(String(entry.id)))
       .filter(entry => !q || candidateTerms(entry).includes(q))
       .sort((a,b) => Number(prioritized.has(String(b.id))) - Number(prioritized.has(String(a.id))) || (state.scores.get(String(b.id)) ?? -1) - (state.scores.get(String(a.id)) ?? -1) || clean(a.title).localeCompare(clean(b.title),'ru',{numeric:true}));
   }
@@ -458,6 +463,11 @@
     const panel = document.querySelector('.oc-workspace-candidates'); if (!panel) return;
     const list = panel.querySelector('.oc-workspace-candidate-list'), scroll = list.scrollTop;
     panel.querySelectorAll('[data-workspace-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.workspaceFilter === state.candidateFilter)));
+    const searchMode = state.candidateFilter === 'all';
+    panel.querySelector('h2').textContent = searchMode ? 'Поиск песен' : 'Кандидаты';
+    const input = panel.querySelector('.oc-workspace-search');
+    input.placeholder = searchMode ? 'Найти в каталоге: песня, аниме, исполнитель…' : 'Найти среди кандидатов…';
+    input.setAttribute('aria-label', searchMode ? 'Поиск по всему каталогу' : 'Поиск кандидатов');
     const type = activeType(), rows = candidateRows(type);
     panel.querySelector('[data-workspace-count]').textContent = `${rows.length} доступно`;
     if (state.candidateLoading) { list.innerHTML = '<div class="oc-empty">Загружаю кандидатов…</div>'; return; }
@@ -465,7 +475,7 @@
     list.innerHTML = rows.slice(0,state.candidateLimit).map(entry => {
       const id = String(entry.id), meta = metaFor(type,id), selected = state.selected?.type === type && state.selected?.id === id;
       return `<article class="oc-workspace-candidate${selected?' oc-workspace-selected':''}" data-workspace-candidate="${esc(id)}" data-type="${type}" role="button" tabindex="0" aria-pressed="${selected}">${meta.image?`<img src="${esc(meta.image)}" alt="" loading="lazy" decoding="async">`:`<span class="oc-workspace-noimage">${type}</span>`}<div><strong>${esc(meta.title)}</strong><small>${esc([entry.anime,meta.meta,...(entry.performers || [])].filter(Boolean).join(' · '))}</small><span>${esc(meta.score)} ✦</span><button type="button" class="oc-top100-play" data-top100-video="${esc(id)}" aria-label="Смотреть ${esc(meta.title)}">▶</button></div><button type="button" data-workspace-add aria-label="Добавить ${esc(meta.title)}">+</button><button type="button" class="oc-top100-drag-handle" aria-label="Перетащить ${esc(meta.title)}">⋮⋮</button></article>`;
-    }).join('') || `<div class="oc-empty">${clean(state.candidateQuery) ? 'Среди кандидатов ничего не найдено.' : 'Доступных кандидатов пока нет. Пометь песни кандидатами в их карточках.'}</div>`;
+    }).join('') || `<div class="oc-empty">${searchMode ? (clean(state.candidateQuery) ? 'В каталоге ничего не найдено.' : 'Введи название песни, аниме или исполнителя для поиска по каталогу.') : (clean(state.candidateQuery) ? 'Среди кандидатов ничего не найдено.' : 'Доступных кандидатов пока нет. Пометь песни кандидатами в их карточках.')}</div>`;
     if (rows.length > state.candidateLimit) list.insertAdjacentHTML('beforeend','<button type="button" data-workspace-more>Показать ещё 40</button>');
     list.scrollTop = scroll;
   }
@@ -476,8 +486,15 @@
     state.candidateLoading = true; state.candidateError = ''; renderCandidates();
     try {
       mergeLiveCatalog();
-      const ids = window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || [];
-      await loadCatalog(ids);
+      if (state.candidateFilter === 'all') {
+        if (clean(state.candidateQuery)) {
+          state.catalogSearch ||= window.OC_CATALOG_CACHE.load().catch(error => { state.catalogSearch = null; throw error; });
+          mergeLiveCatalog(await state.catalogSearch);
+        }
+      } else {
+        const ids = window.OC_APP_BRIDGE?.top100Meta?.(type)?.candidates || [];
+        await loadCatalog(ids);
+      }
       if (request !== state.candidateRequest || key !== state.key || !state.editing) return;
       state.candidateLoadedKey = `${key}|${type}`;
     } catch(error) {
