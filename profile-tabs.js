@@ -196,7 +196,7 @@
     });
 
     setVisible('#oc-profile-stats', currentView === 'overview');
-    setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns', currentView === 'top100');
+    setVisible('.oc-topmode-toggle,.oc-topmode-hint,.oc-manual-actions,.oc-profile-columns,.oc-top100-workspace', currentView === 'top100');
     setVisible('.oc-allratings', currentView === 'ratings');
     setVisible('#oc-profile-rerate', currentView === 'rerate');
     setVisible('#oc-profile-taste-comparison', currentView === 'comparison');
@@ -217,7 +217,28 @@
 
     if (persist) {
       try { sessionStorage.setItem(STORAGE_KEY, currentView); } catch (_) {}
+      syncViewUrl(currentView);
     }
+  }
+
+  function initialView() {
+    try {
+      const url = new URL(window.location.href);
+      const section = url.searchParams.get('section');
+      if (url.searchParams.get('view') === 'profile' && VIEWS.has(section)) return section;
+    } catch (_) {}
+    try { const saved = sessionStorage.getItem(STORAGE_KEY); if (VIEWS.has(saved)) return saved; } catch (_) {}
+    return 'overview';
+  }
+
+  function syncViewUrl(view) {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('view') !== 'profile') return;
+      if (url.searchParams.get('section') === view) return;
+      url.searchParams.set('section', view);
+      window.history.replaceState(window.history.state, '', url.href);
+    } catch (_) {}
   }
 
   function initProfileTabs() {
@@ -227,9 +248,13 @@
 
     ensureTabs();
     ensureComparisonPanel();
-    let saved = 'overview';
-    try { saved = sessionStorage.getItem(STORAGE_KEY) || 'overview'; } catch (_) {}
+    const saved = initialView();
+    syncViewUrl(saved);
     setView(saved, false);
+    new MutationObserver(() => {
+      const view = root.dataset.profileView;
+      if (VIEWS.has(view) && view !== currentView) setView(view, false);
+    }).observe(root, { attributes: true, attributeFilter: ['data-profile-view'] });
 
     const stats = root.querySelector('#oc-profile-stats');
     if (stats) {
