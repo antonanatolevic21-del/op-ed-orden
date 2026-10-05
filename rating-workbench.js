@@ -8,6 +8,8 @@
   let renderTimer = 0;
   let renderPendingAfterEdit = false;
   let queueMap = new Map();
+  let coverageLoading = false;
+  let coverageError = '';
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const bridge = () => window.OC_APP_BRIDGE;
@@ -139,6 +141,15 @@
 
   function coverageMarkup(entries, user, own) {
     if (!own) return '';
+    queueMap = new Map();
+    const data = snapshot();
+    if (!data.coverageCatalogRequested || !data.coverageCatalogReady) {
+      return `<section class="oc-workbench-block oc-coverage-block">
+        <div class="oc-workbench-head"><div><span>прогресс каталога</span><h3>Карта покрытия</h3><p>Карта загружается по кнопке и учитывает все песни каталога.</p></div>
+        <button type="button" class="oc-addbtn" data-coverage-load ${coverageLoading ? 'disabled' : ''}>${coverageLoading ? 'Загрузка карты…' : 'Загрузить карту покрытия'}</button></div>
+        ${coverageError ? `<p role="alert">${esc(coverageError)}</p>` : ''}
+      </section>`;
+    }
     const rows = new Map();
     queueMap = new Map();
     entries.forEach(entry => {
@@ -384,6 +395,23 @@
     }
     const save = event.target.closest('[data-criteria-save]');
     if (save) { await saveCriteria(save); return; }
+    const loadCoverage = event.target.closest('[data-coverage-load]');
+    if (loadCoverage) {
+      if (coverageLoading) return;
+      coverageLoading = true;
+      coverageError = '';
+      render({ force: true });
+      try {
+        if (!bridge()?.loadCoverageCatalog) throw new Error('Обнови страницу для загрузки карты.');
+        await bridge().loadCoverageCatalog();
+      } catch (error) {
+        coverageError = error?.message || 'Не удалось загрузить карту. Попробуй ещё раз.';
+      } finally {
+        coverageLoading = false;
+        render({ force: true });
+      }
+      return;
+    }
     const coverage = event.target.closest('[data-coverage-key]');
     if (coverage) {
       const ids = queueMap.get(coverage.dataset.coverageKey) || [];

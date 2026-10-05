@@ -88,7 +88,7 @@ console.log('PASS: seasonal ID-only subscriptions, batching, readiness, errors, 
     firebaseDbInstance:{watchOpenings:fn=>{watchers.push({kind:'all',fn});return ()=>{};},watchOpeningsByIds:(ids,fn)=>{watchers.push({kind:'ids',ids,fn});return ()=>{};}}
   };
   vm.createContext(ctx);
-  vm.runInContext(source.slice(source.indexOf("    let openingsScopeKey = '';"),source.indexOf('    function catalogHasRatingAggregates()')),ctx);
+  vm.runInContext(source.slice(source.indexOf("    let coverageRequestedOwner = '';"),source.indexOf('    function catalogHasRatingAggregates()')),ctx);
   ctx.ensureOpeningsWatcher(ctx.firebaseDbInstance,ctx.topProfileOpeningIds());
   assert.equal(watchers[0].kind,'ids');assert.deepEqual(Array.from(watchers[0].ids),['one','three','two']);
   ctx.ensureOpeningsWatcher(ctx.firebaseDbInstance,ctx.topProfileOpeningIds());assert.equal(watchers.length,1);
