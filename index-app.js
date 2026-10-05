@@ -320,6 +320,8 @@
     function appDataSnapshot() {
       return {
         entries,
+        coverageCatalogRequested: Boolean(coverageRequestedOwner && manualSameUser(coverageRequestedOwner, myName)),
+        coverageCatalogReady: openingsScopeKey === 'all' && remoteDataState.openings.ready && !coverageCatalogError,
         ratings: firebaseRatings,
         manualRanks,
         userProfiles: firebaseUserProfiles,
@@ -344,6 +346,14 @@
 
     window.OC_APP_BRIDGE = {
       snapshot: appDataSnapshot,
+      async loadCoverageCatalog() {
+        if (!myName || activeTab !== 'profile') throw new Error('Открой свой профиль для загрузки карты.');
+        coverageRequestedOwner = myName;
+        if (coverageCatalogError) remoteDataState.openings.started = false;
+        await syncRouteDataSubscriptions(activeTab);
+        if (!appDataSnapshot().coverageCatalogReady) throw new Error('Не удалось загрузить карту. Попробуй ещё раз.');
+        publishAppData('coverage-catalog-loaded');
+      },
       refreshRouteSubscriptions: () => syncRouteDataSubscriptions(activeTab),
       requestLogin: message => showAuthModal(message || 'Войди в личный аккаунт.'),
       openTrack: id => openCardModal(String(id || '')),
@@ -2879,6 +2889,8 @@
       resetRemoteDataSubscription('eventBasket');
     }
 
+    let coverageRequestedOwner = '';
+    let coverageCatalogError = false;
     let openingsScopeKey = '';
     let openingsScopeGeneration = 0;
     let ratingsUserKey = '';
@@ -2920,8 +2932,11 @@
       return [...ids].sort();
     }
     function usesScopedProfileCatalog(tab = activeTab) {
-      // Daily selection needs the eligible catalogue to generate new assignments.
-      return tab === 'profile' && profilePanel?.dataset.profileView !== 'daily';
+      // Daily assignments and the owner's coverage map need unrated songs too.
+      const view = profilePanel?.dataset.profileView || 'overview';
+      const name = profileUserSelect?.value || profileUser || myName;
+      const needsCoverageCatalog = view === 'overview' && Boolean(myName && coverageRequestedOwner && manualSameUser(name, myName) && manualSameUser(coverageRequestedOwner, myName));
+      return tab === 'profile' && view !== 'daily' && !needsCoverageCatalog;
     }
     function refreshScopedProfileCatalog() {
       if (usesScopedProfileCatalog() && firebaseDbInstance && remoteDataState.ratings.ready && remoteDataState.manualRanks.ready && remoteDataState.userProfiles.ready) {
@@ -2952,6 +2967,7 @@
       const readyPromise = createRemoteDataPromise('openings');
       const receive = (rows, meta = {}) => {
         if (generation !== openingsScopeGeneration) return;
+        coverageCatalogError = Boolean(meta.error);
         if (!meta.error) {
           firebaseOpenings = rows || [];
           rebuildEntriesFromFirebase();
