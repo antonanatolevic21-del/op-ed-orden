@@ -2920,8 +2920,11 @@
       return [...ids].sort();
     }
     function usesScopedProfileCatalog(tab = activeTab) {
-      // Daily selection needs the eligible catalogue to generate new assignments.
-      return tab === 'profile' && profilePanel?.dataset.profileView !== 'daily';
+      // Daily assignments and the owner's coverage map need unrated songs too.
+      const view = profilePanel?.dataset.profileView || 'overview';
+      const name = profileUserSelect?.value || profileUser || myName;
+      const needsCoverageCatalog = view === 'overview' && Boolean(myName && manualSameUser(name, myName));
+      return tab === 'profile' && view !== 'daily' && !needsCoverageCatalog;
     }
     function refreshScopedProfileCatalog() {
       if (usesScopedProfileCatalog() && firebaseDbInstance && remoteDataState.ratings.ready && remoteDataState.manualRanks.ready && remoteDataState.userProfiles.ready) {

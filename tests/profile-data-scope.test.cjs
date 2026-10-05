@@ -72,6 +72,33 @@ assert.equal(profileRows, null);
   app.markRemoteDataReady = kind => { app.remoteDataState[kind].ready = true; };
   vm.createContext(app);
   vm.runInContext(source.slice(source.indexOf("    let openingsScopeKey = ''"), source.indexOf('    const profileWatcherKeys')), app);
+  assert.equal(app.usesScopedProfileCatalog(), false, 'own overview needs the full catalogue for coverage, including unrated songs');
+  delete app.profilePanel.dataset.profileView;
+  assert.equal(app.usesScopedProfileCatalog(), false, 'initial own profile defaults to overview');
+  app.profilePanel.dataset.profileView = 'overview';
+  app.profileUserSelect.value = 'Bob';
+  assert.equal(app.usesScopedProfileCatalog(), true, 'other profiles still use selected song IDs');
+  app.profileUserSelect.value = 'Alice';
+  for (const view of ['top100', 'ratings', 'rerate', 'comparison', 'events']) {
+    app.profilePanel.dataset.profileView = view;
+    assert.equal(app.usesScopedProfileCatalog(), true, view + ' keeps scoped catalogue loading');
+  }
+  app.profilePanel.dataset.profileView = 'daily';
+  assert.equal(app.usesScopedProfileCatalog(), false, 'daily selection still needs the eligible catalogue');
+  app.profilePanel.dataset.profileView = 'overview';
+  const catalogCalls = [];
+  const catalogDb = {
+    watchOpenings(receive) { const call = { scope: 'all', receive }; catalogCalls.push(call); return () => { call.stopped = true; }; },
+    watchOpeningsByIds(ids, receive) { const call = { scope: Array.from(ids), receive }; catalogCalls.push(call); return () => { call.stopped = true; }; }
+  };
+  app.ensureOpeningsWatcher(catalogDb, ['rated-song']);
+  catalogCalls[0].receive([{ id: 'rated-song' }]);
+  app.ensureOpeningsWatcher(catalogDb, app.usesScopedProfileCatalog() ? ['rated-song'] : null);
+  assert.ok(catalogCalls[0].stopped, 'overview cancels the previous partial catalogue');
+  assert.equal(catalogCalls[1].scope, 'all');
+  catalogCalls[1].receive([{ id: 'rated-song' }, { id: 'unrated-song' }]);
+  catalogCalls[0].receive([{ id: 'rated-song' }]);
+  assert.equal(app.firebaseOpenings.length, 2, 'late partial results cannot remove unrated songs from coverage');
   const mockDb = { watchRatings() { throw Error('whole ratings forbidden'); }, watchRatingsForUsers(users, receive) { calls.push({ users, receive, stopped: false }); const call = calls.at(-1); return () => { call.stopped = true; }; } };
   assert.equal(app.preferredRatingsScope(), 'user', 'profile never needs aggregate fallback to all ratings');
   app.ensureRatingsWatcher(mockDb);
