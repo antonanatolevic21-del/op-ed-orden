@@ -45,6 +45,22 @@
     try { localStorage.removeItem(key); } catch (_) {}
   }
 
+  function normalizeConditionalModifiers(value) {
+    return (Array.isArray(value) ? value : []).slice(0, 16).map(rule => ({
+      criterionId: String(rule?.criterionId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48),
+      from: rule?.from, to: rule?.to, min: rule?.min, max: rule?.max
+    })).filter(rule => rule.criterionId && ['from', 'to', 'min', 'max'].every(key =>
+      rule[key] !== null && String(rule[key]).trim() !== '' && Number.isFinite(Number(rule[key]))
+    )).map(rule => ({ ...rule, from: Number(rule.from), to: Number(rule.to), min: Number(rule.min), max: Number(rule.max) }))
+      .filter(rule => rule.from >= 0 && rule.from <= rule.to && rule.min <= rule.max);
+  }
+
+  function editableConditionalModifiers(value) {
+    return (Array.isArray(value) ? value : []).slice(0, 16).filter(rule => rule && typeof rule === 'object').map(rule => ({
+      criterionId: String(rule.criterionId || ''), from: rule.from ?? '', to: rule.to ?? '', min: rule.min ?? '', max: rule.max ?? ''
+    }));
+  }
+
   function normalizeRatingFields(value) {
     const source = Array.isArray(value) ? value : [];
     const used = new Set();
@@ -58,7 +74,7 @@
       const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
       const mode = item.mode === 'modifier' ? 'modifier' : 'weight';
       const modifierRules = String(item.modifierRules || item.rules || '').trim().slice(0, 240);
-      return { id, label, weight, mode, modifierRules };
+      return { id, label, weight, mode, modifierRules, conditionalModifiers: editableConditionalModifiers(item.conditionalModifiers) };
     }).filter(row => row.label);
   }
 
@@ -76,6 +92,8 @@
       visualMode: source?.visualMode === 'modifier' ? 'modifier' : 'weight',
       songModifierRules: String(source?.songModifierRules || '').trim().slice(0, 240),
       visualModifierRules: String(source?.visualModifierRules || '').trim().slice(0, 240),
+      songConditionalModifiers: editableConditionalModifiers(source?.songConditionalModifiers),
+      visualConditionalModifiers: editableConditionalModifiers(source?.visualConditionalModifiers),
       fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
     };
   }
@@ -97,17 +115,63 @@
     return root;
   }
 
+  function conditionalRuleRow(rule = {}) {
+    return `<div class="oc-conditional-rule" data-conditional-rule data-selected-criterion="${esc(rule.criterionId || '')}">
+      <label>Если оценка критерия<select data-conditional-criterion aria-label="Критерий для условия"></select></label>
+      <label>От<input type="number" min="0" step="any" value="${esc(rule.from ?? 7)}" data-conditional-from></label>
+      <label>До включительно<input type="number" min="0" step="any" value="${esc(rule.to ?? 9)}" data-conditional-to></label>
+      <label>Влияние от<input type="number" step="any" value="${esc(rule.min ?? -1)}" data-conditional-min></label>
+      <label>Влияние до<input type="number" step="any" value="${esc(rule.max ?? 1)}" data-conditional-max></label>
+      <button type="button" data-conditional-remove aria-label="Удалить условие">×</button>
+    </div>`;
+  }
+
+  function conditionalMarkup(rules, mode) {
+    return `<div class="oc-conditional-modifiers" data-conditional-modifiers ${mode === 'modifier' ? '' : 'hidden'}>
+      <b>Влияние зависит от другого критерия</b>
+      <div data-conditional-list>${editableConditionalModifiers(rules).map(conditionalRuleRow).join('')}</div>
+      <button type="button" class="oc-secondary-btn" data-conditional-add>+ Добавить диапазон</button>
+      <small>Диапазоны включают границы. При пересечении действует первое условие. Влияние меняется равномерно от минимума при оценке этого модификатора 0 до максимума при верхней границе твоей шкалы. Одинаковые пределы задают постоянную поправку. Если условие не подошло или другой критерий пуст, действуют обычные правила выше; без них влияние равно 0.</small>
+    </div>`;
+  }
+
+  function refreshConditionalCriteria(panel) {
+    if (!panel) return;
+    const choices = [
+      { id: 'song', label: panel.querySelector('[data-type-song-label]')?.value || 'Песня' },
+      { id: 'visual', label: panel.querySelector('[data-type-visual-label]')?.value || 'Визуал' },
+      ...[...panel.querySelectorAll('[data-rating-field-row]')].map(row => ({ id: row.dataset.fieldId, label: row.querySelector('[data-rating-field-label]')?.value || 'Без названия' }))
+    ];
+    panel.querySelectorAll('[data-conditional-rule]').forEach(row => {
+      const select = row.querySelector('[data-conditional-criterion]');
+      const selected = select.value || row.dataset.selectedCriterion;
+      const ownId = row.closest('[data-criterion-config]')?.dataset.criterionId;
+      const available = choices.filter(choice => choice.id !== ownId);
+      const missing = selected && !available.some(choice => choice.id === selected);
+      select.innerHTML = '<option value="">Выбери критерий</option>' + (missing ? `<option value="${esc(selected)}">Критерий удалён — выбери другой</option>` : '') + available.map(choice => `<option value="${esc(choice.id)}">${esc(choice.label)}</option>`).join('');
+      select.value = selected || '';
+    });
+  }
+
+  function collectConditionalModifiers(config) {
+    return [...(config?.querySelectorAll('[data-conditional-rule]') || [])].slice(0, 16).map(row => ({
+      criterionId: row.querySelector('[data-conditional-criterion]')?.value || '',
+      ...Object.fromEntries(['from', 'to', 'min', 'max'].map(key => [key, row.querySelector(`[data-conditional-${key}]`)?.value ?? '']))
+    }));
+  }
+
   function ratingFieldRow(type, field = {}) {
     const id = String(field.id || `${type.toLowerCase()}-field-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
     const weight = Math.max(0, Math.min(100, Number(field.weight ?? 50) || 0));
     const mode = field.mode === 'modifier' ? 'modifier' : 'weight';
     const modifierRules = String(field.modifierRules || '').trim().slice(0, 240);
-    return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}" data-criterion-config>
+    return `<div class="oc-custom-field-row" data-rating-field-row data-field-id="${esc(id)}" data-criterion-id="${esc(id)}" data-criterion-config>
       <input type="text" maxlength="48" value="${esc(field.label || '')}" data-rating-field-label placeholder="Например: Личное впечатление">
       <label class="oc-rating-mode-field"><span>Расчёт</span><select data-rating-field-mode data-criterion-mode><option value="weight" ${mode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${mode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label>
       <label class="oc-rating-weight-field" data-criterion-weight ${mode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${weight}" data-rating-field-weight></label>
-      <label class="oc-rating-modifier-field" data-criterion-modifier ${mode === 'modifier' ? '' : 'hidden'}><span>Правила</span><input type="text" maxlength="240" value="${esc(modifierRules)}" data-rating-field-modifier placeholder="1-3: -1; 9-10: +1"></label>
+      <label class="oc-rating-modifier-field" data-criterion-modifier ${mode === 'modifier' ? '' : 'hidden'}><span>Обычные правила (если условие не подошло)</span><input type="text" maxlength="240" value="${esc(modifierRules)}" data-rating-field-modifier placeholder="1-3: -1; 9-10: +1"></label>
       <button type="button" data-rating-field-remove aria-label="Удалить поле">×</button>
+      ${conditionalMarkup(field.conditionalModifiers, mode)}
     </div>`;
   }
 
@@ -123,8 +187,8 @@
         <legend>${title}</legend>
         <label class="oc-detailed-rating-switch"><input type="checkbox" data-type-detailed-enabled ${settings.enabled ? 'checked' : ''}><span><b>Включить детальную оценку ${type}</b><small>Настройка действует только для ${type}</small></span></label>
         <div class="oc-base-rating-fields">
-          <div class="oc-base-rating-field" data-criterion-config><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(settings.songLabel)}" data-type-song-label></label><label class="oc-rating-mode-field"><span>Расчёт</span><select data-type-song-mode data-criterion-mode><option value="weight" ${settings.songMode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${settings.songMode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label><label class="oc-rating-weight-field" data-criterion-weight ${settings.songMode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.songWeight}" data-type-song-weight></label><label class="oc-rating-modifier-field" data-criterion-modifier ${settings.songMode === 'modifier' ? '' : 'hidden'}><span>Правила</span><input type="text" maxlength="240" value="${esc(settings.songModifierRules)}" data-type-song-modifier placeholder="1-3: -1; 9-10: +1"></label></div>
-          <div class="oc-base-rating-field" data-criterion-config><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(settings.visualLabel)}" data-type-visual-label></label><label class="oc-rating-mode-field"><span>Расчёт</span><select data-type-visual-mode data-criterion-mode><option value="weight" ${settings.visualMode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${settings.visualMode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label><label class="oc-rating-weight-field" data-criterion-weight ${settings.visualMode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.visualWeight}" data-type-visual-weight></label><label class="oc-rating-modifier-field" data-criterion-modifier ${settings.visualMode === 'modifier' ? '' : 'hidden'}><span>Правила</span><input type="text" maxlength="240" value="${esc(settings.visualModifierRules)}" data-type-visual-modifier placeholder="1-3: -1; 9-10: +1"></label></div>
+          <div class="oc-base-rating-field" data-criterion-config data-criterion-id="song"><label>Первый базовый критерий<input type="text" maxlength="48" value="${esc(settings.songLabel)}" data-type-song-label></label><label class="oc-rating-mode-field"><span>Расчёт</span><select data-type-song-mode data-criterion-mode><option value="weight" ${settings.songMode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${settings.songMode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label><label class="oc-rating-weight-field" data-criterion-weight ${settings.songMode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.songWeight}" data-type-song-weight></label><label class="oc-rating-modifier-field" data-criterion-modifier ${settings.songMode === 'modifier' ? '' : 'hidden'}><span>Обычные правила (если условие не подошло)</span><input type="text" maxlength="240" value="${esc(settings.songModifierRules)}" data-type-song-modifier placeholder="1-3: -1; 9-10: +1"></label>${conditionalMarkup(settings.songConditionalModifiers, settings.songMode)}</div>
+          <div class="oc-base-rating-field" data-criterion-config data-criterion-id="visual"><label>Второй базовый критерий<input type="text" maxlength="48" value="${esc(settings.visualLabel)}" data-type-visual-label></label><label class="oc-rating-mode-field"><span>Расчёт</span><select data-type-visual-mode data-criterion-mode><option value="weight" ${settings.visualMode === 'weight' ? 'selected' : ''}>Вес</option><option value="modifier" ${settings.visualMode === 'modifier' ? 'selected' : ''}>Модификатор</option></select></label><label class="oc-rating-weight-field" data-criterion-weight ${settings.visualMode === 'modifier' ? 'hidden' : ''}><span>Вес</span><input type="number" min="0" max="100" step="5" value="${settings.visualWeight}" data-type-visual-weight></label><label class="oc-rating-modifier-field" data-criterion-modifier ${settings.visualMode === 'modifier' ? '' : 'hidden'}><span>Обычные правила (если условие не подошло)</span><input type="text" maxlength="240" value="${esc(settings.visualModifierRules)}" data-type-visual-modifier placeholder="1-3: -1; 9-10: +1"></label>${conditionalMarkup(settings.visualConditionalModifiers, settings.visualMode)}</div>
         </div>
         <div class="oc-custom-fields-head"><b>Собственные критерии</b><span>до восьми</span></div>
         <div class="oc-custom-fields-list" data-rating-fields-list>${rows || '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>'}</div>
@@ -207,6 +271,7 @@
     const own = Boolean(user && currentName() && sameUser(user, currentName()));
     const profile = profileFor(user) || {};
     root.innerHTML = `${rateLaterMarkup(entries, profile, own)}${criteriaMarkup(profile, own)}${coverageMarkup(entries, user, own)}`;
+    root.querySelectorAll('[data-rating-type-panel]').forEach(refreshConditionalCriteria);
     root.hidden = !user;
     scanRateLaterButtons();
   }
@@ -222,7 +287,7 @@
         const weight = Math.max(0, Math.min(100, Number(row.querySelector('[data-rating-field-weight]')?.value ?? 50) || 0));
         const mode = row.querySelector('[data-rating-field-mode]')?.value === 'modifier' ? 'modifier' : 'weight';
         const modifierRules = String(row.querySelector('[data-rating-field-modifier]')?.value || '').trim().slice(0, 240);
-        if (label && id) fields.push({ id, label, weight, mode, modifierRules });
+        if (label && id) fields.push({ id, label, weight, mode, modifierRules, conditionalModifiers: collectConditionalModifiers(row) });
       });
       detailedRatingByType[type] = {
         enabled: Boolean(panel.querySelector('[data-type-detailed-enabled]')?.checked),
@@ -234,6 +299,8 @@
         visualMode: panel.querySelector('[data-type-visual-mode]')?.value === 'modifier' ? 'modifier' : 'weight',
         songModifierRules: String(panel.querySelector('[data-type-song-modifier]')?.value || '').trim().slice(0, 240),
         visualModifierRules: String(panel.querySelector('[data-type-visual-modifier]')?.value || '').trim().slice(0, 240),
+        songConditionalModifiers: collectConditionalModifiers(panel.querySelector('[data-criterion-id="song"]')),
+        visualConditionalModifiers: collectConditionalModifiers(panel.querySelector('[data-criterion-id="visual"]')),
         fields: fields.slice(0, 8)
       };
     });
@@ -273,6 +340,7 @@
     const modifier = select.value === 'modifier';
     config.querySelector('[data-criterion-weight]')?.toggleAttribute('hidden', modifier);
     config.querySelector('[data-criterion-modifier]')?.toggleAttribute('hidden', !modifier);
+    config.querySelector('[data-conditional-modifiers]')?.toggleAttribute('hidden', !modifier);
   }
 
   async function saveCriteria(button) {
@@ -282,20 +350,40 @@
     const status = root.querySelector('[data-criteria-save-status]');
     const detailedRatingByType = collectCriteriaSettings(root);
     persistCriteriaDraft();
+    const invalidCondition = [...root.querySelectorAll('[data-conditional-rule]')].find(row => {
+      const config = row.closest('[data-criterion-config]');
+      if (config.querySelector('[data-criterion-mode]')?.value !== 'modifier') return false;
+      const rule = collectConditionalModifiers(config)[[...config.querySelectorAll('[data-conditional-rule]')].indexOf(row)];
+      const panel = row.closest('[data-rating-type-panel]');
+      const ids = ['song', 'visual', ...[...panel.querySelectorAll('[data-rating-field-row]')].filter(field => field.querySelector('[data-rating-field-label]')?.value.trim()).map(field => field.dataset.fieldId)];
+      return !ids.includes(rule.criterionId) || rule.criterionId === config.dataset.criterionId || normalizeConditionalModifiers([rule]).length !== 1;
+    });
+    if (invalidCondition) {
+      if (status) { status.textContent = 'Выбери другой критерий и заполни диапазон и пределы влияния: «от» не должно быть больше «до».'; status.dataset.state = 'error'; }
+      invalidCondition.querySelector('select')?.focus();
+      invalidCondition.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
     const invalidRules = [...root.querySelectorAll('[data-criterion-config]')].find(config => {
       const mode = config.querySelector('[data-criterion-mode]')?.value;
       const rules = config.querySelector('[data-criterion-modifier] input')?.value;
-      return mode === 'modifier' && !modifierRulesAreValid(rules);
+      const conditions = collectConditionalModifiers(config);
+      return mode === 'modifier' && ((!String(rules || '').trim() && !conditions.length) || (String(rules || '').trim() && !modifierRulesAreValid(rules)));
     });
     if (invalidRules) {
       if (status) {
         status.textContent = 'Правила не сохранены: исправь выделенный модификатор.';
         status.dataset.state = 'error';
       }
-      window.alert('Проверь правила модификатора. Формат: 1-3: -1; 9-10: +1. Первым пишется диапазон или условие, после двоеточия — изменение итогового балла.');
+      window.alert('Добавь условный диапазон или проверь обычные правила модификатора. Формат: 1-3: -1; 9-10: +1. Первым пишется диапазон или условие, после двоеточия — изменение итогового балла.');
       invalidRules.querySelector('[data-criterion-modifier] input')?.focus();
       return;
     }
+    Object.values(detailedRatingByType).forEach(settings => {
+      settings.songConditionalModifiers = normalizeConditionalModifiers(settings.songConditionalModifiers);
+      settings.visualConditionalModifiers = normalizeConditionalModifiers(settings.visualConditionalModifiers);
+      settings.fields.forEach(field => { field.conditionalModifiers = normalizeConditionalModifiers(field.conditionalModifiers); });
+    });
     buttons.forEach(item => { item.disabled = true; item.textContent = 'Сохраняю…'; });
     if (status) {
       status.textContent = 'Записываю настройки в профиль…';
@@ -366,6 +454,22 @@
       }, 80);
       return;
     }
+    const addCondition = event.target.closest('[data-conditional-add]');
+    if (addCondition) {
+      const list = addCondition.closest('[data-conditional-modifiers]').querySelector('[data-conditional-list]');
+      if (list.querySelectorAll('[data-conditional-rule]').length >= 16) return;
+      list.insertAdjacentHTML('beforeend', conditionalRuleRow());
+      refreshConditionalCriteria(addCondition.closest('[data-rating-type-panel]'));
+      persistCriteriaDraft();
+      list.lastElementChild?.querySelector('select')?.focus();
+      return;
+    }
+    const removeCondition = event.target.closest('[data-conditional-remove]');
+    if (removeCondition) {
+      removeCondition.closest('[data-conditional-rule]').remove();
+      persistCriteriaDraft();
+      return;
+    }
     const addField = event.target.closest('[data-rating-field-add]');
     if (addField) {
       const type = addField.dataset.ratingFieldAdd === 'ED' ? 'ED' : 'OP';
@@ -373,6 +477,7 @@
       if (!list || list.querySelectorAll('[data-rating-field-row]').length >= 8) return;
       list.querySelector('[data-rating-fields-empty]')?.remove();
       list.insertAdjacentHTML('beforeend', ratingFieldRow(type));
+      refreshConditionalCriteria(addField.closest('[data-rating-type-panel]'));
       persistCriteriaDraft();
       list.lastElementChild?.querySelector('input')?.focus();
       return;
@@ -380,7 +485,9 @@
     const removeField = event.target.closest('[data-rating-field-remove]');
     if (removeField) {
       const list = removeField.closest('[data-rating-fields-list]');
+      const panel = removeField.closest('[data-rating-type-panel]');
       removeField.closest('[data-rating-field-row]')?.remove();
+      refreshConditionalCriteria(panel);
       if (list && !list.querySelector('[data-rating-field-row]')) list.innerHTML = '<div class="oc-workbench-empty" data-rating-fields-empty>Дополнительных полей пока нет.</div>';
       persistCriteriaDraft();
       return;
@@ -454,10 +561,12 @@
   }
 
   document.addEventListener('input', event => {
+    if (event.target?.matches?.('[data-type-song-label], [data-type-visual-label], [data-rating-field-label]')) refreshConditionalCriteria(event.target.closest('[data-rating-type-panel]'));
     if (event.target?.closest?.('#oc-rating-fields-settings [data-rating-type-panel]')) persistCriteriaDraft();
   });
   document.addEventListener('change', event => {
     if (event.target?.matches?.('[data-criterion-mode]')) syncCriterionMode(event.target);
+    if (event.target?.matches?.('[data-conditional-criterion]')) event.target.closest('[data-conditional-rule]').dataset.selectedCriterion = event.target.value;
     if (event.target?.closest?.('#oc-rating-fields-settings [data-rating-type-panel]')) persistCriteriaDraft();
   });
   document.addEventListener('focusout', event => {

@@ -3846,6 +3846,16 @@
       </details>`;
     }
 
+    function normalizeConditionalModifiers(value) {
+      return (Array.isArray(value) ? value : []).slice(0, 16).map(rule => ({
+        criterionId: String(rule?.criterionId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48),
+        from: rule?.from, to: rule?.to, min: rule?.min, max: rule?.max
+      })).filter(rule => rule.criterionId && ['from', 'to', 'min', 'max'].every(key =>
+        rule[key] !== null && String(rule[key]).trim() !== '' && Number.isFinite(Number(rule[key]))
+      )).map(rule => ({ ...rule, from: Number(rule.from), to: Number(rule.to), min: Number(rule.min), max: Number(rule.max) }))
+        .filter(rule => rule.from >= 0 && rule.from <= rule.to && rule.min <= rule.max);
+    }
+
     function normalizeRatingFields(value) {
       const source = Array.isArray(value) ? value : [];
       const used = new Set();
@@ -3859,7 +3869,7 @@
         const weight = Math.max(0, Math.min(100, Number(item.weight ?? 50) || 0));
         const mode = item.mode === 'modifier' ? 'modifier' : 'weight';
         const modifierRules = String(item.modifierRules || item.rules || '').trim().slice(0, 240);
-        return { id, label, weight, mode, modifierRules };
+        return { id, label, weight, mode, modifierRules, conditionalModifiers: normalizeConditionalModifiers(item.conditionalModifiers) };
       }).filter(row => row.label);
     }
 
@@ -3904,6 +3914,17 @@
       return { matched: false, value: 0 };
     }
 
+    function conditionalRatingModifier(rules, score, criterionScores, maximum) {
+      if (!Number.isFinite(score) || !Number.isFinite(maximum) || maximum <= 0) return { matched: false, value: 0 };
+      for (const rule of normalizeConditionalModifiers(rules)) {
+        const other = criterionScores[rule.criterionId];
+        if (!Number.isFinite(other) || other < rule.from || other > rule.to) continue;
+        const fraction = Math.max(0, Math.min(1, score / maximum));
+        return { matched: true, value: rule.min + fraction * (rule.max - rule.min) };
+      }
+      return { matched: false, value: 0 };
+    }
+
     function ratingCriterionScore(input, rawValue) {
       if (rawValue === null || rawValue === undefined || String(rawValue).trim() === '') return null;
       const score = Number(String(rawValue).trim().replace(',', '.'));
@@ -3933,6 +3954,8 @@
         visualMode: source?.visualMode === 'modifier' ? 'modifier' : 'weight',
         songModifierRules: String(source?.songModifierRules || '').trim().slice(0, 240),
         visualModifierRules: String(source?.visualModifierRules || '').trim().slice(0, 240),
+        songConditionalModifiers: normalizeConditionalModifiers(source?.songConditionalModifiers),
+        visualConditionalModifiers: normalizeConditionalModifiers(source?.visualConditionalModifiers),
         fields: normalizeRatingFields(source?.fields ?? profile?.ratingFields)
       };
     }
@@ -3949,18 +3972,18 @@
       }
       const bounds = { min: ratingMin(), max: ratingMax(), step: scaleStep() };
       const saved = customScoresFor(entry, myName);
-      const calculationHint = (mode, weight, rules) => mode === 'modifier' ? `модификатор · ${rules || 'нет правил'}` : `вес ${weight}`;
+      const calculationHint = (mode, weight, rules, conditions) => mode === 'modifier' ? `модификатор · ${conditions?.length ? 'влияние по другому критерию' : rules || 'нет правил'}` : `вес ${weight}`;
       const calculationMin = mode => mode === 'modifier' ? 0 : bounds.min;
-      const calculationAttributes = (mode, weight, rules) => mode === 'modifier'
-        ? `data-rating-modifier-rules="${escapeHtml(rules || '')}"`
+      const calculationAttributes = (mode, weight, rules, conditions) => mode === 'modifier'
+        ? `data-rating-modifier-rules="${escapeHtml(rules || '')}" data-rating-conditional-modifiers="${escapeHtml(JSON.stringify(normalizeConditionalModifiers(conditions)))}"`
         : `data-rating-weight="${weight}"`;
-      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(field.mode, field.weight, field.modifierRules))}</span><input type="number" min="${calculationMin(field.mode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" ${calculationAttributes(field.mode, field.weight, field.modifierRules)}></label>`).join('')}</div>` : '';
+      const custom = settings.fields.length ? `<div class="oc-custom-rating-inputs">${settings.fields.map(field => `<label>${escapeHtml(field.label)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(field.mode, field.weight, field.modifierRules, field.conditionalModifiers))}</span><input type="number" min="${calculationMin(field.mode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${saved[field.id] !== undefined ? escapeHtml(formatScore(saved[field.id])) : ''}" placeholder="—" data-rating-criterion-id="${escapeHtml(field.id)}" data-custom-rating-id="${escapeHtml(field.id)}" data-custom-rating-label="${escapeHtml(field.label)}" ${calculationAttributes(field.mode, field.weight, field.modifierRules, field.conditionalModifiers)}></label>`).join('')}</div>` : '';
       return `<div class="oc-eval-parts">
-        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.songMode, settings.songWeight, settings.songModifierRules))}</span>
-          <input id="${prefix}-song-score" type="number" min="${calculationMin(settings.songMode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" ${calculationAttributes(settings.songMode, settings.songWeight, settings.songModifierRules)} />
+        <label>${escapeHtml(settings.songLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.songMode, settings.songWeight, settings.songModifierRules, settings.songConditionalModifiers))}</span>
+          <input id="${prefix}-song-score" data-rating-criterion-id="song" type="number" min="${calculationMin(settings.songMode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${songScore !== null ? escapeHtml(formatScore(songScore)) : ''}" placeholder="—" ${calculationAttributes(settings.songMode, settings.songWeight, settings.songModifierRules, settings.songConditionalModifiers)} />
         </label>
-        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.visualMode, settings.visualWeight, settings.visualModifierRules))}</span>
-          <input id="${prefix}-visual-score" type="number" min="${calculationMin(settings.visualMode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" ${calculationAttributes(settings.visualMode, settings.visualWeight, settings.visualModifierRules)} />
+        <label>${escapeHtml(settings.visualLabel)} <span class="oc-muted-inline">необяз. · ${escapeHtml(calculationHint(settings.visualMode, settings.visualWeight, settings.visualModifierRules, settings.visualConditionalModifiers))}</span>
+          <input id="${prefix}-visual-score" data-rating-criterion-id="visual" type="number" min="${calculationMin(settings.visualMode)}" max="${bounds.max}" step="any" inputmode="decimal" value="${visualScore !== null ? escapeHtml(formatScore(visualScore)) : ''}" placeholder="—" ${calculationAttributes(settings.visualMode, settings.visualWeight, settings.visualModifierRules, settings.visualConditionalModifiers)} />
         </label>
       </div>${custom}<div class="oc-detailed-rating-suggestion" data-detailed-rating-suggestion="${escapeHtml(prefix)}"><span data-detailed-rating-value>Заполни критерии, чтобы получить подсказку итогового балла</span><button type="button" class="oc-secondary-btn" data-detailed-rating-apply disabled>Подставить итог</button></div>`;
     }
@@ -3986,13 +4009,17 @@
           usedWeight += weight;
         });
         const base = usedWeight > 0 ? weightedTotal / usedWeight : null;
+        const criterionScores = Object.fromEntries([...root.querySelectorAll('[data-rating-criterion-id]')].map(input => [input.dataset.ratingCriterionId, ratingCriterionScore(input, input.value)]));
         let modifierTotal = 0;
         let modifierMatches = 0;
         modifierInputs.forEach(input => {
           const raw = String(input.value || '').trim();
           const score = ratingCriterionScore(input, raw);
           if (score === null) return;
-          const result = ratingModifierForScore(input.dataset.ratingModifierRules, score);
+          let conditions = [];
+          try { conditions = JSON.parse(input.dataset.ratingConditionalModifiers || '[]'); } catch (_) {}
+          const conditional = conditionalRatingModifier(conditions, score, criterionScores, ratingMax());
+          const result = conditional.matched ? conditional : ratingModifierForScore(input.dataset.ratingModifierRules, score);
           if (!result.matched) return;
           modifierTotal += result.value;
           modifierMatches += 1;
