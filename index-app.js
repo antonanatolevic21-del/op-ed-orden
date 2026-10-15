@@ -9057,8 +9057,18 @@
       if (personalSessionRestorePromise) return personalSessionRestorePromise;
       personalSessionRestorePromise = (async () => {
         try {
-          const db = await waitForFirebaseDb();
-          const resumed = await db.resumePersonalAccount();
+          const { restoreSavedSession } = await import('./firebase-session.js?v=20261015-fast-session1');
+          const saved = await restoreSavedSession();
+          let resumed = saved.profile ? saved : null;
+          if (saved.user && !saved.profile) {
+            const db = await waitForFirebaseDb();
+            resumed = await db.resumePersonalAccount();
+          } else if (resumed) {
+            // Refresh display data after the database module becomes available.
+            // This request never delays restoring the signed-in interface.
+            void waitForFirebaseDb().then(db => db.resumePersonalAccount())
+              .catch(error => console.warn('Background account refresh skipped', error));
+          }
           if (resumed) {
             await applyPersonalAccountSession(resumed, true);
             return true;
