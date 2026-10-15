@@ -49,6 +49,7 @@
     const auth = getAuth(app);
     const ACCOUNT_PROFILE_CACHE_KEY = 'op-ed-auth-profile-v1';
     let initPromise = null;
+    let accountProfileGeneration = 0;
 
     function safeStorageSet(storage, key, value) {
       try {
@@ -211,33 +212,38 @@
       return { user: credential.user, profile };
     }
 
+    function refreshAccountProfileInBackground(user, nickname) {
+      const generation = accountProfileGeneration;
+      void getAccountProfile(nickname).then(profile => {
+        // A delayed response must not restore a profile after logout or an
+        // account switch, or cache a nickname now owned by another account.
+        if (generation !== accountProfileGeneration || auth.currentUser !== user) return;
+        if (!profile || String(profile.authUid || '') !== user.uid) return;
+        cacheAccountProfile(user, profile, Boolean(localStorage.getItem(ACCOUNT_PROFILE_CACHE_KEY)));
+      }).catch(error => {
+        console.warn('Could not refresh saved account profile', error);
+      });
+    }
+
     async function resumePersonalAccount() {
       if (typeof auth.authStateReady === 'function') await auth.authStateReady();
       const user = auth.currentUser;
       if (!user || user.isAnonymous) return null;
       const cachedProfile = cachedAccountProfile(user.uid);
-      if (cachedProfile) {
+      if (cachedProfile && String(cachedProfile.authUid || '') === user.uid) {
         const cachedName = String(cachedProfile.nickname || cachedProfile.nicknameKey || cachedProfile.id || '').trim();
-        const freshProfile = cachedName
-          ? await getAccountProfile(cachedName).catch(error => {
-              console.warn('Could not refresh cached account profile', error);
-              return null;
-            })
-          : null;
-        if (freshProfile) {
-          cacheAccountProfile(user, freshProfile, Boolean(localStorage.getItem(ACCOUNT_PROFILE_CACHE_KEY)));
-          return { user, profile: freshProfile };
+        if (cachedName) {
+          // Firebase has restored the real session. The cached profile only
+          // supplies display data; Firestore still verifies every protected write.
+          refreshAccountProfileInBackground(user, cachedName);
+          return { user, profile: cachedProfile };
         }
-        return { user, profile: cachedProfile };
       }
       if (user.displayName) {
-        const freshProfile = await getAccountProfile(user.displayName).catch(error => {
-          console.warn('Could not load current account profile', error);
-          return null;
-        });
+        refreshAccountProfileInBackground(user, user.displayName);
         return {
           user,
-          profile: freshProfile || {
+          profile: {
             nickname: user.displayName,
             nicknameKey: normalizeNickname(user.displayName),
             authUid: user.uid
@@ -245,7 +251,7 @@
         };
       }
       const profile = await accountProfileByUid(user.uid);
-      if (!profile) return null;
+      if (!profile || String(profile.authUid || '') !== user.uid || auth.currentUser !== user) return null;
       cacheAccountProfile(user, profile, true);
       return { user, profile };
     }
@@ -255,6 +261,7 @@
     }
 
     async function logoutAccount() {
+      accountProfileGeneration += 1;
       sessionStorage.removeItem(ACCOUNT_PROFILE_CACHE_KEY);
       localStorage.removeItem(ACCOUNT_PROFILE_CACHE_KEY);
       await signOut(auth);
