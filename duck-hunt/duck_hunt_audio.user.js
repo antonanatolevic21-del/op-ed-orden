@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duck Hunt — звук для SVG
 // @namespace    local.duckhunt.audio
-// @version      1.1.3
+// @version      1.1.4
 // @description  Оригинальные звуки NES для SVG Duck Hunt: выстрелы, утки, собака, раунды. Без внешних загрузок.
 // @match        *://pikuco.ru/*
 // @match        *://*.pikuco.ru/*
@@ -26,7 +26,9 @@
   let context, master, buffers = new Map(), decoding, db, dbPromise, ui, activeRoot;
   const games = new Map();
   const voices = new Map();
-  function stop(name){for(const source of voices.get(name)||[]){try{source.stop();}catch{}}voices.delete(name);}
+  const voiceVersions = new Map();
+  let playbackEpoch=0;
+  function stop(name){voiceVersions.set(name,(voiceVersions.get(name)||0)+1);for(const source of voices.get(name)||[]){try{source.stop();}catch{}}voices.delete(name);}
   const stored = new Map();
   const savePrefs = () => {try {localStorage.setItem('duckhunt-audio-prefs-v1',JSON.stringify(prefs));} catch {}};
   const report = error => {stats.errors.push(String(error?.message || error)); if (stats.errors.length>8) stats.errors.shift();};
@@ -85,10 +87,12 @@
   function record(name){stats.events[name]=(stats.events[name]||0)+1;}
   async function play(name,delay=0) {
     if(!prefs.enabled)return;
+    const epoch=playbackEpoch,version=voiceVersions.get(name)||0;
     record(name);
     try {
       if(!context)return;await resumePromise;if(context.state!=='running')return;
       await decodeAll();
+      if(epoch!==playbackEpoch||version!==(voiceVersions.get(name)||0))return;
       const buffer=buffers.get(name);if(!buffer)return;
       const source=context.createBufferSource();source.buffer=buffer;source.connect(master);
       if(!voices.has(name))voices.set(name,new Set());voices.get(name).add(source);
@@ -106,14 +110,17 @@
     game.hits.add(key);play('fall',.035);play('hit',.68);
   }
   function handleTarget(game) {
-    const target=targetIn(game.svg), id=target?.id||'';
+    const target=targetIn(game.svg), id=target?.id||(game.svg.ownerDocument.defaultView.location.hash==='#mainmenu'?'mainmenu':'');
     if(!id||id===game.lastTarget)return;
     game.lastTarget=id;
     if(id==='mainmenu'){
+      playbackEpoch++;game.introUntil=0;
       game.started=false;game.ended=false;game.hits.clear();game.seen.clear();
       for(const name of Object.keys(PACK))stop(name);activeRoot=null;return;
     }
     if(id==='astart'){
+      playbackEpoch++;
+      game.introUntil=performance.now()+1000*(parseFloat(game.intro?style(game.intro).animationDuration:'0')||0);
       for(const name of Object.keys(PACK))stop(name);
       game.hits.clear();game.seen.clear();
       activeRoot=game.svg;game.started=true;game.ended=false;play('start');return;
@@ -129,6 +136,12 @@
     if(!svg.isConnected||svg.ownerDocument.hidden)return;
     handleTarget(game);
     if(activeRoot!==svg||!game.started||game.ended)return;
+    if(performance.now()<(game.introUntil||0)||(game.introUntil&&visible(game.intro))){
+      const notice=game.intro?.querySelector('.introready');
+      if(notice&&Number(style(notice).opacity)>.5&&!game.seen.has('bark')){game.seen.add('bark');play('bark');}
+      return;
+    }
+    game.introUntil=0;
     const current=game.volleys.find(e=>visible(e));
     if(current){
       const key=current.dataset.volley;
