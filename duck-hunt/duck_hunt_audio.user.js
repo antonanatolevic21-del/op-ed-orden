@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duck Hunt — звук для SVG
 // @namespace    local.duckhunt.audio
-// @version      1.1.1
+// @version      1.1.2
 // @description  Оригинальные звуки NES для SVG Duck Hunt: выстрелы, утки, собака, раунды. Без внешних загрузок.
 // @match        *://pikuco.ru/*
 // @match        *://*.pikuco.ru/*
@@ -160,7 +160,8 @@
       if(Math.abs(x)<800){game.ended=true;play('gameover');return;}
     }
     if(game.win&&visible(game.win)){game.ended=true;play('win');}
-    if(game.intro&&visible(game.intro)&&!game.seen.has('bark')){game.seen.add('bark');play('bark');}
+    const notice=game.intro?.querySelector('.introready');
+    if(game.intro&&visible(game.intro)&&(!notice||Number(style(notice).opacity)>.5)&&!game.seen.has('bark')){game.seen.add('bark');play('bark');}
   }
   function bind(svg) {
     if(games.has(svg)||!svg.querySelector('.v[data-volley] .q'))return;
@@ -213,7 +214,7 @@
     if(svgPanel)shadow.querySelector('details').addEventListener('toggle',event=>svgPanel.setAttribute('height',event.target.open?'465':'54'));
     const q=id=>shadow.getElementById(id);ui={status:q('status'),toggle:q('toggle')};
     q('kind').innerHTML=Object.entries(LABELS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');q('volume').value=prefs.volume;
-    q('enable').onclick=async()=>{prefs.enabled=true;savePrefs();if(await unlock())play('start');};
+    q('enable').onclick=async()=>{prefs.enabled=true;savePrefs();await unlock();};
     q('toggle').onclick=async()=>{prefs.enabled=!prefs.enabled;savePrefs();if(prefs.enabled)await unlock();if(master)master.gain.value=prefs.enabled?prefs.volume:0;refreshUI();};
     q('volume').oninput=event=>{prefs.volume=Number(event.target.value);if(master)master.gain.value=prefs.enabled?prefs.volume:0;savePrefs();};
     q('test').onclick=async()=>{prefs.enabled=true;if(master)master.gain.value=prefs.volume;if(await unlock())play(q('kind').value);refreshUI();};
