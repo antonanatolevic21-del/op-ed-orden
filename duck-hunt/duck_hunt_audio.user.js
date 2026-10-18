@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duck Hunt — звук для SVG
 // @namespace    local.duckhunt.audio
-// @version      1.1.2
+// @version      1.1.3
 // @description  Оригинальные звуки NES для SVG Duck Hunt: выстрелы, утки, собака, раунды. Без внешних загрузок.
 // @match        *://pikuco.ru/*
 // @match        *://*.pikuco.ru/*
@@ -109,7 +109,13 @@
     const target=targetIn(game.svg), id=target?.id||'';
     if(!id||id===game.lastTarget)return;
     game.lastTarget=id;
+    if(id==='mainmenu'){
+      game.started=false;game.ended=false;game.hits.clear();game.seen.clear();
+      for(const name of Object.keys(PACK))stop(name);activeRoot=null;return;
+    }
     if(id==='astart'){
+      for(const name of Object.keys(PACK))stop(name);
+      game.hits.clear();game.seen.clear();
       activeRoot=game.svg;game.started=true;game.ended=false;play('start');return;
     }
     if(target.classList.contains('q')){
