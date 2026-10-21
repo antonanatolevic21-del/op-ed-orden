@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duck Hunt — звук для SVG
 // @namespace    local.duckhunt.audio
-// @version      1.2.2
+// @version      1.2.3
 // @description  Оригинальные звуки NES для SVG Duck Hunt: выстрелы, утки, собака, раунды. Без внешних загрузок.
 // @match        *://pikuco.ru/*
 // @match        *://*.pikuco.ru/*
@@ -206,11 +206,18 @@
     const track=fallback.querySelector('rect'),knob=fallback.querySelector('circle');
     const output=[...fallback.querySelectorAll('text')].at(-1);
     if(!track||!knob||!output)return;
-    const left=Number(track.getAttribute('x')),width=Number(track.getAttribute('width'));
-    const cy=Number(knob.getAttribute('cy'));
+    // Pikuco may store geometry in CSS; attributes alone can be missing or overridden.
+    const geometry=(element,name,fallback)=>{
+      const computed=parseFloat(style(element).getPropertyValue(name));
+      const attribute=parseFloat(element.getAttribute(name));
+      return Number.isFinite(computed)?computed:Number.isFinite(attribute)?attribute:fallback;
+    };
+    const left=geometry(track,'x',181),width=geometry(track,'width',330)||330;
+    const cy=geometry(knob,'cy',352.5);
     const input=doc.createElementNS(ns,'rect');
     for(const [key,value]of Object.entries({class:'duck-volume-live',x:left-12,y:cy-20,width:width+24,height:40,tabindex:0,role:'slider','aria-label':'Громкость','aria-valuemin':0,'aria-valuemax':100}))input.setAttribute(key,String(value));
     input.style.cssText='fill:#fff!important;fill-opacity:.001!important;pointer-events:all!important;cursor:pointer!important;touch-action:none!important;';
+    for(const property of ['x','y','width','height'])input.style.setProperty(property,input.getAttribute(property)+'px','important');
     slot.append(input);
     let dragging=null;
     const fromPointer=event=>{
@@ -268,11 +275,13 @@
       const percent=Math.round(prefs.volume*100);
       control.input.setAttribute('aria-valuenow',String(percent));
       control.input.setAttribute('aria-valuetext',percent+'%');
-      control.knob.setAttribute('cx',String(control.left+control.width*prefs.volume));
+      const cx=control.left+control.width*prefs.volume;
+      control.knob.setAttribute('cx',String(cx));
+      control.knob.style.setProperty('cx',cx+'px','important');
       control.output.textContent=percent+'%';
     }
   }
-  Object.defineProperty(window,'DuckHuntAudio',{value:Object.freeze({snapshot:()=>({version:'1.2.2',volume:prefs.volume,enabled:prefs.enabled,events:{...stats.events},errors:[...stats.errors],decoded:[...stats.decoded],state:context?.state||'not-started',games:games.size,custom:[...stored.keys()]}),preview:async name=>{if(Object.hasOwn(PACK,name)&&await unlock())await play(name);}})});
+  Object.defineProperty(window,'DuckHuntAudio',{value:Object.freeze({snapshot:()=>({version:'1.2.3',volume:prefs.volume,enabled:prefs.enabled,events:{...stats.events},errors:[...stats.errors],decoded:[...stats.decoded],state:context?.state||'not-started',games:games.size,custom:[...stored.keys()]}),preview:async name=>{if(Object.hasOwn(PACK,name)&&await unlock())await play(name);}})});
   void loadStored();scan();
   setInterval(()=>{for(const [svg,game]of games){if(!svg.isConnected){games.delete(svg);continue;}try{pollGame(game);}catch(error){report(error);}}},75);
   setInterval(()=>scan(),1500);
