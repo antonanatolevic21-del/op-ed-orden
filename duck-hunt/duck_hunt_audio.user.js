@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duck Hunt — звук для SVG
 // @namespace    local.duckhunt.audio
-// @version      1.2.1
+// @version      1.2.2
 // @description  Оригинальные звуки NES для SVG Duck Hunt: выстрелы, утки, собака, раунды. Без внешних загрузок.
 // @match        *://pikuco.ru/*
 // @match        *://*.pikuco.ru/*
@@ -199,22 +199,50 @@
   function attachSettings(svg){
     const slot=svg.querySelector('#sound-volume-control');
     if(!slot||slot.querySelector('.duck-volume-live'))return;
-    const doc=svg.ownerDocument,html='http://www.w3.org/1999/xhtml';
-    const foreign=doc.createElementNS('http://www.w3.org/2000/svg','foreignObject');
-    foreign.setAttribute('class','duck-volume-live');foreign.setAttribute('x','55');foreign.setAttribute('y','337');foreign.setAttribute('width','650');foreign.setAttribute('height','44');
-    const row=doc.createElementNS(html,'div');
-    row.style.cssText='display:flex!important;align-items:center!important;gap:18px!important;height:44px!important;color:#fff!important;font:20px monospace!important;background:transparent!important;';
-    const label=doc.createElementNS(html,'label');label.textContent='Громкость';label.setAttribute('for','duckhunt-inline-volume');
-    const input=doc.createElementNS(html,'input');input.setAttribute('id','duckhunt-inline-volume');input.setAttribute('type','range');input.setAttribute('min','0');input.setAttribute('max','100');input.setAttribute('step','1');input.setAttribute('aria-label','Громкость');
-    input.style.cssText='width:330px!important;height:32px!important;accent-color:#f6ce58!important;cursor:pointer!important;margin:0!important;';
-    const output=doc.createElementNS(html,'span');output.style.cssText='min-width:50px!important;color:#fff!important;';
-    input.addEventListener('input',()=>setVolume(Number(input.value)/100,true));
-    row.append(label,input,output);foreign.append(row);slot.append(foreign);
-    slot.querySelector('.volume-fallback')?.setAttribute('display','none');
-    settingsControls.add({svg,input,output});refreshUI();
+    // Use native SVG controls: foreignObject/input can be blocked by the host.
+    const doc=svg.ownerDocument,ns='http://www.w3.org/2000/svg';
+    const fallback=slot.querySelector('.volume-fallback');
+    if(!fallback)return;
+    const track=fallback.querySelector('rect'),knob=fallback.querySelector('circle');
+    const output=[...fallback.querySelectorAll('text')].at(-1);
+    if(!track||!knob||!output)return;
+    const left=Number(track.getAttribute('x')),width=Number(track.getAttribute('width'));
+    const cy=Number(knob.getAttribute('cy'));
+    const input=doc.createElementNS(ns,'rect');
+    for(const [key,value]of Object.entries({class:'duck-volume-live',x:left-12,y:cy-20,width:width+24,height:40,tabindex:0,role:'slider','aria-label':'Громкость','aria-valuemin':0,'aria-valuemax':100}))input.setAttribute(key,String(value));
+    input.style.cssText='fill:#fff!important;fill-opacity:.001!important;pointer-events:all!important;cursor:pointer!important;touch-action:none!important;';
+    slot.append(input);
+    let dragging=null;
+    const fromPointer=event=>{
+      const matrix=slot.getScreenCTM();if(!matrix)return;
+      const point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;
+      const local=point.matrixTransform(matrix.inverse());
+      setVolume((local.x-left)/width,true);
+    };
+    input.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;
+      event.preventDefault();event.stopPropagation();input.focus();dragging=event.pointerId;
+      input.setPointerCapture?.(dragging);fromPointer(event);
+    });
+    input.addEventListener('pointermove',event=>{if(event.pointerId===dragging)fromPointer(event);});
+    const release=event=>{if(event.pointerId===dragging)dragging=null;};
+    input.addEventListener('pointerup',release);input.addEventListener('pointercancel',release);input.addEventListener('lostpointercapture',release);
+    input.addEventListener('keydown',event=>{
+      let value=prefs.volume;
+      if(event.key==='ArrowRight'||event.key==='ArrowUp')value+=.01;
+      else if(event.key==='ArrowLeft'||event.key==='ArrowDown')value-=.01;
+      else if(event.key==='PageUp')value+=.1;
+      else if(event.key==='PageDown')value-=.1;
+      else if(event.key==='Home')value=0;
+      else if(event.key==='End')value=1;
+      else return;
+      event.preventDefault();event.stopPropagation();setVolume(value,true);
+    });
+    settingsControls.add({svg,slot,input,output,knob,left,width});refreshUI();
   }
   function bind(svg) {
-    if(games.has(svg)||!svg.querySelector('.v[data-volley] .q'))return;
+    if(games.has(svg)){attachSettings(svg);return;}
+    if(!svg.querySelector('.v[data-volley] .q'))return;
     const target=targetIn(svg);
     const game={svg,lastTarget:target?.id||'',started:!!target&&(target.id==='astart'||target.classList.contains('q')),ended:false,hits:new Set(),seen:new Set(),volleys:[...svg.querySelectorAll('.v[data-volley]')],results:[...svg.querySelectorAll('.result')].filter(e=>e.textContent.includes('ROUND CLEAR')),overs:[...svg.querySelectorAll('.over')],win:svg.querySelector('.win'),intro:svg.querySelector('.intro')};
     // Baseline existing state when the script is enabled halfway through a game.
@@ -236,11 +264,15 @@
   }
   function refreshUI(message) {
     for(const control of settingsControls){
-      if(!control.svg.isConnected){settingsControls.delete(control);continue;}
-      control.input.value=String(Math.round(prefs.volume*100));control.output.textContent=Math.round(prefs.volume*100)+'%';
+      if(!control.svg.isConnected||!control.input.isConnected){settingsControls.delete(control);continue;}
+      const percent=Math.round(prefs.volume*100);
+      control.input.setAttribute('aria-valuenow',String(percent));
+      control.input.setAttribute('aria-valuetext',percent+'%');
+      control.knob.setAttribute('cx',String(control.left+control.width*prefs.volume));
+      control.output.textContent=percent+'%';
     }
   }
-  Object.defineProperty(window,'DuckHuntAudio',{value:Object.freeze({snapshot:()=>({version:'1.2.1',volume:prefs.volume,enabled:prefs.enabled,events:{...stats.events},errors:[...stats.errors],decoded:[...stats.decoded],state:context?.state||'not-started',games:games.size,custom:[...stored.keys()]}),preview:async name=>{if(Object.hasOwn(PACK,name)&&await unlock())await play(name);}})});
+  Object.defineProperty(window,'DuckHuntAudio',{value:Object.freeze({snapshot:()=>({version:'1.2.2',volume:prefs.volume,enabled:prefs.enabled,events:{...stats.events},errors:[...stats.errors],decoded:[...stats.decoded],state:context?.state||'not-started',games:games.size,custom:[...stored.keys()]}),preview:async name=>{if(Object.hasOwn(PACK,name)&&await unlock())await play(name);}})});
   void loadStored();scan();
   setInterval(()=>{for(const [svg,game]of games){if(!svg.isConnected){games.delete(svg);continue;}try{pollGame(game);}catch(error){report(error);}}},75);
   setInterval(()=>scan(),1500);
