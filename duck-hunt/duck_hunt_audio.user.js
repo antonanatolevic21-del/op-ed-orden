@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Duck Hunt — звук для SVG
 // @namespace    local.duckhunt.audio
-// @version      1.2.3
+// @version      1.3.0
 // @description  Оригинальные звуки NES для SVG Duck Hunt: выстрелы, утки, собака, раунды. Без внешних загрузок.
 // @match        *://pikuco.ru/*
 // @match        *://*.pikuco.ru/*
@@ -25,6 +25,7 @@
   let context, master, buffers = new Map(), decoding, db, dbPromise, activeRoot;
   const games = new Map();
   const settingsControls=new Set();
+  const settingsDocuments=new WeakSet();
   let menuPreviewPending=false;
   const voices = new Map();
   const voiceVersions = new Map();
@@ -196,17 +197,29 @@
     if(master)master.gain.setTargetAtTime(prefs.enabled?prefs.volume:0,context.currentTime,.015);
     refreshUI();if(preview)void previewMenu();
   }
+  function positionSettings(){
+    for(const control of settingsControls){
+      if(!control.host)continue;
+      if(!control.svg.isConnected||!control.anchor.isConnected){control.host.remove();settingsControls.delete(control);continue;}
+      const panel=control.slot.closest('.soundsettings');
+      if(!visible(panel)){control.host.style.setProperty('display','none','important');continue;}
+      const box=control.anchor.getBoundingClientRect();
+      const shown=box.width>0&&box.height>0;
+      control.host.style.setProperty('display',shown?'block':'none','important');
+      if(!shown)continue;
+      for(const [name,value]of Object.entries({left:box.left,top:box.top,width:box.width,height:box.height}))control.host.style.setProperty(name,value+'px','important');
+      control.input.style.setProperty('--scale',String(box.height/40));
+    }
+  }
   function attachSettings(svg){
     const slot=svg.querySelector('#sound-volume-control');
-    if(!slot||slot.querySelector('.duck-volume-live'))return;
-    // Use native SVG controls: foreignObject/input can be blocked by the host.
+    if(!slot||[...settingsControls].some(c=>c.slot===slot&&c.input.isConnected))return;
     const doc=svg.ownerDocument,ns='http://www.w3.org/2000/svg';
     const fallback=slot.querySelector('.volume-fallback');
     if(!fallback)return;
     const track=fallback.querySelector('rect'),knob=fallback.querySelector('circle');
     const output=[...fallback.querySelectorAll('text')].at(-1);
     if(!track||!knob||!output)return;
-    // Pikuco may store geometry in CSS; attributes alone can be missing or overridden.
     const geometry=(element,name,fallback)=>{
       const computed=parseFloat(style(element).getPropertyValue(name));
       const attribute=parseFloat(element.getAttribute(name));
@@ -214,38 +227,56 @@
     };
     const left=geometry(track,'x',181),width=geometry(track,'width',330)||330;
     const cy=geometry(knob,'cy',352.5);
-    const input=doc.createElementNS(ns,'rect');
-    for(const [key,value]of Object.entries({class:'duck-volume-live',x:left-12,y:cy-20,width:width+24,height:40,tabindex:0,role:'slider','aria-label':'Громкость','aria-valuemin':0,'aria-valuemax':100}))input.setAttribute(key,String(value));
-    input.style.cssText='fill:#fff!important;fill-opacity:.001!important;pointer-events:all!important;cursor:pointer!important;touch-action:none!important;';
-    for(const property of ['x','y','width','height'])input.style.setProperty(property,input.getAttribute(property)+'px','important');
-    slot.append(input);
-    let dragging=null;
-    const fromPointer=event=>{
-      const matrix=slot.getScreenCTM();if(!matrix)return;
-      const point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;
-      const local=point.matrixTransform(matrix.inverse());
-      setVolume((local.x-left)/width,true);
-    };
-    input.addEventListener('pointerdown',event=>{
-      if(event.button!==0)return;
-      event.preventDefault();event.stopPropagation();input.focus();dragging=event.pointerId;
-      input.setPointerCapture?.(dragging);fromPointer(event);
-    });
-    input.addEventListener('pointermove',event=>{if(event.pointerId===dragging)fromPointer(event);});
-    const release=event=>{if(event.pointerId===dragging)dragging=null;};
-    input.addEventListener('pointerup',release);input.addEventListener('pointercancel',release);input.addEventListener('lostpointercapture',release);
-    input.addEventListener('keydown',event=>{
-      let value=prefs.volume;
-      if(event.key==='ArrowRight'||event.key==='ArrowUp')value+=.01;
-      else if(event.key==='ArrowLeft'||event.key==='ArrowDown')value-=.01;
-      else if(event.key==='PageUp')value+=.1;
-      else if(event.key==='PageDown')value-=.1;
-      else if(event.key==='Home')value=0;
-      else if(event.key==='End')value=1;
-      else return;
-      event.preventDefault();event.stopPropagation();setVolume(value,true);
-    });
-    settingsControls.add({svg,slot,input,output,knob,left,width});refreshUI();
+    const anchor=doc.createElementNS(ns,'rect');
+    const htmlDocument=doc.documentElement.namespaceURI==='http://www.w3.org/1999/xhtml';
+    for(const [key,value]of Object.entries({class:'duck-volume-live',x:left-9,y:cy-20,width:width+18,height:40}))anchor.setAttribute(key,String(value));
+    anchor.style.cssText='fill:#fff!important;fill-opacity:.001!important;pointer-events:none!important;';
+    for(const property of ['x','y','width','height'])anchor.style.setProperty(property,anchor.getAttribute(property)+'px','important');
+    slot.append(anchor);
+    let input=anchor,host=null;
+    if(htmlDocument){
+      // Native HTML range lives outside SVG and its event handlers/styles.
+      // Only this slider is overlaid, at the exact position of the SVG track.
+      host=doc.createElement('div');host.className='duckhunt-native-volume';
+      host.style.cssText='all:initial!important;position:fixed!important;display:none!important;z-index:2147483647!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;pointer-events:auto!important;transform:none!important;';
+      const shadow=host.attachShadow({mode:'open'}),css=doc.createElement('style');
+      css.textContent=`:host{color-scheme:dark}input{all:initial;box-sizing:border-box;display:block;width:100%;height:100%;margin:0;padding:0;border:0;background:transparent;appearance:none;-webkit-appearance:none;cursor:pointer;touch-action:none;--scale:1;--volume:28%}input::-webkit-slider-runnable-track{height:calc(7px * var(--scale));border-radius:3px;background:linear-gradient(to right,#f6ce58 var(--volume),#42627c var(--volume))}input::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:calc(18px * var(--scale));height:calc(18px * var(--scale));border:0;border-radius:50%;background:#f6ce58;margin-top:calc(-5.5px * var(--scale))}input::-moz-range-track{height:calc(7px * var(--scale));border-radius:3px;background:#42627c}input::-moz-range-progress{height:calc(7px * var(--scale));background:#f6ce58}input::-moz-range-thumb{width:calc(18px * var(--scale));height:calc(18px * var(--scale));border:0;border-radius:50%;background:#f6ce58}input:focus-visible{outline:2px solid #fff;outline-offset:-2px}`;
+      input=doc.createElement('input');input.type='range';input.min='0';input.max='100';input.step='1';input.setAttribute('aria-label','Громкость');
+      input.addEventListener('input',()=>setVolume(Number(input.value)/100,true));
+      input.addEventListener('pointerdown',event=>{event.stopPropagation();void previewMenu();});
+      input.addEventListener('keydown',event=>event.stopPropagation());
+      shadow.append(css,input);doc.documentElement.append(host);
+      track.style.setProperty('visibility','hidden','important');knob.style.setProperty('visibility','hidden','important');
+    }else{
+      // A standalone SVG document cannot host an HTML body overlay.
+      // Keep a native SVG control with document-level drag delivery there.
+      anchor.style.setProperty('pointer-events','all','important');anchor.style.setProperty('cursor','pointer','important');anchor.style.setProperty('touch-action','none','important');
+      for(const [key,value]of Object.entries({tabindex:0,role:'slider','aria-label':'Громкость','aria-valuemin':0,'aria-valuemax':100}))input.setAttribute(key,String(value));
+      let dragging=null;
+      const fromPointer=event=>{
+        const matrix=slot.getScreenCTM();if(!matrix)return;
+        const point=svg.createSVGPoint();point.x=event.clientX;point.y=event.clientY;
+        setVolume((point.matrixTransform(matrix.inverse()).x-left)/width,true);
+      };
+      input.addEventListener('pointerdown',event=>{
+        if(event.button!==0)return;
+        event.preventDefault();event.stopPropagation();dragging=event.pointerId;fromPointer(event);
+        try{input.focus?.();input.setPointerCapture?.(dragging);}catch(error){report(error);}
+      });
+      doc.addEventListener('pointermove',event=>{if(event.pointerId===dragging&&input.isConnected)fromPointer(event);},{capture:true});
+      const release=event=>{if(event.pointerId===dragging)dragging=null;};
+      doc.addEventListener('pointerup',release,{capture:true});doc.addEventListener('pointercancel',release,{capture:true});
+      input.addEventListener('keydown',event=>{
+        const values={ArrowRight:prefs.volume+.01,ArrowUp:prefs.volume+.01,ArrowLeft:prefs.volume-.01,ArrowDown:prefs.volume-.01,PageUp:prefs.volume+.1,PageDown:prefs.volume-.1,Home:0,End:1};
+        if(!Object.hasOwn(values,event.key))return;
+        event.preventDefault();event.stopPropagation();setVolume(values[event.key],true);
+      });
+    }
+    settingsControls.add({svg,slot,input,output,knob,left,width,host,anchor});
+    if(!settingsDocuments.has(doc)){
+      settingsDocuments.add(doc);doc.addEventListener('scroll',positionSettings,{capture:true,passive:true});doc.defaultView.addEventListener('resize',positionSettings,{passive:true});doc.defaultView.addEventListener('hashchange',()=>doc.defaultView.requestAnimationFrame(positionSettings));
+    }
+    refreshUI();positionSettings();
   }
   function bind(svg) {
     if(games.has(svg)){attachSettings(svg);return;}
@@ -271,8 +302,9 @@
   }
   function refreshUI(message) {
     for(const control of settingsControls){
-      if(!control.svg.isConnected||!control.input.isConnected){settingsControls.delete(control);continue;}
+      if(!control.svg.isConnected||!control.input.isConnected){control.host?.remove();settingsControls.delete(control);continue;}
       const percent=Math.round(prefs.volume*100);
+      if(control.host){control.input.value=String(percent);control.input.style.setProperty('--volume',percent+'%');}
       control.input.setAttribute('aria-valuenow',String(percent));
       control.input.setAttribute('aria-valuetext',percent+'%');
       const cx=control.left+control.width*prefs.volume;
@@ -281,8 +313,8 @@
       control.output.textContent=percent+'%';
     }
   }
-  Object.defineProperty(window,'DuckHuntAudio',{value:Object.freeze({snapshot:()=>({version:'1.2.3',volume:prefs.volume,enabled:prefs.enabled,events:{...stats.events},errors:[...stats.errors],decoded:[...stats.decoded],state:context?.state||'not-started',games:games.size,custom:[...stored.keys()]}),preview:async name=>{if(Object.hasOwn(PACK,name)&&await unlock())await play(name);}})});
+  Object.defineProperty(window,'DuckHuntAudio',{value:Object.freeze({snapshot:()=>({version:'1.3.0',volume:prefs.volume,enabled:prefs.enabled,events:{...stats.events},errors:[...stats.errors],decoded:[...stats.decoded],state:context?.state||'not-started',games:games.size,controls:[...settingsControls].map(c=>({type:c.host?'html-range':'svg',visible:c.host?c.host.style.display!=='none':visible(c.input),value:c.input.getAttribute('aria-valuenow')})),custom:[...stored.keys()]}),preview:async name=>{if(Object.hasOwn(PACK,name)&&await unlock())await play(name);}})});
   void loadStored();scan();
-  setInterval(()=>{for(const [svg,game]of games){if(!svg.isConnected){games.delete(svg);continue;}try{pollGame(game);}catch(error){report(error);}}},75);
+  setInterval(()=>{positionSettings();for(const [svg,game]of games){if(!svg.isConnected){games.delete(svg);continue;}try{pollGame(game);}catch(error){report(error);}}},75);
   setInterval(()=>scan(),1500);
 })();
