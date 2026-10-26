@@ -7,6 +7,7 @@
       doc,
       addDoc,
       getDoc,
+      runTransaction,
       getDocs,
       setDoc,
       updateDoc,
@@ -571,12 +572,42 @@
             .filter(pin => pin.id && pin.rank >= 1 && pin.rank <= 100);
         }
       });
-      const results = await Promise.allSettled([
-        setDoc(doc(db, "manualRanks", safeName), payload, { merge: true }),
-        setDoc(doc(db, "userProfiles", safeName), payload, { merge: true })
-      ]);
-      const firstOk = results.find(r => r.status === 'fulfilled');
-      if (!firstOk) throw results[0].reason;
+      const manualRef = doc(db, "manualRanks", safeName);
+      const profileRef = doc(db, "userProfiles", safeName);
+      const orderOf = row => ({
+        OP: Array.from(new Set((row?.OP || row?.manualOP || []).map(String).filter(Boolean))).slice(0, 100),
+        ED: Array.from(new Set((row?.ED || row?.manualED || []).map(String).filter(Boolean))).slice(0, 100)
+      });
+      const fingerprint = row => JSON.stringify(orderOf(row));
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(manualRef);
+        const previous = snapshot.exists() ? snapshot.data() : {};
+        const previousOrder = orderOf(previous);
+        const next = { ...payload };
+        if (ranks?.metadataOnly) {
+          next.OP = next.manualOP = previousOrder.OP;
+          next.ED = next.manualED = previousOrder.ED;
+          if (snapshot.exists()) delete next.manualCreated;
+          else next.manualCreated = false;
+        } else if (ranks?.expectedOrder && fingerprint(previousOrder) !== fingerprint(ranks.expectedOrder)) {
+          throw new Error('Топ уже изменён в другой вкладке. Обнови профиль перед сохранением. Черновик сохранён на этом устройстве.');
+        }
+        const changed = fingerprint(previousOrder) !== fingerprint(next);
+        if (changed) {
+          const hasPrevious = previous.topUpdatedAt || previous.manualCreated === true || previousOrder.OP.length || previousOrder.ED.length;
+          const savedAtLocal = previous.topUpdatedAt?.toMillis?.() || previous.updatedAt?.toMillis?.() || 0;
+          next.history = [
+            ...(hasPrevious ? [{ ...previousOrder, savedAtLocal }] : []),
+            ...(Array.isArray(previous.history) ? previous.history : [])
+          ].slice(0, 30);
+          next.topUpdatedAt = serverTimestamp();
+        }
+        transaction.set(manualRef, next, { merge: true });
+        // Keep the public mirror and the authoritative top in the same commit.
+        const mirror = { ...next };
+        delete mirror.history;
+        transaction.set(profileRef, mirror, { merge: true });
+      });
       return true;
     }
 
@@ -877,3 +908,4 @@
       currentUserUid
     };
     window.dispatchEvent(new Event("oped-db-ready"));
+

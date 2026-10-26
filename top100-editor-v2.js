@@ -149,23 +149,6 @@
     try { if (state.key) localStorage.removeItem(draftKey(state.key)); } catch (_) {}
   }
 
-  function historyEntry(order, savedAtLocal = Date.now()) {
-    const cleanOrder = cloneOrder(order);
-    return { savedAtLocal, OP: cleanOrder.OP, ED: cleanOrder.ED };
-  }
-
-  function dedupeHistory(entries) {
-    const seen = new Set(), result = [];
-    for (const entry of entries || []) {
-      const cleanEntry = historyEntry(entry, Number(entry?.savedAtLocal) || Date.now());
-      const key = fingerprint(cleanEntry);
-      if (seen.has(key)) continue;
-      seen.add(key); result.push(cleanEntry);
-      if (result.length >= MAX_HISTORY) break;
-    }
-    return result;
-  }
-
   function scoreFromAllRatings(id) {
     const node = [...document.querySelectorAll('#oc-allratings-columns [data-id]')].find(el => clean(el.dataset.id) === String(id));
     const card = node?.closest('.oc-card, .oc-profile-item, article, [data-opening-id]');
@@ -340,13 +323,6 @@
       const manualRef = tools.doc(tools.db, 'manualRanks', state.key);
       const previousSnap = await tools.getDoc(manualRef);
       const previousRow = previousSnap.exists() ? previousSnap.data() || {} : {};
-      const previousOrder = { OP: uniqueIds(previousRow.OP || previousRow.manualOP), ED: uniqueIds(previousRow.ED || previousRow.manualED) };
-      const previousTime = previousRow.updatedAt?.toMillis?.() || Date.now();
-      const hasPreviousOrder = previousOrder.OP.length || previousOrder.ED.length;
-      const history = dedupeHistory([
-        ...(hasPreviousOrder && fingerprint(previousOrder) !== fingerprint(payload) ? [historyEntry(previousOrder, previousTime)] : []),
-        ...(Array.isArray(previousRow.history) ? previousRow.history : [])
-      ]);
       if (options.clearType) {
         payload.manualCreated = Boolean(payload.OP.length || payload.ED.length);
         payload[`pins${options.clearType}`] = [];
@@ -354,8 +330,7 @@
           if (Array.isArray(previousRow[`candidates${type}`])) payload[`candidates${type}`] = previousRow[`candidates${type}`].slice();
         }
       }
-      await db.saveManualRanks(state.user, payload);
-      await tools.setDoc(manualRef, { history }, { merge: true });
+      await db.saveManualRanks(state.user, { ...payload, expectedOrder: cloneOrder(state.baseline) });
       const snap = await tools.getDoc(manualRef);
       const row = snap.exists() ? snap.data() || {} : {};
       const verified = { OP: uniqueIds(row.OP || row.manualOP), ED: uniqueIds(row.ED || row.manualED) };
@@ -740,13 +715,17 @@
       const tools = await firebaseTools();
       const snap = await tools.getDoc(tools.doc(tools.db, 'manualRanks', state.key));
       const row = snap.exists() ? snap.data() || {} : {};
-      const history = isVisibleManualTop(row) && Array.isArray(row.history) ? row.history : [];
-      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>История топ-100</h2><p>${esc(viewedUser())} · до ${MAX_HISTORY} предыдущих сохранений</p></div></div><div class="oc-top100-history-list">${history.length ? history.map((entry, index) => `<div class="oc-top100-history-row"><div><strong>${new Date(Number(entry.savedAtLocal) || Date.now()).toLocaleString('ru-RU')}</strong><span>OP: ${uniqueIds(entry.OP).length} · ED: ${uniqueIds(entry.ED).length}</span></div><button type="button" data-history-index="${index}" ${state.editing && isOwnProfile() ? '' : 'disabled'}>Восстановить</button></div>`).join('') : '<div class="oc-empty">Предыдущих версий пока нет. Они начнут сохраняться при следующем изменении топа.</div>'}</div>`;
-      body.addEventListener('click', event => {
+      const history = Array.isArray(row.history) ? row.history : [];
+      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>История топ-100</h2><p>${esc(viewedUser())} · до ${MAX_HISTORY} предыдущих сохранений</p></div></div><div class="oc-top100-history-list">${history.length ? history.map((entry, index) => `<div class="oc-top100-history-row"><div><strong>${Number(entry.savedAtLocal) > 0 ? new Date(Number(entry.savedAtLocal)).toLocaleString('ru-RU') : 'Дата неизвестна'}</strong><span>OP: ${uniqueIds(entry.OP).length} · ED: ${uniqueIds(entry.ED).length}</span></div><button type="button" data-history-index="${index}" ${state.editing && isOwnProfile() ? '' : 'disabled'}>Восстановить</button></div>`).join('') : '<div class="oc-empty">Предыдущих версий пока нет. Они начнут сохраняться при следующем изменении топа.</div>'}</div>`;
+      body.addEventListener('click', async event => {
         const button = event.target.closest('[data-history-index]');
         if (!button || !state.editing || !isOwnProfile()) return;
         const entry = history[Number(button.dataset.historyIndex)];
         if (!entry || !window.confirm('Восстановить эту версию в черновик? Текущий сохранённый топ изменится только после нажатия «Сохранить».')) return;
+        button.disabled = true;
+        try { await loadCatalog([...uniqueIds(entry.OP), ...uniqueIds(entry.ED)]); }
+        catch (error) { button.disabled = false; toast('Не удалось загрузить песни этой версии. Попробуй ещё раз.', 'error'); return; }
+        if (!modal.isConnected || !state.editing || !isOwnProfile()) return;
         setDraft({ OP: uniqueIds(entry.OP), ED: uniqueIds(entry.ED) });
         modal.remove();
         toast('Версия восстановлена в черновик. Проверь её и нажми «Сохранить».', 'success');
@@ -1018,3 +997,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void init(), { once:true });
   else void init();
 })();
+

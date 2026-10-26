@@ -2762,56 +2762,8 @@
         pinsED: sanitizeTopPins(ranks.pinsED)
       };
       rememberManualRanksForUser(myName, cleanRanks);
-      const errors = [];
-      let savedRemote = false;
-
-      if (window.OPED_DB && typeof window.OPED_DB.saveManualRanks === 'function') {
-        try {
-          await window.OPED_DB.saveManualRanks(myName, cleanRanks);
-          savedRemote = true;
-        } catch (e) {
-          console.error('Could not save manual ranks through OPED_DB', e);
-          errors.push(e);
-        }
-      }
-
-      try {
-        const ext = await getExtendedDb();
-        const safeName = manualUserSafeKey(myName);
-        const payload = {
-          nickname: myName,
-          nicknameKey: safeName,
-          ownerUid: requirePersonalUid(),
-          manualCreated: cleanRanks.manualCreated,
-          OP: cleanRanks.OP,
-          ED: cleanRanks.ED,
-          manualOP: cleanRanks.OP,
-          manualED: cleanRanks.ED,
-          excludedOP: cleanRanks.excludedOP,
-          excludedED: cleanRanks.excludedED,
-          candidatesOP: cleanRanks.candidatesOP,
-          candidatesED: cleanRanks.candidatesED,
-          pinsOP: cleanRanks.pinsOP,
-          pinsED: cleanRanks.pinsED,
-          avatar: myAvatar,
-          updatedAt: ext.serverTimestamp()
-        };
-        await Promise.allSettled([
-          ext.setDoc(ext.doc(ext.db, 'manualRanks', safeName), payload, { merge: true }),
-          ext.setDoc(ext.doc(ext.db, 'userProfiles', safeName), payload, { merge: true })
-        ]).then(results => {
-          if (results.some(r => r.status === 'fulfilled')) savedRemote = true;
-          results.filter(r => r.status === 'rejected').forEach(r => { console.error('Manual rank mirror save failed', r.reason); errors.push(r.reason); });
-        });
-      } catch (e) {
-        console.error('Could not mirror manual ranks to Firebase', e);
-        errors.push(e);
-      }
-
-      if (!savedRemote) {
-        setStatus('Не удалось сохранить ручной топ.', true);
-        if (errors.length) throw errors[0];
-      }
+      if (!window.OPED_DB?.saveManualRanks) throw new Error('Firebase ещё не готов.');
+      await window.OPED_DB.saveManualRanks(myName, { ...cleanRanks, metadataOnly: !explicitCreate });
     }
 
     async function syncMyAvatarIntoMap(requireRemote = false) {
@@ -9110,3 +9062,4 @@
       if (accessLevel && !myName) showNameModal('Введите никнейм, чтобы продолжить.');
     })();
   })();
+

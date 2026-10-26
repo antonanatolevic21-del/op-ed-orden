@@ -14,9 +14,10 @@ vm.runInContext(source,ctx);
 const a=window.test,s=a.state;s.loaded=true;s.editing=true;s.user='Tester';s.key='tester';s.baseline={OP:['marked','unmarked'],ED:['ending']};s.draft={OP:['marked','unmarked'],ED:['ending']};s.catalog.set('marked',{id:'marked',type:'OP'});s.catalog.set('unmarked',{id:'unmarked',type:'OP'});
 (async()=>{
  confirm=false;await a.clearTop();assert.equal(row.OP.length,2);
- confirm=true;await a.clearTop();assert.deepEqual(Array.from(row.OP),[]);assert.deepEqual(Array.from(row.ED),['ending']);assert.deepEqual(Array.from(row.candidatesOP),['marked']);assert.deepEqual(Array.from(row.pinsOP),[]);assert.equal(row.pinsED.length,1);assert.equal(row.manualCreated,true);assert.deepEqual(Array.from(a.candidateRows('OP'),x=>x.id),['marked']);assert.equal(row.history.length,1);
+ confirm=true;await a.clearTop();assert.deepEqual(Array.from(row.OP),[]);assert.deepEqual(Array.from(row.ED),['ending']);assert.deepEqual(Array.from(row.candidatesOP),['marked']);assert.deepEqual(Array.from(row.pinsOP),[]);assert.equal(row.pinsED.length,1);assert.equal(row.manualCreated,true);assert.deepEqual(Array.from(a.candidateRows('OP'),x=>x.id),['marked']);assert.deepEqual(Array.from(row.expectedOrder.OP),['marked','unmarked']);
  s.draft.OP=['unmarked'];fail=true;await a.clearTop();assert.deepEqual(Array.from(s.draft.OP),['unmarked']);assert.equal(row.candidatesOP[0],'marked');
  fail=false;s.draft={OP:['marked'],ED:[]};await a.clearTop();assert.equal(row.manualCreated,false);
  assert.equal(a.safeExternalUrl('javascript:alert(1)'),'');assert.equal(a.getDirectVideoType('https://cdn.example/a.webm'),'video/webm');assert.match(a.getVideoEmbedUrl('https://youtu.be/abc'),/youtube.com\/embed\/abc/);assert.match(a.getVideoEmbedUrl('https://vkvideo.ru/video-1_2'),/oid=-1&id=2/);assert.equal(a.getVideoEmbedUrl('https://evilyoutube.com/watch?v=abc'),'');
  console.log('Passed: reset cancellation, persisted empty top, other top preserved, candidates/pins/history, failure recovery, empty manual status, safe video URLs and supported embeds.');
 })().catch(e=>{console.error(e);process.exitCode=1});
+

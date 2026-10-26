@@ -11,7 +11,7 @@
   const manualTopInsertVersion = '20261001-catalog-search-tab1';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
   const top100SuiteVersion = '20261001-catalog-search-tab1';
-  const top100EditorVersion = '20261001-catalog-search-tab1';
+  const top100EditorVersion = '20261026-real-history1';
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20260730-top100-export1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
@@ -310,3 +310,4 @@
     });
   }
 })();
+
