@@ -57,6 +57,7 @@
 		return [...container.querySelectorAll(':scope > .oc-profile-item')].slice(0, 100).map((card, index) => {
 			const image = card.querySelector('img');
 			return {
+				id: clean(card.dataset.top100Id || card.dataset.explicitTopId || card.querySelector('[data-id]')?.dataset.id),
 				place: index + 1,
 				title: clean(card.querySelector('[data-top100-title]')?.textContent || card.querySelector('.oc-profile-name')?.textContent) || `Место ${index + 1}`,
 				meta: clean(card.querySelector('.oc-profile-meta')?.textContent) || type,
@@ -112,18 +113,28 @@
 	}
 
 	function loadCanvasImage(item) {
-		const candidates = [...new Set([clean(item?.fallback), clean(item?.image)].filter(Boolean))];
+		const candidates = [...new Set([clean(item?.original), clean(item?.image), clean(item?.fallback)].filter(Boolean))];
 		return new Promise(resolve => {
 			const tryCandidate = index => {
 				if (index >= candidates.length) { resolve(null); return; }
 				const image = new Image();
 				image.crossOrigin = 'anonymous';
 				image.referrerPolicy = 'no-referrer';
-				const timeout = window.setTimeout(() => tryCandidate(index + 1), 4000);
-				image.onload = () => { window.clearTimeout(timeout); resolve(image); };
-				image.onerror = () => { window.clearTimeout(timeout); tryCandidate(index + 1); };
+				let finished = false;
+				const finish = loaded => {
+					if (finished) return;
+					finished = true;
+					window.clearTimeout(timeout);
+					image.onload = null;
+					image.onerror = null;
+					if (loaded) resolve(image);
+					else { image.src = ''; tryCandidate(index + 1); }
+				};
+				const timeout = window.setTimeout(() => finish(false), 4000);
+				image.onload = () => finish(true);
+				image.onerror = () => finish(false);
 				try { image.src = new URL(candidates[index], document.baseURI).href; }
-				catch (_) { window.clearTimeout(timeout); tryCandidate(index + 1); }
+				catch (_) { finish(false); }
 			};
 			tryCandidate(0);
 		});
@@ -132,12 +143,17 @@
 	async function renderExportCanvas(items, startPlace, type) {
 		const size = 1500;
 		const cell = 300;
+		const resolution = 2;
 		const canvas = document.createElement('canvas');
-		canvas.width = size;
-		canvas.height = size;
+		canvas.width = size * resolution;
+		canvas.height = size * resolution;
 		const context = canvas.getContext('2d');
+		context.scale(resolution, resolution);
+		context.imageSmoothingEnabled = true;
+		context.imageSmoothingQuality = 'high';
 		context.fillStyle = '#0b0a10';
 		context.fillRect(0, 0, size, size);
+		const images = await Promise.all(items.map(item => item ? loadCanvasImage(item) : null));
 
 		for (let index = 0; index < 25; index += 1) {
 			const item = items[index] || null;
@@ -157,7 +173,7 @@
 			const imageHeight = 170;
 			context.fillStyle = '#17131e';
 			context.fillRect(imageX, imageY, imageWidth, imageHeight);
-			const image = item ? await loadCanvasImage(item) : null;
+			const image = images[index];
 			if (image) {
 				const scale = Math.max(imageWidth / image.width, imageHeight / image.height);
 				const sourceWidth = imageWidth / scale;
@@ -196,18 +212,44 @@
 		exportState.running = true;
 		const modal = createExportModal();
 		const body = modal.querySelector('.oc-top100-modal-body');
-		body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>Экспорт топ-100</h2><p>${escapeHtml(user)} · ${type} · четыре картинки по 25 мест, сетка 5×5.</p></div></div><div class="oc-top100-export-status">Подготавливаю карточки…</div><div class="oc-top100-export-grid"></div>`;
+		body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>Экспорт топ-100</h2><p>${escapeHtml(user)} · ${type} · четыре PNG 3000×3000 без потерь, по 25 мест.</p></div></div><div class="oc-top100-export-status">Подготавливаю карточки…</div><div class="oc-top100-export-grid"></div>`;
 		const grid = body.querySelector('.oc-top100-export-grid');
 		const status = body.querySelector('.oc-top100-export-status');
-		const allItems = Array.from({ length: 100 }, (_, index) => sourceItems[index] || null);
 		try {
+			const catalog = new Map([
+				...(window.OC_CATALOG_STORE?.peek?.() || []),
+				...(window.OC_CATALOG_CACHE?.peek?.() || []),
+				...(window.OC_APP_BRIDGE?.snapshot?.()?.entries || [])
+			].map(entry => [String(entry.id), entry]));
+			const missingIds = [...new Set(sourceItems.map(item => item.id).filter(id => id && !catalog.has(id)))];
+			if (missingIds.length) {
+				try {
+					const rows = await window.OC_CATALOG_CACHE?.byIds?.(missingIds);
+					rows?.forEach(entry => catalog.set(String(entry.id), entry));
+				} catch (error) { console.warn('Top-100 export original images unavailable', error); }
+			}
+			const allItems = Array.from({ length: 100 }, (_, index) => {
+				const item = sourceItems[index];
+				if (!item) return null;
+				const entry = catalog.get(item.id);
+				return { ...item, original: clean(entry?.image), fallback: clean(entry?.fallbackImage) || item.fallback };
+			});
+			if (document.fonts) {
+				await Promise.allSettled([
+					document.fonts.load('700 18px Inter'),
+					document.fonts.load('800 24px "Space Mono"'),
+					document.fonts.load('600 13px "Space Mono"')
+				]);
+			}
 			for (let part = 0; part < 4; part += 1) {
 				if (!modal.isConnected) break;
 				status.textContent = `Генерирую ${part + 1} из 4…`;
 				const from = part * 25 + 1;
 				const to = part * 25 + 25;
 				const canvas = await renderExportCanvas(allItems.slice(part * 25, part * 25 + 25), from, type);
+				if (!modal.isConnected) break;
 				const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось собрать PNG.')), 'image/png'));
+				if (!modal.isConnected) break;
 				const url = URL.createObjectURL(blob);
 				exportState.urls.push(url);
 				const card = document.createElement('div');
@@ -215,7 +257,7 @@
 				card.innerHTML = `<img src="${url}" alt="Топ ${from}–${to}"><div><strong>Места ${from}–${to}</strong><a download="top100-${safeFilePart(user)}-${type.toLowerCase()}-${from}-${to}.png" href="${url}">Скачать PNG</a></div>`;
 				grid.append(card);
 			}
-			if (modal.isConnected) status.textContent = 'Готово: четыре изображения 5×5.';
+			if (modal.isConnected) status.textContent = 'Готово: четыре PNG 3000×3000 без потерь.';
 		} catch (error) {
 			console.error('Top-100 PNG export failed', error);
 			if (modal.isConnected) status.textContent = error?.message || 'Не удалось создать изображения.';
@@ -231,7 +273,7 @@
 		button.type = 'button';
 		button.dataset.top100Export = '';
 		button.textContent = '4 PNG';
-		button.title = 'Скачать топ-100 четырьмя картинками 5×5';
+		button.title = 'Скачать топ-100: четыре PNG 3000×3000 без потерь';
 		button.addEventListener('click', () => void openExport());
 		extra.append(button);
 	}

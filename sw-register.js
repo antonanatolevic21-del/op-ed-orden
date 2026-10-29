@@ -13,7 +13,7 @@
   const top100SuiteVersion = '20261001-catalog-search-tab1';
   const top100EditorVersion = '20261026-real-history1';
   const top100DragVersion = '20260726-top100-drag2';
-  const top100ExportVersion = '20260730-top100-export1';
+  const top100ExportVersion = '20261029-top100-export-hd1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
   const ratingWorkbenchVersion = '20261014-conditional-modifiers1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
@@ -111,7 +111,7 @@
     addStyle('top100-rank-readability.css', primaryVersion);
     top100Promise = addScriptsOrdered([
       ['catalog-cache.js', '20260930-demand-data1'],
-      ['top100-rank-readability.js', '20261001-catalog-search-tab1'],
+      ['top100-rank-readability.js', top100ExportVersion],
       ['profile-top-single.js', top100SuiteVersion],
       ['top100-editor-v2.js', top100EditorVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion]
