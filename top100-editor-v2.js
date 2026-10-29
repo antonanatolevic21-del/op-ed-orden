@@ -6,6 +6,11 @@
   const MAX_HISTORY = 30;
   const CONFIRMED_LEGACY_MANUAL_TOP_KEYS = new Set(['пёс_кошачий', 'пес_кошачий', 'egortos', 'кофа', 'holdes']);
   const DRAFT_PREFIX = 'oc-top100-editor-v2-draft:';
+  const LOCAL_BACKUP_PREFIX = 'oc-top100-local-backups-v1:';
+  const LOCAL_BACKUP_INTERVAL = 5 * 60 * 1000;
+  const MAX_LOCAL_BACKUPS = 30;
+  let backupBusy = false;
+  let backupStatus = { key: '', phase: '', savedAt: 0, checkedAt: 0 };
   const state = {
     user: '', key: '', loaded: false, loading: false, editing: false, applying: false, saving: false,
     baseline: { OP: [], ED: [] }, draft: { OP: [], ED: [] }, undo: [], redo: [], expanded: { OP: false, ED: false },
@@ -147,6 +152,78 @@
 
   function clearLocalDraft() {
     try { if (state.key) localStorage.removeItem(draftKey(state.key)); } catch (_) {}
+  }
+
+  function readLocalBackups(key) {
+    const raw = localStorage.getItem(LOCAL_BACKUP_PREFIX + key);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (data?.version !== 1 || data.key !== key || !Array.isArray(data.copies) || data.copies.some(copy =>
+      !copy || !Array.isArray(copy.OP) || !Array.isArray(copy.ED) || !Number.isFinite(copy.savedAt) || copy.savedAt <= 0
+    )) throw new Error('Не удалось прочитать локальные копии.');
+    return data.copies.slice(0, MAX_LOCAL_BACKUPS);
+  }
+
+  function canBackUp(key) {
+    return state.loaded && !state.loading && !state.saving && !state.drag && isOwnProfile() &&
+      key === state.key && key === normalize(viewedUser()) && key === normalize(ownUser());
+  }
+
+  function updateBackupStatus() {
+    const key = normalize(viewedUser());
+    const marker = document.querySelector('[data-top100-backup-status]');
+    const button = document.querySelector('[data-top100-local-history]');
+    const own = isOwnProfile();
+    if (button) button.hidden = !own;
+    if (!marker) return;
+    marker.hidden = !own;
+    const status = backupStatus.key === key ? backupStatus : {};
+    marker.dataset.phase = status.phase || '';
+    const text = marker.querySelector('[data-top100-backup-text]');
+    if (text) text.textContent = status.phase === 'copying' ? 'создаётся копия' : status.phase === 'error'
+      ? 'Не удалось создать копию' : status.savedAt ? `Копия в браузере · ${new Date(status.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'Автокопия каждые 5 минут';
+    marker.title = status.phase === 'error' ? 'Проверь доступность и свободное место хранилища браузера. Предыдущие копии сохранены.'
+      : `${status.savedAt ? 'Последняя копия: ' + new Date(status.savedAt).toLocaleString('ru-RU') + '. ' : ''}Проверка каждые 5 минут; новая копия создаётся при изменениях. До 30 версий в этом браузере.`;
+  }
+
+  async function backupCurrentTop() {
+    const key = state.key;
+    if (backupBusy || !canBackUp(key)) return;
+    backupBusy = true;
+    try {
+      const copies = readLocalBackups(key);
+      const order = cloneOrder(state.editing ? state.draft : state.baseline);
+      backupStatus = { key, phase: '', savedAt: copies[0]?.savedAt || 0, checkedAt: Date.now() };
+      if (copies[0] && fingerprint(copies[0]) === fingerprint(order)) { updateBackupStatus(); return; }
+      backupStatus.phase = 'copying';
+      updateBackupStatus();
+      // Give the browser time to paint the copying indicator before the local write.
+      await new Promise(resolve => setTimeout(resolve, 350));
+      if (!canBackUp(key)) { backupStatus.phase = ''; updateBackupStatus(); return; }
+      const current = cloneOrder(state.editing ? state.draft : state.baseline);
+      const latest = readLocalBackups(key);
+      if (latest[0] && fingerprint(latest[0]) === fingerprint(current)) {
+        backupStatus.savedAt = latest[0].savedAt;
+      } else {
+        const savedAt = Date.now();
+        const copy = { ...current, savedAt, source: state.editing && dirty() ? 'draft' : 'saved' };
+        localStorage.setItem(LOCAL_BACKUP_PREFIX + key, JSON.stringify({ version: 1, key, copies: [copy, ...latest].slice(0, MAX_LOCAL_BACKUPS) }));
+        backupStatus.savedAt = savedAt;
+      }
+      backupStatus.phase = '';
+      updateBackupStatus();
+    } catch (error) {
+      backupStatus = { key, phase: 'error', savedAt: backupStatus.key === key ? backupStatus.savedAt : 0, checkedAt: Date.now() };
+      updateBackupStatus();
+      console.error('Top-100 local backup failed', error);
+    } finally { backupBusy = false; }
+  }
+
+  function startLocalBackups() {
+    setInterval(() => void backupCurrentTop(), LOCAL_BACKUP_INTERVAL);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && (backupStatus.key !== state.key || Date.now() - backupStatus.checkedAt >= LOCAL_BACKUP_INTERVAL)) void backupCurrentTop();
+    });
   }
 
   function scoreFromAllRatings(id) {
@@ -307,7 +384,10 @@
       if (local && dirty() && state.editing) toast('Несохранённый черновик топа восстановлен.', 'success');
     } catch (error) {
       console.error('Top-100 editor load failed', error); toast('Не удалось загрузить сохранённый топ-100.', 'error');
-    } finally { state.loading = false; }
+    } finally {
+      state.loading = false;
+      if (state.loaded && state.key === key) void backupCurrentTop();
+    }
   }
 
   async function saveCurrent(button, options = {}) {
@@ -515,6 +595,19 @@
     const toolbar = document.createElement('div'); toolbar.className = 'oc-top100-toolbar';
     toolbar.innerHTML = `<div class="oc-top100-toolbar-type"></div><div class="oc-top100-search-wrap"><input id="oc-top100-search" type="search" placeholder="Найти в топе…" autocomplete="off"><div id="oc-top100-search-results" class="oc-top100-search-results" hidden></div></div><div class="oc-top100-jump"><input id="oc-top100-jump" type="number" min="1" max="100" placeholder="№"><button type="button" data-top100-jump>Перейти</button></div><div class="oc-top100-history-actions"><button type="button" data-top100-undo title="Отменить">↶</button><button type="button" data-top100-redo title="Вернуть">↷</button><button type="button" data-top100-reset>Сбросить</button><button type="button" data-top100-clear>Обнулить</button></div><span class="oc-top100-dirty" data-top100-dirty>Сохранено</span><div class="oc-top100-extra"><button type="button" data-top100-history>История</button><button type="button" data-top100-compare>Сравнить</button></div><div class="oc-top100-toolbar-save"></div>`;
     columns.before(toolbar);
+    const statusGroup = document.createElement('div'); statusGroup.className = 'oc-top100-save-status';
+    const dirtyMarker = toolbar.querySelector('[data-top100-dirty]');
+    dirtyMarker.before(statusGroup); statusGroup.append(dirtyMarker);
+    const backupMarker = document.createElement('span');
+    backupMarker.className = 'oc-top100-backup-status'; backupMarker.dataset.top100BackupStatus = '';
+    backupMarker.setAttribute('role', 'status'); backupMarker.setAttribute('aria-live', 'polite');
+    backupMarker.innerHTML = '<span class="oc-top100-backup-icon" aria-hidden="true">◌</span><span data-top100-backup-text>Автокопия каждые 5 минут</span>';
+    statusGroup.append(backupMarker);
+    const localHistory = document.createElement('button'); localHistory.type = 'button';
+    localHistory.dataset.top100LocalHistory = ''; localHistory.textContent = 'Копии в браузере';
+    toolbar.querySelector('.oc-top100-extra').append(localHistory);
+    localHistory.addEventListener('click', openLocalHistory);
+    updateBackupStatus();
     const switcher = document.querySelector('.oc-profile-top-type-switch'); if (switcher) toolbar.querySelector('.oc-top100-toolbar-type').append(switcher);
     const edit = editButton(), save = saveButton();
     if (edit) toolbar.querySelector('.oc-top100-toolbar-save').append(edit);
@@ -568,6 +661,7 @@
     const clearButton = toolbar.querySelector('[data-top100-clear]');
     if (clearButton) clearButton.disabled = !state.editing || state.saving || !state.loaded;
     const save = saveButton(); if (save) { save.classList.toggle('active', state.editing && dirty()); save.disabled = !isOwnProfile() || state.saving; }
+    updateBackupStatus();
   }
 
   function handleEditState() {
@@ -732,6 +826,33 @@
       });
     } catch (error) {
       body.innerHTML = `<h2>История топ-100</h2><div class="oc-top100-error">${esc(error?.message || 'Не удалось загрузить историю.')}</div>`;
+    }
+  }
+
+  function openLocalHistory() {
+    if (!isOwnProfile()) return;
+    const key = normalize(viewedUser());
+    const modal = modalRoot('local-history'), body = modal.querySelector('.oc-top100-modal-body');
+    try {
+      const copies = readLocalBackups(key);
+      const canRestore = state.loaded && state.key === key && !state.loading && !state.saving;
+      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>Копии в браузере</h2><p>${esc(viewedUser())} · до ${MAX_LOCAL_BACKUPS} версий · только на этом устройстве и в этом браузере</p><p>Проверка каждые 5 минут, новая копия — при изменениях. Восстановление переносит порядок OP и ED в черновик.</p></div></div><div class="oc-top100-history-list">${copies.length ? copies.map((copy, index) => `<div class="oc-top100-history-row"><div><strong>${esc(new Date(copy.savedAt).toLocaleString('ru-RU'))}</strong><span>OP: ${uniqueIds(copy.OP).length} · ED: ${uniqueIds(copy.ED).length} · ${copy.source === 'draft' ? 'черновик' : 'сохранённый топ'}</span></div><button type="button" data-local-history-index="${index}" ${canRestore ? '' : 'disabled'}>Восстановить</button></div>`).join('') : '<div class="oc-empty">Копий пока нет. Первая появится после загрузки твоего топа.</div>'}</div>`;
+      body.addEventListener('click', async event => {
+        const button = event.target.closest('[data-local-history-index]');
+        if (!button || !canBackUp(key)) return;
+        const copy = copies[Number(button.dataset.localHistoryIndex)];
+        if (!copy || !window.confirm('Восстановить локальную копию OP и ED в черновик? Топ на сайте изменится только после нажатия «Сохранить топ-100».')) return;
+        button.disabled = true;
+        let catalogMissing = false;
+        try { await loadCatalog([...uniqueIds(copy.OP), ...uniqueIds(copy.ED)]); }
+        catch (_) { catalogMissing = true; }
+        if (!modal.isConnected || !canBackUp(key)) return;
+        state.editing = true; editButton()?.classList.add('active');
+        setDraft(copy); modal.remove();
+        toast(`Копия восстановлена в черновик. Проверь порядок и нажми «Сохранить топ-100».${catalogMissing ? ' Названия некоторых песен загрузятся при подключении к сети.' : ''}`, 'success');
+      });
+    } catch (error) {
+      body.innerHTML = `<h2>Копии в браузере</h2><div class="oc-top100-error">${esc(error?.message || 'Не удалось прочитать локальные копии.')}</div>`;
     }
   }
 
@@ -950,6 +1071,7 @@
 
   async function init() {
     ensureToolbar(); monitorDom(); syncTop100ViewState();
+    startLocalBackups();
     if (isTopView()) await loadSaved(viewedUser(), true);
     document.documentElement.classList.remove('oc-top100-loading');
   }
@@ -997,4 +1119,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void init(), { once:true });
   else void init();
 })();
+
 
