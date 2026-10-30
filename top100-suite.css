@@ -7,6 +7,7 @@
 .oc-top100-jump{display:grid;grid-template-columns:66px auto;gap:5px}.oc-top100-jump button,.oc-top100-history-actions button,.oc-top100-extra button,.oc-top100-toolbar-save button{min-height:40px;border:1px solid #352d40;border-radius:9px;background:#17131e;color:#d9d4e2;padding:7px 10px;font:700 11px 'Space Mono',monospace;cursor:pointer}.oc-top100-jump button:hover,.oc-top100-history-actions button:hover,.oc-top100-extra button:hover,.oc-top100-toolbar-save button:hover{border-color:#5b4b69;background:#201925;color:#fff}.oc-top100-history-actions,.oc-top100-extra,.oc-top100-toolbar-save{display:flex;align-items:center;gap:5px}.oc-top100-history-actions button:first-child,.oc-top100-history-actions button:nth-child(2){min-width:40px;font-size:19px;padding:4px}.oc-top100-toolbar button:disabled{opacity:.35;cursor:not-allowed}
 .oc-top100-dirty{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:6px 9px;border:1px solid #30283a;border-radius:999px;color:#8f879b;background:#0d0b12;font:700 10px 'Space Mono',monospace;white-space:nowrap}.oc-top100-toolbar.dirty .oc-top100-dirty{border-color:rgba(255,184,77,.35);color:#ffbf69;background:rgba(255,184,77,.06)}
 .oc-top100-save-status{display:flex;flex-direction:column;gap:4px;min-width:0}
+.oc-top100-history-row>.oc-top100-local-history-actions{display:flex;flex-wrap:wrap;gap:6px}
 .oc-top100-backup-status{display:flex;align-items:center;justify-content:center;gap:5px;color:#8fbcab;font:10px 'Space Mono',monospace}
 .oc-top100-backup-status[hidden],.oc-top100-extra [data-top100-local-history][hidden]{display:none}
 .oc-top100-backup-status[data-phase="copying"]{color:#08d9d6}
@@ -88,4 +89,5 @@
 .oc-top100-video-player{display:block;width:100%;aspect-ratio:16/9;border:0;background:#000;margin:14px 0}
 .oc-top100-toolbar [data-top100-clear]{color:#ffa5a5;border-color:#704242}
 .oc-top100-modal[data-kind="video"]{z-index:100000}
+
 

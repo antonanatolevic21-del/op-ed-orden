@@ -10,10 +10,10 @@
   const seasonCommunityVersion = '20260805-tournament-delete1';
   const manualTopInsertVersion = '20261001-catalog-search-tab1';
   const manualTopInsertFixVersion = '20260725-manual-top-insert-fix4';
-  const top100SuiteVersion = '20261029-local-top100-backups1';
-  const top100EditorVersion = '20261029-local-top100-backups1';
+  const top100SuiteVersion = '20261030-backup-png1';
+  const top100EditorVersion = '20261030-backup-png1';
   const top100DragVersion = '20260726-top100-drag2';
-  const top100ExportVersion = '20261029-top100-export-hd1';
+  const top100ExportVersion = '20261030-backup-png1';
   const top100CandidatesVersion = '20260731-top100-candidates1';
   const ratingWorkbenchVersion = '20261014-conditional-modifiers1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
@@ -113,6 +113,7 @@
       ['catalog-cache.js', '20260930-demand-data1'],
       ['top100-rank-readability.js', top100ExportVersion],
       ['profile-top-single.js', top100SuiteVersion],
+      ['top100-image-backups.js', top100EditorVersion],
       ['top100-editor-v2.js', top100EditorVersion],
       ['manual-top-insert-fast.js', manualTopInsertVersion]
     ]).catch(error => {
@@ -310,5 +311,6 @@
     });
   }
 })();
+
 
 

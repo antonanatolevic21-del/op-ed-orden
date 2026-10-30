@@ -199,6 +199,28 @@
 		return canvas;
 	}
 
+	window.OC_TOP100_PNG = {
+		async renderPages(tops) {
+			if (document.fonts) await Promise.allSettled([
+				document.fonts.load('700 18px Inter'), document.fonts.load('800 24px "Space Mono"'), document.fonts.load('600 13px "Space Mono"')
+			]);
+			const files = [];
+			for (const type of ['OP', 'ED']) {
+				const items = tops[type] || [];
+				if (!items.length) continue;
+				for (let part = 0; part < 4; part += 1) {
+					const from = part * 25 + 1, to = from + 24;
+					const canvas = await renderExportCanvas(items.slice(part * 25, part * 25 + 25), from, type);
+					try {
+						const blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Не удалось собрать резервный PNG.')), 'image/png'));
+						files.push({ type, from, to, blob });
+					} finally { canvas.width = 0; canvas.height = 0; }
+				}
+			}
+			return files;
+		}
+	};
+
 	async function openExport() {
 		if (exportState.running) return;
 		const user = viewedUser();
@@ -298,3 +320,4 @@
 	});
 	queueSync(0);
 })();
+

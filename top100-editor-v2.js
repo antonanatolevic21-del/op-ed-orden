@@ -182,41 +182,60 @@
     const text = marker.querySelector('[data-top100-backup-text]');
     if (text) text.textContent = status.phase === 'copying' ? 'создаётся копия' : status.phase === 'error'
       ? 'Не удалось создать копию' : status.savedAt ? `Копия в браузере · ${new Date(status.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'Автокопия каждые 5 минут';
-    marker.title = status.phase === 'error' ? 'Проверь доступность и свободное место хранилища браузера. Предыдущие копии сохранены.'
-      : `${status.savedAt ? 'Последняя копия: ' + new Date(status.savedAt).toLocaleString('ru-RU') + '. ' : ''}Проверка каждые 5 минут; новая копия создаётся при изменениях. До 30 версий в этом браузере.`;
+    marker.title = status.phase === 'error' ? `${status.message || 'Проверь доступность и свободное место хранилища браузера.'} Предыдущие копии сохранены.`
+      : `${status.savedAt ? 'Последняя копия: ' + new Date(status.savedAt).toLocaleString('ru-RU') + '. ' : ''}Порядок и PNG: проверка каждые 5 минут; новая копия при изменениях. До 30 версий в этом браузере.`;
   }
 
   async function backupCurrentTop() {
     const key = state.key;
     if (backupBusy || !canBackUp(key)) return;
     backupBusy = true;
+    let stagedImageKey = '';
     try {
+      const images = window.OC_TOP100_BACKUP_IMAGES;
+      if (!images || !window.OC_TOP100_PNG?.renderPages) throw new Error('Модуль резервных PNG ещё не загружен. Обнови страницу.');
       const copies = readLocalBackups(key);
-      const order = cloneOrder(state.editing ? state.draft : state.baseline);
+      const current = cloneOrder(state.editing ? state.draft : state.baseline);
+      const source = state.editing && dirty() ? 'draft' : 'saved';
       backupStatus = { key, phase: '', savedAt: copies[0]?.savedAt || 0, checkedAt: Date.now() };
-      if (copies[0] && fingerprint(copies[0]) === fingerprint(order)) { updateBackupStatus(); return; }
-      backupStatus.phase = 'copying';
-      updateBackupStatus();
-      // Give the browser time to paint the copying indicator before the local write.
+      if (copies[0] && fingerprint(copies[0]) === fingerprint(current) && await images.get(copies[0].imageKey, key)) {
+        updateBackupStatus(); return;
+      }
+      if (!canBackUp(key)) return;
+      backupStatus.phase = 'copying'; updateBackupStatus();
       await new Promise(resolve => setTimeout(resolve, 350));
       if (!canBackUp(key)) { backupStatus.phase = ''; updateBackupStatus(); return; }
-      const current = cloneOrder(state.editing ? state.draft : state.baseline);
+      await loadCatalog([...current.OP, ...current.ED]);
+      if (!canBackUp(key)) return;
+      const tops = Object.fromEntries(['OP', 'ED'].map(type => [type, current[type].map(id => {
+        const meta = metaFor(type, id);
+        return { id, ...meta, original: clean(state.catalog.get(id)?.image) };
+      })]));
+      const files = await window.OC_TOP100_PNG.renderPages(tops);
+      if (!canBackUp(key)) { backupStatus.phase = ''; updateBackupStatus(); return; }
+      const savedAt = Date.now();
+      const imageKey = `${key}:${savedAt}:${Math.random().toString(36).slice(2)}`;
+      await images.put({ id: imageKey, key, savedAt, files });
+      stagedImageKey = imageKey;
+      if (!canBackUp(key)) { backupStatus.phase = ''; updateBackupStatus(); return; }
       const latest = readLocalBackups(key);
-      if (latest[0] && fingerprint(latest[0]) === fingerprint(current)) {
-        backupStatus.savedAt = latest[0].savedAt;
-      } else {
-        const savedAt = Date.now();
-        const copy = { ...current, savedAt, source: state.editing && dirty() ? 'draft' : 'saved' };
-        localStorage.setItem(LOCAL_BACKUP_PREFIX + key, JSON.stringify({ version: 1, key, copies: [copy, ...latest].slice(0, MAX_LOCAL_BACKUPS) }));
-        backupStatus.savedAt = savedAt;
-      }
-      backupStatus.phase = '';
-      updateBackupStatus();
+      // Upgrade the latest order-only copy instead of keeping an identical version without PNGs.
+      if (latest[0] && !latest[0].imageKey && fingerprint(latest[0]) === fingerprint(current)) latest.shift();
+      const copy = { ...current, savedAt, source, imageKey, imageCount: files.length };
+      const retained = [copy, ...latest].slice(0, MAX_LOCAL_BACKUPS);
+      localStorage.setItem(LOCAL_BACKUP_PREFIX + key, JSON.stringify({ version: 1, key, copies: retained }));
+      stagedImageKey = '';
+      backupStatus.savedAt = savedAt; backupStatus.phase = ''; updateBackupStatus();
+      // Retire old image records only after the new images and copy index are both committed.
+      void images.prune(key, retained.map(row => row.imageKey).filter(Boolean)).catch(error => console.warn('Top-100 image cleanup failed', error));
     } catch (error) {
-      backupStatus = { key, phase: 'error', savedAt: backupStatus.key === key ? backupStatus.savedAt : 0, checkedAt: Date.now() };
-      updateBackupStatus();
-      console.error('Top-100 local backup failed', error);
-    } finally { backupBusy = false; }
+      backupStatus = { key, phase: 'error', message: error?.message, savedAt: backupStatus.key === key ? backupStatus.savedAt : 0, checkedAt: Date.now() };
+      updateBackupStatus(); console.error('Top-100 local backup failed', error);
+    } finally {
+      if (stagedImageKey) void window.OC_TOP100_BACKUP_IMAGES.remove(stagedImageKey, key).catch(error => console.warn('Top-100 uncommitted image cleanup failed', error));
+      if (backupStatus.key === key && backupStatus.phase === 'copying') { backupStatus.phase = ''; updateBackupStatus(); }
+      backupBusy = false;
+    }
   }
 
   function startLocalBackups() {
@@ -829,6 +848,34 @@
     }
   }
 
+  async function openLocalImages(copy, key) {
+    const modal = modalRoot('local-images'), body = modal.querySelector('.oc-top100-modal-body');
+    body.innerHTML = '<h2>Резервные картинки</h2><p>Загружаю PNG из браузера…</p>';
+    const urls = [];
+    const observer = new MutationObserver(() => {
+      if (!modal.isConnected) { urls.forEach(url => URL.revokeObjectURL(url)); observer.disconnect(); }
+    });
+    observer.observe(document.body, { childList: true });
+    try {
+      const record = await window.OC_TOP100_BACKUP_IMAGES?.get(copy.imageKey, key);
+      if (!modal.isConnected || !isOwnProfile() || normalize(viewedUser()) !== key) return;
+      if (!record) throw new Error('PNG этой копии отсутствуют в браузере. Новая копия будет создана при следующей проверке.');
+      body.innerHTML = `<h2>Резервные картинки</h2><p>${esc(new Date(copy.savedAt).toLocaleString('ru-RU'))} · PNG 3000×3000</p><div class="oc-top100-export-grid"></div>`;
+      const grid = body.querySelector('.oc-top100-export-grid');
+      if (!record.files.length) grid.textContent = 'В этой версии оба топа пусты.';
+      for (const file of record.files) {
+        const url = URL.createObjectURL(file.blob); urls.push(url);
+        const card = document.createElement('div'); card.className = 'oc-top100-export-card';
+        const img = document.createElement('img'); img.src = url; img.loading = 'lazy'; img.decoding = 'async';
+        img.alt = `${file.type}: места ${file.from}–${file.to}`;
+        const info = document.createElement('div'), title = document.createElement('strong'), link = document.createElement('a');
+        title.textContent = img.alt; link.textContent = 'Скачать PNG'; link.href = url;
+        link.download = `top100-${key}-${file.type.toLowerCase()}-${file.from}-${file.to}-${copy.savedAt}.png`;
+        info.append(title, link); card.append(img, info); grid.append(card);
+      }
+    } catch (error) { if (modal.isConnected) body.textContent = error?.message || 'Не удалось открыть резервные PNG.'; }
+  }
+
   function openLocalHistory() {
     if (!isOwnProfile()) return;
     const key = normalize(viewedUser());
@@ -836,8 +883,14 @@
     try {
       const copies = readLocalBackups(key);
       const canRestore = state.loaded && state.key === key && !state.loading && !state.saving;
-      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>Копии в браузере</h2><p>${esc(viewedUser())} · до ${MAX_LOCAL_BACKUPS} версий · только на этом устройстве и в этом браузере</p><p>Проверка каждые 5 минут, новая копия — при изменениях. Восстановление переносит порядок OP и ED в черновик.</p></div></div><div class="oc-top100-history-list">${copies.length ? copies.map((copy, index) => `<div class="oc-top100-history-row"><div><strong>${esc(new Date(copy.savedAt).toLocaleString('ru-RU'))}</strong><span>OP: ${uniqueIds(copy.OP).length} · ED: ${uniqueIds(copy.ED).length} · ${copy.source === 'draft' ? 'черновик' : 'сохранённый топ'}</span></div><button type="button" data-local-history-index="${index}" ${canRestore ? '' : 'disabled'}>Восстановить</button></div>`).join('') : '<div class="oc-empty">Копий пока нет. Первая появится после загрузки твоего топа.</div>'}</div>`;
+      body.innerHTML = `<div class="oc-top100-modal-head"><div><h2>Копии в браузере</h2><p>${esc(viewedUser())} · до ${MAX_LOCAL_BACKUPS} версий · только на этом устройстве и в этом браузере</p><p>Копии содержат порядок треков и PNG 3000×3000. Проверка каждые 5 минут. Старые копии могут содержать только порядок.</p></div></div><div class="oc-top100-history-list">${copies.length ? copies.map((copy, index) => `<div class="oc-top100-history-row"><div><strong>${esc(new Date(copy.savedAt).toLocaleString('ru-RU'))}</strong><span>OP: ${uniqueIds(copy.OP).length} · ED: ${uniqueIds(copy.ED).length} · ${copy.source === 'draft' ? 'черновик' : 'сохранённый топ'} · ${copy.imageKey ? `${Number(copy.imageCount) || 0} PNG` : 'без PNG'}</span></div><div class="oc-top100-local-history-actions">${copy.imageKey ? `<button type="button" data-local-images-index="${index}">Картинки</button>` : ''}<button type="button" data-local-history-index="${index}" ${canRestore ? '' : 'disabled'}>Восстановить</button></div></div>`).join('') : '<div class="oc-empty">Копий пока нет. Первая появится после загрузки твоего топа.</div>'}</div>`;
       body.addEventListener('click', async event => {
+        const imageButton = event.target.closest('[data-local-images-index]');
+        if (imageButton) {
+          const copy = copies[Number(imageButton.dataset.localImagesIndex)];
+          if (copy && isOwnProfile() && normalize(viewedUser()) === key) void openLocalImages(copy, key);
+          return;
+        }
         const button = event.target.closest('[data-local-history-index]');
         if (!button || !canBackUp(key)) return;
         const copy = copies[Number(button.dataset.localHistoryIndex)];
@@ -1119,5 +1172,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => void init(), { once:true });
   else void init();
 })();
+
 
 
