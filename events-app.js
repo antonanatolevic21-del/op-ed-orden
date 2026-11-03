@@ -1502,7 +1502,23 @@
     function sumForOpeningInSeason(key, openingId) {
       const rows = getSeasonRatings(key).filter(r => String(r.openingId || '') === String(openingId) && Number.isFinite(Number(r.score)));
       const total = rows.reduce((sum, r) => sum + Number(r.score), 0);
-      return { total, count: rows.length };
+      const scoreCounts = Array(11).fill(0);
+      rows.forEach(row => {
+        const score = Number(row.score);
+        if (Number.isInteger(score) && score >= 1 && score <= 10) scoreCounts[score] += 1;
+      });
+      return { total, count: rows.length, scoreCounts };
+    }
+
+    // Equal sums are resolved by the number of 10s, then 9s, down to 1s.
+    function compareSemifinalCandidates(a, b) {
+      const totalDifference = b.total - a.total;
+      if (totalDifference) return totalDifference;
+      for (let score = 10; score >= 1; score -= 1) {
+        const difference = (b.scoreCounts?.[score] || 0) - (a.scoreCounts?.[score] || 0);
+        if (difference) return difference;
+      }
+      return compareNatural(a.title, b.title) || compareNatural(a.id, b.id);
     }
 
     function getParticipantRatingProgress(state) {
@@ -1659,9 +1675,9 @@
         .map(id => {
           const opening = openingsById.get(String(id));
           const score = sumForOpeningInSeason(state.key, id);
-          return { id: String(id), title: opening?.title || String(id), total: score.total, count: score.count };
+          return { id: String(id), title: opening?.title || String(id), total: score.total, count: score.count, scoreCounts: score.scoreCounts };
         })
-        .sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title))
+        .sort(compareSemifinalCandidates)
         .slice(0, winnerCount);
       return { completedParticipants, winnerCount, rows };
     }
@@ -1748,30 +1764,20 @@
             id: String(id),
             title: opening ? opening.title : String(id),
             total: sum.total,
-            count: sum.count
+            count: sum.count,
+            scoreCounts: sum.scoreCounts
           };
         })
-        .sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title));
+        .sort(compareSemifinalCandidates);
       if (!ranked.length) return { winnerCount, ranked: [], auto: [], candidates: [], chosen: [], finalIds: [], needManual: 0, ready: false, complete: false, progress };
       if (!progress.complete) {
         const saved = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
         return { winnerCount, ranked, auto: [], candidates: [], chosen: [], finalIds: saved, needManual: 0, ready: false, complete: false, progress };
       }
-      const cutoff = ranked[Math.min(winnerCount, ranked.length) - 1]?.total ?? 0;
-      const auto = ranked.filter(row => row.total > cutoff);
-      const tiedAtCutoff = ranked.filter(row => row.total === cutoff);
-      const slotsForTie = Math.max(0, Math.min(winnerCount, ranked.length) - auto.length);
-      const savedChosen = Array.isArray(state.semifinalTieWinnerIds) ? state.semifinalTieWinnerIds.map(String) : [];
-      let candidates = [];
-      let chosen = [];
-      if (tiedAtCutoff.length <= slotsForTie) {
-        chosen = tiedAtCutoff.slice(0, slotsForTie);
-      } else {
-        candidates = tiedAtCutoff;
-        const candidateSet = new Set(candidates.map(row => row.id));
-        chosen = savedChosen.filter(id => candidateSet.has(String(id))).slice(0, slotsForTie).map(id => candidates.find(row => row.id === String(id))).filter(Boolean);
-      }
-      const finalRows = [...auto, ...chosen].slice(0, winnerCount);
+      const auto = ranked.slice(0, winnerCount);
+      const candidates = [];
+      const chosen = [];
+      const finalRows = auto;
       return {
         winnerCount,
         ranked,
@@ -1779,7 +1785,7 @@
         candidates,
         chosen,
         finalIds: finalRows.map(row => row.id),
-        needManual: candidates.length ? slotsForTie : 0,
+        needManual: 0,
         ready: finalRows.length === Math.min(winnerCount, ranked.length),
         complete: true,
         progress
@@ -1787,10 +1793,10 @@
     }
 
     function getDirectSemifinalIdsForState(state) {
-      const saved = Array.isArray(state.semifinalOpeningIds) ? state.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
-      if (saved.length) return saved;
       const plan = getSeasonWinnerPlan(state);
-      return plan.ready ? plan.finalIds : [];
+      if (plan.complete) return plan.ready ? plan.finalIds : [];
+      return Array.isArray(state.semifinalOpeningIds)
+        ? state.semifinalOpeningIds.map(String).filter(id => openingsById.has(id)) : [];
     }
 
     function getAllSemifinalRows() {
@@ -1859,11 +1865,12 @@
             title: opening?.title || id,
             total: score.total,
             count: score.count,
+            scoreCounts: score.scoreCounts,
             potential: false
           };
         }))
         .filter((row, idx, arr) => arr.findIndex(x => String(x.id) === String(row.id)) === idx)
-        .sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title));
+        .sort(compareSemifinalCandidates);
 
       const effectiveEarnedSlots = Math.min(earnedSlots, completedPool.length);
       const displayLimit = Math.min(slots, completedPool.length);
@@ -1877,20 +1884,11 @@
       let ready = effectiveEarnedSlots === 0;
 
       if (effectiveEarnedSlots > 0) {
-        const cutoff = completedPool[effectiveEarnedSlots - 1]?.total ?? 0;
-        above = completedPool.filter(row => row.total > cutoff);
-        tie = completedPool.filter(row => row.total === cutoff);
-        below = completedPool.filter(row => row.total < cutoff);
-        const tieIds = new Set(tie.map(row => row.id));
-        overflow = Math.max(0, above.length + tie.length - effectiveEarnedSlots);
-        excluded = Array.isArray(meta.wildcardExcludedIds)
-          ? meta.wildcardExcludedIds.map(String).filter(id => tieIds.has(id)).slice(0, overflow)
-          : [];
-        const excludedSet = new Set(excluded);
-        const included = [...above, ...tie.filter(row => !excludedSet.has(row.id))];
-        finalIds = included.slice(0, effectiveEarnedSlots).map(row => row.id);
-        ready = overflow === 0 || excluded.length === overflow;
-        guaranteedRows = overflow > 0 ? [...above, ...tie] : completedPool.slice(0, effectiveEarnedSlots);
+        above = completedPool.slice(0, effectiveEarnedSlots);
+        below = completedPool.slice(effectiveEarnedSlots);
+        finalIds = above.map(row => row.id);
+        ready = true;
+        guaranteedRows = above;
       }
 
       const guaranteedDisplayIds = new Set(guaranteedRows.map(row => row.id));
@@ -1898,15 +1896,6 @@
         ...row,
         potential: idx >= effectiveEarnedSlots && !guaranteedDisplayIds.has(row.id)
       }));
-      // Если на границе гарантированного прохода ничья, гарантированные строки могут быть шире,
-      // чем обычный срез. Сохраняем всю спорную группу в отображении, а затем добиваем список
-      // до максимального числа потенциальных слотов.
-      if (guaranteedRows.length > visibleRows.length) {
-        const visibleIds = new Set(visibleRows.map(row => row.id));
-        guaranteedRows.forEach(row => {
-          if (!visibleIds.has(row.id)) visibleRows.push({ ...row, potential: false });
-        });
-      }
 
       return {
         slots,
@@ -1999,15 +1988,12 @@
             seasonKey: state.key,
             title: opening?.title || id,
             total: score.total,
-            count: score.count
+            count: score.count,
+            scoreCounts: score.scoreCounts
           });
         });
       });
-      candidates.sort((a, b) =>
-        (Number(b.total) || 0) - (Number(a.total) || 0) ||
-        compareNatural(a.title, b.title) ||
-        compareNatural(a.id, b.id)
-      );
+      candidates.sort(compareSemifinalCandidates);
       const candidateIds = new Set(candidates.map(row => row.id));
       const selectedIds = (Array.isArray(meta.egortosSelectedIds) ? meta.egortosSelectedIds : [])
         .map(String)
@@ -7009,7 +6995,7 @@
             <div>
               <div class="ev-winner-title">Дополнительные слоты полуфинала</div>
               <div class="ev-winner-hint">Подтверждённые сезоны: ${escapeHtml(confirmedText)}. Полностью оценены: ${escapeHtml(completedText)}.</div>
-              <div class="ev-winner-hint">Потенциальный максимум по настройкам четырёх сезонов: ${plan.slots}. Сейчас гарантированно доступно ${plan.earnedSlots || 0}. Показано ${visibleRows.length}/${plan.slots} возможных строк. Базовые 2 уже входят в расчёт.</div>
+              <div class="ev-winner-hint">Потенциальный максимум по настройкам четырёх сезонов: ${plan.slots}. Сейчас гарантированно доступно ${plan.earnedSlots || 0}. Показано ${visibleRows.length}/${plan.slots} возможных строк. Базовые 2 уже входят в расчёт. При равной сумме сравниваем количество десяток, девяток и далее; алфавит — при полном совпадении.</div>
               <div class="ev-status-line ${canSave || plan.finalIds.length ? 'ok' : 'warn'}">${escapeHtml(status)}</div>
             </div>
             <div class="ev-actions">
@@ -7263,7 +7249,7 @@
         const opening = openingsById.get(String(row.id));
         const isAuto = plan.auto.some(x => x.id === row.id);
         const isCandidate = plan.candidates.some(x => x.id === row.id);
-        const isFinal = plan.finalIds.includes(row.id) || finalSet.has(row.id);
+        const isFinal = plan.complete ? plan.finalIds.includes(row.id) : finalSet.has(row.id);
         const cls = ['ev-winner-row'];
         if (isAuto) cls.push('auto');
         if (isCandidate) cls.push('tie');
@@ -7301,7 +7287,7 @@
           <div class="ev-winner-head">
             <div>
               <div class="ev-winner-title">Победители сезона → корзина полуфинала</div>
-              <div class="ev-winner-hint">Выбрано в корзине: ${target} OP. Прямо проходит ${plan.winnerCount}. Дополнительные слоты для общего добора: ${getWildcardSlotCountForSeason(state)}. Считаем по сумме баллов.</div>
+              <div class="ev-winner-hint">Выбрано в корзине: ${target} OP. Прямо проходит ${plan.winnerCount}. Дополнительные слоты для общего добора: ${getWildcardSlotCountForSeason(state)}. Сначала сумма баллов, затем количество десяток, девяток и далее до единиц; при полном совпадении — алфавит.</div>
               <div class="ev-status-line ${plan.ready ? 'ok' : 'warn'}">${escapeHtml(status)} Сейчас сохранено прямых проходов: ${(state.semifinalOpeningIds || []).length}/${plan.winnerCount}.</div>
             </div>
             <div class="ev-actions">
@@ -7440,9 +7426,10 @@
           id,
           title: opening?.title || id,
           total: sum.total,
-          count: sum.count
+          count: sum.count,
+            scoreCounts: sum.scoreCounts
         };
-      }).sort((a, b) => (b.total - a.total) || compareNatural(a.title, b.title));
+      }).sort(compareSemifinalCandidates);
 
       let place = 0;
       let prevTotal = null;
@@ -7515,7 +7502,7 @@
       const text = buildSeasonPostText(state);
       postModalEl.dataset.modalKind = 'season-post';
       postModalEl.innerHTML = `
-        <div class="ev-dialog">
+        <div class="ev-dialog ev-post-dialog">
           <div class="ev-dialog-top">
             <div>
               <div class="ev-progress">${escapeHtml(SEASON_LABEL[state.season])} ${state.year} · пост по итогам сезона</div>
@@ -7532,6 +7519,13 @@
         </div>
       `;
       postModalEl.classList.remove('hidden');
+      const textArea = $('#ev-post-text');
+      const expandPostText = () => {
+        textArea.style.height = 'auto';
+        textArea.style.height = `${textArea.scrollHeight + 2}px`;
+      };
+      expandPostText();
+      textArea.addEventListener('input', expandPostText);
       $('#ev-post-close')?.addEventListener('click', () => postModalEl.classList.add('hidden'));
       $('#ev-post-copy')?.addEventListener('click', async () => {
         const value = String($('#ev-post-text')?.value || '');
@@ -8470,3 +8464,4 @@
     }
 
     init();
+

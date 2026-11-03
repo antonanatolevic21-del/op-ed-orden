@@ -812,16 +812,21 @@
     .ev-field select { cursor: pointer; }
     .ev-field input[type=range] { accent-color: var(--pink); }
     .ev-field textarea { min-height: 96px; resize: vertical; line-height: 1.45; }
-    .ev-post-textarea {
+    .ev-post-dialog { width: min(1120px, 100%); }
+    body .ev-modal .ev-post-dialog .ev-post-textarea {
       width: 100%;
-      min-height: min(58vh, 560px);
+      min-height: 55vh;
+      display: block;
+      box-sizing: border-box;
+      overflow-y: hidden;
+      flex-shrink: 0;
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--text);
       padding: 12px 13px;
       border-radius: 10px;
       font-family: 'Inter', system-ui, sans-serif;
-      font-size: 13px;
+      font-size: 15px;
       line-height: 1.55;
       resize: vertical;
       white-space: pre-wrap;
@@ -1346,3 +1351,4 @@
 .ev-ending-total{color:var(--cyan);font:800 12px 'Space Mono',monospace;white-space:nowrap}
 @media(max-width:850px){.ev-ending-slot-grid{grid-template-columns:1fr 1fr}.ev-ending-score-row{grid-template-columns:28px minmax(0,1fr)}.ev-ending-score-row>.ev-ending-score-field,.ev-ending-score-row>.ev-ending-comment-field,.ev-ending-score-row>button{grid-column:2}}
 @media(max-width:520px){.ev-ending-slot-grid{grid-template-columns:1fr}}
+
