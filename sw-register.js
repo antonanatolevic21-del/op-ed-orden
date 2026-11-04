@@ -110,7 +110,7 @@
     addStyle('top100-drag.css', top100DragVersion);
     addStyle('top100-rank-readability.css', primaryVersion);
     top100Promise = addScriptsOrdered([
-      ['catalog-cache.js', '20260930-demand-data1'],
+      ['catalog-cache.js', '20261104-quota1'],
       ['top100-rank-readability.js', top100ExportVersion],
       ['profile-top-single.js', top100SuiteVersion],
       ['top100-image-backups.js', top100EditorVersion],
@@ -130,7 +130,7 @@
     addStyle('season-navigation.css', primaryVersion);
     addStyle('season-shared-rating.css', sharedSeasonVersion);
     seasonPromise = addScriptsOrdered([
-      ['catalog-cache.js', '20260930-demand-data1'],
+      ['catalog-cache.js', '20261104-quota1'],
       ['season-quality-fill.js', seasonFillVersion],
       ['season-navigation.js', primaryVersion],
       ['season-shared-rating.js', sharedSeasonVersion]
@@ -311,6 +311,7 @@
     });
   }
 })();
+
 
 
 

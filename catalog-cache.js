@@ -20,12 +20,13 @@
     if (!force && loading) return loading;
 
     loading = (async () => {
-      if (!force) {
-        const cached = await window.OC_CATALOG_STORE?.read?.();
+      if (!force || !window.OC_CATALOG_ADMIN_WORKSPACE) {
+        const cached = await window.OC_CATALOG_STORE?.read?.({ refresh: force });
         if (cached?.rows?.length) {
           rows = cached.rows;
           return rows;
         }
+        throw new Error('Не удалось загрузить файл каталога. Попробуй обновить страницу.');
       }
       await waitForFirebase();
       const [{ getApp, getApps }, { getFirestore, collection, getDocs }] = await Promise.all([
@@ -48,6 +49,7 @@
 
   async function byIds(ids) {
     const unique = [...new Set((ids || []).map(String).filter(Boolean))];
+    if (!rows && !window.OC_CATALOG_STORE?.peek?.()?.length) await load();
     const known = new Map((rows || window.OC_CATALOG_STORE?.peek?.() || []).map(row => [String(row.id), row]));
     const missing = unique.filter(id => !known.has(id));
     if (missing.length) {
@@ -80,3 +82,4 @@
     if (cachedRows?.length) rows = cachedRows;
   });
 })();
+

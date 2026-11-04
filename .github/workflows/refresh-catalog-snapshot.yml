@@ -3,7 +3,8 @@ name: Refresh catalog snapshot
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 2 * * *'
+    # After the free Firestore quota resets at midnight Pacific (07–08 UTC).
+    - cron: '17 9 * * *'
 
 permissions:
   contents: write
@@ -17,6 +18,9 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/build-catalog-snapshot.mjs
+        env:
+          # Compute shared averages once per day, not once per visitor.
+          REBUILD_AGGREGATES_FROM_RATINGS: '1'
       - name: Commit changed snapshot
         run: |
           git config user.name "github-actions[bot]"
@@ -24,3 +28,4 @@ jobs:
           git add catalog.snapshot.json
           git diff --cached --quiet || git commit -m "Refresh catalog snapshot"
           git push
+

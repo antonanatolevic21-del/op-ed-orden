@@ -71,8 +71,9 @@ function addScore(bucket, prefix, value, admin) {
   bucket[adminSumKey] = Number(bucket[adminSumKey] || 0) + score;
 }
 
+const rebuildingAggregates = process.env.REBUILD_AGGREGATES_FROM_RATINGS === '1';
 const rows = await loadCollection('openings');
-const ratings = process.env.REBUILD_AGGREGATES_FROM_RATINGS === '1'
+const ratings = rebuildingAggregates
   ? await loadCollection('ratings')
   : [];
 const adminNames = new Set(['пес_кошачий', 'пёс_кошачий', 'toxexex', 'egortos', 'кофа']);
@@ -90,11 +91,19 @@ for (const rating of ratings) {
 
 for (const row of rows) {
   const aggregate = aggregates.get(String(row.id)) || {};
-  if (ratings.length) Object.assign(row, aggregate, {
+  if (rebuildingAggregates) {
+    for (const prefix of ['', 'song', 'visual']) {
+      for (const suffix of ['RatingCount', 'RatingSum', 'AdminRatingCount', 'AdminRatingSum']) {
+        const field = prefix ? prefix + suffix : suffix[0].toLowerCase() + suffix.slice(1);
+        row[field] = 0;
+      }
+    }
+  }
+  if (rebuildingAggregates) Object.assign(row, aggregate, {
       ratingAggregateVersion: 1,
       ratingAggregateUpdatedAt: Date.now()
     });
-  if (!ratings.length && Number(row.ratingAggregateVersion || 0) < 1) continue;
+  if (!rebuildingAggregates && Number(row.ratingAggregateVersion || 0) < 1) continue;
   for (const prefix of ['', 'song', 'visual']) {
     const countKey = prefix ? `${prefix}RatingCount` : 'ratingCount';
     const sumKey = prefix ? `${prefix}RatingSum` : 'ratingSum';
@@ -118,3 +127,4 @@ for (const row of rows) {
 rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 await writeFile(output, `${JSON.stringify({ generatedAt: Date.now(), rows })}\n`);
 console.log(`Saved ${rows.length} tracks${ratings.length ? ` and ${ratings.length} rating aggregates` : ''} to ${output.pathname}`);
+

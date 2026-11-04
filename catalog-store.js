@@ -7,6 +7,7 @@
   const CATALOG_KEY = 'openings-v1';
   const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
   let memoryRows = null;
+  let readPromise = null;
   let databasePromise = null;
 
   function openDatabase() {
@@ -25,8 +26,28 @@
     return databasePromise;
   }
 
-  async function read() {
-    if (memoryRows) return { rows: memoryRows, stale: false };
+  async function read({ refresh = false } = {}) {
+    if (readPromise) return readPromise;
+    if (memoryRows && !refresh) return { rows: memoryRows, stale: false };
+    readPromise = readSnapshot();
+    try { return await readPromise; }
+    finally { readPromise = null; }
+  }
+
+  async function readSnapshot() {
+    // Revalidate the published file once per page. IndexedDB is an offline
+    // fallback, never a reason to retain a two-week-old published catalog.
+    try {
+      const response = await fetch('./catalog.snapshot.json', { cache: 'no-cache' });
+      if (!response.ok) throw new Error('Catalog snapshot HTTP ' + response.status);
+      const snapshot = await response.json();
+      const rows = Array.isArray(snapshot) ? snapshot : snapshot.rows;
+      if (!Array.isArray(rows) || !rows.length) throw new Error('Empty catalog snapshot');
+      memoryRows = rows;
+      void write(rows);
+      return { rows, stale: false, static: true, savedAt: Number(snapshot.generatedAt || 0) };
+    } catch (_) { /* Keep the last complete catalog available offline. */ }
+    if (memoryRows) return { rows: memoryRows, stale: true };
     const database = await openDatabase();
     const stored = database ? await new Promise(resolve => {
         const transaction = database.transaction(STORE_NAME, 'readonly');
@@ -42,18 +63,7 @@
         savedAt: Number(stored.savedAt || 0)
       };
     }
-    try {
-      const response = await fetch('./catalog.snapshot.json', { cache: 'force-cache' });
-      if (!response.ok) return null;
-      const snapshot = await response.json();
-      const snapshotRows = Array.isArray(snapshot) ? snapshot : snapshot.rows;
-      if (!Array.isArray(snapshotRows) || !snapshotRows.length) return null;
-      memoryRows = snapshotRows;
-      void write(memoryRows);
-      return { rows: memoryRows, stale: false, static: true, savedAt: Number(snapshot.generatedAt || 0) };
-    } catch (_) {
-      return null;
-    }
+    return null;
   }
 
   async function write(rows) {
@@ -89,3 +99,4 @@
 
   window.OC_CATALOG_STORE = { read, write, peek, clear };
 })();
+

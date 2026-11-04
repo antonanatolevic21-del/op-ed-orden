@@ -372,7 +372,11 @@
       }).catch(error => console.warn("catalog cache read failed", error)).finally(() => {
         // Гостю по ссылке комнаты достаточно ежедневного статического снимка.
         // Не читаем всю коллекцию openings ради одного приглашения.
-        if (!roomInvite || !deliveredCachedRows) startLiveWatcher();
+        // Only the catalog editing workspace needs the full live collection.
+        // A normal visit must not spend ~8,000 document reads after the
+        // published snapshot has already supplied exactly the same catalog.
+        if (window.OC_CATALOG_ADMIN_WORKSPACE && !roomInvite) startLiveWatcher();
+        else if (!deliveredCachedRows) callback([], { cached: false, error: true });
       });
 
       return () => {
@@ -382,6 +386,31 @@
     }
 
     function watchOpeningsByIds(ids, callback) {
+      if (!window.OC_CATALOG_ADMIN_WORKSPACE) {
+        let active = true;
+        let stopMissing = () => {};
+        const wanted = new Set((ids || []).map(String).filter(Boolean));
+        Promise.resolve(window.OC_CATALOG_STORE?.read?.()).then(snapshot => {
+          if (!active) return;
+          const known = new Map((snapshot?.rows || []).filter(row => wanted.has(String(row.id))).map(row => [String(row.id), row]));
+          const missing = [...wanted].filter(id => !known.has(id));
+          if (!missing.length) { callback([...known.values()], { cached: true }); return; }
+          // Newly added songs can be absent from the daily file: fetch just
+          // those IDs, without resubscribing to every saved/rated song.
+          stopMissing = watchLiveOpeningsByIds(missing, (rows, meta = {}) => {
+            if (!active) return;
+            callback([...known.values(), ...rows], meta);
+          });
+        }).catch(error => {
+          console.error('catalog snapshot read failed', error);
+          if (active) callback([], { error: true });
+        });
+        return () => { active = false; stopMissing(); };
+      }
+      return watchLiveOpeningsByIds(ids, callback);
+    }
+
+    function watchLiveOpeningsByIds(ids, callback) {
       const unique = [...new Set((ids || []).map(String).filter(Boolean))].sort();
       let active = true;
       if (!unique.length) { queueMicrotask(() => { if (active) callback([]); }); return () => { active = false; }; }

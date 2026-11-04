@@ -2939,8 +2939,10 @@
 
     function preferredRatingsScope(tab = activeTab) {
       if (tab === 'profile') return openedProfileUsers().length ? 'user' : 'none';
-      if (!catalogHasRatingAggregates()) return 'all';
-      if (tab === 'profile' || tab === 'stats' || tab === 'discovery') return 'all';
+      // Global statistics explicitly need other users' ratings. Missing
+      // aggregates in the daily catalog must not trigger an all-ratings read
+      // on every catalog, season or album visit.
+      if (tab === 'stats' || tab === 'discovery') return 'all';
       if (myName || authenticatedUid) return 'user';
       return 'none';
     }
@@ -2992,7 +2994,8 @@
     const profileWatcherKeys = {}, profileWatcherGenerations = {};
     function ensureProfileWatcher(kind, db, apply) {
       const state = remoteDataState[kind];
-      const names = activeTab === 'profile' ? openedProfileUsers() : null;
+      const names = activeTab === 'profile' ? openedProfileUsers()
+        : ['top100', 'discovery'].includes(activeTab) ? null : [myName].filter(Boolean);
       const key = JSON.stringify(names);
       if (state.started && profileWatcherKeys[kind] === key) return createRemoteDataPromise(kind);
       if (kind === 'manualRanks') stopManualRanksWatcher(); else stopUserProfilesWatcher();
@@ -3074,7 +3077,7 @@
       if (!firebaseDbInstance) return;
       const syncId = ++routeDataSyncId;
       if (tab === 'profile') loadProfileNicknameDirectory();
-      const needsProfileData = tab === 'profile' || tab === 'top100' || tab === 'discovery';
+      const needsProfileData = Boolean(myName) || tab === 'profile' || tab === 'top100' || tab === 'discovery';
       const needsEntityCards = tab.startsWith('entity-');
       const needsTierData = tab === 'tier';
       const needsEventBasket = tab === 'season' && Boolean(accessLevel);
@@ -9062,4 +9065,5 @@
       if (accessLevel && !myName) showNameModal('Введите никнейм, чтобы продолжить.');
     })();
   })();
+
 
