@@ -7519,13 +7519,6 @@
         </div>
       `;
       postModalEl.classList.remove('hidden');
-      const textArea = $('#ev-post-text');
-      const expandPostText = () => {
-        textArea.style.height = 'auto';
-        textArea.style.height = `${textArea.scrollHeight + 2}px`;
-      };
-      expandPostText();
-      textArea.addEventListener('input', expandPostText);
       $('#ev-post-close')?.addEventListener('click', () => postModalEl.classList.add('hidden'));
       $('#ev-post-copy')?.addEventListener('click', async () => {
         const value = String($('#ev-post-text')?.value || '');
