@@ -436,6 +436,18 @@
       });
     }
 
+    function watchRatingsForOpening(openingId, callback, onError = () => {}) {
+      const id = String(openingId || '').trim();
+      let active = true;
+      if (!id) { callback([]); return () => { active = false; }; }
+      const stop = onSnapshot(query(collection(db, "ratings"), where("openingId", "==", id)), snapshot => {
+        if (active) callback(snapshot.docs.map(row => ({ id: row.id, ...row.data() })));
+      }, error => {
+        if (active) onError(error);
+      });
+      return () => { active = false; stop(); };
+    }
+
     function watchRatingsForUser(user, callback) {
       const uid = String(user?.uid || '').trim();
       const nicknameKey = normalizeNickname(user?.nickname || '');
@@ -906,6 +918,7 @@
       watchOpeningsByIds,
       watchRatings,
       watchRatingsForUser,
+      watchRatingsForOpening,
       watchRatingsForUsers,
       listProfileNicknames,
       watchManualRanksForUsers,

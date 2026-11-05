@@ -7228,24 +7228,73 @@
       return Math.max(bounds.min, Math.min(bounds.max, Number(num.toFixed(1))));
     }
 
-    function openCardModal(id) {
-      if (!requireAccount('Войди в аккаунт, чтобы открыть карточку и выставлять оценки.')) return;
-      const entry = entriesById.get(String(id));
-      if (!entry || !openingModal) return;
+    function cardScoreRowsMarkup(entry, detailSettings) {
       const score = avg(entry.scores);
       const adminScore = adminAvg(entry.scores);
       const adminCount = adminRatingCount(entry.scores);
       const avgSong = avgAny(entry.songScores || {});
       const avgVisual = avgAny(entry.visualScores || {});
-      const detailSettings = detailedRatingSettings(myName, entry.type);
-      const votes = Object.entries(entry.scores || {}).sort((a,b)=> Number(b[1]) - Number(a[1]));
-      const arrayValue = (arr, kind) => (arr || []).filter(Boolean).length ? entityFilterValuesMarkup(kind, arr) : '—';
-      const scoreRows = [
+      return [
         `<div class="oc-detail-box"><div class="oc-detail-label">общая средняя</div><div class="oc-detail-value">${formatScore(score)} · ${ratingCount(entry.scores)}/${MIN_PUBLIC_VOTES}+ оценок</div></div>`,
         isAdmin() ? `<div class="oc-detail-box"><div class="oc-detail-label">средняя админов</div><div class="oc-detail-value">${formatScore(adminScore)} · ${adminCount} оценок</div></div>` : '',
         detailSettings.enabled && avgSong !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailSettings.songLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgSong)} · ${ratingCount(entry.songScores)}</div></div>` : '',
         detailSettings.enabled && avgVisual !== null ? `<div class="oc-detail-box"><div class="oc-detail-label">${escapeHtml(detailSettings.visualLabel.toLowerCase())}</div><div class="oc-detail-value">${formatScore(avgVisual)} · ${ratingCount(entry.visualScores)}</div></div>` : ''
       ].filter(Boolean).join('');
+    }
+
+    function cardVotesMarkup(entry, detailSettings) {
+      const votes = Object.entries(entry.scores || {}).sort((a,b) => Number(b[1]) - Number(a[1]));
+      return votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${detailSettings.enabled && songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailSettings.songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${detailSettings.enabled && visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailSettings.visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>';
+    }
+
+    let stopCardRatingsWatcher = null;
+    let cardRatingsGeneration = 0;
+
+    function stopCardRatings() {
+      cardRatingsGeneration += 1;
+      stopCardRatingsWatcher?.();
+      stopCardRatingsWatcher = null;
+    }
+
+    function startCardRatings(entry, detailSettings) {
+      stopCardRatings();
+      if (!window.OPED_DB?.watchRatingsForOpening) return;
+      const generation = cardRatingsGeneration;
+      const current = () => generation === cardRatingsGeneration
+        && !openingModal.classList.contains('hidden')
+        && openingModal.querySelector('[data-entry-id]')?.dataset.entryId === String(entry.id);
+      const votes = openingModal.querySelector('.oc-votes');
+      if (votes) votes.innerHTML = '<span class="oc-chip">Загружаем оценки пользователей…</span>';
+      stopCardRatingsWatcher = window.OPED_DB.watchRatingsForOpening(entry.id, rows => {
+        if (!current()) return;
+        const publicEntry = { ...entry, scores: {}, songScores: {}, visualScores: {} };
+        rows.forEach(row => {
+          const nickname = String(row.nickname || row.nicknameKey || '').trim();
+          if (!nickname) return;
+          for (const [field, source] of [['scores', 'score'], ['songScores', 'songScore'], ['visualScores', 'visualScore']]) {
+            const value = normalizeOptionalNumber(row[source]);
+            if (Number.isFinite(value)) publicEntry[field][nickname] = value;
+          }
+        });
+        const list = openingModal.querySelector('.oc-votes');
+        if (list) list.innerHTML = cardVotesMarkup(publicEntry, detailSettings);
+        const strip = openingModal.querySelector('.oc-opening-score-strip .oc-detail-grid');
+        if (strip) strip.innerHTML = cardScoreRowsMarkup(publicEntry, detailSettings);
+      }, error => {
+        if (!current()) return;
+        console.error('Track public ratings load failed', error);
+        const list = openingModal.querySelector('.oc-votes');
+        if (list) list.innerHTML = '<span class="oc-chip">Не удалось загрузить оценки пользователей. Попробуй открыть карточку ещё раз.</span>';
+      });
+    }
+
+    function openCardModal(id) {
+      if (!requireAccount('Войди в аккаунт, чтобы открыть карточку и выставлять оценки.')) return;
+      const entry = entriesById.get(String(id));
+      if (!entry || !openingModal) return;
+      const detailSettings = detailedRatingSettings(myName, entry.type);
+      const arrayValue = (arr, kind) => (arr || []).filter(Boolean).length ? entityFilterValuesMarkup(kind, arr) : '—';
+      const scoreRows = cardScoreRowsMarkup(entry, detailSettings);
       const detailRows = `
         <div class="oc-detail-box"><div class="oc-detail-label">тип</div><div class="oc-detail-value">${escapeHtml(entry.type || '—')}</div></div>
         <div class="oc-detail-box"><div class="oc-detail-label">год</div><div class="oc-detail-value">${escapeHtml(entry.year || '—')}</div></div>
@@ -7310,10 +7359,11 @@
         </div>
         <div class="oc-opening-user-votes">
           <div class="oc-section-label" style="margin-bottom:8px;">оценки пользователей</div>
-          <div class="oc-votes">${votes.length ? votes.map(([voter, val]) => `<span class="oc-chip${voter === myName ? ' mine' : ''}">${avatarFor(voter)} ${escapeHtml(voter)}: ${formatScore(val)}${detailSettings.enabled && songScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailSettings.songLabel.toLowerCase()) + ' ' + formatScore(songScoreFor(entry, voter)) : ''}${detailSettings.enabled && visualScoreFor(entry, voter) !== null ? ' · ' + escapeHtml(detailSettings.visualLabel.toLowerCase()) + ' ' + formatScore(visualScoreFor(entry, voter)) : ''}</span>`).join('') : '<span class="oc-chip">оценок пока нет</span>'}</div>
+          <div class="oc-votes">${cardVotesMarkup(entry, detailSettings)}</div>
         </div>
       </div>`;
 
+      startCardRatings(entry, detailSettings);
       bindOpeningVideoEmbed();
       bindDetailedRatingSuggestion(openingModal, 'oc-card');
       const range = $('#oc-card-range');
@@ -7399,6 +7449,7 @@
     }
 
     function closeCardModal() {
+      stopCardRatings();
       if (!openingModal) return;
       openingModal.classList.add('hidden');
       openingModal.innerHTML = '';
