@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname,'../scripts/build-catalog-snapshot.mjs'),'utf8')
   .replace("import { writeFile } from 'node:fs/promises';",'')
-  .replace('import.meta.url', JSON.stringify('file:///repo/scripts/build-catalog-snapshot.mjs'));
+  .replaceAll('import.meta.url', JSON.stringify('file:///repo/scripts/build-catalog-snapshot.mjs'));
 const encode = value => {
   if (typeof value === 'string') return {stringValue:value};
   if (typeof value === 'number') return {doubleValue:value};
@@ -12,9 +12,9 @@ const encode = value => {
 };
 const doc = (id,fields) => ({name:'documents/'+id,fields:Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,encode(v)]))});
 async function build(ratings) {
-  let saved; const reads=[];
+  let saved, compact; const reads=[];
   const ctx = vm.createContext({URL,Date,Map,Set,console:{log(){}},process:{env:{REBUILD_AGGREGATES_FROM_RATINGS:'1'}},
-    writeFile:async(_,content)=>{saved=JSON.parse(content);},
+    writeFile:async(file,content)=>{if(file.pathname.endsWith('/catalog.snapshot.json')) saved=JSON.parse(content); else compact=JSON.parse(content);},
     fetch:async url=>{
       const name=url.pathname.split('/').pop(); reads.push(name);
       return {ok:true,json:async()=>({documents:name==='openings'
@@ -24,6 +24,9 @@ async function build(ratings) {
   });
   await vm.runInContext('(async()=>{'+source+'})()',ctx);
   assert.deepEqual(reads,['openings','ratings']);
+  assert.equal(compact.version,1);
+  assert.equal(compact.rows.length, ratings.length ? 1 : 0);
+  assert(!JSON.stringify(compact).includes('Viewer'));
   return saved.rows;
 }
 (async()=>{

@@ -72,7 +72,8 @@ function addScore(bucket, prefix, value, admin) {
 }
 
 const rebuildingAggregates = process.env.REBUILD_AGGREGATES_FROM_RATINGS === '1';
-const rows = await loadCollection('openings');
+const aggregatesOnly = process.env.AGGREGATES_ONLY === '1';
+const rows = aggregatesOnly ? [] : await loadCollection('openings');
 const ratings = rebuildingAggregates
   ? await loadCollection('ratings')
   : [];
@@ -125,6 +126,20 @@ for (const row of rows) {
 }
 
 rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-await writeFile(output, `${JSON.stringify({ generatedAt: Date.now(), rows })}\n`);
-console.log(`Saved ${rows.length} tracks${ratings.length ? ` and ${ratings.length} rating aggregates` : ''} to ${output.pathname}`);
+if (!aggregatesOnly) await writeFile(output, `${JSON.stringify({ generatedAt: Date.now(), rows })}\n`);
+if (!aggregatesOnly) console.log(`Saved ${rows.length} tracks${ratings.length ? ` and ${ratings.length} rating aggregates` : ''} to ${output.pathname}`);
 
+
+if (rebuildingAggregates) {
+  const compactRows = [...aggregates].filter(([, bucket]) =>
+    ['', 'song', 'visual'].some(prefix => Number(bucket[prefix ? prefix + 'RatingCount' : 'ratingCount'] || 0) > 0)
+  ).sort(([a], [b]) => a.localeCompare(b)).map(([id, bucket]) => [
+    id,
+    ...['', 'song', 'visual'].flatMap(prefix => ['RatingCount', 'RatingSum', 'AdminRatingCount', 'AdminRatingSum'].map(suffix =>
+      Number(bucket[prefix ? prefix + suffix : suffix[0].toLowerCase() + suffix.slice(1)] || 0)
+    ))
+  ]);
+  const aggregatesOutput = new URL('../rating-aggregates.snapshot.json', import.meta.url);
+  await writeFile(aggregatesOutput, JSON.stringify({version: 1, generatedAt: Date.now(), rows: compactRows}) + '\n');
+  console.log('Saved shared rating aggregates for ' + compactRows.length + ' songs');
+}

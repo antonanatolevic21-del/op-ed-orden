@@ -55,7 +55,7 @@ function watchers({ admin = false, rows = [{id:'a'}, {id:'b'}], deferred } = {})
   // A page revalidates the static file once, even when several routes request it.
   let fetches=0, available=true;
   const storeCtx=vm.createContext({window:{}, console, Date,
-    fetch: async (_,options)=>{fetches++; assert.equal(options.cache,'no-cache'); if(!available) throw Error('offline'); return {ok:true,json:async()=>({rows:[{id:'fresh'}],generatedAt:10})};}
+    fetch: async (url,options)=>{if(url.includes('rating-aggregates.snapshot.json')) return {ok:false}; fetches++; assert.equal(options.cache,'no-cache'); if(!available) throw Error('offline'); return {ok:true,json:async()=>({rows:[{id:'fresh'}],generatedAt:10})};}
   });
   vm.runInContext(source('catalog-store.js'),storeCtx);
   const store=storeCtx.window.OC_CATALOG_STORE;

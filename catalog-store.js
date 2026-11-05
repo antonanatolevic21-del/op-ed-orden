@@ -34,6 +34,34 @@
     finally { readPromise = null; }
   }
 
+  async function mergeSharedAverages(rows) {
+    try {
+      const response = await fetch('./rating-aggregates.snapshot.json', { cache: 'no-cache' });
+      if (!response.ok) return rows;
+      const snapshot = await response.json();
+      if (snapshot.version !== 1 || !Number.isFinite(snapshot.generatedAt) || !Array.isArray(snapshot.rows)) return rows;
+      if (!snapshot.rows.every(row => Array.isArray(row) && row.length === 13 && typeof row[0] === 'string'
+        && row.slice(1).every(value => Number.isFinite(value) && value >= 0))) return rows;
+      const byId = new Map(snapshot.rows.map(row => [row[0], row.slice(1)]));
+      return rows.map(row => {
+        if (Number(row.ratingAggregateUpdatedAt || 0) > snapshot.generatedAt) return row;
+        const values = byId.get(String(row.id)) || Array(12).fill(0);
+        const next = { ...row, ratingAggregateVersion: 1, ratingAggregateUpdatedAt: snapshot.generatedAt };
+        ['', 'song', 'visual'].forEach((prefix, index) => {
+          const key = suffix => prefix ? prefix + suffix : suffix[0].toLowerCase() + suffix.slice(1);
+          const [count, sum, adminCount, adminSum] = values.slice(index * 4, index * 4 + 4);
+          next[key('RatingCount')] = count;
+          next[key('RatingSum')] = sum;
+          next[key('RatingAverage')] = count ? sum / count : null;
+          next[key('AdminRatingCount')] = adminCount;
+          next[key('AdminRatingSum')] = adminSum;
+          next[key('AdminRatingAverage')] = adminCount ? adminSum / adminCount : null;
+        });
+        return next;
+      });
+    } catch (_) { return rows; }
+  }
+
   async function readSnapshot() {
     // Revalidate the published file once per page. IndexedDB is an offline
     // fallback, never a reason to retain a two-week-old published catalog.
@@ -43,9 +71,9 @@
       const snapshot = await response.json();
       const rows = Array.isArray(snapshot) ? snapshot : snapshot.rows;
       if (!Array.isArray(rows) || !rows.length) throw new Error('Empty catalog snapshot');
-      memoryRows = rows;
-      void write(rows);
-      return { rows, stale: false, static: true, savedAt: Number(snapshot.generatedAt || 0) };
+      memoryRows = await mergeSharedAverages(rows);
+      void write(memoryRows);
+      return { rows: memoryRows, stale: false, static: true, savedAt: Number(snapshot.generatedAt || 0) };
     } catch (_) { /* Keep the last complete catalog available offline. */ }
     if (memoryRows) return { rows: memoryRows, stale: true };
     const database = await openDatabase();
