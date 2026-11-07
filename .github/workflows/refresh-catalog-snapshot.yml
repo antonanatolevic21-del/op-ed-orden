@@ -17,11 +17,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/build-catalog-snapshot.mjs
+      - name: Refresh catalog
+        run: node scripts/build-catalog-snapshot.mjs
+      - name: Refresh shared averages
+        run: node scripts/build-catalog-snapshot.mjs
         env:
           # Compute shared averages once per day, not once per visitor.
           REBUILD_AGGREGATES_FROM_RATINGS: '1'
+          AGGREGATES_ONLY: '1'
       - name: Commit changed snapshot
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

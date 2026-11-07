@@ -73,6 +73,7 @@ function addScore(bucket, prefix, value, admin) {
 
 const rebuildingAggregates = process.env.REBUILD_AGGREGATES_FROM_RATINGS === '1';
 const aggregatesOnly = process.env.AGGREGATES_ONLY === '1';
+const catalogReadStartedAt = Date.now();
 const rows = aggregatesOnly ? [] : await loadCollection('openings');
 const ratings = rebuildingAggregates
   ? await loadCollection('ratings')
@@ -126,7 +127,7 @@ for (const row of rows) {
 }
 
 rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-if (!aggregatesOnly) await writeFile(output, `${JSON.stringify({ generatedAt: Date.now(), rows })}\n`);
+if (!aggregatesOnly) await writeFile(output, `${JSON.stringify({ generatedAt: Date.now(), catalogReadStartedAt, rows })}\n`);
 if (!aggregatesOnly) console.log(`Saved ${rows.length} tracks${ratings.length ? ` and ${ratings.length} rating aggregates` : ''} to ${output.pathname}`);
 
 

@@ -62,6 +62,30 @@
     } catch (_) { return rows; }
   }
 
+  async function mergeCatalogUpdates(rows, since) {
+    const database = window.OPED_DB;
+    if (window.OC_CATALOG_ADMIN_WORKSPACE || !database?.listCatalogUpdates || !(since > 0)) return rows;
+    let timeout;
+    try {
+      const changes = await Promise.race([
+        database.listCatalogUpdates(since),
+        new Promise(resolve => { timeout = window.setTimeout(() => resolve([]), 4000); })
+      ]);
+      if (!changes.length) return rows;
+      const byId = new Map(rows.map(row => [String(row.id), row]));
+      for (const change of changes) {
+        const id = String(change.id);
+        byId.set(id, { ...byId.get(id), ...change });
+      }
+      return [...byId.values()];
+    } catch (error) {
+      console.warn('Catalog updates unavailable; using published snapshot', error);
+      return rows;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
   async function readSnapshot() {
     // Revalidate the published file once per page. IndexedDB is an offline
     // fallback, never a reason to retain a two-week-old published catalog.
@@ -71,7 +95,8 @@
       const snapshot = await response.json();
       const rows = Array.isArray(snapshot) ? snapshot : snapshot.rows;
       if (!Array.isArray(rows) || !rows.length) throw new Error('Empty catalog snapshot');
-      memoryRows = await mergeSharedAverages(rows);
+      const updated = await mergeCatalogUpdates(rows, Number(snapshot.catalogReadStartedAt || snapshot.generatedAt || 0));
+      memoryRows = await mergeSharedAverages(updated);
       void write(memoryRows);
       return { rows: memoryRows, stale: false, static: true, savedAt: Number(snapshot.generatedAt || 0) };
     } catch (_) { /* Keep the last complete catalog available offline. */ }

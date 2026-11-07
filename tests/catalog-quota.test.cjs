@@ -85,5 +85,35 @@ function watchers({ admin = false, rows = [{id:'a'}, {id:'b'}], deferred } = {})
   profileCtx.ensureProfileWatcher('manualRanks',db,()=>{}); assert.deepEqual(profileReads[0],['Tester']);
   profileCtx.activeTab='profile'; profileCtx.ensureProfileWatcher('manualRanks',db,()=>{}); assert.deepEqual(profileReads[1],['Viewed']);
   profileCtx.activeTab='top100'; profileCtx.ensureProfileWatcher('manualRanks',db,()=>{}); assert.equal(profileReads[2],'all');
-  console.log('Passed: snapshot-only catalog, missing-ID reads, admin live edits, cancellation, revalidation, offline cache, scoped ratings and profiles.');
+  // The shared catalog source overlays recent edits once per page.
+  const updates = [];
+  const publicWindow = {
+    setTimeout, clearTimeout,
+    OPED_DB: {listCatalogUpdates: async since => {
+      updates.push(since);
+      return [{id:'a', image:'', fallbackImage:'images/new.webp'}, {id:'new', image:'new.jpg'}];
+    }}
+  };
+  const updateCtx = vm.createContext({window:publicWindow, console:{warn(){}}, Date,
+    fetch: async url => url.includes('rating-aggregates.snapshot.json') ? {ok:false} : {
+      ok:true, json:async()=>({catalogReadStartedAt:20, generatedAt:30,
+        rows:[{id:'a', image:'old.jpg', ratingAverage:8}, {id:'b'}]})
+    }
+  });
+  vm.runInContext(source('catalog-store.js'),updateCtx);
+  const publicStore = publicWindow.OC_CATALOG_STORE;
+  const [first, second] = await Promise.all([publicStore.read(), publicStore.read()]);
+  assert.deepEqual(updates,[20]);
+  assert.deepEqual(plain(first.rows),[
+    {id:'a', image:'', fallbackImage:'images/new.webp', ratingAverage:8},
+    {id:'b'}, {id:'new', image:'new.jpg'}
+  ]);
+  assert.equal(first.rows, second.rows);
+  publicWindow.OC_CATALOG_ADMIN_WORKSPACE = true;
+  assert.equal((await publicStore.read({refresh:true})).rows[0].image,'old.jpg');
+  assert.deepEqual(updates,[20]);
+  publicWindow.OC_CATALOG_ADMIN_WORKSPACE = false;
+  publicWindow.OPED_DB.listCatalogUpdates = async () => { throw Error('Quota exhausted'); };
+  assert.equal((await publicStore.read({refresh:true})).rows[0].image,'old.jpg');
+  console.log('Passed: scoped catalog updates, missing-ID reads, admin live edits, cancellation, revalidation, offline cache, scoped ratings and profiles.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

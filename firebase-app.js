@@ -9,6 +9,7 @@
       getDoc,
       runTransaction,
       getDocs,
+      getDocsFromServer,
       setDoc,
       updateDoc,
       deleteDoc,
@@ -18,6 +19,7 @@
       documentId,
       limit,
       orderBy,
+      Timestamp,
       serverTimestamp,
       deleteField
     } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
@@ -335,6 +337,12 @@
         });
         return next;
       });
+    }
+
+    async function listCatalogUpdates(since) {
+      const changed = query(collection(db, "openings"), where("updatedAt", ">", Timestamp.fromMillis(since)));
+      const snapshot = await getDocsFromServer(changed);
+      return catalogCacheRows(snapshot.docs.map(row => ({ id: row.id, ...row.data() })));
     }
 
     function watchOpenings(callback) {
@@ -914,6 +922,7 @@
 
     window.OPED_DB = {
       init,
+      listCatalogUpdates,
       watchOpenings,
       watchOpeningsByIds,
       watchRatings,
