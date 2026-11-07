@@ -69,7 +69,7 @@
     try {
       const changes = await Promise.race([
         database.listCatalogUpdates(since),
-        new Promise(resolve => { timeout = window.setTimeout(() => resolve([]), 4000); })
+        new Promise(resolve => { timeout = window.setTimeout(() => resolve([]), 12000); })
       ]);
       if (!changes.length) return rows;
       const byId = new Map(rows.map(row => [String(row.id), row]));
