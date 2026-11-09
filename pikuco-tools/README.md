@@ -1,6 +1,6 @@
 # Пикуко — инструменты
 
-Расширение для Chrome и браузеров на Chromium, которые поддерживают Manifest V3. Версия **0.5.12**.
+Расширение для Chrome и браузеров на Chromium, которые поддерживают Manifest V3. Версия **0.5.13**.
 
 [Скачать ZIP](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools.zip) · [Посмотреть исходники](./src/)
 
@@ -25,6 +25,31 @@
 Переключатели в меню применяются на открытых вкладках Пикуко. Новые отметки пресетов действуют и в открытом редакторе нового теста. Снятие отметки пресета прекращает его автоматическое применение.
 
 Для обновления замени файлы в уже подключённой папке, нажми «Обновить» на странице расширений и перезагрузи вкладку Пикуко. Исходники готовы к запуску, отдельная сборка не требуется.
+
+
+## Совместимость с браузерами
+
+Расширение использует Manifest V3. Ниже указано, где браузер позволяет загрузить распакованное расширение. Работа всех функций в каждом из этих браузеров отдельно не проверялась.
+
+| Браузер | Как загрузить |
+| --- | --- |
+| **Chrome и Chromium на компьютере** | Открой `chrome://extensions`, включи режим разработчика и выбери папку с `manifest.json`. [Инструкция Chrome](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) |
+| **Microsoft Edge на компьютере** | Те же шаги на `edge://extensions`. [Инструкция Microsoft](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading) |
+| **Brave на компьютере** | Те же шаги на `brave://extensions`. [Инструкция Brave](https://community.brave.app/t/debugging-custom-extension-add-ons/169217) |
+| **Opera на компьютере** | Те же шаги на `opera:extensions`. В Opera GX можно попробовать тот же способ. [Инструкция Opera](https://help.opera.com/en/extensions/testing/) |
+| **Vivaldi на компьютере** | Те же шаги на `vivaldi://extensions`. [Инструкция Vivaldi](https://help.vivaldi.com/desktop/appearance-customization/extensions/) |
+| **Яндекс Браузер на Android** | Открой `browser://extensions`, включи режим разработчика и выбери файл `manifest.json` в распакованной папке. [Инструкция Яндекса](https://yandex.ru/support/browser-mobile-android-phone/ru/personal-settings/extensions) |
+| **Vivaldi на Android** | Включи «Версия для ПК», открой меню расширений → «Управление расширениями» и выбери папку в режиме разработчика. [Инструкция Vivaldi](https://help.vivaldi.com/android/android-tools/extensions-on-android/) |
+
+### Где этот ZIP не подходит для обычной установки
+
+| Браузер | Что доступно |
+| --- | --- |
+| **Chrome на Android и iPhone** | Мобильный Chrome предлагает добавить расширение в Chrome на компьютере. Локальной установки из ZIP для мобильного Chrome нет. [Справка Google](https://support.google.com/chrome/answer/2664769) |
+| **Яндекс Браузер на компьютере** | Для локального тестирования Яндекс описывает установку пакета `crx3`. Здесь опубликована ZIP-сборка. [Справка Яндекса](https://yandex.com/support/browser/ru/personalization/extension) |
+| **Firefox на компьютере** | Можно попробовать временную загрузку через `about:debugging` до перезапуска браузера. Совместимость не проверена. [Инструкция Mozilla](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) |
+| **Firefox на Android** | Обычная установка идёт через каталог дополнений. Эта сборка для него не выпускалась. [Справка Mozilla](https://support.mozilla.org/en-US/kb/find-and-install-add-ons-firefox-android) |
+| **Safari на Mac и iPhone** | Для обычной установки нужна отдельно упакованная версия Safari. Совместимость этой сборки не проверена. [Документация Apple](https://developer.apple.com/safari/extensions/) |
 
 ## Файлы расширения
 

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Пикуко — инструменты",
-  "description": "Инструменты редактора, настройки тестов и лента подписок в Пикуко.",
-  "version": "0.5.12",
+  "description": "Пикуко для Chrome, Edge, Brave, Opera и Vivaldi на ПК. Firefox и Safari пока не проверены. Совместимость на Android — в README.",
+  "version": "0.5.13",
   "permissions": [
     "storage"
   ],
