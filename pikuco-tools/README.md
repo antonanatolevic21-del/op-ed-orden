@@ -4,7 +4,7 @@
 
 [Скачать ZIP](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools.zip) · [Посмотреть исходники](./src/)
 
-[CRX3 для Яндекс Браузера](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-yandex.crx) · [Статус сборки Firefox](#firefox)
+[CRX3 для Яндекс Браузера](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-yandex.crx) · [XPI для Firefox](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-firefox.xpi)
 
 ## Что умеет расширение
 
@@ -48,17 +48,17 @@
 | Браузер | Что доступно |
 | --- | --- |
 | **Chrome на Android и iPhone** | Мобильный Chrome предлагает добавить расширение в Chrome на компьютере. Локальной установки из ZIP для мобильного Chrome нет. [Справка Google](https://support.google.com/chrome/answer/2664769) |
-| **Firefox 140+ на компьютере** | [Ожидаем подпись Mozilla](#firefox). |
+| **Firefox 140+ на компьютере** | [Установить подписанный XPI](#firefox). |
 | **Firefox на Android** | Обычная установка идёт через каталог дополнений. Эта сборка для него не выпускалась. [Справка Mozilla](https://support.mozilla.org/en-US/kb/find-and-install-add-ons-firefox-android) |
 | **Safari на Mac и iPhone** | Для обычной установки нужна отдельно упакованная версия Safari. Совместимость этой сборки не проверена. [Документация Apple](https://developer.apple.com/safari/extensions/) |
 
 ### Firefox
 
-Версия 0.5.16 для Firefox на компьютере отправлена на подпись Mozilla. Здесь появится ссылка на подписанный файл `.xpi` после одобрения этой версии.
+Версия 0.5.16 подписана Mozilla и доступна для Firefox 140+ на компьютере.
 
-**Как установить после выхода сборки**
+**Как установить**
 
-1. Скачай подписанный файл `.xpi` на компьютер.
+1. Скачай [подписанный файл `pikuco-tools-firefox.xpi`](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-firefox.xpi) на компьютер.
 2. Открой в Firefox страницу `about:addons`.
 3. Нажми на шестерёнку и выбери «Установить дополнение из файла…».
 4. Выбери скачанный `.xpi` и нажми «Добавить».
