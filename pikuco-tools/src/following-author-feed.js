@@ -194,16 +194,32 @@ const pikucoFollowingAuthors = (() => {
     return wrapper;
   }
 
-  async function readCoverFromTest(href, title, signal) {
-    const { doc, url } = await getPage(href, signal);
+  async function readTestDetails(href, title, signal, includeCover) {
+    const { doc, url } = await getPage(href, signal, 'no-store');
     const key = publicationKey(urlAt(url));
+    if (!key || key !== publicationKey(urlAt(href))) return { passed: false, cover: null };
+
+    let passed = false;
+    for (const script of doc.querySelectorAll('script[type="application/json"][data-island-data]')) {
+      let result;
+      try {
+        result = JSON.parse(script.textContent)?.props?.initialResult;
+      } catch {
+        continue;
+      }
+      if (String(result?.ID) !== key || !Object.hasOwn(result, 'PASSED')) continue;
+      passed = [true, 'Y', 1, '1'].includes(result.PASSED);
+      break;
+    }
+
+    if (!includeCover) return { passed, cover: null };
     const actual = readCover(doc.body, url, key, title, true);
-    if (actual) return actual;
+    if (actual) return { passed, cover: actual };
     for (const meta of doc.querySelectorAll('meta[property="og:image"], meta[name="twitter:image"]')) {
       const image = imageUrl(meta.getAttribute('content'), url);
-      if (image && !/\/(?:blank|placeholder|no[_-]?image|logo)\.[a-z]+(?:[?#]|$)/i.test(image)) return image;
+      if (image && !/\/(?:blank|placeholder|no[_-]?image|logo)\.[a-z]+(?:[?#]|$)/i.test(image)) return { passed, cover: image };
     }
-    return null;
+    return { passed, cover: null };
   }
 
   function readEntries(doc, base, id, entries = new Map()) {
@@ -262,8 +278,8 @@ const pikucoFollowingAuthors = (() => {
     return [...entries.values()];
   }
 
-  async function getPage(url, signal) {
-    const response = await fetch(url, { credentials: 'same-origin', signal });
+  async function getPage(url, signal, cache = 'default') {
+    const response = await fetch(url, { credentials: 'same-origin', signal, cache });
     if (!response.ok || !urlAt(response.url)) throw new Error('Страница недоступна');
     return { doc: new DOMParser().parseFromString(await response.text(), 'text/html'), url: response.url };
   }
@@ -467,5 +483,5 @@ const pikucoFollowingAuthors = (() => {
       : (second.published ?? -1) - (first.published ?? -1));
   }
 
-  return { collect, sortEntries, readCoverFromTest, readCardStatus };
+  return { collect, sortEntries, readTestDetails, readCardStatus };
 })();

@@ -10,6 +10,7 @@
   const resultAttribute = 'data-pikuco-following-result';
   const passedSelector = '.test-item__passed';
   const ratingAttribute = 'data-pikuco-following-rating';
+  const coverSelector = '.test_item_photo, .pikuco-following-test-cover';
   const excluded = 'script, style, textarea, [contenteditable], header, footer, nav, aside';
   const isTestFeed = /^\/tests\/?$/i.test(location.pathname);
 
@@ -522,23 +523,19 @@
     const renderedRows = new WeakMap();
     const renderedNativeRows = new WeakMap();
     const nativeStatuses = new Map();
-    const coverTargets = new WeakMap();
-    const requestedCovers = new WeakSet();
-    const coverCache = new Map();
-    const coverQueue = [];
-    let pendingCovers = 0;
-    const coverObserver = typeof IntersectionObserver === 'function'
+    const testDetails = new Map();
+    const detailTargets = new WeakMap();
+    const visibleDetailRows = new Set();
+    const pendingDetails = new Map();
+    const detailObserver = typeof IntersectionObserver === 'function'
       ? new IntersectionObserver((changes) => {
+        if (!active()) return;
         for (const change of changes) {
-          if (!change.isIntersecting || !active()) continue;
-          coverObserver.unobserve(change.target);
-          const entry = coverTargets.get(change.target);
-          if (entry && !requestedCovers.has(change.target)) {
-            requestedCovers.add(change.target);
-            requestCover(entry, change.target);
-          }
+          if (change.isIntersecting) visibleDetailRows.add(change.target);
+          else visibleDetailRows.delete(change.target);
         }
-      }, { rootMargin: '200px' })
+        pumpDetails();
+      })
       : null;
 
     function active() {
@@ -552,13 +549,15 @@
     }
 
     function clearFilter() {
+      detailObserver?.disconnect();
+      visibleDetailRows.clear();
+      for (const controller of pendingDetails.values()) controller.abort();
+      pendingDetails.clear();
       for (const card of filtered) card.removeAttribute(hiddenAttribute);
       filtered.clear();
       nativeAnchor = undefined;
-      if (nativeRows.length) {
-        removeNativeRows();
-        rendered = undefined;
-      }
+      removeNativeRows();
+      rendered = undefined;
     }
 
     function removeNativeRows() {
@@ -717,26 +716,40 @@
       link.append(image);
     }
 
-    function pumpCovers() {
-      while (active() && pendingCovers < 2 && coverQueue.length) {
-        const { entry, resolve } = coverQueue.shift();
-        pendingCovers++;
-        pikucoFollowingAuthors.readCoverFromTest(entry.url, entry.title)
-          .then(resolve, () => resolve(null))
-          .finally(() => {
-            pendingCovers--;
-            pumpCovers();
-          });
-      }
+    function needsDetails(entry) {
+      return !testDetails.has(entry.key) &&
+        (!entry.cover || !(entry.passed || nativeStatuses.get(entry.key)?.passed));
     }
 
-    function requestCover(entry, link) {
-      if (!coverCache.has(entry.url)) {
-        const promise = new Promise(resolve => coverQueue.push({ entry, resolve }));
-        coverCache.set(entry.url, promise);
+    function pumpDetails() {
+      if (!active()) return;
+      for (const row of visibleDetailRows) {
+        if (pendingDetails.size >= 2) break;
+        visibleDetailRows.delete(row);
+        if (!row.isConnected) continue;
+        const entry = detailTargets.get(row);
+        if (!entry || !needsDetails(entry) || pendingDetails.has(entry.key)) continue;
+
+        const { key, url, title, cover } = entry;
+        const controller = new AbortController();
+        pendingDetails.set(key, controller);
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        pikucoFollowingAuthors.readTestDetails(url, title, controller.signal, !cover)
+          .catch(() => null)
+          .then(details => {
+            if (pendingDetails.get(key) !== controller) return;
+            testDetails.set(key, details);
+            const current = sourceState?.entries.get(key);
+            if (!current) return;
+            applyCardStatus(renderedRows.get(current), current);
+            applyCardStatus(renderedNativeRows.get(current), current);
+          })
+          .finally(() => {
+            clearTimeout(timeout);
+            if (pendingDetails.get(key) === controller) pendingDetails.delete(key);
+            pumpDetails();
+          });
       }
-      coverCache.get(entry.url).then(url => setCover(link, url));
-      pumpCovers();
     }
 
     function markPassed(row) {
@@ -753,7 +766,10 @@
     function applyCardStatus(row, entry) {
       if (!row) return;
       const native = nativeStatuses.get(entry.key);
-      if (entry.passed || native?.passed) markPassed(row);
+      const details = testDetails.get(entry.key);
+      if (entry.passed || native?.passed || details?.passed) markPassed(row);
+      const cover = row.querySelector(coverSelector);
+      if (cover) setCover(cover, entry.cover ?? details?.cover);
       const personalRating = ['like', 'dislike'].includes(entry.ratingClass);
       const ratingClass = personalRating ? entry.ratingClass : native?.ratingClass ?? entry.ratingClass;
       if (!ratingClass) return;
@@ -774,8 +790,6 @@
       cover.className = 'pikuco-following-test-cover';
       cover.href = entry.url;
       cover.setAttribute('aria-label', entry.title);
-      if (entry.cover) setCover(cover, entry.cover);
-      else coverTargets.set(cover, entry);
 
       const content = document.createElement('div');
       content.className = 'pikuco-following-test-content';
@@ -817,6 +831,7 @@
       if (metrics.children.length) content.append(metrics);
       row.append(cover, content);
       applyCardStatus(row, entry);
+      detailTargets.set(row, entry);
       renderedRows.set(entry, row);
       return row;
     }
@@ -875,10 +890,9 @@
         cover.setAttribute('aria-label', entry.title);
         row.querySelector('.upper')?.prepend(cover);
       }
-      if (entry.cover) setCover(cover, entry.cover);
-      else coverTargets.set(cover, entry);
       applyCardStatus(row, entry);
       row.setAttribute(resultAttribute, '');
+      detailTargets.set(row, entry);
       renderedNativeRows.set(entry, row);
       return row;
     }
@@ -891,7 +905,8 @@
       if (rendered?.host !== host || rendered.anchor !== anchor || ordered.length !== rendered.entries.length ||
           ordered.some((entry, index) => entry !== rendered.entries[index]) ||
           nativeRows.some(row => row.parentElement !== host)) {
-        coverObserver?.disconnect();
+        detailObserver?.disconnect();
+        visibleDetailRows.clear();
         const rows = ordered.map(entry => anchor
           ? renderedNativeRows.get(entry) ?? createNativeResultCard(entry)
           : renderedRows.get(entry) ?? createResultCard(entry));
@@ -918,10 +933,9 @@
         }
         if (anchor) nativeRows = rows;
         results.hidden = Boolean(anchor);
-        if (coverObserver) {
+        if (detailObserver) {
           for (const row of rows) {
-            const cover = row.querySelector('.test_item_photo, .pikuco-following-test-cover');
-            if (coverTargets.has(cover) && !requestedCovers.has(cover)) coverObserver.observe(cover);
+            if (needsDetails(detailTargets.get(row))) detailObserver.observe(row);
           }
         }
         rendered = { host, anchor, entries: ordered };
@@ -1043,7 +1057,6 @@
       }
 
       syncAccounts();
-      pumpCovers();
       hideNativeFeed();
       const ids = [...new Set(saved?.ids ?? [])].filter(id => /^\d+$/.test(id)).sort();
       const key = ids.join(',');
@@ -1068,6 +1081,20 @@
     const schedule = observeChanges(update, true);
     window.addEventListener('hashchange', schedule);
     window.addEventListener('popstate', schedule);
+    window.addEventListener('pageshow', (event) => {
+      if (!event.persisted || !active() || !detailObserver || !rendered) return;
+      for (const entry of rendered.entries) {
+        const details = testDetails.get(entry.key);
+        if (details?.passed) continue;
+        testDetails.delete(entry.key);
+        if (!needsDetails(entry)) continue;
+        const row = (rendered.anchor ? renderedNativeRows : renderedRows).get(entry);
+        if (row?.isConnected) {
+          detailObserver.unobserve(row);
+          detailObserver.observe(row);
+        }
+      }
+    });
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
       if (changes[storageKey]) saved = changes[storageKey].newValue;
