@@ -5,6 +5,8 @@
     '/editor/new_test': 'tournament',
     '/editor/new_stand_test': 'standard',
     '/editor/new_tierlist_test': 'tierlist',
+    '/editor/new_tree_test': 'tree',
+    '/editor/new_post': 'post',
   };
   const path = location.pathname.replace(/\/$/, '');
   const route = routes[path];
@@ -21,7 +23,9 @@
     visibility: 'ограничения видимости',
     awards: 'награды',
   };
-  const optionTitles = Object.entries(testPresetOptions).map(([id, option]) => [id, normalize(option.text)]);
+  const clickableSelector = 'button, label, [role="button"], [role="checkbox"], [role="switch"]';
+  const optionTitles = Object.entries(testPresetOptions).flatMap(([id, option]) =>
+    [option.text, ...(option.aliases ?? [])].map(text => [id, normalize(text)]));
   const titles = [...Object.entries(headings), ...optionTitles];
   const formats = testPresetFormats.filter(format => route === 'standard'
     ? !['tournament', 'tierlist'].includes(format.id)
@@ -35,6 +39,7 @@
 
   function start(settings) {
     const handled = new Map(formats.map(format => [format.id, new Set()]));
+    const handledCommon = new Map(commonTestPresetOptions.map(id => [id, new WeakSet()]));
     const clicked = new Set();
     const manual = new WeakSet();
     let timer;
@@ -49,24 +54,33 @@
       const controls = findControls();
       const formatId = route === 'standard' ? standardFormat(controls) : route;
       const format = formats.find(item => item.id === formatId);
-      if (!format) return;
-
-      const processed = handled.get(format.id);
-      const wanted = format.options.filter(id => settings[testPresetKey(format.id, id)] === true);
+      const processed = handled.get(formatId);
+      const wanted = format?.options.filter(id => settings[testPresetKey(formatId, id)] === true) ?? [];
+      for (const id of commonTestPresetOptions) {
+        const common = settings[testPresetKey('common', id)];
+        if ((common ?? settings[testPresetKey(formatId, id)]) === true) wanted.push(id);
+      }
+      let remaining = 0;
       for (const id of wanted) {
         const control = controls.get(id);
-        if (processed.has(id) || !control || !isVisible(control.title) || !canClick(control.target)) continue;
+        const common = handledCommon.get(id);
+        if (common ? common.has(control?.target) : processed.has(id)) continue;
+        if (!control || !isVisible(control.title) || !canClick(control.target)) {
+          remaining++;
+          continue;
+        }
 
         const state = toggleState(control);
         const desired = !testPresetOptions[id].defaultOn;
-        processed.add(id);
-        if (state === desired || manual.has(control.target) || (state === null && clicked.has(id))) continue;
+        if (common) common.add(control.target);
+        else processed.add(id);
+        if (state === desired || manual.has(control.target) || (!common && state === null && clicked.has(id))) continue;
 
         control.target.click();
         clicked.add(id);
       }
 
-      if (route !== 'standard' && wanted.every(id => processed.has(id))) {
+      if (route !== 'standard' && !remaining) {
         observer.disconnect();
       }
     }
@@ -167,22 +181,31 @@
 
     const settings = single('settings');
     const visibility = single('visibility');
-    if (!settings || !visibility || !comesBefore(settings, visibility)) return new Map();
-    const awards = single('awards', element => comesBefore(visibility, element));
+    const awards = visibility && single('awards', element => comesBefore(visibility, element));
+    const hasTestSettings = settings && visibility && comesBefore(settings, visibility);
+    const findStandaloneFlags = route === 'tree' || route === 'post';
 
     const controls = new Map();
     for (const [id, option] of Object.entries(testPresetOptions)) {
-      const title = single(id, element => option.visibility
-        ? comesBefore(visibility, element) && (!awards || comesBefore(element, awards))
-        : comesBefore(settings, element) && comesBefore(element, visibility));
-      if (title) controls.set(id, { title, target: clickTarget(title) });
+      const title = single(id, element => {
+        if (!option.visibility) {
+          return hasTestSettings && comesBefore(settings, element) && comesBefore(element, visibility);
+        }
+        return visibility
+          ? comesBefore(visibility, element) && (!awards || comesBefore(element, awards))
+          : findStandaloneFlags;
+      });
+      if (!title) continue;
+      const target = clickTarget(title);
+      if (option.visibility && !visibility && !target.matches(clickableSelector) &&
+          getComputedStyle(target).cursor !== 'pointer') continue;
+      controls.set(id, { title, target });
     }
     return controls;
   }
 
   function clickTarget(title) {
     const text = normalize(title.textContent);
-    const control = 'button, label, [role="button"], [role="checkbox"], [role="switch"]';
     let target = title;
 
     for (let element = title; element; element = element.parentElement) {
@@ -190,7 +213,7 @@
       // Stop before a common wrapper. A card has just its own title and optional description.
       if (!content.startsWith(text) || content.length > text.length + 300) break;
       if (optionTitles.some(([, other]) => !text.startsWith(other) && content.includes(other))) break;
-      if (element.matches(control)) return element;
+      if (element.matches(clickableSelector)) return element;
       if (getComputedStyle(element).cursor === 'pointer') target = element;
       if (element === document.body || element.parentElement === document.body) break;
     }
@@ -219,6 +242,8 @@
       }
       const dataState = element.getAttribute('data-state');
       if (dataState === 'checked' || dataState === 'unchecked') return dataState === 'checked';
+      if (element.matches('.active, .selected, .checked')) return true;
+      if (element.matches('.inactive, .unchecked')) return false;
       if (element === target) break;
     }
 

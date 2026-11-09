@@ -9,6 +9,7 @@
   const hiddenAttribute = 'data-pikuco-following-hidden';
   const resultAttribute = 'data-pikuco-following-result';
   const passedSelector = '.test-item__passed';
+  const ratingAttribute = 'data-pikuco-following-rating';
   const excluded = 'script, style, textarea, [contenteditable], header, footer, nav, aside';
   const isTestFeed = /^\/tests\/?$/i.test(location.pathname);
 
@@ -77,7 +78,7 @@
     return matches;
   }
 
-  function observeChanges(update) {
+  function observeChanges(update, watchCardStatus = false) {
     let timer;
     function schedule() {
       if (timer !== undefined) return;
@@ -87,10 +88,19 @@
       }, 100);
     }
     const observer = new MutationObserver((records) => {
-      if (records.some(record => record.type === 'characterData' ||
-          [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === Node.ELEMENT_NODE))) schedule();
+      if (records.some(record => {
+        if (record.type === 'attributes') {
+          return record.target.matches(`.test_item_rating, ${passedSelector}`) &&
+            !record.target.closest(`[${resultAttribute}], .pikuco-following-results`);
+        }
+        return record.type === 'characterData' ||
+          [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === Node.ELEMENT_NODE);
+      })) schedule();
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    observer.observe(document.body, {
+      childList: true, subtree: true, characterData: true,
+      ...(watchCardStatus ? { attributeFilter: ['class'] } : {}),
+    });
     schedule();
     return schedule;
   }
@@ -511,7 +521,7 @@
     let accountLoad;
     const renderedRows = new WeakMap();
     const renderedNativeRows = new WeakMap();
-    const passedIds = new Set();
+    const nativeStatuses = new Map();
     const coverTargets = new WeakMap();
     const requestedCovers = new WeakSet();
     const coverCache = new Map();
@@ -730,17 +740,31 @@
     }
 
     function markPassed(row) {
-      if (!row || row.querySelector(passedSelector)) return;
-      const upper = row.querySelector('.upper');
-      const badge = document.createElement('div');
-      badge.className = upper
-        ? 'test-item__icon test-item__passed'
-        : 'test-item__passed pikuco-following-passed';
-      badge.setAttribute('role', 'img');
-      badge.setAttribute('aria-label', 'Тест пройден!');
+      const existing = row.querySelector(passedSelector);
+      if (existing?.classList.contains('pikuco-following-passed')) return;
+      const badge = existing ?? document.createElement('div');
+      badge.classList.remove('test-item__icon');
+      badge.classList.add('test-item__passed', 'pikuco-following-passed');
       badge.title = 'Тест пройден!';
-      if (!upper) badge.textContent = '✓ Пройден';
-      (upper ?? row).prepend(badge);
+      badge.textContent = '✓ Пройден';
+      if (!existing) (row.querySelector('.upper') ?? row).prepend(badge);
+    }
+
+    function applyCardStatus(row, entry) {
+      if (!row) return;
+      const native = nativeStatuses.get(entry.key);
+      if (entry.passed || native?.passed) markPassed(row);
+      const personalRating = ['like', 'dislike'].includes(entry.ratingClass);
+      const ratingClass = personalRating ? entry.ratingClass : native?.ratingClass ?? entry.ratingClass;
+      if (!ratingClass) return;
+      const rating = row.querySelector(`[${ratingAttribute}]`) ??
+        [...row.querySelectorAll('.test_item_rating')].find(node => node.textContent.trim() === entry.rating);
+      if (!rating || rating.getAttribute(ratingAttribute) === ratingClass) return;
+      rating.setAttribute(ratingAttribute, ratingClass);
+      if (rating.matches('.test_item_rating')) {
+        rating.classList.remove('like', 'dislike', 'good', 'bad');
+        rating.classList.add(ratingClass);
+      }
     }
 
     function createResultCard(entry) {
@@ -776,7 +800,7 @@
       const metrics = document.createElement('div');
       metrics.className = 'pikuco-following-test-metrics';
       function metric(symbol, value, label, href) {
-        if (!value) return;
+        if (!value) return null;
         const item = document.createElement(href ? 'a' : 'span');
         if (href) item.href = href;
         item.title = label;
@@ -785,13 +809,14 @@
         icon.textContent = symbol;
         item.append(icon, document.createTextNode(value));
         metrics.append(item);
+        return item;
       }
-      metric('★', entry.rating, 'Рейтинг');
+      metric('★', entry.rating, 'Рейтинг')?.setAttribute(ratingAttribute, '');
       metric('▶', entry.passes, 'Прохождения', entry.statsUrl);
       metric('▦', entry.options, 'Количество вариантов или вопросов');
       if (metrics.children.length) content.append(metrics);
       row.append(cover, content);
-      if (entry.passed || passedIds.has(entry.key)) markPassed(row);
+      applyCardStatus(row, entry);
       renderedRows.set(entry, row);
       return row;
     }
@@ -852,7 +877,7 @@
       }
       if (entry.cover) setCover(cover, entry.cover);
       else coverTargets.set(cover, entry);
-      if (entry.passed || passedIds.has(entry.key)) markPassed(row);
+      applyCardStatus(row, entry);
       row.setAttribute(resultAttribute, '');
       renderedNativeRows.set(entry, row);
       return row;
@@ -949,16 +974,20 @@
 
     function hideNativeFeed() {
       const cards = [...readCards(document.body, group, status).keys()];
-      for (const card of cards) {
-        const icon = card.querySelector(passedSelector);
-        const test = icon?.closest('.test_item');
-        const key = test?.getAttribute('data-id');
-        if (!/^\d+$/.test(key ?? '') || passedIds.has(key)) continue;
-        passedIds.add(key);
+      for (const card of document.querySelectorAll('.test_item[data-id]')) {
+        if (card.closest(`[${resultAttribute}]`) || !isAfter(group, card)) continue;
+        const key = card.getAttribute('data-id');
+        if (!/^\d+$/.test(key)) continue;
+        const status = pikucoFollowingAuthors.readCardStatus(card);
+        const previous = nativeStatuses.get(key);
+        const passed = Boolean(status.passed || previous?.passed);
+        const ratingClass = status.ratingClass ?? previous?.ratingClass;
+        if ((!passed && !ratingClass) || (previous?.passed === passed && previous?.ratingClass === ratingClass)) continue;
+        nativeStatuses.set(key, { passed, ratingClass });
         const entry = sourceState?.entries.get(key);
         if (entry) {
-          markPassed(renderedRows.get(entry));
-          markPassed(renderedNativeRows.get(entry));
+          applyCardStatus(renderedRows.get(entry), entry);
+          applyCardStatus(renderedNativeRows.get(entry), entry);
         }
       }
       nativeAnchor = cards.find(card => card.matches('.test_item_wrap'));
@@ -1036,7 +1065,7 @@
       renderResults();
     }
 
-    const schedule = observeChanges(update);
+    const schedule = observeChanges(update, true);
     window.addEventListener('hashchange', schedule);
     window.addEventListener('popstate', schedule);
     chrome.storage.onChanged.addListener((changes, area) => {

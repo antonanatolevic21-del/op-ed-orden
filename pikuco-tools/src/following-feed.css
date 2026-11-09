@@ -196,6 +196,34 @@
   font-size: 0.85rem;
 }
 
+[data-pikuco-following-result] .upper {
+  position: relative;
+}
+
+[data-pikuco-following-result] .upper > .pikuco-following-passed {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+}
+
+[data-pikuco-following-rating="good"],
+[data-pikuco-following-rating="like"] {
+  --pikuco-following-rating-color: var(--green, #a8f5d6);
+}
+
+[data-pikuco-following-rating="bad"],
+[data-pikuco-following-rating="dislike"] {
+  --pikuco-following-rating-color: var(--red, #ff6f75);
+}
+
+[data-pikuco-following-result] .test_item_rating[data-pikuco-following-rating],
+[data-pikuco-following-result] .test_item_rating[data-pikuco-following-rating] > a,
+.pikuco-following-test-metrics > [data-pikuco-following-rating]:not([data-pikuco-following-rating=""]),
+.pikuco-following-test-metrics > [data-pikuco-following-rating]:not([data-pikuco-following-rating=""]) > span {
+  color: var(--pikuco-following-rating-color, inherit);
+}
+
 .pikuco-following-test-cover {
   display: block;
   aspect-ratio: 16 / 9;

@@ -17,8 +17,16 @@ const testPresetOptions = {
   hideCorrectness: { text: 'Скрыть правильность ответов после прохождения' },
   noBack: { text: 'Отключить возможность возвращаться на шаг назад' },
   strictOrder: { text: 'Ответы должны даваться в строгом порядке' },
-  erotic: { text: 'Эротические материалы', visibility: true },
-  profanity: { text: 'Ненормативная лексика', visibility: true },
+  erotic: {
+    text: 'Эротические материалы',
+    aliases: ['Эротический контент', 'Содержит эротические материалы'],
+    visibility: true,
+  },
+  profanity: {
+    text: 'Ненормативная лексика',
+    aliases: ['Содержит ненормативную лексику'],
+    visibility: true,
+  },
 };
 
 const testPresetFormats = [
@@ -35,7 +43,9 @@ const testPresetFormats = [
   },
   { id: 'challenge', name: 'Челлендж', options: ['showCorrect', 'strictOrder'] },
   { id: 'tierlist', name: 'Тирлист', options: ['shuffleOptions'] },
-].map(format => ({ ...format, options: [...format.options, 'erotic', 'profanity'] }));
+];
+
+const commonTestPresetOptions = ['profanity', 'erotic'];
 
 function testPresetKey(format, option) {
   return `testPreset.${format}.${option}`;
@@ -43,8 +53,11 @@ function testPresetKey(format, option) {
 
 function testPresetDefaults(formats = testPresetFormats) {
   const defaults = {};
+  for (const option of commonTestPresetOptions) defaults[testPresetKey('common', option)] = null;
   for (const format of formats) {
-    for (const option of format.options) defaults[testPresetKey(format.id, option)] = false;
+    for (const option of [...format.options, ...commonTestPresetOptions]) {
+      defaults[testPresetKey(format.id, option)] = false;
+    }
   }
   return defaults;
 }

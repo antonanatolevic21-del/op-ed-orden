@@ -135,7 +135,16 @@ const pikucoFollowingAuthors = (() => {
       passes: passLink?.textContent.trim() ?? '',
       statsUrl: statLink ? urlAt(statLink.getAttribute('href'), base).href : null,
       options,
+      ...readCardStatus(card),
+    };
+  }
+
+  function readCardStatus(card) {
+    const rating = card.querySelector('.test_item_rating.dislike, .test_item_rating.like') ??
+      card.querySelector('.test_item_rating.bad, .test_item_rating.good');
+    return {
       passed: Boolean(card.querySelector('.test-item__passed')),
+      ratingClass: ['dislike', 'like', 'bad', 'good'].find(name => rating?.classList.contains(name)),
     };
   }
 
@@ -204,7 +213,7 @@ const pikucoFollowingAuthors = (() => {
     for (const link of links) {
       const key = keys.get(link);
       const title = link.textContent.trim();
-      if (!key || entries.has(key) || !title || link.closest(excluded)) continue;
+      if (!key || !title || link.closest(excluded)) continue;
       let owner;
       let card;
       const native = link.closest('h3') && link.closest('.test_item');
@@ -213,6 +222,15 @@ const pikucoFollowingAuthors = (() => {
         if (owners.get(profile) !== id) continue;
         owner = profile;
         card = native;
+      }
+      const previous = entries.get(key);
+      if (previous) {
+        if (card) {
+          const status = readCardStatus(card);
+          previous.passed ||= status.passed;
+          previous.ratingClass = status.ratingClass ?? previous.ratingClass;
+        }
+        continue;
       }
       for (let parent = card ? null : link.parentElement, depth = 0; parent && parent !== doc.body && depth < 7;
           parent = parent.parentElement, depth++) {
@@ -449,5 +467,5 @@ const pikucoFollowingAuthors = (() => {
       : (second.published ?? -1) - (first.published ?? -1));
   }
 
-  return { collect, sortEntries, readCoverFromTest };
+  return { collect, sortEntries, readCoverFromTest, readCardStatus };
 })();

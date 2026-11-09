@@ -13,7 +13,8 @@
     p { margin: 6px 0 0; font-size: 13px; line-height: 1.45; }
     .page-options label { margin-top: 10px; }
     section { margin-top: 16px; padding-top: 14px; border-top: 1px solid color-mix(in srgb, currentColor 24%, transparent); }
-    #test-presets { margin-top: 10px; }
+    #common-test-presets, #test-presets { margin-top: 10px; }
+    #common-test-presets label + label { margin-top: 8px; }
     details { border-radius: 8px; background: color-mix(in srgb, currentColor 7%, transparent); }
     details + details { margin-top: 6px; }
     summary { padding: 9px 10px; cursor: pointer; font-weight: 600; }
@@ -55,8 +56,10 @@
   </section>
   <p id="status" role="status"></p>
   <section aria-labelledby="test-presets-title">
-    <h2 id="test-presets-title">Автонастройки новых тестов</h2>
-    <p>Новые отметки применяются и в открытом редакторе нового теста выбранного формата.</p>
+    <h2 id="test-presets-title">Автонастройки тестов и постов</h2>
+    <p>Общие отметки действуют во всех новых тестах и постах, включая древа.</p>
+    <div id="common-test-presets"></div>
+    <p id="test-presets-legacy" hidden>Старые отметки по форматам действуют, пока ты не изменишь соответствующую общую настройку.</p>
     <div id="test-presets"></div>
     <p id="test-presets-status" role="status"></p>
   </section>
