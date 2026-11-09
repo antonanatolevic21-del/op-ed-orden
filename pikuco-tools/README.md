@@ -4,7 +4,7 @@
 
 [Скачать ZIP](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools.zip) · [Посмотреть исходники](./src/)
 
-[CRX3 для Яндекс Браузера](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-yandex.crx) · [Пакет Firefox для подписи Mozilla](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-firefox-unsigned.zip)
+[CRX3 для Яндекс Браузера](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-yandex.crx) · [Статус сборки Firefox](#firefox)
 
 ## Что умеет расширение
 
@@ -49,13 +49,25 @@
 | Браузер | Что доступно |
 | --- | --- |
 | **Chrome на Android и iPhone** | Мобильный Chrome предлагает добавить расширение в Chrome на компьютере. Локальной установки из ZIP для мобильного Chrome нет. [Справка Google](https://support.google.com/chrome/answer/2664769) |
-| **Firefox 140+ на компьютере** | [Неподписанный пакет](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-firefox-unsigned.zip) можно временно загрузить через `about:debugging`. Для обычной установки нужен XPI с подписью Mozilla. [Инструкция Mozilla](https://extensionworkshop.com/documentation/develop/temporary-installation-in-firefox/) |
+| **Firefox 140+ на компьютере** | [Ожидаем подпись Mozilla](#firefox). |
 | **Firefox на Android** | Обычная установка идёт через каталог дополнений. Эта сборка для него не выпускалась. [Справка Mozilla](https://support.mozilla.org/en-US/kb/find-and-install-add-ons-firefox-android) |
 | **Safari на Mac и iPhone** | Для обычной установки нужна отдельно упакованная версия Safari. Совместимость этой сборки не проверена. [Документация Apple](https://developer.apple.com/safari/extensions/) |
 
-### Как отправить пакет Firefox на подпись
+### Firefox
 
-Войди в [Mozilla Add-on Developer Hub](https://addons.mozilla.org/developers/), выбери **Submit a New Add-on → On your own** и загрузи [Firefox ZIP](https://raw.githubusercontent.com/antonanatolevic21-del/op-ed-orden/pikuco-tools/pikuco-tools/pikuco-tools-firefox-unsigned.zip). Если Mozilla одобрит заявку, скачай подписанный XPI. [Документация Mozilla](https://extensionworkshop.com/documentation/publish/submitting-an-add-on/)
+Версия 0.5.15 для Firefox на компьютере отправлена на подпись Mozilla. Когда Mozilla одобрит сборку, здесь появится ссылка на подписанный файл `.xpi`.
+
+**Как установить после выхода сборки**
+
+1. Скачай подписанный файл `.xpi` на компьютер.
+2. Открой в Firefox страницу `about:addons`.
+3. Нажми на шестерёнку и выбери «Установить дополнение из файла…».
+4. Выбери скачанный `.xpi` и нажми «Добавить».
+5. Открой или обнови вкладку Пикуко.
+
+[Инструкция Mozilla](https://extensionworkshop.com/documentation/publish/install-self-distributed/)
+
+Перед каждым следующим выпуском сначала проверяем изменения в Firefox. Готовую версию отправляем на подпись и публикуем подписанный `.xpi` после одобрения Mozilla.
 
 ### Данные
 
