@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Пикуко — инструменты",
   "description": "Пикуко для Chrome, Edge, Brave, Opera и Vivaldi на ПК. Firefox и Safari пока не проверены. Совместимость на Android — в README.",
-  "version": "0.5.15",
+  "version": "0.5.16",
   "permissions": [
     "storage"
   ],
@@ -37,8 +37,7 @@
         "https://*.pikuco.ru/*"
       ],
       "css": [
-        "skip-intro.css",
-        "blog-cover.css"
+        "skip-intro.css"
       ],
       "js": [
         "page-options.js"
