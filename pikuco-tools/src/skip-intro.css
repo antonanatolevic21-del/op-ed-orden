@@ -1,0 +1,14 @@
+[data-pikuco-tools-intro-hidden] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+[data-pikuco-tools-intro-hidden],
+[data-pikuco-tools-intro-hidden] * {
+  pointer-events: none !important;
+}
+
+html body .test-window__anticlicker.test-window__anticlicker_sting.active,
+html body .test-window__anticlicker.active > .test-window__anticlicker-window {
+  background-color: #263238 !important;
+}
