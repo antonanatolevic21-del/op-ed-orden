@@ -8,9 +8,11 @@
   pointer-events: none !important;
 }
 
-:root[data-pikuco-tools-hide-round-screen] .round_window {
+:root[data-pikuco-tools-skip-intro] .round_window,
+:root[data-pikuco-tools-skip-intro] .brand-sting {
   visibility: hidden !important;
   opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 html body .test-window__anticlicker.test-window__anticlicker_sting.active,

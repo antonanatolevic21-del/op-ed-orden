@@ -127,9 +127,9 @@
 
   function skipIntro(root) {
     const hiddenAttribute = 'data-pikuco-tools-intro-hidden';
-    const roundAttribute = 'data-pikuco-tools-hide-round-screen';
-    if (/^\/tests\/\d+\/?$/i.test(location.pathname)) root.setAttribute(roundAttribute, '');
-    const introNames = /intro|splash|curtain|(?:^|[\s_-])wipe|preloader|(?:page|site|pikuco)[\s_-]*(?:loader|transition)/i;
+    const enabledAttribute = 'data-pikuco-tools-skip-intro';
+    root.setAttribute(enabledAttribute, '');
+    const introNames = /brand-sting|intro|splash|curtain|(?:^|[\s_-])wipe|preloader|(?:page|site|pikuco)[\s_-]*(?:loader|transition)/i;
     const logoNames = /logo|pikuco|пикуко/i;
     const loaderNames = /(?:^|[\s_-])(?:loader|loading|transition|stripe)(?:$|[\s_.-])/i;
     const protectedSelector = [
@@ -143,7 +143,7 @@
       '[style*="fixed" i]', '[class~="fixed"]', '[class*="overlay" i]', '[id*="overlay" i]',
       '[class*="fullscreen" i]', '[class*="full-screen" i]',
     ].join(', ');
-    const markerSelector = selectorFor(['intro', 'splash', 'curtain', 'wipe', 'preloader',
+    const markerSelector = selectorFor(['brand-sting', 'intro', 'splash', 'curtain', 'wipe', 'preloader',
       'loader', 'loading', 'transition', 'stripe', 'logo', 'pikuco', 'пикуко']) + ', use, image, ' + coverHints;
     const pending = new Set([root]);
     const hidden = new Map();
@@ -301,7 +301,7 @@
     schedule();
     return () => {
       observer.disconnect();
-      root.removeAttribute(roundAttribute);
+      root.removeAttribute(enabledAttribute);
       root.removeEventListener('animationstart', animationStarted, true);
       root.removeEventListener('transitionrun', animationStarted, true);
       pending.clear();
