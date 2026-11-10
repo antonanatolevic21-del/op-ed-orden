@@ -115,9 +115,10 @@
     const view = label.ownerDocument?.defaultView ?? window;
     for (let element = label; element && element !== group; element = element.parentElement) {
       if (element.matches('[aria-selected="true"], [aria-current="page"], [aria-pressed="true"]') ||
+          (element.control?.type === 'radio' && element.control.checked) ||
           element.querySelector('input[type="radio"]:checked')) return 3;
-        const style = view.getComputedStyle ? view.getComputedStyle(element) : getComputedStyle(element);
-        const color = style.backgroundColor?.match(/\d+/g)?.map(Number);
+      const style = view.getComputedStyle ? view.getComputedStyle(element) : getComputedStyle(element);
+      const color = style.backgroundColor?.match(/\d+/g)?.map(Number);
       if (color && color[0] >= 190 && color[1] >= 135 && color[1] - color[2] >= 40) score = 2;
       else if (!score && /(?:^|[\s_-])(?:active|selected|current|checked)(?:$|\s)/i
         .test(element.getAttribute('class') ?? '')) score = 1;
@@ -144,7 +145,13 @@
     const ids = new Set();
     const cards = new Map();
     const ratings = {};
-    for (const label of view.labels.get('отписаться') ?? []) {
+    const controls = new Set(view.labels.get('отписаться') ?? []);
+    for (const control of doc.querySelectorAll('[aria-label], [title]')) {
+      if (['aria-label', 'title'].some(attribute =>
+        /^отписаться(?:\s|$)/.test(normalize(control.getAttribute(attribute) ?? ''))) &&
+        visible(control) && !control.closest(excluded)) controls.add(control);
+    }
+    for (const label of controls) {
       for (let card = label.parentElement, depth = 0; card && depth < 6; card = card.parentElement, depth++) {
         if (card.contains(view.tab)) break;
         const links = [...card.querySelectorAll('a[href]')];
@@ -156,7 +163,8 @@
           ids.add(id);
           const profile = links.find(link => link.textContent.trim() && accountId(link) === id);
           const name = profile?.textContent.trim() || `Профиль ${id}`;
-          cards.set(card, { id, name, control: label.closest(navigationControl) ?? label });
+          const existing = cards.get(card);
+          cards.set(card, { id, name, control: existing?.control ?? label.closest(navigationControl) ?? label });
           const rating = readAccountRating(card);
           if (rating !== undefined) ratings[id] = rating;
           break;
@@ -187,15 +195,20 @@
     const url = sameSiteUrl(value);
     if (!url) return undefined;
     url.hash = '';
-    for (const key of [...url.searchParams.keys()]) {
-      if (/(?:token|sess|sid|auth|key|code|csrf|nonce|signature|pass)/i.test(key)) url.searchParams.delete(key);
-    }
+    const privateKeys = new Set();
+    url.searchParams.forEach((_, key) => {
+      if (/(?:token|sess|sid|auth|key|code|csrf|nonce|signature|pass)/i.test(key)) privateKeys.add(key);
+    });
+    for (const key of privateKeys) url.searchParams.delete(key);
     return url.pathname + url.search;
   }
 
   function isPaged(url) {
-    return [...url.searchParams.keys()].some(key =>
-      /^(?:PAGEN_\d+|page)$/i.test(key) && Number(url.searchParams.get(key)) > 1);
+    let paged = false;
+    url.searchParams.forEach((value, key) => {
+      if (/^(?:PAGEN_\d+|page)$/i.test(key) && Number(value) > 1) paged = true;
+    });
+    return paged;
   }
 
   function sameAccounts(previous, ids) {
@@ -356,7 +369,7 @@
       const url = sameSiteUrl(href, doc.URL);
       if (!url) return false;
       if (url.href.split('#')[0] !== doc.URL.split('#')[0]) {
-        frame.src = url.href;
+        if (frame.src !== url.href) frame.src = url.href;
         return true;
       }
     }
@@ -374,15 +387,14 @@
       frame.tabIndex = -1;
       frame.src = accountEntry(saved);
 
-      let usersOpened = false;
-      let subscriptionsOpened = false;
+      const tabAttempts = new WeakMap();
       let source;
       let settledAt = Date.now();
       let snapshot;
       const ids = new Set();
       const ratings = {};
       const requestedPages = new Set();
-      const deadline = Date.now() + 10000;
+      const deadline = Date.now() + 16000;
 
       function finish(result) {
         clearInterval(timer);
@@ -395,9 +407,18 @@
         finish(null);
       }
 
+      function openTab(doc, label) {
+        const control = label.closest(navigationControl) ?? label;
+        const prior = tabAttempts.get(control);
+        const now = Date.now();
+        if (prior && (prior.count >= 3 || now - prior.time < 1400)) return;
+        tabAttempts.set(control, { count: (prior?.count ?? 0) + 1, time: now });
+        navigateAccount(frame, doc, label);
+      }
+
       const timer = setInterval(() => {
         if (Date.now() >= deadline) {
-          finish(null);
+          finish(source ? { ids: [...ids].sort(), ratings, source, updatedAt: Date.now() } : null);
           return;
         }
         const doc = frame.contentDocument;
@@ -405,13 +426,12 @@
 
         const view = subscriptionView(doc);
         if (!view) {
-          if (usersOpened) return;
           const tabs = exactLabels(doc.body, new Set(['пользователи'])).get('пользователи') ?? [];
-          if (tabs.length === 1) usersOpened = navigateAccount(frame, doc, tabs[0]);
+          if (tabs.length === 1) openTab(doc, tabs[0]);
           return;
         }
         if (!view.selected) {
-          if (!subscriptionsOpened) subscriptionsOpened = navigateAccount(frame, doc, view.tab);
+          openTab(doc, view.tab);
           return;
         }
         const found = readSubscribedAccounts(doc, view);
@@ -511,6 +531,8 @@
     let tab;
     let status;
     let message;
+    let accountLink;
+    let retryAccounts;
     let results;
     let rendered;
     let nativeAnchor;
@@ -612,9 +634,22 @@
       status.hidden = true;
       message = document.createElement('span');
       message.setAttribute('role', 'status');
+      accountLink = document.createElement('a');
+      accountLink.href = accountEntry(null);
+      accountLink.textContent = 'Открыть личный кабинет';
+      accountLink.hidden = true;
+      retryAccounts = document.createElement('button');
+      retryAccounts.type = 'button';
+      retryAccounts.textContent = 'Повторить';
+      retryAccounts.hidden = true;
+      retryAccounts.addEventListener('click', () => {
+        if (!active() || accountLoad) return;
+        attemptedSync = false;
+        update();
+      });
       results = document.createElement('ol');
       results.className = 'pikuco-following-results';
-      status.append(message, results);
+      status.append(message, accountLink, retryAccounts, results);
       rendered = undefined;
       group.addEventListener('click', selectNativeFilter, true);
     }
@@ -948,10 +983,11 @@
       if (!active() || !status?.isConnected) return;
       const count = sourceState?.entries.size ?? 0;
       const loading = Boolean(sourceLoad || (!saved && accountLoad));
+      accountLink.hidden = retryAccounts.hidden = Boolean(saved || accountLoad);
       message.classList.toggle('pikuco-following-loading', loading);
       let text;
       if (!saved && accountLoad) text = 'Читаю список подписок…';
-      else if (!saved) text = 'Не удалось прочитать подписки автоматически. Открой «Личный кабинет → Пользователи → Подписки».';
+      else if (!saved) text = 'Не удалось прочитать подписки автоматически. В личном кабинете открой «Пользователи → Подписки».';
       else if (!saved.ids.length) text = 'Список подписок пуст.';
       else if (sourceLoad?.older) text = `Загружаю архив… Обработано страниц: ${sourceLoad.done}. Карточек в ленте: ${count}.`;
       else if (sourceLoad) text = `Загружаю тесты… Обработано ${sourceLoad.done} из ${sourceLoad.total} авторов.`;

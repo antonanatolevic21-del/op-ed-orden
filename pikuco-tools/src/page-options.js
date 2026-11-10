@@ -127,6 +127,8 @@
 
   function skipIntro(root) {
     const hiddenAttribute = 'data-pikuco-tools-intro-hidden';
+    const roundAttribute = 'data-pikuco-tools-hide-round-screen';
+    if (/^\/tests\/\d+\/?$/i.test(location.pathname)) root.setAttribute(roundAttribute, '');
     const introNames = /intro|splash|curtain|(?:^|[\s_-])wipe|preloader|(?:page|site|pikuco)[\s_-]*(?:loader|transition)/i;
     const logoNames = /logo|pikuco|пикуко/i;
     const loaderNames = /(?:^|[\s_-])(?:loader|loading|transition|stripe)(?:$|[\s_.-])/i;
@@ -299,6 +301,7 @@
     schedule();
     return () => {
       observer.disconnect();
+      root.removeAttribute(roundAttribute);
       root.removeEventListener('animationstart', animationStarted, true);
       root.removeEventListener('transitionrun', animationStarted, true);
       pending.clear();

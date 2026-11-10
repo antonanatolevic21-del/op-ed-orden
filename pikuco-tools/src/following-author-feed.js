@@ -304,8 +304,12 @@ const pikucoFollowingAuthors = (() => {
       const url = urlAt(link.getAttribute('href'), base);
       if (!sameList(url, route) || !url.search || visited.has(pageKey(url)) ||
           link.closest('header, footer, aside, [contenteditable]')) continue;
-      const page = [...url.searchParams].find(([name, value]) =>
-        pageParameter.test(name) && /^\d+$/.test(value) && value !== params.get(name));
+      let page;
+      url.searchParams.forEach((value, name) => {
+        if (!page && pageParameter.test(name) && /^\d+$/.test(value) && value !== params.get(name)) {
+          page = [name, value];
+        }
+      });
       const number = Number(page?.[1]);
       if (page && number <= Number(params.get(page[0]) ?? 1)) continue;
       const label = link.textContent.trim() || link.getAttribute('aria-label') || link.getAttribute('title') || '';

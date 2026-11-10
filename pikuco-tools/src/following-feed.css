@@ -36,12 +36,12 @@
 
 .pikuco-following-reader {
   position: fixed !important;
-  left: -20000px !important;
-  top: 0 !important;
+  inset: 0 !important;
   width: 1200px !important;
   height: 800px !important;
   opacity: 0 !important;
   pointer-events: none !important;
+  z-index: -1 !important;
 }
 
 .pikuco-following-author-reader {
@@ -63,6 +63,11 @@
 .pikuco-following-capture {
   margin: 8px 0;
   font-size: 0.85rem;
+}
+
+.pikuco-following-status > a,
+.pikuco-following-status > button {
+  margin-inline-start: 0.5em;
 }
 
 .pikuco-following-star {
