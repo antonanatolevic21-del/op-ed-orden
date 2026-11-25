@@ -6861,6 +6861,10 @@
       return isPersonalScale() ? personalScoreFor(entry, user) : scoreFor(entry, user);
     }
 
+    function tierItemPriority(entry, user) {
+      return !isPersonalScale() && entry.type === 'OP' && scoreFor(entry, user) % 1 === 0.5 ? 0 : 1;
+    }
+
     function baseTierRowForScore(score) {
       if (isPersonalScale()) {
         const num = normalizeOptionalNumber(score);
@@ -6938,7 +6942,7 @@
       const ordered = saved.filter(id => byId.has(id)).map(id => byId.get(id));
       const used = new Set(ordered.map(e => e.id));
       const rest = items.filter(e => !used.has(e.id)).sort((a, b) => compareNatural(a.title, b.title));
-      return ordered.concat(rest);
+      return ordered.concat(rest).sort((a, b) => tierItemPriority(a, user) - tierItemPriority(b, user));
     }
 
     function renderTierList() {
@@ -6971,7 +6975,7 @@
         const cards = items.map(e => {
           const title = escapeHtml(e.title);
           const bg = e.image ? `<img class="oc-track-image" src="${escapeHtml(normalizeUrl(e.image))}" alt="${title}" crossorigin="anonymous" referrerpolicy="no-referrer" data-remove-on-error="1">` : `<span>${escapeHtml(e.type)}</span>`;
-          return `<div class="oc-tier-card" draggable="true" data-tier-card="1" data-id="${e.id}" data-score="${score}" title="${title}">
+          return `<div class="oc-tier-card" draggable="true" data-tier-card="1" data-id="${e.id}" data-score="${score}" data-tier-priority="${tierItemPriority(e, myName)}" title="${title}">
             ${bg}<div class="oc-tier-card-controls"><button type="button" class="oc-tier-shift-btn" data-tier-shift="-1" data-id="${e.id}" data-score="${score}" title="Левее">←</button><button type="button" class="oc-tier-shift-btn" data-tier-shift="1" data-id="${e.id}" data-score="${score}" title="Правее">→</button></div><div class="oc-tier-card-title">${title}</div>
           </div>`;
         }).join('');
@@ -7010,15 +7014,6 @@
       await saveTierPlacements(user, type, year, season);
     }
 
-    async function saveVisibleTierOrders(container, scores) {
-      for (const score of Array.from(new Set(scores.map(Number)))) {
-        const zone = container.querySelector(`[data-tier-drop][data-score="${score}"]`);
-        if (!zone) continue;
-        const order = Array.from(zone.querySelectorAll('[data-tier-card]')).map(el => el.getAttribute('data-id'));
-        await saveTierOrder(myName, tierSelection.type, tierSelection.year, tierSelection.season, Number(score), order);
-      }
-    }
-
     function bindTierLabels() {
       const container = $('#oc-tier-list');
       if (!container) return;
@@ -7039,23 +7034,37 @@
     function bindTierDnD() {
       const container = $('#oc-tier-list');
       if (!container) return;
-      let dragId = null;
-      let dragScore = null;
-      let dragChanged = false;
+      let drag = null;
+
+      function moveDraggedCard(zone, event) {
+        const cards = [...zone.querySelectorAll('[data-tier-card]')].filter(card => card !== drag.card);
+        const after = getDragAfterElement(cards, event.clientX, event.clientY);
+        const position = after ? cards.indexOf(after) : cards.length;
+        const boundary = cards.filter(card => card.dataset.tierPriority === '0').length;
+        const allowedPosition = drag.card.dataset.tierPriority === '0'
+          ? Math.min(position, boundary)
+          : Math.max(position, boundary);
+        const next = cards[allowedPosition] || null;
+        if (drag.card.parentElement !== zone || drag.card.nextElementSibling !== next) {
+          zone.insertBefore(drag.card, next);
+        }
+      }
 
       container.querySelectorAll('[data-tier-shift]').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
           const id = btn.getAttribute('data-id');
-          const score = Number(btn.getAttribute('data-score'));
           const delta = Number(btn.getAttribute('data-tier-shift'));
-          const zone = container.querySelector(`[data-tier-drop][data-score="${score}"]`);
+          const zone = btn.closest('[data-tier-drop]');
           if (!zone || !id || !Number.isFinite(delta)) return;
-          const order = Array.from(zone.querySelectorAll('[data-tier-card]')).map(el => el.getAttribute('data-id'));
-          const from = order.indexOf(id);
-          const to = Math.max(0, Math.min(order.length - 1, from + delta));
+          const score = Number(zone.dataset.score);
+          const cards = [...zone.querySelectorAll('[data-tier-card]')];
+          const from = cards.findIndex(card => card.dataset.id === id);
+          const to = Math.max(0, Math.min(cards.length - 1, from + delta));
           if (from === -1 || from === to) return;
+          if (cards[from].dataset.tierPriority !== cards[to].dataset.tierPriority) return;
+          const order = cards.map(card => card.dataset.id);
           const [moved] = order.splice(from, 1);
           order.splice(to, 0, moved);
           try {
@@ -7072,59 +7081,52 @@
       container.querySelectorAll('[data-tier-card]').forEach(card => {
         card.addEventListener('dragstart', (e) => {
           if (e.target && e.target.closest && e.target.closest('[data-tier-shift]')) { e.preventDefault(); return; }
-          dragId = card.getAttribute('data-id');
-          dragScore = card.getAttribute('data-score');
-          dragChanged = false;
+          drag = { card, zone: card.parentElement, next: card.nextElementSibling, dropped: false };
           card.classList.add('dragging');
           e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', dragId);
+          e.dataTransfer.setData('text/plain', card.dataset.id);
         });
-        card.addEventListener('dragend', async () => {
-          const currentId = dragId;
-          const originalScore = dragScore;
-          const currentScore = card.getAttribute('data-score') || originalScore;
+        card.addEventListener('dragend', () => {
           card.classList.remove('dragging');
-          dragId = null;
-          dragScore = null;
-          if (!currentId || !dragChanged) return;
-          try {
-            await saveVisibleTierOrders(container, [Number(originalScore), Number(currentScore)]);
-            setStatus(Number(originalScore) === Number(currentScore) ? 'Порядок в тире сохранён ✓' : 'Карточка перенесена в допустимый тир ✓');
-          } catch (err) {
-            console.error(err);
-            setStatus('Не удалось сохранить порядок тир-листа.', true);
-          }
+          if (!drag || drag.card !== card) return;
+          if (!drag.dropped) drag.zone.insertBefore(card, drag.next);
+          drag = null;
+          container.querySelectorAll('.drag-over').forEach(zone => zone.classList.remove('drag-over'));
         });
       });
       container.querySelectorAll('[data-tier-drop]').forEach(zone => {
         zone.addEventListener('dragover', (e) => {
           const targetScore = Number(zone.getAttribute('data-score'));
-          if (!dragId || !canDropTierCardToScore(dragId, targetScore)) return;
+          if (!drag || !canDropTierCardToScore(drag.card.dataset.id, targetScore)) return;
           e.preventDefault();
           zone.classList.add('drag-over');
-          const after = getDragAfterElement(zone, e.clientX, e.clientY);
-          const dragged = Array.from(container.querySelectorAll('[data-tier-card]')).find(el => el.getAttribute('data-id') === dragId);
-          if (!dragged) return;
-          const beforeParent = dragged.parentElement;
-          const beforeNext = dragged.nextElementSibling;
-          if (after == null) zone.appendChild(dragged);
-          else zone.insertBefore(dragged, after);
-          if (beforeParent !== dragged.parentElement || beforeNext !== dragged.nextElementSibling) dragChanged = true;
+          moveDraggedCard(zone, e);
         });
         zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
         zone.addEventListener('drop', async (e) => {
           const dropScore = Number(zone.getAttribute('data-score'));
-          if (!dragId || !canDropTierCardToScore(dragId, dropScore)) return;
+          if (!drag || !canDropTierCardToScore(drag.card.dataset.id, dropScore)) return;
           e.preventDefault();
           zone.classList.remove('drag-over');
-          const droppedId = dragId;
-          const oldScore = Number(dragScore);
+          const { card } = drag;
+          if (card.parentElement !== zone) moveDraggedCard(zone, e);
+          drag.dropped = true;
+          if (drag.zone === zone && drag.next === card.nextElementSibling) return;
+          const oldScore = Number(drag.zone.dataset.score);
+          card.dataset.score = String(dropScore);
+          const user = myName;
+          const { type, year, season } = tierSelection;
+          const orders = [...new Set([drag.zone, zone])].map(row => ({
+            score: Number(row.dataset.score),
+            ids: [...row.querySelectorAll('[data-tier-card]')].map(item => item.dataset.id)
+          }));
           try {
-            await saveTierPlacement(myName, tierSelection.type, tierSelection.year, tierSelection.season, droppedId, dropScore);
-            const moved = Array.from(container.querySelectorAll('[data-tier-card]')).find(el => el.getAttribute('data-id') === droppedId);
-            if (moved) moved.setAttribute('data-score', String(dropScore));
-            await saveVisibleTierOrders(container, [oldScore, dropScore]);
-            dragChanged = false;
+            if (oldScore !== dropScore) {
+              await saveTierPlacement(user, type, year, season, card.dataset.id, dropScore);
+            }
+            for (const { score, ids } of orders) {
+              await saveTierOrder(user, type, year, season, score, ids);
+            }
             setStatus(oldScore === dropScore ? 'Порядок в тире сохранён ✓' : 'Карточка перенесена в допустимый тир ✓');
           } catch (err) {
             console.error(err);
@@ -7134,9 +7136,8 @@
       });
     }
 
-    function getDragAfterElement(container, x, y) {
-      const elements = [...container.querySelectorAll('[data-tier-card]:not(.dragging)')];
-      for (const child of elements) {
+    function getDragAfterElement(cards, x, y) {
+      for (const child of cards) {
         const box = child.getBoundingClientRect();
         const midY = box.top + box.height / 2;
         const midX = box.left + box.width / 2;
