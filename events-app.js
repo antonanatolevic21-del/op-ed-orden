@@ -206,6 +206,7 @@
     const guessGameEl = $('#ev-guess-game');
     const POST_PRIORITY_NICKS = ['Egortos', 'Кофа', 'Toxexex'];
     const FIXED_PARTICIPANTS = ['Egortos', 'Кофа', 'Toxexex'];
+    const ENDING_FIXED_PARTICIPANTS = FIXED_PARTICIPANTS.slice(0, 2);
 
     let accessLevel = localStorage.getItem(ACCESS_KEY) || '';
     let guestSlot = Math.max(0, Math.min(15, Number(localStorage.getItem(GUEST_SLOT_KEY) || 0) || 0));
@@ -1011,37 +1012,38 @@
       return out.slice(0, 15);
     }
 
-    function cleanParticipantSlots(values) {
+    function cleanParticipantSlots(values, fixedParticipants = FIXED_PARTICIPANTS) {
       const raw = Array.isArray(values) ? values : [];
       const out = Array.from({ length: 15 }, () => '');
       const used = new Set();
-      FIXED_PARTICIPANTS.forEach((name, idx) => {
+      const firstFreeSlot = fixedParticipants.length;
+      fixedParticipants.forEach((name, idx) => {
         out[idx] = name;
         used.add(normalizeNickname(name));
       });
 
-      const fixedAlreadyInSlots = FIXED_PARTICIPANTS.every((name, idx) => normalizeNickname(raw[idx]) === normalizeNickname(name));
+      const fixedAlreadyInSlots = fixedParticipants.every((name, idx) => normalizeNickname(raw[idx]) === normalizeNickname(name));
       const looksSlotBased = raw.length >= 15 || fixedAlreadyInSlots;
 
       const fillNextFree = (name) => {
         const clean = String(name || '').trim();
         const key = normalizeNickname(clean);
         if (!clean || !key || used.has(key)) return;
-        const pos = out.findIndex((value, idx) => idx >= 3 && !value);
+        const pos = out.findIndex((value, idx) => idx >= firstFreeSlot && !value);
         if (pos < 0) return;
         out[pos] = clean;
         used.add(key);
       };
 
       if (looksSlotBased) {
-        for (let idx = 3; idx < 15; idx += 1) {
+        for (let idx = firstFreeSlot; idx < 15; idx += 1) {
           const name = String(raw[idx] || '').trim();
           const key = normalizeNickname(name);
           if (!name || !key || used.has(key)) continue;
           out[idx] = name;
           used.add(key);
         }
-        for (let idx = 0; idx < 3; idx += 1) {
+        for (let idx = 0; idx < firstFreeSlot; idx += 1) {
           fillNextFree(raw[idx]);
         }
       } else {
@@ -4495,6 +4497,12 @@
       const source = seasonDocs.get(key) || {};
       const allIds = endingPeriodPool(period).map(row => String(row.id));
       const hasSavedSelection = Array.isArray(source.selectedOpeningIds);
+      const slots = Array.isArray(source.allowedNicknames) ? source.allowedNicknames.slice() : [];
+      // Older ED rosters saved the three OP defaults as their first three slots.
+      if (!source.endingParticipantSlotsCustomized && FIXED_PARTICIPANTS.every((name, idx) =>
+        normalizeNickname(slots[idx]) === normalizeNickname(name))) {
+        slots[ENDING_FIXED_PARTICIPANTS.length] = '';
+      }
       return {
         ...source,
         key,
@@ -4503,7 +4511,7 @@
         year: CURRENT_EVENT_YEAR,
         period,
         selectedOpeningIds: (hasSavedSelection ? source.selectedOpeningIds : []).map(String).filter(id => allIds.includes(id)),
-        allowedNicknames: cleanParticipantSlots(source.allowedNicknames || []),
+        allowedNicknames: cleanParticipantSlots(slots, ENDING_FIXED_PARTICIPANTS),
         semifinalOpeningIds: Array.isArray(source.semifinalOpeningIds) ? source.semifinalOpeningIds.map(String) : []
       };
     }
@@ -4631,7 +4639,7 @@
 
     function renderEndingParticipants(state) {
       if (endingManualPeriod(state)) return '';
-      return `<section class="ev-ending-participants"><div class="ev-mini-title">15 свободных слотов участников</div>
+      return `<section class="ev-ending-participants"><div class="ev-mini-title">15 слотов участников</div>
         <div class="ev-ending-slot-grid">${Array.from({ length: 15 }, (_, index) => `<label class="ev-ending-slot"><span>${String(index + 1).padStart(2, '0')}</span>
           <input type="text" data-ending-slot="${index}" value="${escapeHtml(state.allowedNicknames[index] || '')}" placeholder="Свободный слот" ${isAdmin() ? '' : 'disabled'}>
         </label>`).join('')}</div>
@@ -4730,7 +4738,7 @@
       });
       appEl.querySelector('#ev-ending-save-participants')?.addEventListener('click', async () => {
         const slots = Array.from({ length: 15 }, (_, index) => String(appEl.querySelector(`[data-ending-slot="${index}"]`)?.value || '').trim());
-        await saveEndingPeriodPatch(state, { allowedNicknames: slots });
+        await saveEndingPeriodPatch(state, { allowedNicknames: slots, endingParticipantSlotsCustomized: true });
       });
       appEl.querySelectorAll('[data-ending-save-manual]').forEach(button => button.addEventListener('click', async () => {
         const openingId = button.dataset.endingSaveManual;
@@ -4759,7 +4767,7 @@
       const state = endingPeriodState();
       appEl.innerHTML = `<section class="ev-panel-head"><div><div class="ev-section-label">Оценка эндингов года</div>
         <h2>${CURRENT_EVENT_YEAR} · отбор по полугодиям</h2>
-        <div class="ev-hint">Только ED. I полугодие: Зима + Весна. II полугодие: Лето + Осень. Все 15 мест участников изначально свободны.</div></div></section>
+        <div class="ev-hint">Только ED. I полугодие: Зима + Весна. II полугодие: Лето + Осень. Первые два места по умолчанию занимают Egortos и Кофа.</div></div></section>
         ${endingPeriodSwitchMarkup(state)}`;
       const content = appEl.querySelector('#ev-ending-content');
       if (activeStage === 'basket') content.innerHTML = renderEndingBasket(state);
