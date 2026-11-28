@@ -523,6 +523,7 @@
 }
 
 .oc-duel-card {
+  color: var(--text, #f5f3fa);
   display: grid;
   overflow: hidden;
   width: 100%;
@@ -552,6 +553,7 @@
 }
 
 .oc-duel-card h4 {
+  color: inherit;
   margin: 0 0 7px;
   font-size: 20px;
 }

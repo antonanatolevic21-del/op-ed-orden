@@ -1,7 +1,7 @@
 (() => {
   const primaryVersion = '20260804-quality-inline-editor1';
   const primaryScriptVersion = '20260930-profile-scope1';
-  const discoveryVersion = '20260803-existing-corrections1';
+  const discoveryVersion = '20261128-duel-text-color1';
   const tasteComparisonVersion = '20260930-profile-scope1';
   const imageUploadSecretVersion = '20260731-image-secret-memory1';
   const catalogAdminWorkspace = window.OC_CATALOG_ADMIN_WORKSPACE === true;
