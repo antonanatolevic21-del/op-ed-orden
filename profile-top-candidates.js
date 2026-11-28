@@ -2,17 +2,14 @@
   if (window.__OC_PROFILE_TOP_CANDIDATES_READY__) return;
   window.__OC_PROFILE_TOP_CANDIDATES_READY__ = true;
 
-  const LIMIT = 150;
   const state = {
     type: 'OP',
     query: '',
     expanded: false,
-    busy: false,
     addingTens: false,
     renderTimer: 0,
     bridgePatched: false,
-    dbPatched: false,
-    replacementResolve: null
+    dbPatched: false
   };
 
   const clean = value => String(value ?? '').trim();
@@ -46,16 +43,16 @@
       .oc-top-candidates-summary-copy span{color:#8f879b;font:10px 'Space Mono',monospace}
       .oc-top-candidates-summary-counts{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
       .oc-top-candidates-summary-counts b{display:inline-flex;align-items:center;min-height:28px;padding:5px 9px;border:1px solid #352d40;border-radius:999px;background:#0d0b12;color:#c9c2d2;font:800 10px 'Space Mono',monospace}
-      .oc-top-candidates-summary-counts b.full{border-color:rgba(255,184,77,.45);color:#ffbf69}
+      
       .oc-top-candidates-body{padding:0 14px 14px;border-top:1px solid #292230}
       .oc-top-candidates-add-tens{margin:0 0 12px;min-height:40px;padding:9px 12px;border:1px solid rgba(8,217,214,.45);border-radius:9px;background:rgba(8,217,214,.08);color:#08d9d6;cursor:pointer;font:800 11px 'Space Mono',monospace}
       .oc-top-candidates-add-tens:disabled{opacity:.5;cursor:wait}
       .oc-top-candidates-toolbar{display:grid;grid-template-columns:auto minmax(180px,1fr) auto;gap:9px;align-items:center;padding:13px 0}
-      .oc-top-candidates-tabs{display:flex;gap:5px}.oc-top-candidates-tabs button,.oc-top-candidates-remove,.oc-top-candidate-replace-row button{border:1px solid #352d40;border-radius:9px;background:#17131e;color:#d9d4e2;cursor:pointer;font:800 10px 'Space Mono',monospace}
+      .oc-top-candidates-tabs{display:flex;gap:5px}.oc-top-candidates-tabs button,.oc-top-candidates-remove{border:1px solid #352d40;border-radius:9px;background:#17131e;color:#d9d4e2;cursor:pointer;font:800 10px 'Space Mono',monospace}
       .oc-top-candidates-tabs button{min-width:66px;min-height:38px;padding:7px 11px}.oc-top-candidates-tabs button.active{border-color:rgba(8,217,214,.58);background:rgba(8,217,214,.08);color:#08d9d6}
       .oc-top-candidates-search{width:100%;min-height:40px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;outline:none}
       .oc-top-candidates-search:focus{border-color:#71617f;box-shadow:0 0 0 3px rgba(113,97,127,.12)}
-      .oc-top-candidates-limit{color:#8f879b;font:800 10px 'Space Mono',monospace;white-space:nowrap}.oc-top-candidates-limit.full{color:#ffbf69}.oc-top-candidates-limit.over{color:#ff5f86}
+      .oc-top-candidates-limit{color:#8f879b;font:800 10px 'Space Mono',monospace;white-space:nowrap}
       .oc-top-candidates-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;max-height:560px;overflow:auto;padding-right:3px}
       .oc-top-candidate-row{display:grid;grid-template-columns:58px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:76px;padding:8px;border:1px solid #2d2635;border-radius:11px;background:#0d0b12}
       .oc-top-candidate-row img,.oc-top-candidate-image-empty{display:block;width:58px;height:58px;border-radius:8px;object-fit:cover;background:#17131e}
@@ -64,20 +61,7 @@
       .oc-top-candidate-copy em{color:#b7afc1;font:700 10px 'Space Mono',monospace;font-style:normal}
       .oc-top-candidates-remove{min-height:36px;padding:7px 10px}.oc-top-candidates-remove:hover{border-color:rgba(255,95,134,.55);color:#ff7b9d;background:rgba(255,95,134,.06)}.oc-top-candidates-remove:disabled{opacity:.45;cursor:wait}
       .oc-top-candidates-empty{grid-column:1/-1;padding:20px;border:1px dashed #352d40;border-radius:11px;color:#8f879b;text-align:center;font-size:12px}
-      .oc-top-candidate-replace-modal{position:fixed;inset:0;z-index:620;display:flex;align-items:flex-start;justify-content:center;padding:88px 16px 24px;background:rgba(5,4,8,.86);backdrop-filter:blur(8px);overflow:auto}
-      .oc-top-candidate-replace-dialog{position:relative;width:min(900px,100%);padding:20px;border:1px solid #342c3d;border-radius:18px;background:#100d16;color:#f5f3fa;box-shadow:0 30px 90px rgba(0,0,0,.55)}
-      .oc-top-candidate-replace-close{position:absolute;right:12px;top:9px;width:38px;height:38px;border:0;background:transparent;color:#8f879b;font-size:28px;cursor:pointer}
-      .oc-top-candidate-replace-dialog h2{margin:0 44px 5px 0;font-size:23px}.oc-top-candidate-replace-dialog>p{margin:0 44px 15px 0;color:#8f879b;font-size:12px}
-      .oc-top-candidate-replace-new{display:grid;grid-template-columns:54px minmax(0,1fr);gap:10px;align-items:center;margin-bottom:12px;padding:9px;border:1px solid rgba(8,217,214,.28);border-radius:11px;background:rgba(8,217,214,.045)}
-      .oc-top-candidate-replace-new img,.oc-top-candidate-replace-new span:first-child{width:54px;height:54px;border-radius:8px;object-fit:cover;background:#17131e}.oc-top-candidate-replace-new span:first-child{display:grid;place-items:center;color:#08d9d6}
-      .oc-top-candidate-replace-new strong{display:block;margin-bottom:3px}.oc-top-candidate-replace-new small{color:#8f879b}
-      .oc-top-candidate-replace-search{width:100%;min-height:42px;margin-bottom:10px;border:1px solid #352d40;border-radius:10px;background:#0d0b12;color:#f5f3fa;padding:9px 11px;outline:none}
-      .oc-top-candidate-replace-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:520px;overflow:auto}
-      .oc-top-candidate-replace-row{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:9px;align-items:center;padding:7px;border:1px solid #2d2635;border-radius:10px;background:#0d0b12}
-      .oc-top-candidate-replace-row img,.oc-top-candidate-replace-row .empty{width:48px;height:48px;border-radius:7px;object-fit:cover;background:#17131e}.oc-top-candidate-replace-row .empty{display:grid;place-items:center;color:#655b70}
-      .oc-top-candidate-replace-row>span{display:grid;gap:3px;min-width:0}.oc-top-candidate-replace-row strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}.oc-top-candidate-replace-row small{color:#8f879b;font:9px 'Space Mono',monospace}
-      .oc-top-candidate-replace-row button{min-height:34px;padding:6px 9px}.oc-top-candidate-replace-row button:hover{border-color:rgba(8,217,214,.55);color:#08d9d6}
-      @media(max-width:760px){.oc-top-candidates-details>summary{align-items:flex-start;flex-wrap:wrap}.oc-top-candidates-summary-counts{margin-left:0}.oc-top-candidates-toolbar{grid-template-columns:1fr}.oc-top-candidates-tabs{width:100%}.oc-top-candidates-tabs button{flex:1}.oc-top-candidates-list,.oc-top-candidate-replace-list{grid-template-columns:1fr}.oc-top-candidate-replace-modal{padding:72px 8px 10px}.oc-top-candidate-replace-dialog{padding:17px 10px}.oc-top-candidate-row{grid-template-columns:52px minmax(0,1fr) auto}.oc-top-candidate-row img,.oc-top-candidate-image-empty{width:52px;height:52px}}
+      @media(max-width:760px){.oc-top-candidates-details>summary{align-items:flex-start;flex-wrap:wrap}.oc-top-candidates-summary-counts{margin-left:0}.oc-top-candidates-toolbar{grid-template-columns:1fr}.oc-top-candidates-tabs{width:100%}.oc-top-candidates-tabs button{flex:1}.oc-top-candidates-list{grid-template-columns:1fr}.oc-top-candidate-row{grid-template-columns:52px minmax(0,1fr) auto}.oc-top-candidate-row img,.oc-top-candidate-image-empty{width:52px;height:52px}}
     `;
     document.head.append(style);
   }
@@ -176,14 +160,11 @@
     const opCount = candidateIds('OP').length;
     const edCount = candidateIds('ED').length;
     const currentCount = state.type === 'ED' ? edCount : opCount;
-    const countClass = currentCount > LIMIT ? 'over' : currentCount === LIMIT ? 'full' : '';
     root.innerHTML = `<details class="oc-top-candidates-details" ${state.expanded ? 'open' : ''}>
-      <summary><span class="oc-top-candidates-summary-copy"><strong>Все кандидаты в топ-100</strong><span>Список свёрнут изначально · максимум ${LIMIT} отдельно для OP и ED</span></span><span class="oc-top-candidates-summary-counts"><b class="${opCount >= LIMIT ? 'full' : ''}">OP ${opCount}/${LIMIT}</b><b class="${edCount >= LIMIT ? 'full' : ''}">ED ${edCount}/${LIMIT}</b></span></summary>
-      <div class="oc-top-candidates-body"><div class="oc-top-candidates-toolbar"><div class="oc-top-candidates-tabs"><button type="button" data-candidate-type="OP" class="${state.type === 'OP' ? 'active' : ''}">OP</button><button type="button" data-candidate-type="ED" class="${state.type === 'ED' ? 'active' : ''}">ED</button></div><input class="oc-top-candidates-search" type="search" value="${esc(state.query)}" placeholder="Найти кандидата…" autocomplete="off"><span class="oc-top-candidates-limit ${countClass}">${currentCount}/${LIMIT}</span></div><div class="oc-top-candidates-list">${candidateListMarkup(state.type)}</div></div>
+      <summary><span class="oc-top-candidates-summary-copy"><strong>Все кандидаты в топ-100</strong><span>Без ограничения количества · отдельно для OP и ED</span></span><span class="oc-top-candidates-summary-counts"><b>OP ${opCount}</b><b>ED ${edCount}</b></span></summary>
+      <div class="oc-top-candidates-body"><div class="oc-top-candidates-toolbar"><div class="oc-top-candidates-tabs"><button type="button" data-candidate-type="OP" class="${state.type === 'OP' ? 'active' : ''}">OP</button><button type="button" data-candidate-type="ED" class="${state.type === 'ED' ? 'active' : ''}">ED</button></div><input class="oc-top-candidates-search" type="search" value="${esc(state.query)}" placeholder="Найти кандидата…" autocomplete="off"><span class="oc-top-candidates-limit">${currentCount}</span></div><div class="oc-top-candidates-list">${candidateListMarkup(state.type)}</div></div>
     </details>`;
-    if (state.type === 'OP') {
-      root.querySelector('.oc-top-candidates-toolbar').insertAdjacentHTML('afterend', `<button type="button" class="oc-top-candidates-add-tens" data-add-ten-opening-candidates ${state.busy || state.addingTens ? 'disabled' : ''}>${state.addingTens ? 'Добавляю десятки…' : 'Добавить все OP с оценкой 10 в кандидаты'}</button>`);
-    }
+    root.querySelector('.oc-top-candidates-toolbar').insertAdjacentHTML('afterend', `<button type="button" class="oc-top-candidates-add-tens" data-add-ten-candidates ${state.addingTens ? 'disabled' : ''}>${state.addingTens ? 'Добавляю десятки…' : `Добавить все ${state.type} с оценкой 10 в кандидаты`}</button>`);
     const details = root.querySelector('details');
     details?.addEventListener('toggle', () => { state.expanded = details.open; });
   }
@@ -193,120 +174,25 @@
     state.renderTimer = window.setTimeout(render, delay);
   }
 
-  function openCandidates(type) {
-    state.type = cleanType(type);
-    state.expanded = true;
-    state.query = '';
-    render();
-    document.querySelector('#oc-profile-top-candidates')?.scrollIntoView({ behavior:'smooth', block:'start' });
-  }
-
-  function closeReplacement(value = null) {
-    document.querySelector('.oc-top-candidate-replace-modal')?.remove();
-    const resolve = state.replacementResolve;
-    state.replacementResolve = null;
-    if (resolve) resolve(value);
-  }
-
-  function replacementRowsMarkup(type, query = '') {
-    const normalized = norm(query);
-    const rows = candidateRows(type).filter(row => !normalized || norm([
-      row.entry.title,
-      ...(Array.isArray(row.entry.alternativeTitles) ? row.entry.alternativeTitles : []),
-      row.entry.anime
-    ].join(' ')).includes(normalized));
-    if (!rows.length) return '<div class="oc-top-candidates-empty">Ничего не найдено.</div>';
-    return rows.map(row => `<div class="oc-top-candidate-replace-row">
-      ${imageMarkup(row.entry, row.entry?.fallbackImage || row.entry?.image ? '' : 'empty')}
-      <span><strong title="${esc(row.entry.title || row.id)}">${esc(row.entry.title || row.id)}</strong><small>${row.position ? `№${row.position} в топе` : 'вне топа'} · ${row.score === null ? 'оценка —' : `оценка ${row.score}`}</small></span>
-      <button type="button" data-replace-top-candidate="${esc(row.id)}">Заменить</button>
-    </div>`).join('');
-  }
-
-  function chooseReplacement(newId, type) {
-    closeReplacement(null);
-    const map = new Map(entries().map(entry => [String(entry.id), entry]));
-    const entry = map.get(String(newId)) || { id:newId, title:newId, type:cleanType(type) };
-    const modal = document.createElement('div');
-    modal.className = 'oc-top-candidate-replace-modal';
-    modal.innerHTML = `<div class="oc-top-candidate-replace-dialog"><button type="button" class="oc-top-candidate-replace-close" aria-label="Закрыть">×</button><h2>Лимит кандидатов достигнут</h2><p>Для ${cleanType(type)} уже выбрано ${LIMIT} кандидатов. Выбери один вариант, который нужно заменить новым.</p><div class="oc-top-candidate-replace-new">${imageMarkup(entry)}<div><strong>${esc(entry.title || newId)}</strong><small>Новый кандидат</small></div></div><input class="oc-top-candidate-replace-search" type="search" placeholder="Найти кандидата для замены…" autocomplete="off"><div class="oc-top-candidate-replace-list">${replacementRowsMarkup(type)}</div></div>`;
-    document.body.append(modal);
-    modal.addEventListener('click', event => {
-      if (event.target === modal || event.target.closest('.oc-top-candidate-replace-close')) closeReplacement(null);
-      const replace = event.target.closest('[data-replace-top-candidate]');
-      if (replace) closeReplacement(String(replace.dataset.replaceTopCandidate));
-    });
-    const search = modal.querySelector('.oc-top-candidate-replace-search');
-    search?.addEventListener('input', () => {
-      modal.querySelector('.oc-top-candidate-replace-list').innerHTML = replacementRowsMarkup(type, search.value);
-    });
-    window.setTimeout(() => search?.focus(), 0);
-    return new Promise(resolve => { state.replacementResolve = resolve; });
-  }
-
   function patchBridge() {
-    const appBridge = bridge();
-    if (!appBridge?.toggleTopCandidate) return false;
-    if (appBridge.__ocTopCandidateLimitPatched) {
-      state.bridgePatched = true;
-      return true;
-    }
-    const originalToggle = appBridge.toggleTopCandidate.bind(appBridge);
-    appBridge.__ocTopCandidateLimitPatched = true;
-    appBridge.__ocOriginalToggleTopCandidate = originalToggle;
-    appBridge.topCandidateLimit = LIMIT;
-    appBridge.toggleTopCandidate = async (id, type) => {
-      const candidateId = String(id || '');
-      const candidateType = cleanType(type);
-      const before = candidateIds(candidateType);
-      if (before.includes(candidateId)) return originalToggle(candidateId, candidateType);
-      if (before.length > LIMIT) {
-        openCandidates(candidateType);
-        throw new Error(`Сейчас выбрано ${before.length} кандидатов ${candidateType}. Сначала удали лишние варианты до лимита ${LIMIT}.`);
-      }
-      if (before.length < LIMIT) return originalToggle(candidateId, candidateType);
-      const replacementId = await chooseReplacement(candidateId, candidateType);
-      if (!replacementId) return false;
-      if (state.busy) throw new Error('Замена кандидата уже выполняется.');
-      state.busy = true;
-      try {
-        const latest = candidateIds(candidateType);
-        if (latest.includes(candidateId)) return true;
-        if (latest.length < LIMIT) return originalToggle(candidateId, candidateType);
-        if (!latest.includes(replacementId)) throw new Error('Выбранный кандидат уже удалён. Попробуй ещё раз.');
-        await originalToggle(replacementId, candidateType);
-        try {
-          const active = await originalToggle(candidateId, candidateType);
-          toast(`Кандидат заменён: ${clean(entries().find(entry => String(entry.id) === replacementId)?.title || replacementId)} → ${clean(entries().find(entry => String(entry.id) === candidateId)?.title || candidateId)}`, 'success');
-          return active;
-        } catch (error) {
-          try { await originalToggle(replacementId, candidateType); } catch (_) {}
-          throw error;
-        }
-      } finally {
-        state.busy = false;
-        queueRender(0);
-      }
-    };
-    state.bridgePatched = true;
-    return true;
+    state.bridgePatched = Boolean(bridge()?.toggleTopCandidate);
+    return state.bridgePatched;
   }
 
   function patchDb() {
     const db = window.OPED_DB;
     if (!db?.saveManualRanks) return false;
-    if (db.__ocTopCandidateLimitPatched) {
+    if (db.__ocTopCandidatesDedupPatched) {
       state.dbPatched = true;
       return true;
     }
     const originalSave = db.saveManualRanks.bind(db);
-    db.__ocTopCandidateLimitPatched = true;
+    db.__ocTopCandidatesDedupPatched = true;
     db.saveManualRanks = (nickname, ranks) => {
       const next = { ...(ranks || {}) };
       for (const field of ['candidatesOP', 'candidatesED']) {
         if (!Array.isArray(next[field])) continue;
         next[field] = Array.from(new Set(next[field].map(String).filter(Boolean)));
-        if (next[field].length > LIMIT) throw new Error(`Максимум ${LIMIT} кандидатов отдельно для OP и ED.`);
       }
       return originalSave(nickname, next);
     };
@@ -320,14 +206,15 @@
   }
 
   document.addEventListener('click', async event => {
-    if (event.target.closest('[data-add-ten-opening-candidates]')) {
-      if (state.busy || state.addingTens || !ownProfile()) return;
+    if (event.target.closest('[data-add-ten-candidates]')) {
+      if (state.addingTens || !ownProfile()) return;
+      const type = state.type;
       state.addingTens = true;
       render();
       try {
-        if (!bridge()?.addTenRatedOpeningCandidates) throw new Error('Обнови страницу для добавления десяток.');
-        const result = await bridge().addTenRatedOpeningCandidates();
-        toast(result.added ? `В кандидаты добавлено OP с оценкой 10: ${result.added}.` : result.total ? 'Все твои OP с оценкой 10 уже в кандидатах.' : 'У тебя пока нет OP с оценкой 10.', 'success');
+        if (!bridge()?.addTenRatedCandidates) throw new Error('Обнови страницу для добавления десяток.');
+        const result = await bridge().addTenRatedCandidates(type);
+        toast(result.added ? `В кандидаты добавлено ${type} с оценкой 10: ${result.added}.` : result.total ? `Все твои ${type} с оценкой 10 уже в кандидатах.` : `У тебя пока нет ${type} с оценкой 10.`, 'success');
       } catch (error) {
         toast(error?.message || 'Не удалось добавить десятки в кандидаты.', 'error');
       } finally {
@@ -344,7 +231,7 @@
       return;
     }
     const remove = event.target.closest('[data-remove-top-candidate]');
-    if (remove && !state.busy && !state.addingTens) {
+    if (remove && !state.addingTens) {
       const id = String(remove.dataset.removeTopCandidate || '');
       const type = cleanType(remove.dataset.type);
       remove.disabled = true;
@@ -370,10 +257,6 @@
     const input = document.querySelector('.oc-top-candidates-search');
     input?.focus({ preventScroll:true });
     input?.setSelectionRange?.(...selection);
-  });
-
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && document.querySelector('.oc-top-candidate-replace-modal')) closeReplacement(null);
   });
 
   window.addEventListener('oped-db-ready', () => { patchDb(); patchBridge(); queueRender(0); });

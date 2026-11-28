@@ -386,7 +386,9 @@
         publishAppData('top100-candidates-saved');
         return candidates.has(openingId);
       },
-      async addTenRatedOpeningCandidates() {
+      async addTenRatedCandidates(type = 'OP') {
+        const candidateType = type === 'ED' ? 'ED' : 'OP';
+        const field = `candidates${candidateType}`;
         const owner = myName;
         const uid = currentPersonalUid();
         if (!owner || !uid) throw new Error('Для кандидатов войди в личный аккаунт.');
@@ -399,15 +401,11 @@
           throw new Error('Не удалось загрузить все оценки и кандидатов. Попробуй ещё раз.');
         }
         const current = getManualRanksForUser(owner) || {};
-        const candidates = new Set((current.candidatesOP || []).map(String).filter(Boolean));
-        const tens = entries.filter(entry => entry.type === 'OP' && scoreFor(entry, owner) === 10);
+        const candidates = new Set((current[field] || []).map(String).filter(Boolean));
+        const tens = entries.filter(entry => entry.type === candidateType && scoreFor(entry, owner) === 10);
         const missing = [...new Set(tens.map(entry => String(entry.id)).filter(Boolean))].filter(id => !candidates.has(id));
-        const limit = window.OC_APP_BRIDGE.topCandidateLimit || 150;
-        if (candidates.size + missing.length > limit) {
-          throw new Error(`Нужно добавить ${missing.length} OP, свободно мест: ${Math.max(0, limit - candidates.size)}. Удали лишних кандидатов: лимит ${limit}.`);
-        }
         if (!missing.length) return { added: 0, total: tens.length };
-        const next = { ...current, candidatesOP: [...candidates, ...missing] };
+        const next = { ...current, [field]: [...candidates, ...missing] };
         rememberManualRanksForUser(owner, next);
         try {
           await saveManualRanks();
