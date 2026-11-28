@@ -1541,7 +1541,7 @@
         if (!byUser.has(nicknameKey)) byUser.set(nicknameKey, new Set());
         byUser.get(nicknameKey).add(openingId);
       });
-      return cleanParticipantSlots(state?.allowedNicknames || []).map((nickname, idx) => {
+      return cleanParticipantSlots(state?.allowedNicknames || [], state?.eventKind === 'ending-year' ? ENDING_FIXED_PARTICIPANTS : FIXED_PARTICIPANTS).map((nickname, idx) => {
         const nicknameKey = normalizeNickname(nickname);
         const done = nicknameKey && byUser.has(nicknameKey) ? byUser.get(nicknameKey).size : 0;
         const total = selectedIds.length;
@@ -4604,8 +4604,15 @@
           <div class="ev-season-buttons">
             ${Object.entries(ENDING_PERIOD_META).map(([key, meta]) => {
               const row = endingPeriodState(key);
-              return `<button type="button" class="ev-season-btn ${key === state.period ? 'active' : ''}" data-ending-period="${key}">
-                <span>${meta.label}</span><span class="ev-season-meta">${meta.seasons.map(value => SEASON_LABEL[value]).join(' + ')}<br>${row.selectedOpeningIds.length} ED</span>
+              const basket = activeStage === 'basket' ? endingBasketState(key) : null;
+              const progress = endingManualPeriod(row)
+                ? { done: row.selectedOpeningIds.filter(id => endingScoreFor(row, id)).length, total: row.selectedOpeningIds.length }
+                : ratingProgress(row);
+              const detail = basket
+                ? `${basketAllIds(basket).length} в корзине<br>${basket.buckets.guaranteed.length}/${basket.target} гарант · полугодие ${row.selectedOpeningIds.length}`
+                : `${row.closed ? 'закрыто' : 'открыто'}<br>${row.selectedOpeningIds.length} ED · ${progress.done}/${progress.total || '—'}`;
+              return `<button type="button" class="ev-season-btn ${key === state.period ? 'active' : ''} ${row.closed && !basket ? 'closed' : ''}" data-ending-period="${key}">
+                <span>${meta.label}</span><span class="ev-season-meta">${detail}</span>
               </button>`;
             }).join('')}
           </div>
@@ -4625,31 +4632,16 @@
       const unassigned = basket.buckets.unassigned.length;
       const guaranteed = basket.buckets.guaranteed.length;
       const canConfirm = unassigned === 0 && guaranteed === basket.target;
-      const column = (bucket, title) => `<section class="ev-basket-col"><div class="ev-basket-col-head"><div class="ev-basket-col-title">${title}</div><div class="ev-basket-count">${basket.buckets[bucket].length} ED</div></div>
-        <div class="ev-basket-list">${basket.buckets[bucket].map(id => {
-          const opening = openingsById.get(String(id));
-          if (!opening) return '';
-          const buttons = [];
-          if (bucket !== 'guaranteed') buttons.push(`<button class="ev-basket-move" data-ending-basket-move="guaranteed" data-id="${escapeHtml(id)}">в гарант</button>`);
-          if (bucket !== 'variable') buttons.push(`<button class="ev-basket-move" data-ending-basket-move="variable" data-id="${escapeHtml(id)}">в вариатив</button>`);
-          if (bucket !== 'unassigned') buttons.push(`<button class="ev-basket-move" data-ending-basket-move="unassigned" data-id="${escapeHtml(id)}">назад</button>`);
-          return `<article class="ev-basket-card"><div class="ev-basket-card-title">${escapeHtml(getOpeningTitle(opening))}</div><div class="ev-basket-card-meta">${escapeHtml(SEASON_LABEL[opening.season] || opening.season)} · ${escapeHtml((opening.performers || []).join(', ') || 'исполнитель —')}</div><div class="ev-basket-actions">${buttons.join('')}</div></article>`;
-        }).join('') || '<div class="ev-empty" style="padding:20px 10px;">Пусто</div>'}</div></section>`;
       return `<div class="ev-content-head"><div><div class="ev-content-title">${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
         <div class="ev-content-sub">Корзина полугодия · ${basketAllIds(basket).length} ED</div>
         <div class="ev-status-line ${canConfirm ? 'ok' : 'warn'}">${canConfirm ? 'Можно подтверждать набор.' : `Нужно: нераспределённых 0, гарантированных ${basket.target}. Сейчас ${unassigned} и ${guaranteed}.`}</div></div></div>
         <div class="ev-target-row"><span class="ev-hint">Количество гарантированных:</span>${[10,15,20].map(value => `<button class="ev-target-btn ${basket.target === value ? 'active' : ''}" data-ending-basket-target="${value}">${value}</button>`).join('')}</div>
-        <div class="ev-basket-grid">${column('unassigned', 'Нераспределённая')}${column('guaranteed', 'Гарантированная')}${column('variable', 'Вариативная')}</div>
+        <div class="ev-basket-grid">${renderBasketColumn(basket, 'unassigned', 'Нераспределённая')}${renderBasketColumn(basket, 'guaranteed', 'Гарантированная')}${renderBasketColumn(basket, 'variable', 'Вариативная')}</div>
         <div class="ev-basket-confirm-row"><div class="ev-basket-status">После подтверждения гарантированные ED попадут в первый этап.</div><button class="ev-btn-main" id="ev-ending-confirm-basket" ${canConfirm ? '' : 'disabled'}>Подтвердить полугодие</button></div>`;
     }
 
     function renderEndingParticipants(state) {
-      if (endingManualPeriod(state)) return '';
-      return `<section class="ev-ending-participants"><div class="ev-mini-title">15 слотов участников</div>
-        <div class="ev-ending-slot-grid">${Array.from({ length: 15 }, (_, index) => `<label class="ev-ending-slot"><span>${String(index + 1).padStart(2, '0')}</span>
-          <input type="text" data-ending-slot="${index}" value="${escapeHtml(state.allowedNicknames[index] || '')}" placeholder="Свободный слот" ${isAdmin() ? '' : 'disabled'}>
-        </label>`).join('')}</div>
-        ${isAdmin() ? '<button class="ev-btn-secondary" type="button" id="ev-ending-save-participants">Сохранить участников</button>' : ''}</section>`;
+      return endingManualPeriod(state) ? '' : renderParticipants(state);
     }
 
     function renderEndingManualScores(state) {
@@ -4658,24 +4650,16 @@
           const opening = openingsById.get(String(id));
           if (!opening) return '';
           const saved = endingScoreFor(state, id);
-          return `<div class="ev-opening-row ev-ending-score-row">${endingTrackLabel(opening, index)}
+          return `<article class="oc-season-op ev-ending-manual-row">${renderEventTrackIdentity(opening, index)}
             <label class="ev-ending-score-field"><span>Итоговые баллы</span><input type="number" min="0" step="0.01" data-ending-manual-score="${escapeHtml(id)}" value="${saved ? escapeHtml(saved.score) : ''}" ${isAdmin() ? '' : 'disabled'}></label>
             ${isAdmin() ? `<button type="button" class="ev-btn-secondary" data-ending-save-manual="${escapeHtml(id)}">Сохранить</button>` : ''}
-          </div>`;
+          </article>`;
         }).join('')}</div>`;
     }
 
     function renderEndingParticipantScores(state) {
       const actor = endingActor(state);
-      const status = isAdmin()
-        ? '<div class="ev-status-line warn">Чтобы поставить оценки за участника, переключись в правом верхнем углу на нужный гостевой слот.</div>'
-        : actor
-          ? `<div class="ev-status-line ok">Ты оцениваешь как ${escapeHtml(actor.nickname)} · слот ${actor.slot}.</div>`
-          : '<div class="ev-status-line warn">Твой гостевой слот пока свободен. Администратор должен указать участника в этой строке.</div>';
-      return `${status}
-        <div class="ev-actions" style="margin:12px 0;">
-          ${!isAdmin() ? `<button class="ev-btn-secondary" id="ev-ending-rate-all" ${!actor || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>` : ''}
-        </div>
+      return `${!isAdmin() ? `<div class="ev-actions"><button class="ev-btn-secondary" id="ev-ending-rate-all" ${!actor || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button></div>` : ''}
         <div class="ev-mini-title" style="margin:4px 0 10px;">Эндинги полугодия</div>
         <div class="ev-list">
           ${state.selectedOpeningIds.length ? state.selectedOpeningIds.map((id, index) => renderOpeningRow(state, id, index)).join('') : '<div class="ev-empty">В этом полугодии пока нет ED для оценки.</div>'}
@@ -4685,17 +4669,20 @@
     function renderEndingRankTable(state, selectable = false) {
       const selected = new Set(state.semifinalOpeningIds);
       const rows = endingRankedRows(state);
-      return `<div class="ev-mini-title">Результаты полугодия</div><div class="ev-list ev-ending-results">${rows.map((row, index) =>
-        `<label class="ev-opening-row ev-ending-result-row">${selectable ? `<input type="checkbox" data-ending-semifinal-id="${escapeHtml(row.id)}" ${selected.has(row.id) ? 'checked' : ''} ${isAdmin() ? '' : 'disabled'}>` : ''}
-          ${endingTrackLabel(row.opening, index)}<span class="ev-ending-total">${row.total} б.${endingManualPeriod(state) ? '' : ` · ${row.votes}/15`}</span></label>`
-      ).join('') || '<div class="ev-empty">Результатов пока нет.</div>'}</div>`;
+      return `<section class="ev-winner-panel"><div class="ev-mini-title">Результаты полугодия</div><div class="ev-winner-list">${rows.map((row, index) =>
+        `<label class="ev-winner-row ${selected.has(row.id) ? 'chosen' : ''}">
+          ${endingTrackLabel(row.opening, index)}<span class="ev-winner-score">${row.total} б.${endingManualPeriod(state) ? '' : ` · ${row.votes}/15`}</span>
+          ${selectable ? `<span class="ev-winner-btn"><input type="checkbox" aria-label="Выбрать ${escapeHtml(getOpeningTitle(row.opening))} в финал" data-ending-semifinal-id="${escapeHtml(row.id)}" ${selected.has(row.id) ? 'checked' : ''} ${isAdmin() ? '' : 'disabled'}></span>` : ''}</label>`
+      ).join('') || '<div class="ev-empty">Результатов пока нет.</div>'}</div></section>`;
     }
 
     function renderEndingFirst(state) {
+      const manual = endingManualPeriod(state);
       return `<div class="ev-content-head"><div><div class="ev-content-title">${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
-        <div class="ev-content-sub">Первый этап · ${state.selectedOpeningIds.length} ED</div></div></div>
+        <div class="ev-content-sub">Первый этап · ${state.closed ? 'полугодие закрыто' : 'полугодие открыто'} · ${state.selectedOpeningIds.length} ED</div>
+        <div class="ev-status-line ${manual ? 'warn' : state.closed ? 'bad' : 'warn'}">${manual ? 'Готовые итоговые баллы за I полугодие 2026.' : state.closed ? 'Полугодие закрыто: оценка недоступна.' : 'Для оценки переключись в гостевой режим нужного участника.'}</div></div></div>
         ${renderEndingParticipants(state)}
-        ${endingManualPeriod(state) ? renderEndingManualScores(state) : renderEndingParticipantScores(state)}`;
+        ${manual ? renderEndingManualScores(state) : renderEndingParticipantScores(state)}`;
     }
 
     function renderEndingSemi(state) {
@@ -4711,7 +4698,7 @@
         .filter(row => row.opening).sort((a, b) => b.total - a.total);
       return `<div class="ev-content-head"><div><div class="ev-content-title">Финал · ${ENDING_PERIOD_META[state.period].label} ${state.year}</div>
         <div class="ev-content-sub">${state.semifinalOpeningIds.length ? 'Сохранённые финалисты' : 'Предварительный топ-10 по баллам'}</div></div></div>
-        <div class="ev-list">${rows.map((row, index) => `<div class="ev-opening-row">${endingTrackLabel(row.opening, index)}<span class="ev-ending-total">${row.total} б.</span></div>`).join('') || '<div class="ev-empty">Финалисты пока не выбраны.</div>'}</div>`;
+        <section class="ev-winner-panel"><div class="ev-winner-list">${rows.map((row, index) => `<div class="ev-winner-row auto">${endingTrackLabel(row.opening, index)}<span class="ev-winner-score">${row.total} б.</span></div>`).join('') || '<div class="ev-empty">Финалисты пока не выбраны.</div>'}</div></section>`;
     }
 
     async function saveEndingPeriodPatch(state, patch) {
@@ -4757,6 +4744,10 @@
           updatedAt: serverTimestamp()
         }, { merge: true });
       }));
+      appEl.querySelectorAll('[data-participant-review]').forEach(button => button.addEventListener('click', () => {
+        const participant = getParticipantRatingProgress(state)[Number(button.dataset.participantReview)];
+        if (participant) openParticipantReviewModal(state, participant);
+      }));
       appEl.querySelector('#ev-ending-rate-all')?.addEventListener('click', () => {
         if (endingActor(state)) openEvaluator(state, state.selectedOpeningIds, 0);
       });
@@ -4772,8 +4763,8 @@
     function renderEndingYearEvent() {
       if (isGuest()) { renderGuestStage(); return; }
       const state = endingPeriodState();
-      appEl.innerHTML = `<section class="ev-panel-head"><div><div class="ev-section-label">Оценка эндингов года</div>
-        <h2>${CURRENT_EVENT_YEAR} · отбор по полугодиям</h2>
+      appEl.innerHTML = `<section class="ev-panel-head"><div><div class="ev-section-label">${escapeHtml(STAGE_LABEL[activeStage])}</div>
+        <h2>${CURRENT_EVENT_YEAR} · ${activeStage === 'basket' ? 'отбор ED для полугодия' : 'отбор эндингов по полугодиям'}</h2>
         <div class="ev-hint">Только ED. I полугодие: Зима + Весна. II полугодие: Лето + Осень. Первые два места по умолчанию занимают Egortos и Кофа.</div></div></section>
         ${endingPeriodSwitchMarkup(state)}`;
       const content = appEl.querySelector('#ev-ending-content');
@@ -6813,7 +6804,7 @@
         <section class="ev-basket-col">
           <div class="ev-basket-col-head">
             <div class="ev-basket-col-title">${escapeHtml(title)}</div>
-            <div class="ev-basket-count">${ids.length} OP</div>
+            <div class="ev-basket-count">${ids.length} ${state.eventKind === 'ending-year' ? 'ED' : 'OP'}</div>
           </div>
           <div class="ev-basket-list">
             ${ids.length ? ids.map(id => renderBasketCard(state, id, bucket)).join('') : '<div class="ev-empty" style="padding:20px 10px;">Пусто</div>'}
@@ -6827,9 +6818,9 @@
       if (!opening) return '';
       const meta = [opening.year, SEASON_LABEL[opening.season], opening.performers?.length ? opening.performers.join(', ') : 'исполнитель —'].filter(Boolean).join(' · ');
       const buttons = [];
-      if (bucket !== 'guaranteed') buttons.push(`<button class="ev-basket-move" data-basket-move="guaranteed" data-id="${escapeHtml(opening.id)}">в гарант</button>`);
-      if (bucket !== 'variable') buttons.push(`<button class="ev-basket-move" data-basket-move="variable" data-id="${escapeHtml(opening.id)}">в вариатив</button>`);
-      if (bucket !== 'unassigned') buttons.push(`<button class="ev-basket-move" data-basket-move="unassigned" data-id="${escapeHtml(opening.id)}">назад</button>`);
+      if (bucket !== 'guaranteed') buttons.push(`<button class="ev-basket-move" ${state.eventKind === 'ending-year' ? 'data-ending-basket-move' : 'data-basket-move'}="guaranteed" data-id="${escapeHtml(opening.id)}">в гарант</button>`);
+      if (bucket !== 'variable') buttons.push(`<button class="ev-basket-move" ${state.eventKind === 'ending-year' ? 'data-ending-basket-move' : 'data-basket-move'}="variable" data-id="${escapeHtml(opening.id)}">в вариатив</button>`);
+      if (bucket !== 'unassigned') buttons.push(`<button class="ev-basket-move" ${state.eventKind === 'ending-year' ? 'data-ending-basket-move' : 'data-basket-move'}="unassigned" data-id="${escapeHtml(opening.id)}">назад</button>`);
       return `
         <article class="ev-basket-card">
           <div class="ev-basket-card-title">${escapeHtml(opening.title)}</div>
@@ -7320,21 +7311,23 @@
     }
 
     function renderParticipants(state) {
-      const names = cleanParticipantSlots(state.allowedNicknames || []);
+      const endings = state.eventKind === 'ending-year';
+      const fixedNames = endings ? ENDING_FIXED_PARTICIPANTS : FIXED_PARTICIPANTS;
+      const names = cleanParticipantSlots(state.allowedNicknames || [], fixedNames);
       const progressRows = getParticipantRatingProgress(state);
       const completeCount = progressRows.filter(row => row.complete).length;
       return `
         <section class="ev-participants">
           <div class="ev-participants-head">
             <div>
-              <div class="ev-mini-title">Участники сезона</div>
-              <div class="ev-hint">Первые три строки закреплены всегда: Egortos, Кофа, Toxexex. Галочка означает, что пользователь оценил все OP сезона. Завершили: ${completeCount}/15.</div>
+              <div class="ev-mini-title">Участники ${endings ? 'полугодия' : 'сезона'}</div>
+              <div class="ev-hint">Первые ${endings ? 'две' : 'три'} строки закреплены всегда: ${escapeHtml(fixedNames.join(', '))}. Галочка означает, что пользователь оценил все ${endings ? 'ED полугодия' : 'OP сезона'}. Завершили: ${completeCount}/15.</div>
             </div>
-            <button class="ev-btn-ghost" id="ev-save-participants" ${!isAdmin() || state.closed ? 'disabled' : ''}>Сохранить участников</button>
+            <button class="ev-btn-ghost" id="${endings ? 'ev-ending-save-participants' : 'ev-save-participants'}" ${!isAdmin() || state.closed ? 'disabled' : ''}>Сохранить участников</button>
           </div>
           <div class="ev-participant-grid">
             ${names.map((name, idx) => {
-              const fixed = idx < FIXED_PARTICIPANTS.length;
+              const fixed = idx < fixedNames.length;
               const disabled = !isAdmin() || state.closed || fixed;
               const title = fixed ? 'Фиксированный участник' : '';
               const progress = progressRows[idx] || { done: 0, total: state.selectedOpeningIds.length, complete: false };
@@ -7353,7 +7346,7 @@
                 : `<span class="ev-participant-progress ${progressClass}" title="${escapeHtml(progressTitle)}">${escapeHtml(progressText)}</span>`;
               return `
                 <div class="ev-participant-slot">
-                  <input class="ev-participant-input ${fixed ? 'fixed' : ''}" data-idx="${idx}" value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''} />
+                  <input class="ev-participant-input ${fixed ? 'fixed' : ''}" ${endings ? `data-ending-slot="${idx}"` : `data-idx="${idx}"`} value="${escapeHtml(name)}" placeholder="${idx + 1}. никнейм" title="${escapeHtml(title)}" ${disabled ? 'disabled' : ''} />
                   ${progressEl}
                 </div>
               `;
@@ -7363,6 +7356,18 @@
       `;
     }
 
+    function renderEventTrackIdentity(opening, idx, detail = '') {
+      const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
+      const img = opening.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : escapeHtml(opening.type || 'OP');
+      const thumb = opening.link
+        ? `<a class="ev-thumb-link" href="${escapeHtml(opening.link)}" target="_blank" rel="noopener noreferrer" title="Открыть видео"><div class="oc-season-thumb">${img}</div></a>`
+        : `<div class="oc-season-thumb">${img}</div>`;
+      const meta = [opening.year, SEASON_LABEL[opening.season], opening.performers?.length ? opening.performers.join(', ') : 'исполнитель —'].filter(Boolean).join(' · ');
+      return `<div class="oc-profile-rank ${rankClass}">${idx + 1}</div>
+        ${thumb}<div><div class="oc-name">${escapeHtml(opening.title)}</div>
+        <div class="oc-meta">${escapeHtml(meta)}</div>${detail}</div>`;
+    }
+
     function renderOpeningRow(state, openingId, idx) {
       const opening = openingsById.get(String(openingId));
       if (!opening) return '';
@@ -7370,12 +7375,6 @@
       const canRate = isAllowedForSeason(state);
       const guestView = isGuest();
       const avg = guestView ? null : avgForOpeningInSeason(state.key, openingId);
-      const rankClass = idx === 0 ? 'gold' : idx === 1 ? 'silver' : idx === 2 ? 'bronze' : '';
-      const img = opening.image ? `<img class="oc-track-image" src="${escapeHtml(opening.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : escapeHtml(opening.type || 'OP');
-      const thumb = opening.link
-        ? `<a class="ev-thumb-link" href="${escapeHtml(opening.link)}" target="_blank" rel="noopener noreferrer" title="Открыть видео"><div class="oc-season-thumb">${img}</div></a>`
-        : `<div class="oc-season-thumb">${img}</div>`;
-      const meta = [opening.year, SEASON_LABEL[opening.season], opening.performers?.length ? opening.performers.join(', ') : 'исполнитель —'].filter(Boolean).join(' · ');
       const scoreText = avg ? `${avg.avg.toFixed(2)} · ${avg.count}` : '—';
       const personalLine = guestView ? '' : `<div class="oc-song-small">${myRating ? `твоя оценка: ${Number(myRating.score).toFixed(1)} · ${escapeHtml(String(myRating.comment || '').slice(0, 80))}` : 'ещё не оценено тобой'}</div>`;
       const statusCell = guestView
@@ -7383,13 +7382,7 @@
         : `<div class="ev-score-pill">${scoreText}</div>`;
       return `
         <article class="oc-season-op" data-opening-id="${escapeHtml(opening.id)}">
-          <div class="oc-profile-rank ${rankClass}">${idx + 1}</div>
-          ${thumb}
-          <div>
-            <div class="oc-name">${escapeHtml(opening.title)}</div>
-            <div class="oc-meta">${escapeHtml(meta)}</div>
-            ${personalLine}
-          </div>
+          ${renderEventTrackIdentity(opening, idx, personalLine)}
           ${statusCell}
           <button class="ev-rate-btn ${isAdmin() ? 'admin-edit' : ''}" data-rate-id="${escapeHtml(opening.id)}" ${isAdmin() ? '' : (state.closed || !canRate ? 'disabled' : '')}>${isAdmin() ? 'Редактировать' : (myRating ? 'Изменить' : 'Оценить')}</button>
         </article>
@@ -7571,7 +7564,7 @@
     function buildParticipantReviewText(state, participant) {
       const rows = getParticipantReviewRows(state, participant);
       const nickname = String(participant?.nickname || '').trim() || 'Пользователь';
-      const lines = [`${nickname} — ${SEASON_LABEL[state.season]} ${state.year}`];
+      const lines = [`${nickname} — ${state.eventKind === 'ending-year' ? ENDING_PERIOD_META[state.period].label : SEASON_LABEL[state.season]} ${state.year}`];
       rows.forEach(row => {
         const rating = row.rating;
         if (!rating) {
@@ -7600,9 +7593,9 @@
         <div class="ev-dialog">
           <div class="ev-dialog-top">
             <div>
-              <div class="ev-progress">${escapeHtml(SEASON_LABEL[state.season])} ${state.year} · ${done}/${rows.length} оценок</div>
+              <div class="ev-progress">${escapeHtml(state.eventKind === 'ending-year' ? ENDING_PERIOD_META[state.period].label : SEASON_LABEL[state.season])} ${state.year} · ${done}/${rows.length} оценок</div>
               <div class="ev-modal-title">Оценки пользователя ${escapeHtml(nickname)}</div>
-              <div class="ev-hint">Здесь можно быстро проверить все оценки и комментарии участника по этому сезону.</div>
+              <div class="ev-hint">Здесь можно быстро проверить все оценки и комментарии участника по этому ${state.eventKind === 'ending-year' ? 'полугодию' : 'сезону'}.</div>
             </div>
             <button class="ev-close" id="ev-review-close">Закрыть</button>
           </div>

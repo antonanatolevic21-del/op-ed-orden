@@ -169,7 +169,7 @@ async function loadFull(mode = '', profile = null, seasons = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   window.OC_EVENTS_INITIAL_MODE = mode;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20261128-guest-ed-access2');
+  await import('./events-app.js?v=20261128-ed-visual-parity1');
   if (mode) void clickRequestedMode(mode);
 
   if (seasons?.length) return;

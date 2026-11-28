@@ -46,6 +46,12 @@ async function loadProfiles(force = false) {
 }
 
 function activeSeasonInfo() {
+  const ending = document.querySelector('.ev-season-btn.active[data-ending-period]');
+  if (ending) {
+    const period = ending.dataset.endingPeriod;
+    return { period, season: period, type: 'ED', year: CURRENT_EVENT_YEAR,
+      key: `ending_${CURRENT_EVENT_YEAR}_${period}`, label: period === 'h2' ? 'II полугодие' : 'I полугодие' };
+  }
   const button = document.querySelector('.ev-season-btn.active[data-season]');
   const season = String(button?.dataset.season || '');
   if (!season) return null;
@@ -180,7 +186,7 @@ async function sendReminder(slot) {
     }
     return;
   }
-  const message = `${info.label} ${info.year}: ${remaining === null ? 'есть незавершённые оценки' : `осталось оценить ${remaining} OP`}.`;
+  const message = `${info.label} ${info.year}: ${remaining === null ? 'есть незавершённые оценки' : `осталось оценить ${remaining} ${info.type || 'OP'}`}.`;
   const app = await waitForApp();
   if (!app) return;
   const db = getFirestore(app);
@@ -220,7 +226,7 @@ document.addEventListener('click', event => {
     open.closest('.ev-participant-slot')?.querySelector('[data-participant-review]')?.click();
     return;
   }
-  if (event.target.closest?.('#ev-save-participants')) window.setTimeout(() => void syncBindings(), 250);
+  if (event.target.closest?.('#ev-save-participants, #ev-ending-save-participants')) window.setTimeout(() => void syncBindings(), 250);
 }, true);
 
 document.addEventListener('input', event => {
