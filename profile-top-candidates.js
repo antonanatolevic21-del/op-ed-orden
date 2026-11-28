@@ -8,6 +8,7 @@
     query: '',
     expanded: false,
     busy: false,
+    addingTens: false,
     renderTimer: 0,
     bridgePatched: false,
     dbPatched: false,
@@ -47,6 +48,8 @@
       .oc-top-candidates-summary-counts b{display:inline-flex;align-items:center;min-height:28px;padding:5px 9px;border:1px solid #352d40;border-radius:999px;background:#0d0b12;color:#c9c2d2;font:800 10px 'Space Mono',monospace}
       .oc-top-candidates-summary-counts b.full{border-color:rgba(255,184,77,.45);color:#ffbf69}
       .oc-top-candidates-body{padding:0 14px 14px;border-top:1px solid #292230}
+      .oc-top-candidates-add-tens{margin:0 0 12px;min-height:40px;padding:9px 12px;border:1px solid rgba(8,217,214,.45);border-radius:9px;background:rgba(8,217,214,.08);color:#08d9d6;cursor:pointer;font:800 11px 'Space Mono',monospace}
+      .oc-top-candidates-add-tens:disabled{opacity:.5;cursor:wait}
       .oc-top-candidates-toolbar{display:grid;grid-template-columns:auto minmax(180px,1fr) auto;gap:9px;align-items:center;padding:13px 0}
       .oc-top-candidates-tabs{display:flex;gap:5px}.oc-top-candidates-tabs button,.oc-top-candidates-remove,.oc-top-candidate-replace-row button{border:1px solid #352d40;border-radius:9px;background:#17131e;color:#d9d4e2;cursor:pointer;font:800 10px 'Space Mono',monospace}
       .oc-top-candidates-tabs button{min-width:66px;min-height:38px;padding:7px 11px}.oc-top-candidates-tabs button.active{border-color:rgba(8,217,214,.58);background:rgba(8,217,214,.08);color:#08d9d6}
@@ -178,6 +181,9 @@
       <summary><span class="oc-top-candidates-summary-copy"><strong>Все кандидаты в топ-100</strong><span>Список свёрнут изначально · максимум ${LIMIT} отдельно для OP и ED</span></span><span class="oc-top-candidates-summary-counts"><b class="${opCount >= LIMIT ? 'full' : ''}">OP ${opCount}/${LIMIT}</b><b class="${edCount >= LIMIT ? 'full' : ''}">ED ${edCount}/${LIMIT}</b></span></summary>
       <div class="oc-top-candidates-body"><div class="oc-top-candidates-toolbar"><div class="oc-top-candidates-tabs"><button type="button" data-candidate-type="OP" class="${state.type === 'OP' ? 'active' : ''}">OP</button><button type="button" data-candidate-type="ED" class="${state.type === 'ED' ? 'active' : ''}">ED</button></div><input class="oc-top-candidates-search" type="search" value="${esc(state.query)}" placeholder="Найти кандидата…" autocomplete="off"><span class="oc-top-candidates-limit ${countClass}">${currentCount}/${LIMIT}</span></div><div class="oc-top-candidates-list">${candidateListMarkup(state.type)}</div></div>
     </details>`;
+    if (state.type === 'OP') {
+      root.querySelector('.oc-top-candidates-toolbar').insertAdjacentHTML('afterend', `<button type="button" class="oc-top-candidates-add-tens" data-add-ten-opening-candidates ${state.busy || state.addingTens ? 'disabled' : ''}>${state.addingTens ? 'Добавляю десятки…' : 'Добавить все OP с оценкой 10 в кандидаты'}</button>`);
+    }
     const details = root.querySelector('details');
     details?.addEventListener('toggle', () => { state.expanded = details.open; });
   }
@@ -314,6 +320,22 @@
   }
 
   document.addEventListener('click', async event => {
+    if (event.target.closest('[data-add-ten-opening-candidates]')) {
+      if (state.busy || state.addingTens || !ownProfile()) return;
+      state.addingTens = true;
+      render();
+      try {
+        if (!bridge()?.addTenRatedOpeningCandidates) throw new Error('Обнови страницу для добавления десяток.');
+        const result = await bridge().addTenRatedOpeningCandidates();
+        toast(result.added ? `В кандидаты добавлено OP с оценкой 10: ${result.added}.` : result.total ? 'Все твои OP с оценкой 10 уже в кандидатах.' : 'У тебя пока нет OP с оценкой 10.', 'success');
+      } catch (error) {
+        toast(error?.message || 'Не удалось добавить десятки в кандидаты.', 'error');
+      } finally {
+        state.addingTens = false;
+        queueRender(0);
+      }
+      return;
+    }
     const typeButton = event.target.closest('[data-candidate-type]');
     if (typeButton) {
       state.type = cleanType(typeButton.dataset.candidateType);
@@ -322,7 +344,7 @@
       return;
     }
     const remove = event.target.closest('[data-remove-top-candidate]');
-    if (remove && !state.busy) {
+    if (remove && !state.busy && !state.addingTens) {
       const id = String(remove.dataset.removeTopCandidate || '');
       const type = cleanType(remove.dataset.type);
       remove.disabled = true;

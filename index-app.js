@@ -386,6 +386,40 @@
         publishAppData('top100-candidates-saved');
         return candidates.has(openingId);
       },
+      async addTenRatedOpeningCandidates() {
+        const owner = myName;
+        const uid = currentPersonalUid();
+        if (!owner || !uid) throw new Error('Для кандидатов войди в личный аккаунт.');
+        if (activeTab !== 'profile' || !manualSameUser(profileUserSelect?.value || profileUser || owner, owner)) {
+          throw new Error('Открой свой профиль.');
+        }
+        await syncRouteDataSubscriptions(activeTab);
+        if (myName !== owner || currentPersonalUid() !== uid) throw new Error('Аккаунт изменился. Повтори добавление.');
+        if (!remoteDataState.ratings.ready || !remoteDataState.openings.ready || !remoteDataState.manualRanks.ready) {
+          throw new Error('Не удалось загрузить все оценки и кандидатов. Попробуй ещё раз.');
+        }
+        const current = getManualRanksForUser(owner) || {};
+        const candidates = new Set((current.candidatesOP || []).map(String).filter(Boolean));
+        const tens = entries.filter(entry => entry.type === 'OP' && scoreFor(entry, owner) === 10);
+        const missing = [...new Set(tens.map(entry => String(entry.id)).filter(Boolean))].filter(id => !candidates.has(id));
+        const limit = window.OC_APP_BRIDGE.topCandidateLimit || 150;
+        if (candidates.size + missing.length > limit) {
+          throw new Error(`Нужно добавить ${missing.length} OP, свободно мест: ${Math.max(0, limit - candidates.size)}. Удали лишних кандидатов: лимит ${limit}.`);
+        }
+        if (!missing.length) return { added: 0, total: tens.length };
+        const next = { ...current, candidatesOP: [...candidates, ...missing] };
+        rememberManualRanksForUser(owner, next);
+        try {
+          await saveManualRanks();
+        } catch (error) {
+          rememberManualRanksForUser(owner, current);
+          try { await window.storage.set(MANUAL_RANKS_KEY, JSON.stringify(manualRanks), true); } catch (_) {}
+          publishAppData('top100-candidates-failed');
+          throw error;
+        }
+        publishAppData('top100-tens-added');
+        return { added: missing.length, total: tens.length };
+      },
       async addTopCandidates(type) {
         if (!myName || !currentPersonalUid()) throw new Error('Для изменения топа войди в личный аккаунт.');
         const cleanType = type === 'ED' ? 'ED' : 'OP';

@@ -14,7 +14,7 @@
   const top100EditorVersion = '20261030-backup-png1';
   const top100DragVersion = '20260726-top100-drag2';
   const top100ExportVersion = '20261030-backup-png1';
-  const top100CandidatesVersion = '20260731-top100-candidates1';
+  const top100CandidatesVersion = '20261128-opening-tens1';
   const ratingWorkbenchVersion = '20261014-conditional-modifiers1';
   const trackAddPanelVersion = '20260804-list-suggestions1';
   const profileVersion = '20261001-profile-refresh1';
