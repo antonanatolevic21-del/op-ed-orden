@@ -97,7 +97,6 @@ function bindingRows(row) {
 function participantMatch(row, profile) {
   if (!row || row.closed || Number(row.year || CURRENT_EVENT_YEAR) !== CURRENT_EVENT_YEAR) return null;
   const ending = row.eventKind === 'ending-year' || String(row.id || '').startsWith('ending_');
-  if (ending !== (requestedMode() === 'endingrating')) return null;
   if (ending && CURRENT_EVENT_YEAR === 2026 && (row.period === 'h1' || String(row.id).endsWith('_h1'))) return null;
   const key = normalizeNickname(profile.nicknameKey || profile.nickname);
   const slots = Array.isArray(row.allowedNicknames) ? row.allowedNicknames : [];
@@ -170,7 +169,7 @@ async function loadFull(mode = '', profile = null, seasons = null) {
   window.__OC_EVENTS_LIGHT_PARTICIPANT__ = false;
   window.OC_EVENTS_INITIAL_MODE = mode;
   prepareRegisteredFullAccess(auth.currentUser, profile);
-  await import('./events-app.js?v=20261128-guest-ed-layout1');
+  await import('./events-app.js?v=20261128-guest-ed-access2');
   if (mode) void clickRequestedMode(mode);
 
   if (seasons?.length) return;
@@ -234,7 +233,8 @@ async function start() {
   }
 
   clearFullMarker();
-  await loadFull(mode === 'endingrating' ? 'endingrating' : 'rating', profile, seasons);
+  const onlyEndings = seasons.every(row => row.eventKind === 'ending-year' || String(row.id || '').startsWith('ending_'));
+  await loadFull(mode === 'endingrating' || (!mode && onlyEndings) ? 'endingrating' : 'rating', profile, seasons);
 }
 
 start().catch(async error => {

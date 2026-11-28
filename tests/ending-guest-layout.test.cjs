@@ -51,7 +51,11 @@ const boot = { CURRENT_EVENT_YEAR: 2026, requestedMode: () => 'endingrating', no
 const match = new Function('ctx', 'with(ctx){' + bootstrap.slice(start,end) + ';return participantMatch;}')(boot);
 assert.ok(match({ id: 'ending_2026_h2', ...period('h2') }, { ...profile, authUid: 'alice-uid' }));
 assert.equal(match({ id: 'ending_2026_h1', ...period('h1') }, profile), null);
-assert.equal(match({ id: '2026_fall', year: 2026, allowedNicknames: ['Alice'] }, profile), null);
+assert.ok(match({ id: '2026_fall', year: 2026, allowedNicknames: ['Alice'] }, profile));
+const access = new Function('ctx', 'with(ctx){' + extract(source,'canAccessMode') + '; return canAccessMode;}')({ registeredSeasonProfile: () => profile });
+assert.equal(access('rating'), true);
+assert.equal(access('endingrating'), true);
+assert.equal(access('guess'), false);
 const calls = [];
 const allButton = { dataset: { guestRateAll: 'ending_2026_h2' }, addEventListener: (type, cb) => { allButton.click = cb; } };
 const oneButton = { dataset: { rateId: 'ed2' }, closest: () => ({ dataset: { guestKey: 'ending_2026_h2' } }), addEventListener: (type, cb) => { oneButton.click = cb; } };

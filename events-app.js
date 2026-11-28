@@ -1071,7 +1071,7 @@
     function hasAccess() { return isUser() || accessLevel === 'guest' || isAdmin(); }
     function canAccessMode(mode) {
       const requested = String(mode || 'rating');
-      if (registeredSeasonProfile()) return requested === 'rating';
+      if (registeredSeasonProfile()) return requested === 'rating' || requested === 'endingrating';
       if (requested === 'rating' || requested === 'endingrating') return isGuest() || isAdmin();
       if (requested === 'predictions') return isAdmin();
       return !isGuest();
