@@ -928,7 +928,7 @@
       const verifiedPersonalAdmin = authenticated && isAdminUid(firebaseUser.uid);
       accessLevel = verifiedPersonalAdmin ? 'admin' : seasonalProfile ? 'guest' : 'user';
       guestSlot = 0;
-      if (seasonalProfile) activeMode = 'rating';
+      if (seasonalProfile) activeMode = window.OC_EVENTS_INITIAL_MODE === 'endingrating' ? 'endingrating' : 'rating';
       adminUnlocked = accessLevel === 'admin';
       localStorage.setItem(NAME_KEY, myName);
       localStorage.setItem(ACCESS_KEY, accessLevel);
@@ -993,6 +993,12 @@
           const guestKey = normalizeNickname(nickname);
           return !!guestKey && (isAdminGuestPreview() || guestKey === myKey);
         });
+    }
+
+    function findGuestEndingStates() {
+      if (!isGuest() || (!guestSlot && !registeredSeasonProfile())) return [];
+      return ['h1', 'h2'].map(period => endingPeriodState(period))
+        .filter(state => !endingManualPeriod(state) && isAllowedForSeason(state));
     }
 
     function findGuestSeasonState() {
@@ -4764,6 +4770,7 @@
     }
 
     function renderEndingYearEvent() {
+      if (isGuest()) { renderGuestStage(); return; }
       const state = endingPeriodState();
       appEl.innerHTML = `<section class="ev-panel-head"><div><div class="ev-section-label">Оценка эндингов года</div>
         <h2>${CURRENT_EVENT_YEAR} · отбор по полугодиям</h2>
@@ -7102,15 +7109,17 @@
     }
 
     function renderGuestStage() {
-      const states = findGuestSeasonStates();
+      const endings = activeMode === 'endingrating';
+      const states = endings ? findGuestEndingStates() : findGuestSeasonStates();
+      const periodsLabel = endings ? 'полугодия' : 'сезоны';
       updateAccessUi();
       if (!states.length) {
         appEl.innerHTML = `
           <section class="ev-panel-head">
             <div>
               <div class="ev-section-label">Гостевой вход #${escapeHtml(String(guestSlot).padStart(2, '0'))}</div>
-              <h2>Нет доступных сезонов для оценки</h2>
-              <div class="ev-hint">${registeredSeasonProfile() ? 'Твой аккаунт пока не приглашён в открытые сезоны.' : `Ник должен совпадать с участником #${escapeHtml(String(guestSlot).padStart(2, '0'))}.`}</div>
+              <h2>Нет доступных ${endings ? 'полугодий' : 'сезонов'} для оценки</h2>
+              <div class="ev-hint">${registeredSeasonProfile() ? `Твой аккаунт пока не приглашён в открытые ${periodsLabel}.` : `Ник должен совпадать с участником #${escapeHtml(String(guestSlot).padStart(2, '0'))}.`}</div>
             </div>
           </section>
         `;
@@ -7119,13 +7128,13 @@
       appEl.innerHTML = `
         <section class="ev-panel-head">
           <div>
-            <div class="ev-section-label">Сезоны для оценки</div>
-            <h2>${CURRENT_EVENT_YEAR} · доступные открытые сезоны</h2>
-            <div class="ev-hint">Ты вошёл как ${registeredSeasonProfile() ? 'гость со своим аккаунтом' : `участник #${escapeHtml(String(guestSlot).padStart(2, '0'))}`}: <strong style="color:var(--cyan);">${escapeHtml(myName)}</strong>. ${registeredSeasonProfile() ? 'Показаны все открытые сезоны, куда приглашён твой аккаунт.' : 'Показаны все открытые сезоны, где этот ник стоит в указанной строке участника.'}</div>
+            <div class="ev-section-label">${endings ? 'Эндинги' : 'Сезоны'} для оценки</div>
+            <h2>${CURRENT_EVENT_YEAR} · доступные открытые ${periodsLabel}</h2>
+            <div class="ev-hint">Ты вошёл как ${registeredSeasonProfile() ? 'гость со своим аккаунтом' : `участник #${escapeHtml(String(guestSlot).padStart(2, '0'))}`}: <strong style="color:var(--cyan);">${escapeHtml(myName)}</strong>. ${registeredSeasonProfile() ? `Показаны все открытые ${periodsLabel}, куда приглашён твой аккаунт.` : `Показаны все открытые ${periodsLabel}, где этот ник стоит в указанной строке участника.`}</div>
           </div>
         </section>
         <div class="ev-guest-season-stack">
-          ${states.map(state => `<section class="ev-content ev-guest-season" data-guest-season="${escapeHtml(state.season)}">${renderGuestSeasonContent(state)}</section>`).join('')}
+          ${states.map(state => `<section class="ev-content ev-guest-season" data-guest-season="${escapeHtml(state.season || state.period)}" data-guest-key="${escapeHtml(state.key)}">${renderGuestSeasonContent(state)}</section>`).join('')}
         </div>
       `;
       bindGuestEvents(states);
@@ -7133,25 +7142,28 @@
 
     function renderGuestSeasonContent(state) {
       const allowed = isAllowedForSeason(state);
+      const endings = state.eventKind === 'ending-year';
+      const type = endings ? 'ED' : 'OP';
+      const label = endings ? ENDING_PERIOD_META[state.period].label : SEASON_LABEL[state.season];
       return `
         <div class="ev-content-head">
           <div>
-            <div class="ev-content-title">${escapeHtml(SEASON_LABEL[state.season])} ${state.year}</div>
-            <div class="ev-content-sub">${state.selectedOpeningIds.length} OP · комментарий обязателен</div>
-            <div class="ev-status-line ${allowed ? 'ok' : 'warn'}">${allowed ? 'Можно оценивать OP сезона.' : 'Оценка недоступна для этого гостевого входа.'}</div>
+            <div class="ev-content-title">${escapeHtml(label)} ${state.year}</div>
+            <div class="ev-content-sub">${state.selectedOpeningIds.length} ${type} · комментарий обязателен</div>
+            <div class="ev-status-line ${allowed ? 'ok' : 'warn'}">${allowed ? `Можно оценивать ${type} ${endings ? 'полугодия' : 'сезона'}.` : 'Оценка недоступна для этого гостевого входа.'}</div>
           </div>
           <div class="ev-actions">
-            <button class="ev-btn-secondary" data-guest-rate-all="${escapeHtml(state.season)}" ${!allowed || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>
+            <button class="ev-btn-secondary" data-guest-rate-all="${escapeHtml(state.key)}" ${!allowed || !state.selectedOpeningIds.length ? 'disabled' : ''}>Оценить все</button>
           </div>
         </div>
         <div class="ev-list">
-          ${state.selectedOpeningIds.length ? state.selectedOpeningIds.map((id, idx) => renderOpeningRow(state, id, idx)).join('') : '<div class="ev-empty">В этом сезоне пока нет OP для оценки.</div>'}
+          ${state.selectedOpeningIds.length ? state.selectedOpeningIds.map((id, idx) => renderOpeningRow(state, id, idx)).join('') : `<div class="ev-empty">В этом ${endings ? 'полугодии' : 'сезоне'} пока нет ${type} для оценки.</div>`}
         </div>
       `;
     }
 
     function bindGuestEvents(states) {
-      const bySeason = new Map((states || []).map(state => [state.season, state]));
+      const bySeason = new Map((states || []).map(state => [state.key, state]));
       document.querySelectorAll('[data-guest-rate-all]').forEach(btn => {
         btn.addEventListener('click', () => {
           const state = bySeason.get(btn.dataset.guestRateAll);
@@ -7160,7 +7172,7 @@
       });
       document.querySelectorAll('[data-rate-id]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const season = btn.closest('[data-guest-season]')?.dataset.guestSeason;
+          const season = btn.closest('[data-guest-key]')?.dataset.guestKey;
           const state = bySeason.get(season);
           if (!state) return;
           openEvaluator(state, state.selectedOpeningIds, state.selectedOpeningIds.indexOf(String(btn.dataset.rateId)));
@@ -8257,7 +8269,13 @@
     }
     function neededEventSeasons() {
       return [...seasonDocs.values()].filter(row => {
-        if (activeMode === 'endingrating') return String(row.id).startsWith(`ending_${CURRENT_EVENT_YEAR}_`);
+        if (activeMode === 'endingrating') {
+          if (!String(row.id).startsWith(`ending_${CURRENT_EVENT_YEAR}_`)) return false;
+          if (!isGuest()) return true;
+          if (String(row.id) === endingPeriodKey('h1') && CURRENT_EVENT_YEAR === 2026) return false;
+          return !row.closed && Boolean(getGuestNicknameForSeason(row)) &&
+            (isAdminGuestPreview() || normalizeNickname(getGuestNicknameForSeason(row)) === normalizeNickname(myName));
+        }
         if (!SEASONS.some(season => row.id === seasonKey(season))) return false;
         return !isGuest() || Boolean(getGuestNicknameForSeason(row));
       });
